@@ -53,6 +53,9 @@ spotifyRouter.get('/auth-url', async (c) => {
   const codeVerifier = generateCodeVerifier()
   const codeChallenge = await generateCodeChallenge(codeVerifier)
 
+  // Generate state for security and as backup identifier
+  const state = crypto.randomUUID()
+
   const params = new URLSearchParams({
     client_id: c.env.SPOTIFY_CLIENT_ID,
     response_type: 'code',
@@ -60,12 +63,14 @@ spotifyRouter.get('/auth-url', async (c) => {
     code_challenge_method: 'S256',
     code_challenge: codeChallenge,
     scope: 'playlist-modify-public playlist-modify-private user-read-private',
-    show_dialog: 'true'
+    show_dialog: 'true',
+    state: state
   })
 
   return c.json({
     url: `${SPOTIFY_AUTH_URL}?${params.toString()}`,
-    codeVerifier // Return to frontend for sessionStorage
+    codeVerifier, // Return to frontend for sessionStorage
+    state // Also return state for backup validation
   })
 })
 
