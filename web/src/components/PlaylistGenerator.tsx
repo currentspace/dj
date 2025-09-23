@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { generatePlaylist } from '../lib/api'
+import type { Playlist } from '@dj/shared-types'
 
 export function PlaylistGenerator() {
   const [prompt, setPrompt] = useState('')
   const [loading, setLoading] = useState(false)
-  const [playlist, setPlaylist] = useState<any>(null)
+  const [playlist, setPlaylist] = useState<Playlist | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -55,7 +56,7 @@ export function PlaylistGenerator() {
           <h3>{playlist.name}</h3>
           <p>{playlist.description}</p>
           <div className="track-list">
-            {playlist.tracks?.map((track: any, index: number) => (
+            {playlist.tracks?.map((track, index: number) => (
               <div key={index} className="track">
                 <span className="track-number">{index + 1}</span>
                 <div className="track-info">

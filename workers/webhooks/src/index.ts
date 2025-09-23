@@ -1,6 +1,22 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import type { WebhookEvent, SpotifyWebhookPayload } from '@dj/shared-types';
+import { z } from 'zod';
+import type { SpotifyWebhookPayload } from '@dj/shared-types';
+
+// Validation schemas
+const SpotifyWebhookPayloadSchema = z.object({
+  event: z.enum(['playlist.created', 'playlist.updated', 'playlist.deleted']),
+  playlistId: z.string(),
+  userId: z.string(),
+  timestamp: z.string()
+});
+
+const GenericWebhookSchema = z.object({
+  type: z.string(),
+  timestamp: z.number(),
+  payload: z.unknown(),
+  signature: z.string().optional()
+});
 
 export interface Env {
   WEBHOOK_SECRET: string;
@@ -43,12 +59,24 @@ app.post('/spotify', async (c) => {
   }
 
   try {
-    const payload: SpotifyWebhookPayload = JSON.parse(body);
+    let jsonPayload: unknown;
+    try {
+      jsonPayload = JSON.parse(body);
+    } catch {
+      return c.json({ error: 'Invalid JSON payload' }, 400);
+    }
+
+    const payload = SpotifyWebhookPayloadSchema.safeParse(jsonPayload);
+
+    if (!payload.success) {
+      console.error('Invalid Spotify webhook payload:', payload.error);
+      return c.json({ error: 'Invalid webhook payload format' }, 400);
+    }
 
     // Process webhook event
-    await processSpotifyWebhook(payload, c.env);
+    await processSpotifyWebhook(payload.data, c.env);
 
-    return c.json({ success: true, processed: payload.event });
+    return c.json({ success: true, processed: payload.data.event });
   } catch (error) {
     console.error('Webhook processing error:', error);
     return c.json({ error: 'Failed to process webhook' }, 500);
@@ -58,13 +86,25 @@ app.post('/spotify', async (c) => {
 // Generic webhook endpoint for future integrations
 app.post('/webhook/:service', async (c) => {
   const service = c.req.param('service');
-  const body = await c.req.json<WebhookEvent>();
 
-  console.log(`Received webhook from ${service}:`, body.type);
+  try {
+    const requestBody = await c.req.json();
+    const body = GenericWebhookSchema.safeParse(requestBody);
 
-  // Add service-specific processing here
+    if (!body.success) {
+      console.error(`Invalid webhook payload from ${service}:`, body.error);
+      return c.json({ error: 'Invalid webhook payload format' }, 400);
+    }
 
-  return c.json({ success: true, service, event: body.type });
+    console.log(`Received webhook from ${service}:`, body.data.type);
+
+    // Add service-specific processing here
+
+    return c.json({ success: true, service, event: body.data.type });
+  } catch (error) {
+    console.error(`Webhook processing error for ${service}:`, error);
+    return c.json({ error: 'Failed to process webhook' }, 500);
+  }
 });
 
 async function verifySpotifyWebhook(

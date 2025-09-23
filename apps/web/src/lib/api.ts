@@ -1,3 +1,5 @@
+import type { Playlist } from '@dj/shared-types'
+
 const API_BASE = import.meta.env.DEV ? 'http://localhost:8787/api' : '/api'
 
 export async function generatePlaylist(prompt: string) {
@@ -19,7 +21,7 @@ export async function generatePlaylist(prompt: string) {
   return response.json()
 }
 
-export async function savePlaylistToSpotify(playlist: any) {
+export async function savePlaylistToSpotify(playlist: Playlist) {
   const token = localStorage.getItem('spotify_token')
 
   if (!token) {

@@ -76,17 +76,25 @@ export const GeneratePlaylistRequestSchema = z.object({
   prompt: z.string().min(1).max(500)
 });
 
+// Enhanced track schema for playlist processing
+export const PlaylistTrackSchema = z.object({
+  name: z.string(),
+  artist: z.string(),
+  query: z.string(),
+  spotifyId: z.string().optional(),
+  spotifyUri: z.string().optional(),
+  preview_url: z.string().nullable().optional(),
+  external_url: z.string().optional()
+});
+
 export const SavePlaylistRequestSchema = z.object({
   playlist: z.object({
     name: z.string(),
     description: z.string(),
-    tracks: z.array(z.object({
-      name: z.string(),
-      artist: z.string(),
-      spotifyUri: z.string().optional()
-    }))
+    tracks: z.array(PlaylistTrackSchema)
   })
 });
 
 export type GeneratePlaylistRequest = z.infer<typeof GeneratePlaylistRequestSchema>;
 export type SavePlaylistRequest = z.infer<typeof SavePlaylistRequestSchema>;
+export type PlaylistTrack = z.infer<typeof PlaylistTrackSchema>;

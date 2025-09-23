@@ -9,11 +9,13 @@ async function generatePlaylistAction(
   prevState: { playlist: Playlist | null; error: string | null },
   formData: FormData
 ): Promise<{ playlist: Playlist | null; error: string | null }> {
-  const prompt = formData.get('prompt') as string;
+  const promptValue = formData.get('prompt');
 
-  if (!prompt?.trim()) {
+  if (typeof promptValue !== 'string' || !promptValue.trim()) {
     return { playlist: null, error: 'Please enter a description' };
   }
+
+  const prompt = promptValue;
 
   try {
     const response = await apiClient.generatePlaylist(prompt);

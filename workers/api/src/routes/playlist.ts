@@ -3,7 +3,13 @@ import type { Env } from '../index'
 import {
   AnthropicMessageSchema,
   GeneratedPlaylistSchema,
-  GeneratePlaylistRequestSchema
+  GeneratePlaylistRequestSchema,
+  SavePlaylistRequestSchema,
+  SpotifySearchResponseSchema,
+  SpotifyUserSchema,
+  SpotifyPlaylistSchema,
+  PlaylistTrackSchema,
+  type PlaylistTrack
 } from '../lib/schemas'
 import { safeParse, isSuccessResponse } from '../lib/guards'
 
@@ -80,7 +86,7 @@ playlistRouter.post('/generate', async (c) => {
     // Step 2: If user is authenticated, search for tracks on Spotify
     if (token) {
       const tracksWithSpotifyIds = await Promise.all(
-        playlistData.tracks.map(async (track: any) => {
+        playlistData.tracks.map(async (track): Promise<PlaylistTrack> => {
           try {
             const searchResponse = await fetch(
               `https://api.spotify.com/v1/search?q=${encodeURIComponent(track.query)}&type=track&limit=1`,
@@ -91,17 +97,23 @@ playlistRouter.post('/generate', async (c) => {
               }
             )
 
-            if (searchResponse.ok) {
-              const searchData = await searchResponse.json() as any
-              const spotifyTrack = searchData.tracks?.items?.[0]
-              if (spotifyTrack) {
-                return {
+            if (isSuccessResponse(searchResponse)) {
+              const responseData = await searchResponse.json()
+              const searchData = safeParse(SpotifySearchResponseSchema, responseData)
+
+              if (searchData && searchData.tracks?.items && searchData.tracks.items.length > 0) {
+                const spotifyTrack = searchData.tracks.items[0]
+                const enhancedTrack: PlaylistTrack = {
                   ...track,
                   spotifyId: spotifyTrack.id,
                   spotifyUri: spotifyTrack.uri,
                   preview_url: spotifyTrack.preview_url,
                   external_url: spotifyTrack.external_urls?.spotify
                 }
+
+                // Validate the enhanced track
+                const validatedTrack = safeParse(PlaylistTrackSchema, enhancedTrack)
+                return validatedTrack || track
               }
             }
           } catch (err) {
@@ -122,18 +134,22 @@ playlistRouter.post('/generate', async (c) => {
 })
 
 playlistRouter.post('/save', async (c) => {
-  const { playlist } = await c.req.json()
-  const token = c.req.header('Authorization')?.replace('Bearer ', '')
-
-  if (!token) {
-    return c.json({ error: 'Not authenticated' }, 401)
-  }
-
-  if (!playlist || !playlist.tracks) {
-    return c.json({ error: 'Invalid playlist data' }, 400)
-  }
-
   try {
+    const requestBody = await c.req.json()
+    const request = safeParse(SavePlaylistRequestSchema, requestBody)
+
+    if (!request) {
+      return c.json({ error: 'Invalid playlist data' }, 400)
+    }
+
+    const token = c.req.header('Authorization')?.replace('Bearer ', '')
+
+    if (!token) {
+      return c.json({ error: 'Not authenticated' }, 401)
+    }
+
+    const { playlist } = request
+
     // Get user ID
     const userResponse = await fetch('https://api.spotify.com/v1/me', {
       headers: {
@@ -141,11 +157,17 @@ playlistRouter.post('/save', async (c) => {
       }
     })
 
-    if (!userResponse.ok) {
+    if (!isSuccessResponse(userResponse)) {
       throw new Error('Failed to get user profile')
     }
 
-    const userData = await userResponse.json() as any
+    const responseData = await userResponse.json()
+    const userData = safeParse(SpotifyUserSchema, responseData)
+
+    if (!userData) {
+      throw new Error('Invalid user data from Spotify')
+    }
+
     const userId = userData.id
 
     // Create playlist
@@ -165,16 +187,23 @@ playlistRouter.post('/save', async (c) => {
       }
     )
 
-    if (!createResponse.ok) {
+    if (!isSuccessResponse(createResponse)) {
       throw new Error('Failed to create playlist')
     }
 
-    const createdPlaylist = await createResponse.json() as any
+    const createResponseData = await createResponse.json()
+    const createdPlaylist = safeParse(SpotifyPlaylistSchema, createResponseData)
+
+    if (!createdPlaylist) {
+      throw new Error('Invalid playlist creation response from Spotify')
+    }
 
     // Add tracks to playlist
     const trackUris = playlist.tracks
-      .filter((track: any) => track.spotifyUri)
-      .map((track: any) => track.spotifyUri)
+      .filter((track: PlaylistTrack): track is PlaylistTrack & { spotifyUri: string } =>
+        Boolean(track.spotifyUri)
+      )
+      .map((track: PlaylistTrack & { spotifyUri: string }) => track.spotifyUri)
 
     if (trackUris.length > 0) {
       const addTracksResponse = await fetch(

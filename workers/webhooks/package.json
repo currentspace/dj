@@ -12,7 +12,8 @@
   },
   "dependencies": {
     "@dj/shared-types": "workspace:*",
-    "hono": "^4.9.8"
+    "hono": "^4.9.8",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20241127.0",
