@@ -18,84 +18,36 @@ export function useSpotifyAuth() {
       return;
     }
 
-    // Check for authorization code in URL (OAuth callback)
+    // Check for server-side OAuth callback results
     const urlParams = new URLSearchParams(window.location.search)
-    const code = urlParams.get('code')
+    const spotifyToken = urlParams.get('spotify_token')
+    const authSuccess = urlParams.get('auth_success')
     const error = urlParams.get('error')
 
-    console.log('🔗 URL params:', { code: code ? 'Found' : 'Not found', error });
+    console.log('🔗 URL params:', {
+      spotify_token: spotifyToken ? 'Found' : 'Not found',
+      auth_success: authSuccess ? 'Found' : 'Not found',
+      error
+    });
 
     if (error) {
       console.error('❌ OAuth error:', error);
+      // Clean up URL
+      window.history.replaceState({}, document.title, window.location.pathname)
       return;
     }
 
-    if (code) {
-      console.log('🔑 Authorization code found, exchanging for token...');
+    if (spotifyToken && authSuccess) {
+      console.log('🎉 Server-side OAuth success! Storing token...');
+      localStorage.setItem('spotify_token', spotifyToken)
+      setToken(spotifyToken)
+      setIsAuthenticated(true)
+      console.log('✅ Authentication complete!');
 
-      // Debug: Check all localStorage keys
-      console.log('🔍 All localStorage keys:', Object.keys(localStorage));
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key) {
-          const value = localStorage.getItem(key);
-          console.log(`📋 localStorage[${key}]:`, value?.substring(0, 50) + '...');
-        }
-      }
-
-      // Exchange code for tokens
-      const codeVerifier = localStorage.getItem('spotify_code_verifier')
-      console.log('🔐 Code verifier:', codeVerifier ? 'Found' : 'Not found');
-
-      if (codeVerifier) {
-        exchangeCodeForToken(code, codeVerifier)
-        // Clean up
-        localStorage.removeItem('spotify_code_verifier')
-        window.history.replaceState({}, document.title, window.location.pathname)
-      } else {
-        console.error('❌ No code verifier found in localStorage');
-        console.log('🔄 Attempting to start fresh auth flow...');
-        // Clear the URL and let user try again
-        window.history.replaceState({}, document.title, window.location.pathname)
-      }
+      // Clean up URL
+      window.history.replaceState({}, document.title, window.location.pathname)
     }
   }, [])
-
-  const exchangeCodeForToken = async (code: string, codeVerifier: string) => {
-    try {
-      console.log('🔄 Making token exchange request...');
-
-      const response = await fetch('/api/spotify/token', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ code, codeVerifier }),
-      })
-
-      console.log('📡 Token exchange response status:', response.status);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ Token exchange failed:', response.status, errorText);
-        throw new Error(`Token exchange failed: ${response.status} ${errorText}`)
-      }
-
-      const tokenData = await response.json()
-      console.log('🎉 Token received:', tokenData.access_token ? 'Success' : 'No token in response');
-
-      if (tokenData.access_token) {
-        localStorage.setItem('spotify_token', tokenData.access_token)
-        setToken(tokenData.access_token)
-        setIsAuthenticated(true)
-        console.log('✅ Authentication complete!');
-      } else {
-        console.error('❌ No access_token in response:', tokenData);
-      }
-    } catch (error) {
-      console.error('💥 Failed to exchange code for token:', error)
-    }
-  }
 
   const login = async () => {
     try {
@@ -110,13 +62,9 @@ export function useSpotifyAuth() {
         return;
       }
 
-      const { url, codeVerifier } = await response.json()
+      const { url } = await response.json()
       console.log('🔗 Auth URL received:', url ? 'Success' : 'No URL');
-      console.log('🔐 Code verifier:', codeVerifier ? 'Generated' : 'Missing');
-
-      // Store code verifier for later use
-      localStorage.setItem('spotify_code_verifier', codeVerifier)
-      console.log('💾 Code verifier stored');
+      console.log('🔒 Using server-side PKCE flow (no client-side storage needed)');
 
       console.log('➡️ Redirecting to Spotify...');
       window.location.href = url
