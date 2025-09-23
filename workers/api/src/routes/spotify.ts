@@ -8,7 +8,7 @@ const spotifyRouter = new Hono<{ Bindings: Env }>()
 
 const SPOTIFY_AUTH_URL = 'https://accounts.spotify.com/authorize'
 const SPOTIFY_TOKEN_URL = 'https://accounts.spotify.com/api/token'
-const REDIRECT_URI = 'https://dj.current.space/callback'
+const REDIRECT_URI = 'https://dj.current.space'
 
 // PKCE helper functions
 function generateCodeVerifier(): string {
