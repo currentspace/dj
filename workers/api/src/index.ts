@@ -3,6 +3,8 @@ import { cors } from 'hono/cors'
 import { anthropicRouter } from './routes/anthropic'
 import { spotifyRouter } from './routes/spotify'
 import { playlistRouter } from './routes/playlist'
+import { chatRouter } from './routes/chat'
+import { testRouter } from './routes/test'
 
 export interface Env {
   ANTHROPIC_API_KEY: string
@@ -22,6 +24,8 @@ app.get('/health', (c) => c.json({ status: 'healthy' }))
 app.route('/api/anthropic', anthropicRouter)
 app.route('/api/spotify', spotifyRouter)
 app.route('/api/playlist', playlistRouter)
+app.route('/api/chat', chatRouter)
+app.route('/api/test', testRouter)
 
 // Serve static files in production
 app.get('*', async (c) => {

@@ -15,8 +15,9 @@ DJ is an AI-powered playlist generator that combines Anthropic's Claude API with
 pnpm install
 
 # Development
-pnpm run dev          # Start React frontend (port 3000)
-pnpm run worker:dev   # Start Cloudflare Worker (port 8787)
+pnpm run dev          # Start both React frontend (port 3000) and API worker (port 8787)
+pnpm run dev:web      # Start only React frontend (port 3000)
+pnpm run dev:api      # Start only API worker (port 8787)
 
 # Build & Deploy
 pnpm run build        # Build React app
@@ -50,17 +51,31 @@ Production secrets set via Wrangler:
 - `SPOTIFY_CLIENT_ID` - Spotify app ID
 - `SPOTIFY_CLIENT_SECRET` - Spotify app secret
 
-For local development, create `.dev.vars` file with these keys.
+For local development, create `.dev.vars` files in worker directories:
+
+**workers/api/.dev.vars:**
+```
+ANTHROPIC_API_KEY=your_anthropic_api_key_here
+SPOTIFY_CLIENT_ID=your_spotify_client_id_here
+SPOTIFY_CLIENT_SECRET=your_spotify_client_secret_here
+ENVIRONMENT=development
+```
+
+**workers/webhooks/.dev.vars:**
+```
+ENVIRONMENT=development
+```
 
 ## Key Workflows
 
-### Playlist Generation Flow
-1. User describes desired playlist → Frontend
-2. Frontend calls `/api/playlist/generate`
-3. Worker queries Claude for song recommendations
-4. Worker searches Spotify for matching tracks
-5. Returns enriched playlist data to frontend
-6. User can save playlist to their Spotify account
+### Playlist Generation Flow (Chat-based)
+1. User chats with AI DJ assistant → React ChatInterface
+2. Frontend calls `/api/chat/message` with conversation history
+3. Worker uses Langchain + Anthropic Claude to understand context and generate responses
+4. When ready, Claude generates structured playlist JSON
+5. Worker searches Spotify for matching tracks and enriches metadata
+6. Returns conversational response + playlist data to frontend
+7. User can save playlist to their Spotify account
 
 ### Spotify Authentication
 - OAuth2 implicit flow

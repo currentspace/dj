@@ -65,3 +65,20 @@ export interface SpotifyWebhookPayload {
   userId: string;
   timestamp: string;
 }
+
+// Chat interfaces
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface ChatRequest {
+  message: string;
+  conversationHistory?: ChatMessage[];
+}
+
+export interface ChatResponse {
+  message: string;
+  playlist?: Playlist;
+  conversationHistory: ChatMessage[];
+}

@@ -5,6 +5,8 @@ import type {
   SavePlaylistRequest,
   SavePlaylistResponse,
   SpotifyAuthResponse,
+  ChatRequest,
+  ChatResponse,
   ApiError
 } from '@dj/shared-types';
 
@@ -83,6 +85,13 @@ export class DJApiClient {
     return this.request(`/spotify/search`, {
       method: 'POST',
       body: JSON.stringify({ query, type })
+    });
+  }
+
+  async sendChatMessage(chatRequest: ChatRequest): Promise<ChatResponse> {
+    return this.request<ChatResponse>('/chat/message', {
+      method: 'POST',
+      body: JSON.stringify(chatRequest)
     });
   }
 }
