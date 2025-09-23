@@ -1,0 +1,32 @@
+name = "dj-api"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat_v2"]
+workers_dev = false
+
+[vars]
+ENVIRONMENT = "production"
+
+# Secrets should be added via:
+# - GitHub Actions (automatic deployment)
+# - wrangler secret put (manual deployment)
+
+[[kv_namespaces]]
+binding = "SESSIONS"
+id = "YOUR_KV_NAMESPACE_ID"
+preview_id = "YOUR_KV_PREVIEW_ID"
+
+[site]
+bucket = "../../apps/web/dist"
+
+[[routes]]
+pattern = "dj.current.space/*"
+zone_name = "current.space"
+
+[build]
+command = "pnpm run build"
+
+# Development environment
+[env.development]
+name = "dj-api-dev"
+vars = { ENVIRONMENT = "development" }

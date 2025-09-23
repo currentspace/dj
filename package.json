@@ -1,36 +1,26 @@
 {
-  "name": "dj-app",
+  "name": "@dj/root",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview",
-    "worker:dev": "wrangler dev",
-    "worker:deploy": "wrangler deploy",
-    "deploy": "pnpm run build && pnpm run worker:deploy",
-    "typecheck": "tsc --noEmit",
-    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0"
-  },
-  "dependencies": {
-    "@ark-ui/react": "^3.5.0",
-    "hono": "^4.6.13",
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "dev": "pnpm --parallel dev",
+    "dev:web": "pnpm --filter @dj/web dev",
+    "dev:api": "pnpm --filter @dj/api-worker dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "eslint .",
+    "test": "pnpm -r test",
+    "deploy": "pnpm build && pnpm --filter @dj/api-worker deploy && pnpm --filter @dj/webhook-worker deploy"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20241127.0",
-    "@types/react": "^19.0.2",
-    "@types/react-dom": "^19.0.2",
-    "@typescript-eslint/eslint-plugin": "^7.0.0",
-    "@typescript-eslint/parser": "^7.0.0",
-    "@vitejs/plugin-react": "^4.3.4",
-    "eslint": "^8.57.0",
-    "eslint-plugin-react-hooks": "^4.6.0",
-    "eslint-plugin-react-refresh": "^0.4.6",
-    "typescript": "^5.7.2",
-    "vite": "^6.0.5",
-    "wrangler": "^3.101.0"
+    "@eslint/js": "^9.36.0",
+    "@typescript-eslint/eslint-plugin": "^8.44.1",
+    "@typescript-eslint/parser": "^8.44.1",
+    "eslint": "^9.36.0",
+    "eslint-plugin-react": "^7.38.2",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.21",
+    "typescript": "^5.9.2"
   }
 }
