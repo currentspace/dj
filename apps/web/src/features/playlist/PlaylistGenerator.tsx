@@ -1,12 +1,12 @@
-import { useState, useActionState, useOptimistic, Suspense } from 'react';
+import { useActionState, useOptimistic, Suspense } from 'react';
 import { apiClient } from '@dj/api-client';
-import type { Playlist, Track } from '@dj/shared-types';
+import type { Playlist } from '@dj/shared-types';
 import { PlaylistSkeleton } from './PlaylistSkeleton';
 import { TrackList } from './TrackList';
 
 // Server action for generating playlist
 async function generatePlaylistAction(
-  prevState: { playlist: Playlist | null; error: string | null },
+  _prevState: { playlist: Playlist | null; error: string | null },
   formData: FormData
 ): Promise<{ playlist: Playlist | null; error: string | null }> {
   const promptValue = formData.get('prompt');
