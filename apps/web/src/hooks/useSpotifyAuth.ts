@@ -32,6 +32,17 @@ export function useSpotifyAuth() {
 
     if (code) {
       console.log('🔑 Authorization code found, exchanging for token...');
+
+      // Debug: Check all localStorage keys
+      console.log('🔍 All localStorage keys:', Object.keys(localStorage));
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key) {
+          const value = localStorage.getItem(key);
+          console.log(`📋 localStorage[${key}]:`, value?.substring(0, 50) + '...');
+        }
+      }
+
       // Exchange code for tokens
       const codeVerifier = localStorage.getItem('spotify_code_verifier')
       console.log('🔐 Code verifier:', codeVerifier ? 'Found' : 'Not found');
@@ -43,6 +54,9 @@ export function useSpotifyAuth() {
         window.history.replaceState({}, document.title, window.location.pathname)
       } else {
         console.error('❌ No code verifier found in localStorage');
+        console.log('🔄 Attempting to start fresh auth flow...');
+        // Clear the URL and let user try again
+        window.history.replaceState({}, document.title, window.location.pathname)
       }
     }
   }, [])
