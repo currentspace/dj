@@ -37,40 +37,40 @@ export function useSpotifyAuth() {
       return;
     }
 
-    if (code) {
-      console.log('🔑 Authorization code found, exchanging for token...');
+    if (code && state) {
+      console.log('🔑 Authorization code found, decoding state parameter...');
 
-      // Debug sessionStorage contents
-      console.log('🔍 All sessionStorage keys:', Object.keys(sessionStorage));
-      for (let i = 0; i < sessionStorage.length; i++) {
-        const key = sessionStorage.key(i);
-        if (key) {
-          const value = sessionStorage.getItem(key);
-          console.log(`📋 sessionStorage[${key}]:`, value?.substring(0, 50) + '...');
+      try {
+        // Decode the state parameter to get the code verifier (stateless approach)
+        const stateData = JSON.parse(atob(state));
+        const codeVerifier = stateData.verifier;
+        const timestamp = stateData.timestamp;
+
+        console.log('🔐 Code verifier from state:', codeVerifier ? 'Found' : 'Missing');
+        console.log('⏰ Auth timestamp:', new Date(timestamp).toISOString());
+
+        // Check if the auth request is not too old (15 minutes max)
+        const maxAge = 15 * 60 * 1000; // 15 minutes
+        const isExpired = Date.now() - timestamp > maxAge;
+
+        if (codeVerifier && !isExpired) {
+          console.log('✅ Valid OAuth flow with fresh state, proceeding with token exchange');
+          exchangeCodeForToken(code, codeVerifier);
+          // Clean up URL
+          window.history.replaceState({}, document.title, window.location.pathname);
+        } else {
+          console.error('❌ Invalid OAuth flow:');
+          if (!codeVerifier) console.error('  - Missing code verifier in state');
+          if (isExpired) console.error('  - Auth request expired (older than 15 minutes)');
+          console.log('🔄 Please try logging in again');
+          // Clean up URL
+          window.history.replaceState({}, document.title, window.location.pathname);
         }
-      }
-
-      // Retrieve code verifier from sessionStorage (canonical approach)
-      const codeVerifier = sessionStorage.getItem('spotify_code_verifier')
-      const storedState = sessionStorage.getItem('spotify_auth_state')
-      console.log('🔐 Code verifier in sessionStorage:', codeVerifier ? 'Found' : 'Not found');
-      console.log('🔑 Stored state in sessionStorage:', storedState ? 'Found' : 'Not found');
-      console.log('🔍 State match:', state === storedState ? 'Valid' : 'Invalid');
-
-      if (codeVerifier && storedState === state) {
-        console.log('✅ Valid OAuth flow, proceeding with token exchange');
-        exchangeCodeForToken(code, codeVerifier)
-        // Clean up
-        sessionStorage.removeItem('spotify_code_verifier')
-        sessionStorage.removeItem('spotify_auth_state')
-        window.history.replaceState({}, document.title, window.location.pathname)
-      } else {
-        console.error('❌ Invalid OAuth flow detected:');
-        console.error('  - Code verifier:', codeVerifier ? 'Found' : 'Missing');
-        console.error('  - State validation:', state === storedState ? 'Valid' : 'Invalid');
-        console.log('🔄 Please try logging in again');
-        // Clean up URL and let user try again
-        window.history.replaceState({}, document.title, window.location.pathname)
+      } catch (error) {
+        console.error('❌ Failed to decode state parameter:', error);
+        console.log('🔄 Invalid state format, please try logging in again');
+        // Clean up URL
+        window.history.replaceState({}, document.title, window.location.pathname);
       }
     }
   }, [])
@@ -124,15 +124,9 @@ export function useSpotifyAuth() {
         return;
       }
 
-      const { url, codeVerifier, state } = await response.json()
+      const { url } = await response.json()
       console.log('🔗 Auth URL received:', url ? 'Success' : 'No URL');
-      console.log('🔐 Code verifier received:', codeVerifier ? 'Success' : 'Missing');
-      console.log('🔑 State received:', state ? 'Success' : 'Missing');
-
-      // Store code verifier in sessionStorage (canonical approach for SPAs)
-      sessionStorage.setItem('spotify_code_verifier', codeVerifier)
-      sessionStorage.setItem('spotify_auth_state', state)
-      console.log('💾 Code verifier and state stored in sessionStorage');
+      console.log('🔒 Using stateless OAuth flow (code verifier encoded in state parameter)');
 
       console.log('➡️ Redirecting to Spotify...');
       window.location.href = url

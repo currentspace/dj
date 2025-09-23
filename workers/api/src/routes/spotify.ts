@@ -53,8 +53,13 @@ spotifyRouter.get('/auth-url', async (c) => {
   const codeVerifier = generateCodeVerifier()
   const codeChallenge = await generateCodeChallenge(codeVerifier)
 
-  // Generate state for security and as backup identifier
-  const state = crypto.randomUUID()
+  // Encode the code verifier in the state parameter (stateless approach)
+  // This ensures it survives the OAuth redirect without relying on sessionStorage
+  const stateData = {
+    verifier: codeVerifier,
+    timestamp: Date.now()
+  }
+  const state = btoa(JSON.stringify(stateData))
 
   const params = new URLSearchParams({
     client_id: c.env.SPOTIFY_CLIENT_ID,
@@ -68,9 +73,8 @@ spotifyRouter.get('/auth-url', async (c) => {
   })
 
   return c.json({
-    url: `${SPOTIFY_AUTH_URL}?${params.toString()}`,
-    codeVerifier, // Return to frontend for sessionStorage
-    state // Also return state for backup validation
+    url: `${SPOTIFY_AUTH_URL}?${params.toString()}`
+    // No need to return codeVerifier - it's encoded in the state
   })
 })
 
