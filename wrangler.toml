@@ -10,9 +10,11 @@ workers_dev = true
 [vars]
 ENVIRONMENT = "production"
 
-# Static site configuration - serves React app from build output
-[site]
-bucket = "apps/web/dist"
+# Static assets configuration - serves React app from build output (modern approach)
+[assets]
+directory = "apps/web/dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
 
 # Custom domain routing
 # Route already configured in Cloudflare dashboard - commenting to avoid duplicate error

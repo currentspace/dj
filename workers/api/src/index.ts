@@ -11,6 +11,7 @@ export interface Env {
   SPOTIFY_CLIENT_ID: string
   SPOTIFY_CLIENT_SECRET: string
   ENVIRONMENT: string
+  ASSETS: Fetcher
 }
 
 const app = new Hono<{ Bindings: Env }>()
@@ -27,11 +28,35 @@ app.route('/api/playlist', playlistRouter)
 app.route('/api/chat', chatRouter)
 app.route('/api/test', testRouter)
 
-// Serve static files in production
+// Serve static files for non-API routes
 app.get('*', async (c) => {
-  // In production, serve the built React app
-  // This would be handled by Cloudflare Pages or your static hosting
-  return c.text('Not found', 404)
+  try {
+    // Use the ASSETS binding to serve static files
+    const response = await c.env.ASSETS.fetch(c.req.raw)
+
+    // If the response is 404 and this is a navigation request,
+    // serve index.html for client-side routing (SPA behavior)
+    if (response.status === 404) {
+      const acceptHeader = c.req.header('Accept') || ''
+      if (acceptHeader.includes('text/html')) {
+        // Try to serve index.html for SPA routing
+        const indexResponse = await c.env.ASSETS.fetch(new Request(new URL('/index.html', c.req.url)))
+        if (indexResponse.status === 200) {
+          return new Response(indexResponse.body, {
+            headers: {
+              ...Object.fromEntries(indexResponse.headers),
+              'Content-Type': 'text/html; charset=utf-8'
+            }
+          })
+        }
+      }
+    }
+
+    return response
+  } catch (e) {
+    // Fallback for development or if ASSETS is not available
+    return c.text('Not found', 404)
+  }
 })
 
 export default app
