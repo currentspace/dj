@@ -8,6 +8,7 @@
     "dev:web": "pnpm --filter @dj/web dev",
     "dev:api": "pnpm --filter @dj/api-worker dev",
     "build": "pnpm -r build",
+    "build:worker": "pnpm install && pnpm --filter @dj/shared-types build && pnpm --filter @dj/api-client build && pnpm --filter @dj/web build && pnpm --filter @dj/api-worker build",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint .",
     "test": "pnpm -r test",
