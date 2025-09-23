@@ -15,9 +15,10 @@ ENVIRONMENT = "production"
 bucket = "apps/web/dist"
 
 # Custom domain routing
-[[routes]]
-pattern = "dj.current.space/*"
-zone_name = "current.space"
+# Route already configured in Cloudflare dashboard - commenting to avoid duplicate error
+# [[routes]]
+# pattern = "dj.current.space/*"
+# zone_name = "current.space"
 
 # Build configuration for deployment
 [build]
