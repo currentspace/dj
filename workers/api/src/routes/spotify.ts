@@ -36,6 +36,13 @@ const SearchRequestSchema = z.object({
   type: z.enum(['track', 'album', 'artist']).default('track')
 })
 
+const CreatePlaylistRequestSchema = z.object({
+  name: z.string().min(1).max(100),
+  description: z.string().max(300).optional(),
+  public: z.boolean().optional().default(false),
+  trackUris: z.array(z.string()).max(100)
+})
+
 spotifyRouter.get('/auth-url', async (c) => {
   const codeVerifier = generateCodeVerifier()
   const codeChallenge = await generateCodeChallenge(codeVerifier)
@@ -137,6 +144,117 @@ spotifyRouter.post('/search', async (c) => {
   } catch (error) {
     console.error('Spotify search error:', error)
     const message = error instanceof Error ? error.message : 'Search failed'
+    return c.json({ error: message }, 500)
+  }
+})
+
+// Get user's playlists
+spotifyRouter.get('/playlists', async (c) => {
+  try {
+    const token = c.req.header('Authorization')?.replace('Bearer ', '')
+
+    if (!token) {
+      return c.json({ error: 'No authorization token' }, 401)
+    }
+
+    const response = await fetch('https://api.spotify.com/v1/me/playlists?limit=50', {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    })
+
+    if (!isSuccessResponse(response)) {
+      console.error(`Get playlists failed: ${response.status} ${response.statusText}`)
+      return c.json({ error: 'Failed to get playlists' }, 500)
+    }
+
+    const data = await response.json()
+    return c.json(data)
+  } catch (error) {
+    console.error('Get playlists error:', error)
+    const message = error instanceof Error ? error.message : 'Failed to get playlists'
+    return c.json({ error: message }, 500)
+  }
+})
+
+// Create a new playlist
+spotifyRouter.post('/playlists', async (c) => {
+  try {
+    const requestBody = await c.req.json()
+    const playlistRequest = safeParse(CreatePlaylistRequestSchema, requestBody)
+
+    if (!playlistRequest) {
+      return c.json({ error: 'Invalid playlist request' }, 400)
+    }
+
+    const token = c.req.header('Authorization')?.replace('Bearer ', '')
+
+    if (!token) {
+      return c.json({ error: 'No authorization token' }, 401)
+    }
+
+    // First, get the user's Spotify ID
+    const userResponse = await fetch('https://api.spotify.com/v1/me', {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    })
+
+    if (!isSuccessResponse(userResponse)) {
+      return c.json({ error: 'Failed to get user info' }, 500)
+    }
+
+    const userData = await userResponse.json()
+    const userId = userData.id
+
+    // Create the playlist
+    const createResponse = await fetch(`https://api.spotify.com/v1/users/${userId}/playlists`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        name: playlistRequest.name,
+        description: playlistRequest.description,
+        public: playlistRequest.public
+      })
+    })
+
+    if (!isSuccessResponse(createResponse)) {
+      console.error(`Create playlist failed: ${createResponse.status} ${createResponse.statusText}`)
+      return c.json({ error: 'Failed to create playlist' }, 500)
+    }
+
+    const playlist = await createResponse.json()
+
+    // Add tracks to the playlist if provided
+    if (playlistRequest.trackUris.length > 0) {
+      const addTracksResponse = await fetch(`https://api.spotify.com/v1/playlists/${playlist.id}/tracks`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          uris: playlistRequest.trackUris
+        })
+      })
+
+      if (!isSuccessResponse(addTracksResponse)) {
+        console.error(`Add tracks failed: ${addTracksResponse.status} ${addTracksResponse.statusText}`)
+        // Still return the created playlist even if adding tracks failed
+        return c.json({
+          ...playlist,
+          warning: 'Playlist created but some tracks could not be added'
+        })
+      }
+    }
+
+    return c.json(playlist)
+  } catch (error) {
+    console.error('Create playlist error:', error)
+    const message = error instanceof Error ? error.message : 'Failed to create playlist'
     return c.json({ error: message }, 500)
   }
 })
