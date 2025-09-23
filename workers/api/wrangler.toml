@@ -11,10 +11,11 @@ ENVIRONMENT = "production"
 # - GitHub Actions (automatic deployment)
 # - wrangler secret put (manual deployment)
 
-[[kv_namespaces]]
-binding = "SESSIONS"
-id = "YOUR_KV_NAMESPACE_ID"
-preview_id = "YOUR_KV_PREVIEW_ID"
+# KV Namespaces (not needed for current implementation)
+# [[kv_namespaces]]
+# binding = "SESSIONS"
+# id = "YOUR_KV_NAMESPACE_ID"
+# preview_id = "YOUR_KV_PREVIEW_ID"
 
 [site]
 bucket = "../../apps/web/dist"
