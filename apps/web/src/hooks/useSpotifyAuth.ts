@@ -12,25 +12,53 @@ export function useSpotifyAuth() {
       setIsAuthenticated(true)
     }
 
-    // Check for token in URL hash (OAuth callback)
-    const hash = window.location.hash
-    if (hash) {
-      const params = new URLSearchParams(hash.substring(1))
-      const accessToken = params.get('access_token')
-      if (accessToken) {
-        localStorage.setItem('spotify_token', accessToken)
-        setToken(accessToken)
-        setIsAuthenticated(true)
-        // Clean up URL
-        window.location.hash = ''
+    // Check for authorization code in URL (OAuth callback)
+    const urlParams = new URLSearchParams(window.location.search)
+    const code = urlParams.get('code')
+
+    if (code) {
+      // Exchange code for tokens
+      const codeVerifier = localStorage.getItem('spotify_code_verifier')
+      if (codeVerifier) {
+        exchangeCodeForToken(code, codeVerifier)
+        // Clean up
+        localStorage.removeItem('spotify_code_verifier')
+        window.history.replaceState({}, document.title, window.location.pathname)
       }
     }
   }, [])
 
+  const exchangeCodeForToken = async (code: string, codeVerifier: string) => {
+    try {
+      const response = await fetch('/api/spotify/token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ code, codeVerifier }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Token exchange failed')
+      }
+
+      const tokenData = await response.json()
+      localStorage.setItem('spotify_token', tokenData.access_token)
+      setToken(tokenData.access_token)
+      setIsAuthenticated(true)
+    } catch (error) {
+      console.error('Failed to exchange code for token:', error)
+    }
+  }
+
   const login = async () => {
     try {
       const response = await fetch('/api/spotify/auth-url')
-      const { url } = await response.json()
+      const { url, codeVerifier } = await response.json()
+
+      // Store code verifier for later use
+      localStorage.setItem('spotify_code_verifier', codeVerifier)
+
       window.location.href = url
     } catch (error) {
       console.error('Failed to get auth URL:', error)

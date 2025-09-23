@@ -7,7 +7,28 @@ import { safeParse, isSuccessResponse } from '../lib/guards'
 const spotifyRouter = new Hono<{ Bindings: Env }>()
 
 const SPOTIFY_AUTH_URL = 'https://accounts.spotify.com/authorize'
+const SPOTIFY_TOKEN_URL = 'https://accounts.spotify.com/api/token'
 const REDIRECT_URI = 'https://dj.current.space/callback'
+
+// PKCE helper functions
+function generateCodeVerifier(): string {
+  const array = new Uint8Array(32)
+  crypto.getRandomValues(array)
+  return btoa(String.fromCharCode.apply(null, Array.from(array)))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '')
+}
+
+async function generateCodeChallenge(verifier: string): Promise<string> {
+  const encoder = new TextEncoder()
+  const data = encoder.encode(verifier)
+  const digest = await crypto.subtle.digest('SHA-256', data)
+  return btoa(String.fromCharCode.apply(null, Array.from(new Uint8Array(digest))))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '')
+}
 
 // Request validation schemas
 const SearchRequestSchema = z.object({
@@ -15,16 +36,62 @@ const SearchRequestSchema = z.object({
   type: z.enum(['track', 'album', 'artist']).default('track')
 })
 
-spotifyRouter.get('/auth-url', (c) => {
+spotifyRouter.get('/auth-url', async (c) => {
+  const codeVerifier = generateCodeVerifier()
+  const codeChallenge = await generateCodeChallenge(codeVerifier)
+
   const params = new URLSearchParams({
     client_id: c.env.SPOTIFY_CLIENT_ID,
-    response_type: 'token',
+    response_type: 'code',
     redirect_uri: REDIRECT_URI,
+    code_challenge_method: 'S256',
+    code_challenge: codeChallenge,
     scope: 'playlist-modify-public playlist-modify-private user-read-private',
     show_dialog: 'true'
   })
 
-  return c.json({ url: `${SPOTIFY_AUTH_URL}?${params.toString()}` })
+  return c.json({
+    url: `${SPOTIFY_AUTH_URL}?${params.toString()}`,
+    codeVerifier // Frontend needs this to exchange the code for tokens
+  })
+})
+
+// Token exchange endpoint
+spotifyRouter.post('/token', async (c) => {
+  try {
+    const { code, codeVerifier } = await c.req.json()
+
+    if (!code || !codeVerifier) {
+      return c.json({ error: 'Missing code or code_verifier' }, 400)
+    }
+
+    const response = await fetch(SPOTIFY_TOKEN_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: REDIRECT_URI,
+        client_id: c.env.SPOTIFY_CLIENT_ID,
+        client_secret: c.env.SPOTIFY_CLIENT_SECRET,
+        code_verifier: codeVerifier,
+      }),
+    })
+
+    if (!response.ok) {
+      const error = await response.text()
+      console.error('Token exchange failed:', error)
+      return c.json({ error: 'Token exchange failed' }, 400)
+    }
+
+    const tokenData = await response.json()
+    return c.json(tokenData)
+  } catch (error) {
+    console.error('Token exchange error:', error)
+    return c.json({ error: 'Token exchange failed' }, 500)
+  }
 })
 
 spotifyRouter.post('/search', async (c) => {
