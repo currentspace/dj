@@ -1,9 +1,7 @@
 import { Hono } from 'hono';
-import { z } from 'zod';
 import { ChatAnthropic } from '@langchain/anthropic';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import type { Env } from '../index';
-import { safeParse } from '../lib/guards';
 
 const testRouter = new Hono<{ Bindings: Env }>();
 
