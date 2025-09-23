@@ -57,6 +57,7 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: deploy
+          workingDirectory: workers/api
           secrets: |
             ANTHROPIC_API_KEY
             SPOTIFY_CLIENT_ID
