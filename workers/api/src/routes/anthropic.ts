@@ -1,13 +1,15 @@
 import { Hono } from 'hono'
 import type { Env } from '../index'
+import { AnthropicMessageSchema, GeneratedPlaylistSchema } from '../lib/schemas'
+import { safeParse, isSuccessResponse } from '../lib/guards'
 
 const anthropicRouter = new Hono<{ Bindings: Env }>()
 
 anthropicRouter.post('/generate', async (c) => {
   const { prompt } = await c.req.json()
 
-  if (!prompt) {
-    return c.json({ error: 'Prompt is required' }, 400)
+  if (!prompt || typeof prompt !== 'string') {
+    return c.json({ error: 'Valid prompt is required' }, 400)
   }
 
   try {
@@ -25,12 +27,12 @@ anthropicRouter.post('/generate', async (c) => {
           {
             role: 'user',
             content: `You are a music expert DJ. Based on the following request, generate a playlist with 10-15 songs.
-            Return the response as a JSON object with this structure:
+            Return ONLY a valid JSON object with this exact structure (no other text):
             {
               "name": "playlist name",
               "description": "brief description",
               "tracks": [
-                {"name": "song name", "artist": "artist name", "query": "search query for spotify"}
+                {"name": "song name", "artist": "artist name", "query": "artist song name"}
               ]
             }
 
@@ -40,20 +42,38 @@ anthropicRouter.post('/generate', async (c) => {
       })
     })
 
-    if (!response.ok) {
+    if (!isSuccessResponse(response)) {
       throw new Error(`Anthropic API error: ${response.status}`)
     }
 
-    const data = await response.json()
-    const content = data.content[0].text
+    const responseData = await response.json()
+    const anthropicMessage = safeParse(AnthropicMessageSchema, responseData)
 
-    // Parse the JSON from Claude's response
-    const playlistData = JSON.parse(content)
+    if (!anthropicMessage) {
+      throw new Error('Invalid response format from Anthropic API')
+    }
+
+    const content = anthropicMessage.content[0].text
+
+    // Parse and validate the JSON from Claude's response
+    let jsonContent: unknown
+    try {
+      jsonContent = JSON.parse(content)
+    } catch {
+      throw new Error('Invalid JSON response from Anthropic API')
+    }
+
+    const playlistData = safeParse(GeneratedPlaylistSchema, jsonContent)
+
+    if (!playlistData) {
+      throw new Error('Generated playlist does not match expected format')
+    }
 
     return c.json(playlistData)
   } catch (error) {
     console.error('Anthropic API error:', error)
-    return c.json({ error: 'Failed to generate playlist' }, 500)
+    const message = error instanceof Error ? error.message : 'Failed to generate playlist'
+    return c.json({ error: message }, 500)
   }
 })
 

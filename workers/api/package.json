@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build": "tsup",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "typecheck": "tsc --noEmit",
@@ -11,11 +12,13 @@
   },
   "dependencies": {
     "@dj/shared-types": "workspace:*",
-    "hono": "^4.9.8"
+    "hono": "^4.9.8",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20241127.0",
-    "wrangler": "^3.114.14",
-    "vitest": "^3.2.0"
+    "tsup": "^8.3.5",
+    "vitest": "^3.2.0",
+    "wrangler": "^3.114.14"
   }
 }

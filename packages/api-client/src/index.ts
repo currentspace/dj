@@ -32,9 +32,9 @@ export class DJApiClient {
     options: RequestInit = {}
   ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
-    const headers: HeadersInit = {
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      ...options.headers
+      ...(options.headers as Record<string, string> || {})
     };
 
     if (this.token) {
@@ -89,5 +89,7 @@ export class DJApiClient {
 
 // Export a singleton instance for convenience
 export const apiClient = new DJApiClient(
-  import.meta.env.DEV ? 'http://localhost:8787/api' : '/api'
+  typeof window !== 'undefined' && window.location.hostname === 'localhost'
+    ? 'http://localhost:8787/api'
+    : '/api'
 );

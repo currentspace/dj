@@ -1,17 +1,26 @@
 import { Hono } from 'hono'
 import type { Env } from '../index'
+import {
+  AnthropicMessageSchema,
+  GeneratedPlaylistSchema,
+  GeneratePlaylistRequestSchema
+} from '../lib/schemas'
+import { safeParse, isSuccessResponse } from '../lib/guards'
 
 const playlistRouter = new Hono<{ Bindings: Env }>()
 
 playlistRouter.post('/generate', async (c) => {
-  const { prompt } = await c.req.json()
-  const token = c.req.header('Authorization')?.replace('Bearer ', '')
-
-  if (!prompt) {
-    return c.json({ error: 'Prompt is required' }, 400)
-  }
-
   try {
+    const requestBody = await c.req.json()
+    const request = safeParse(GeneratePlaylistRequestSchema, requestBody)
+
+    if (!request) {
+      return c.json({ error: 'Valid prompt is required' }, 400)
+    }
+
+    const token = c.req.header('Authorization')?.replace('Bearer ', '')
+    const { prompt } = request
+
     // Step 1: Generate playlist ideas with Anthropic
     const anthropicResponse = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -27,7 +36,7 @@ playlistRouter.post('/generate', async (c) => {
           {
             role: 'user',
             content: `You are a music expert DJ. Based on the following request, generate a playlist with 10-15 songs.
-            Return ONLY a JSON object (no other text) with this exact structure:
+            Return ONLY a valid JSON object with this exact structure (no other text):
             {
               "name": "playlist name",
               "description": "brief description",
@@ -42,13 +51,31 @@ playlistRouter.post('/generate', async (c) => {
       })
     })
 
-    if (!anthropicResponse.ok) {
+    if (!isSuccessResponse(anthropicResponse)) {
       throw new Error(`Anthropic API error: ${anthropicResponse.status}`)
     }
 
-    const anthropicData = await anthropicResponse.json()
-    const content = anthropicData.content[0].text
-    const playlistData = JSON.parse(content)
+    const responseData = await anthropicResponse.json()
+    const anthropicMessage = safeParse(AnthropicMessageSchema, responseData)
+
+    if (!anthropicMessage) {
+      throw new Error('Invalid response format from Anthropic API')
+    }
+
+    const content = anthropicMessage.content[0].text
+
+    let jsonContent: unknown
+    try {
+      jsonContent = JSON.parse(content)
+    } catch {
+      throw new Error('Invalid JSON response from Anthropic API')
+    }
+
+    const playlistData = safeParse(GeneratedPlaylistSchema, jsonContent)
+
+    if (!playlistData) {
+      throw new Error('Generated playlist does not match expected format')
+    }
 
     // Step 2: If user is authenticated, search for tracks on Spotify
     if (token) {
@@ -65,7 +92,7 @@ playlistRouter.post('/generate', async (c) => {
             )
 
             if (searchResponse.ok) {
-              const searchData = await searchResponse.json()
+              const searchData = await searchResponse.json() as any
               const spotifyTrack = searchData.tracks?.items?.[0]
               if (spotifyTrack) {
                 return {
@@ -118,7 +145,7 @@ playlistRouter.post('/save', async (c) => {
       throw new Error('Failed to get user profile')
     }
 
-    const userData = await userResponse.json()
+    const userData = await userResponse.json() as any
     const userId = userData.id
 
     // Create playlist
@@ -142,7 +169,7 @@ playlistRouter.post('/save', async (c) => {
       throw new Error('Failed to create playlist')
     }
 
-    const createdPlaylist = await createResponse.json()
+    const createdPlaylist = await createResponse.json() as any
 
     // Add tracks to playlist
     const trackUris = playlist.tracks

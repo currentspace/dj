@@ -1,7 +1,7 @@
 name = "dj-api"
-main = "src/index.ts"
-compatibility_date = "2024-12-01"
-compatibility_flags = ["nodejs_compat_v2"]
+main = "dist/index.js"
+compatibility_date = "2025-09-23"
+compatibility_flags = ["nodejs_compat"]
 workers_dev = false
 
 [vars]
