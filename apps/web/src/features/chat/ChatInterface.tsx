@@ -1,15 +1,37 @@
 import { useState, useRef, useEffect } from 'react';
-import type { ChatMessage, ChatResponse, Playlist } from '@dj/shared-types';
+import type { ChatMessage, ChatResponse } from '@dj/shared-types';
 
-interface ChatInterfaceProps {
-  onPlaylistGenerated?: (playlist: Playlist) => void;
+interface SpotifyPlaylist {
+  id: string;
+  name: string;
+  description: string;
+  external_urls: {
+    spotify: string;
+  };
+  images: Array<{
+    url: string;
+    height: number;
+    width: number;
+  }>;
+  tracks: {
+    total: number;
+  };
+  public: boolean;
+  owner: {
+    display_name: string;
+  };
 }
 
-export function ChatInterface({ onPlaylistGenerated }: ChatInterfaceProps) {
+interface ChatInterfaceProps {
+  selectedPlaylist: SpotifyPlaylist;
+  onPlaylistModified?: () => void;
+}
+
+export function ChatInterface({ selectedPlaylist, onPlaylistModified }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: 'assistant',
-      content: "Hey! I'm your AI DJ assistant. What kind of music are you in the mood for today? I can help you discover new songs or create the perfect playlist for any occasion!"
+      content: `Hey! I'm your AI DJ assistant. I can help you modify "${selectedPlaylist.name}" by adding or removing songs. Tell me what you'd like to add or remove, or ask me to suggest similar tracks!`
     }
   ]);
   const [inputMessage, setInputMessage] = useState('');
@@ -46,7 +68,9 @@ export function ChatInterface({ onPlaylistGenerated }: ChatInterfaceProps) {
         },
         body: JSON.stringify({
           message: userMessage,
-          conversationHistory: messages
+          conversationHistory: messages,
+          selectedPlaylistId: selectedPlaylist.id,
+          mode: 'edit' // Indicate this is playlist editing mode
         })
       });
 
@@ -59,9 +83,9 @@ export function ChatInterface({ onPlaylistGenerated }: ChatInterfaceProps) {
       // Update messages with the full conversation history
       setMessages(chatResponse.conversationHistory);
 
-      // If a playlist was generated, notify parent component
-      if (chatResponse.playlist && onPlaylistGenerated) {
-        onPlaylistGenerated(chatResponse.playlist);
+      // If playlist was modified, notify parent component
+      if (chatResponse.playlistModified && onPlaylistModified) {
+        onPlaylistModified();
       }
 
     } catch (error) {
@@ -90,8 +114,8 @@ export function ChatInterface({ onPlaylistGenerated }: ChatInterfaceProps) {
   return (
     <div className="chat-interface">
       <div className="chat-header">
-        <h2>🎵 AI DJ Chat</h2>
-        <p>Chat with your AI DJ to create the perfect playlist</p>
+        <h2>🎵 Editing: {selectedPlaylist.name}</h2>
+        <p>Chat with your AI DJ to add or remove songs from this playlist</p>
       </div>
 
       <div className="chat-messages">
@@ -128,7 +152,7 @@ export function ChatInterface({ onPlaylistGenerated }: ChatInterfaceProps) {
             value={inputMessage}
             onChange={(e) => setInputMessage(e.target.value)}
             onKeyPress={handleKeyPress}
-            placeholder="Tell me what kind of music you want... (e.g., 'Something upbeat for working out')"
+            placeholder="Add or remove songs... (e.g., 'Add some Taylor Swift songs' or 'Remove the slow songs')"
             rows={2}
             disabled={isLoading}
             className="message-input"

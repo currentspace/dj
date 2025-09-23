@@ -43,6 +43,12 @@ const CreatePlaylistRequestSchema = z.object({
   trackUris: z.array(z.string()).max(100)
 })
 
+const ModifyPlaylistRequestSchema = z.object({
+  playlistId: z.string().min(1),
+  action: z.enum(['add', 'remove']),
+  trackUris: z.array(z.string()).min(1).max(100)
+})
+
 spotifyRouter.get('/auth-url', async (c) => {
   const codeVerifier = generateCodeVerifier()
   const codeChallenge = await generateCodeChallenge(codeVerifier)
@@ -255,6 +261,105 @@ spotifyRouter.post('/playlists', async (c) => {
   } catch (error) {
     console.error('Create playlist error:', error)
     const message = error instanceof Error ? error.message : 'Failed to create playlist'
+    return c.json({ error: message }, 500)
+  }
+})
+
+// Modify playlist (add or remove tracks)
+spotifyRouter.post('/playlists/modify', async (c) => {
+  try {
+    const requestBody = await c.req.json()
+    const modifyRequest = safeParse(ModifyPlaylistRequestSchema, requestBody)
+
+    if (!modifyRequest) {
+      return c.json({ error: 'Invalid modify request' }, 400)
+    }
+
+    const token = c.req.header('Authorization')?.replace('Bearer ', '')
+
+    if (!token) {
+      return c.json({ error: 'No authorization token' }, 401)
+    }
+
+    const { playlistId, action, trackUris } = modifyRequest
+
+    if (action === 'add') {
+      // Add tracks to playlist
+      const response = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          uris: trackUris
+        })
+      })
+
+      if (!isSuccessResponse(response)) {
+        console.error(`Add tracks failed: ${response.status} ${response.statusText}`)
+        return c.json({ error: 'Failed to add tracks' }, 500)
+      }
+
+      const result = await response.json()
+      return c.json({ success: true, action: 'added', snapshot_id: result.snapshot_id })
+
+    } else if (action === 'remove') {
+      // Remove tracks from playlist
+      const response = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          tracks: trackUris.map(uri => ({ uri }))
+        })
+      })
+
+      if (!isSuccessResponse(response)) {
+        console.error(`Remove tracks failed: ${response.status} ${response.statusText}`)
+        return c.json({ error: 'Failed to remove tracks' }, 500)
+      }
+
+      const result = await response.json()
+      return c.json({ success: true, action: 'removed', snapshot_id: result.snapshot_id })
+    }
+
+    return c.json({ error: 'Invalid action' }, 400)
+  } catch (error) {
+    console.error('Modify playlist error:', error)
+    const message = error instanceof Error ? error.message : 'Failed to modify playlist'
+    return c.json({ error: message }, 500)
+  }
+})
+
+// Get playlist tracks
+spotifyRouter.get('/playlists/:id/tracks', async (c) => {
+  try {
+    const playlistId = c.req.param('id')
+    const token = c.req.header('Authorization')?.replace('Bearer ', '')
+
+    if (!token) {
+      return c.json({ error: 'No authorization token' }, 401)
+    }
+
+    const response = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=50`, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    })
+
+    if (!isSuccessResponse(response)) {
+      console.error(`Get playlist tracks failed: ${response.status} ${response.statusText}`)
+      return c.json({ error: 'Failed to get playlist tracks' }, 500)
+    }
+
+    const data = await response.json()
+    return c.json(data)
+  } catch (error) {
+    console.error('Get playlist tracks error:', error)
+    const message = error instanceof Error ? error.message : 'Failed to get playlist tracks'
     return c.json({ error: message }, 500)
   }
 })

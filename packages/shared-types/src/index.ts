@@ -80,5 +80,6 @@ export interface ChatRequest {
 export interface ChatResponse {
   message: string;
   playlist?: Playlist;
+  playlistModified?: boolean;
   conversationHistory: ChatMessage[];
 }

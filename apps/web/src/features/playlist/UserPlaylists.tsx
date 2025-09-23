@@ -23,10 +23,11 @@ interface SpotifyPlaylist {
 }
 
 interface UserPlaylistsProps {
-  onPlaylistCreated?: (playlist: SpotifyPlaylist) => void;
+  onPlaylistSelect?: (playlist: SpotifyPlaylist) => void;
+  selectedPlaylist?: SpotifyPlaylist | null;
 }
 
-function UserPlaylists({ }: UserPlaylistsProps) {
+function UserPlaylists({ onPlaylistSelect, selectedPlaylist }: UserPlaylistsProps) {
   const { token } = useSpotifyAuth();
   const [playlists, setPlaylists] = useState<SpotifyPlaylist[]>([]);
   const [loading, setLoading] = useState(true);
@@ -104,7 +105,11 @@ function UserPlaylists({ }: UserPlaylistsProps) {
 
       <div className="playlists-grid">
         {playlists.map((playlist) => (
-          <div key={playlist.id} className="playlist-card">
+          <div
+            key={playlist.id}
+            className={`playlist-card ${selectedPlaylist?.id === playlist.id ? 'selected' : ''}`}
+            onClick={() => onPlaylistSelect?.(playlist)}
+          >
             <div className="playlist-image">
               {playlist.images && playlist.images.length > 0 ? (
                 <img
@@ -134,6 +139,7 @@ function UserPlaylists({ }: UserPlaylistsProps) {
                 target="_blank"
                 rel="noopener noreferrer"
                 className="open-spotify-button"
+                onClick={(e) => e.stopPropagation()}
               >
                 Open in Spotify
               </a>
@@ -224,12 +230,31 @@ const playlistsStyles = `
     padding: 1rem;
     border: 1px solid #333;
     transition: all 0.2s ease;
+    cursor: pointer;
   }
 
   .playlist-card:hover {
     background: #333;
     border-color: #1db954;
     transform: translateY(-2px);
+  }
+
+  .playlist-card.selected {
+    background: #1db954;
+    border-color: #1ed760;
+    transform: translateY(-2px);
+  }
+
+  .playlist-card.selected .playlist-name {
+    color: white;
+  }
+
+  .playlist-card.selected .playlist-meta {
+    color: rgba(255, 255, 255, 0.8);
+  }
+
+  .playlist-card.selected .playlist-description {
+    color: rgba(255, 255, 255, 0.9);
   }
 
   .playlist-image {

@@ -21,7 +21,9 @@ const ChatMessageSchema = z.object({
 
 const ChatRequestSchema = z.object({
   message: z.string().min(1).max(1000),
-  conversationHistory: z.array(ChatMessageSchema).optional().default([])
+  conversationHistory: z.array(ChatMessageSchema).optional().default([]),
+  selectedPlaylistId: z.string().optional(),
+  mode: z.enum(['create', 'edit']).optional().default('create')
 });
 
 const ChatResponseSchema = z.object({
@@ -31,13 +33,14 @@ const ChatResponseSchema = z.object({
     description: z.string(),
     tracks: z.array(PlaylistTrackSchema)
   }).optional(),
+  playlistModified: z.boolean().optional(),
   conversationHistory: z.array(ChatMessageSchema)
 });
 
 type ChatResponse = z.infer<typeof ChatResponseSchema>;
 
-// System prompt for the DJ assistant
-const SYSTEM_PROMPT = `You are an expert DJ and music curator with deep knowledge of all genres, artists, and musical history. Your job is to help users create the perfect playlists through natural conversation.
+// System prompts for different modes
+const CREATE_SYSTEM_PROMPT = `You are an expert DJ and music curator with deep knowledge of all genres, artists, and musical history. Your job is to help users create the perfect playlists through natural conversation.
 
 Guidelines:
 1. Ask clarifying questions about mood, genre, occasion, energy level, decade, or specific artists
@@ -60,6 +63,38 @@ Examples:
 - User: "90s rock for working out" → Generate playlist immediately
 - User: "Something chill" → Ask about specific mood, genre preferences, or setting`;
 
+const EDIT_SYSTEM_PROMPT = `You are an expert DJ and music curator helping users modify their existing Spotify playlists. Your job is to add or remove songs based on their requests.
+
+Guidelines:
+1. Listen for requests to add or remove specific songs, artists, or types of music
+2. Be conversational and ask clarifying questions when needed
+3. When ready to modify the playlist, format your response as JSON with this exact structure:
+
+For adding songs:
+{
+  "type": "modify",
+  "action": "add",
+  "tracks": [
+    {"name": "Song Name", "artist": "Artist Name", "query": "artist song name"}
+  ]
+}
+
+For removing songs (you'll need to know what's currently in the playlist):
+{
+  "type": "modify",
+  "action": "remove",
+  "tracks": [
+    {"name": "Song Name", "artist": "Artist Name", "query": "artist song name"}
+  ]
+}
+
+4. For regular conversation (not playlist modification), respond normally without JSON
+
+Examples:
+- User: "Add some Taylor Swift songs" → Ask which Taylor Swift songs or generate suggestions
+- User: "Remove all the slow songs" → You'll need to know current playlist contents
+- User: "Add something more upbeat" → Ask for clarification and suggest specific tracks`;
+
 chatRouter.post('/message', async (c) => {
   try {
     const requestBody = await c.req.json();
@@ -69,8 +104,11 @@ chatRouter.post('/message', async (c) => {
       return c.json({ error: 'Invalid chat request' }, 400);
     }
 
-    const { message, conversationHistory = [] } = request;
+    const { message, conversationHistory = [], selectedPlaylistId, mode = 'create' } = request;
     const token = c.req.header('Authorization')?.replace('Bearer ', '');
+
+    // Choose system prompt based on mode
+    const systemPrompt = mode === 'edit' ? EDIT_SYSTEM_PROMPT : CREATE_SYSTEM_PROMPT;
 
     // Initialize Langchain ChatAnthropic
     const chat = new ChatAnthropic({
@@ -82,7 +120,7 @@ chatRouter.post('/message', async (c) => {
 
     // Build conversation messages
     const messages = [
-      new SystemMessage(SYSTEM_PROMPT),
+      new SystemMessage(systemPrompt),
       ...conversationHistory.map(msg =>
         msg.role === 'user'
           ? new HumanMessage(msg.content)
@@ -95,8 +133,9 @@ chatRouter.post('/message', async (c) => {
     const response = await chat.invoke(messages);
     const assistantMessage = response.content as string;
 
-    // Check if response contains a playlist
+    // Check if response contains a playlist or modification command
     let playlist: PlaylistTrack[] | undefined;
+    let playlistModified = false;
     let cleanMessage = assistantMessage;
 
     try {
@@ -104,13 +143,14 @@ chatRouter.post('/message', async (c) => {
       const jsonMatch = assistantMessage.match(/\{[\s\S]*?\}/);
       if (jsonMatch) {
         const jsonStr = jsonMatch[0];
-        const playlistData = JSON.parse(jsonStr);
+        const actionData = JSON.parse(jsonStr);
 
-        if (playlistData.type === 'playlist') {
+        if (actionData.type === 'playlist') {
+          // Handle playlist creation (original functionality)
           const validatedPlaylist = safeParse(GeneratedPlaylistSchema, {
-            name: playlistData.name,
-            description: playlistData.description,
-            tracks: playlistData.tracks
+            name: actionData.name,
+            description: actionData.description,
+            tracks: actionData.tracks
           });
 
           if (validatedPlaylist && token) {
@@ -125,14 +165,60 @@ chatRouter.post('/message', async (c) => {
             // Remove JSON from message
             cleanMessage = assistantMessage.replace(jsonMatch[0], '').trim();
             if (!cleanMessage) {
-              cleanMessage = `I've created "${playlistData.name}" for you! ${playlistData.description}`;
+              cleanMessage = `I've created "${actionData.name}" for you! ${actionData.description}`;
+            }
+          }
+        } else if (actionData.type === 'modify' && selectedPlaylistId && token) {
+          // Handle playlist modification
+          const { action, tracks } = actionData;
+
+          if (tracks && tracks.length > 0) {
+            // Enrich tracks with Spotify data
+            const enrichedTracks = await enrichTracksWithSpotify(tracks, token);
+            const trackUris = enrichedTracks
+              .filter(track => track.spotifyUri)
+              .map(track => track.spotifyUri as string);
+
+            if (trackUris.length > 0) {
+              // Call playlist modification API directly
+              const modifyRequest = {
+                playlistId: selectedPlaylistId,
+                action,
+                trackUris
+              };
+
+              // Make internal request to modify endpoint
+              const modifyResponse = await fetch('https://api.spotify.com/v1/playlists/' + selectedPlaylistId + '/tracks', {
+                method: action === 'add' ? 'POST' : 'DELETE',
+                headers: {
+                  'Authorization': `Bearer ${token}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(
+                  action === 'add'
+                    ? { uris: trackUris }
+                    : { tracks: trackUris.map(uri => ({ uri })) }
+                )
+              });
+
+              if (modifyResponse.ok) {
+                playlistModified = true;
+                cleanMessage = assistantMessage.replace(jsonMatch[0], '').trim();
+                if (!cleanMessage) {
+                  cleanMessage = `I've ${action === 'add' ? 'added' : 'removed'} ${trackUris.length} track${trackUris.length !== 1 ? 's' : ''} ${action === 'add' ? 'to' : 'from'} your playlist!`;
+                }
+              } else {
+                cleanMessage = `I found the tracks but couldn't ${action} them to your playlist. Please try again.`;
+              }
+            } else {
+              cleanMessage = `I couldn't find those tracks on Spotify. Could you be more specific?`;
             }
           }
         }
       }
     } catch (error) {
       // If JSON parsing fails, just continue with the regular message
-      console.log('No valid playlist JSON found in response');
+      console.log('No valid action JSON found in response');
     }
 
     // Update conversation history
@@ -151,7 +237,8 @@ chatRouter.post('/message', async (c) => {
           description: 'AI-generated playlist based on our conversation',
           tracks: playlist
         }
-      })
+      }),
+      playlistModified
     };
 
     return c.json(chatResponse);
