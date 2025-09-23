@@ -1,0 +1,26 @@
+name = "dj-app"
+main = "src/worker/index.ts"
+compatibility_date = "2024-12-01"
+workers_dev = false
+
+[vars]
+ENVIRONMENT = "production"
+
+# Secrets should be added via:
+# - GitHub Actions (automatic deployment)
+# - wrangler secret put (manual deployment)
+
+[site]
+bucket = "./dist"
+
+[[routes]]
+pattern = "dj.current.space/*"
+zone_name = "current.space"
+
+[build]
+command = "npm run build"
+
+# Development environment
+[env.development]
+name = "dj-app-dev"
+vars = { ENVIRONMENT = "development" }
