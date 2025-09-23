@@ -1,26 +1,30 @@
-name = "dj-app"
-main = "src/worker/index.ts"
-compatibility_date = "2024-12-01"
-workers_dev = false
+# Cloudflare Worker Configuration - Points to actual worker in workers/api/
+# This file tells Cloudflare where to find the actual worker configuration
+name = "dj"
+main = "workers/api/dist/index.js"
+compatibility_date = "2025-09-23"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
 
+# Production environment variables
 [vars]
 ENVIRONMENT = "production"
 
-# Secrets should be added via:
-# - GitHub Actions (automatic deployment)
-# - wrangler secret put (manual deployment)
-
+# Static site configuration - serves React app from build output
 [site]
-bucket = "./dist"
+bucket = "apps/web/dist"
 
+# Custom domain routing
 [[routes]]
 pattern = "dj.current.space/*"
 zone_name = "current.space"
 
+# Build configuration for deployment
 [build]
-command = "pnpm run build"
+command = "pnpm run build:worker"
 
-# Development environment
+# Development environment override
 [env.development]
-name = "dj-app-dev"
+name = "dj-dev"
+workers_dev = true
 vars = { ENVIRONMENT = "development" }

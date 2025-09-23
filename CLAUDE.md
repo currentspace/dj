@@ -38,9 +38,9 @@ pnpm run lint         # ESLint
 - API client in `web/src/lib/api.ts`
 - Spotify auth hook in `web/src/hooks/useSpotifyAuth.ts`
 
-### Backend (src/worker/)
+### Backend (workers/api/)
 - **Cloudflare Worker** using Hono framework
-- Routes organized in `src/worker/routes/`
+- Routes organized in `workers/api/src/routes/`
   - `/api/anthropic` - AI playlist generation
   - `/api/spotify` - Spotify authentication and search
   - `/api/playlist` - Combined playlist generation and saving
