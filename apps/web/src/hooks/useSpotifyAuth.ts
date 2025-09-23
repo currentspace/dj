@@ -37,79 +37,27 @@ export function useSpotifyAuth() {
       return;
     }
 
-    if (code && state) {
-      console.log('🔑 Authorization code found, decoding state parameter...');
+    // Check for server-side OAuth callback results (from /api/spotify/callback)
+    const spotifyToken = urlParams.get('spotify_token')
+    const authSuccess = urlParams.get('auth_success')
 
-      try {
-        // Decode the state parameter to get the code verifier (stateless approach)
-        const stateData = JSON.parse(atob(state));
-        const codeVerifier = stateData.verifier;
-        const timestamp = stateData.timestamp;
+    console.log('🔗 Server callback params:', {
+      spotify_token: spotifyToken ? 'Found' : 'Not found',
+      auth_success: authSuccess ? 'Found' : 'Not found',
+      error
+    });
 
-        console.log('🔐 Code verifier from state:', codeVerifier ? 'Found' : 'Missing');
-        console.log('⏰ Auth timestamp:', new Date(timestamp).toISOString());
+    if (spotifyToken && authSuccess) {
+      console.log('🎉 Server-side OAuth success! Storing token...');
+      localStorage.setItem('spotify_token', spotifyToken)
+      setToken(spotifyToken)
+      setIsAuthenticated(true)
+      console.log('✅ Authentication complete!');
 
-        // Check if the auth request is not too old (15 minutes max)
-        const maxAge = 15 * 60 * 1000; // 15 minutes
-        const isExpired = Date.now() - timestamp > maxAge;
-
-        if (codeVerifier && !isExpired) {
-          console.log('✅ Valid OAuth flow with fresh state, proceeding with token exchange');
-          exchangeCodeForToken(code, codeVerifier);
-          // Clean up URL
-          window.history.replaceState({}, document.title, window.location.pathname);
-        } else {
-          console.error('❌ Invalid OAuth flow:');
-          if (!codeVerifier) console.error('  - Missing code verifier in state');
-          if (isExpired) console.error('  - Auth request expired (older than 15 minutes)');
-          console.log('🔄 Please try logging in again');
-          // Clean up URL
-          window.history.replaceState({}, document.title, window.location.pathname);
-        }
-      } catch (error) {
-        console.error('❌ Failed to decode state parameter:', error);
-        console.log('🔄 Invalid state format, please try logging in again');
-        // Clean up URL
-        window.history.replaceState({}, document.title, window.location.pathname);
-      }
+      // Clean up URL
+      window.history.replaceState({}, document.title, window.location.pathname)
     }
   }, [])
-
-  const exchangeCodeForToken = async (code: string, codeVerifier: string) => {
-    try {
-      console.log('🔄 Making token exchange request...');
-
-      const response = await fetch('/api/spotify/token', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ code, codeVerifier }),
-      })
-
-      console.log('📡 Token exchange response status:', response.status);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ Token exchange failed:', response.status, errorText);
-        throw new Error(`Token exchange failed: ${response.status} ${errorText}`)
-      }
-
-      const tokenData = await response.json()
-      console.log('🎉 Token received:', tokenData.access_token ? 'Success' : 'No token in response');
-
-      if (tokenData.access_token) {
-        localStorage.setItem('spotify_token', tokenData.access_token)
-        setToken(tokenData.access_token)
-        setIsAuthenticated(true)
-        console.log('✅ Authentication complete!');
-      } else {
-        console.error('❌ No access_token in response:', tokenData);
-      }
-    } catch (error) {
-      console.error('💥 Failed to exchange code for token:', error)
-    }
-  }
 
   const login = async () => {
     try {
@@ -126,7 +74,7 @@ export function useSpotifyAuth() {
 
       const { url } = await response.json()
       console.log('🔗 Auth URL received:', url ? 'Success' : 'No URL');
-      console.log('🔒 Using stateless OAuth flow (code verifier encoded in state parameter)');
+      console.log('🔒 Using secure cookie-based PKCE flow with server-side token exchange');
 
       console.log('➡️ Redirecting to Spotify...');
       window.location.href = url

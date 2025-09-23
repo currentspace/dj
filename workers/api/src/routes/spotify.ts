@@ -8,7 +8,7 @@ const spotifyRouter = new Hono<{ Bindings: Env }>()
 
 const SPOTIFY_AUTH_URL = 'https://accounts.spotify.com/authorize'
 const SPOTIFY_TOKEN_URL = 'https://accounts.spotify.com/api/token'
-const REDIRECT_URI = 'https://dj.current.space'
+const REDIRECT_URI = 'https://dj.current.space/api/spotify/callback'
 
 // PKCE helper functions
 function generateCodeVerifier(): string {
@@ -49,17 +49,60 @@ const ModifyPlaylistRequestSchema = z.object({
   trackUris: z.array(z.string()).min(1).max(100)
 })
 
+// Base64URL helpers (URL-safe encoding)
+function base64urlEncode(data: string): string {
+  return btoa(data)
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '')
+}
+
+function base64urlDecode(data: string): string {
+  const pad = data.length % 4
+  const padded = data + '='.repeat(pad === 0 ? 0 : 4 - pad)
+  return atob(padded.replace(/-/g, '+').replace(/_/g, '/'))
+}
+
+// HMAC helper for cookie integrity
+async function hmacSign(data: string, key: string): Promise<string> {
+  const encoder = new TextEncoder()
+  const keyData = encoder.encode(key)
+  const dataBuffer = encoder.encode(data)
+
+  const cryptoKey = await crypto.subtle.importKey(
+    'raw',
+    keyData,
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  )
+
+  const signature = await crypto.subtle.sign('HMAC', cryptoKey, dataBuffer)
+  return base64urlEncode(String.fromCharCode(...new Uint8Array(signature)))
+}
+
+async function hmacVerify(data: string, signature: string, key: string): Promise<boolean> {
+  const expectedSignature = await hmacSign(data, key)
+  return expectedSignature === signature
+}
+
 spotifyRouter.get('/auth-url', async (c) => {
   const codeVerifier = generateCodeVerifier()
   const codeChallenge = await generateCodeChallenge(codeVerifier)
 
-  // Encode the code verifier in the state parameter (stateless approach)
-  // This ensures it survives the OAuth redirect without relying on sessionStorage
-  const stateData = {
+  // Generate random state for CSRF protection (no secrets in URL)
+  const state = crypto.randomUUID()
+
+  // Create signed cookie payload with verifier
+  const cookieData = {
+    state,
     verifier: codeVerifier,
     timestamp: Date.now()
   }
-  const state = btoa(JSON.stringify(stateData))
+
+  const payload = base64urlEncode(JSON.stringify(cookieData))
+  const signature = await hmacSign(payload, c.env.SPOTIFY_CLIENT_SECRET) // Use client secret as HMAC key
+  const cookieValue = `${payload}.${signature}`
 
   const params = new URLSearchParams({
     client_id: c.env.SPOTIFY_CLIENT_ID,
@@ -69,13 +112,117 @@ spotifyRouter.get('/auth-url', async (c) => {
     code_challenge: codeChallenge,
     scope: 'playlist-modify-public playlist-modify-private user-read-private',
     show_dialog: 'true',
-    state: state
+    state: state // Only random state in URL, no secrets
   })
+
+  // Set secure, SameSite cookie with verifier
+  c.header('Set-Cookie', `spotify_oauth=${cookieValue}; Max-Age=900; Secure; SameSite=Lax; Path=/; HttpOnly`)
 
   return c.json({
     url: `${SPOTIFY_AUTH_URL}?${params.toString()}`
-    // No need to return codeVerifier - it's encoded in the state
   })
+})
+
+// OAuth callback endpoint - handles server-side token exchange with cookie verification
+spotifyRouter.get('/callback', async (c) => {
+  try {
+    const code = c.req.query('code')
+    const state = c.req.query('state')
+    const error = c.req.query('error')
+
+    if (error) {
+      console.error('OAuth error:', error)
+      return c.redirect(`${c.env.FRONTEND_URL || 'https://dj.current.space'}?error=${encodeURIComponent(error)}`)
+    }
+
+    if (!code || !state) {
+      console.error('Missing code or state parameter')
+      return c.redirect(`${c.env.FRONTEND_URL || 'https://dj.current.space'}?error=missing_parameters`)
+    }
+
+    // Retrieve and verify the signed cookie
+    const cookieHeader = c.req.header('Cookie')
+    const cookieMatch = cookieHeader?.match(/spotify_oauth=([^;]+)/)
+    const cookieValue = cookieMatch?.[1]
+
+    if (!cookieValue) {
+      console.error('Missing OAuth cookie')
+      return c.redirect(`${c.env.FRONTEND_URL || 'https://dj.current.space'}?error=missing_cookie`)
+    }
+
+    const [payload, signature] = cookieValue.split('.')
+    if (!payload || !signature) {
+      console.error('Invalid cookie format')
+      return c.redirect(`${c.env.FRONTEND_URL || 'https://dj.current.space'}?error=invalid_cookie`)
+    }
+
+    // Verify HMAC signature
+    const isValidSignature = await hmacVerify(payload, signature, c.env.SPOTIFY_CLIENT_SECRET)
+    if (!isValidSignature) {
+      console.error('Invalid cookie signature')
+      return c.redirect(`${c.env.FRONTEND_URL || 'https://dj.current.space'}?error=tampered_cookie`)
+    }
+
+    // Decode and validate cookie data
+    const cookieData = JSON.parse(base64urlDecode(payload))
+    const { state: cookieState, verifier: codeVerifier, timestamp } = cookieData
+
+    // Validate state matches (CSRF protection)
+    if (state !== cookieState) {
+      console.error('State mismatch - possible CSRF attack')
+      return c.redirect(`${c.env.FRONTEND_URL || 'https://dj.current.space'}?error=state_mismatch`)
+    }
+
+    // Check cookie age (15 minutes max)
+    const maxAge = 15 * 60 * 1000
+    if (Date.now() - timestamp > maxAge) {
+      console.error('OAuth cookie expired')
+      return c.redirect(`${c.env.FRONTEND_URL || 'https://dj.current.space'}?error=expired_auth`)
+    }
+
+    // Exchange code for tokens server-side
+    const tokenResponse = await fetch(SPOTIFY_TOKEN_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: REDIRECT_URI,
+        client_id: c.env.SPOTIFY_CLIENT_ID,
+        client_secret: c.env.SPOTIFY_CLIENT_SECRET,
+        code_verifier: codeVerifier,
+      }),
+    })
+
+    if (!tokenResponse.ok) {
+      const errorText = await tokenResponse.text()
+      console.error('Token exchange failed:', tokenResponse.status, errorText)
+      return c.redirect(`${c.env.FRONTEND_URL || 'https://dj.current.space'}?error=token_exchange_failed`)
+    }
+
+    const tokenData = await tokenResponse.json()
+
+    if (!tokenData.access_token) {
+      console.error('No access token in response')
+      return c.redirect(`${c.env.FRONTEND_URL || 'https://dj.current.space'}?error=no_access_token`)
+    }
+
+    // Clear the OAuth cookie
+    c.header('Set-Cookie', `spotify_oauth=; Max-Age=0; Secure; SameSite=Lax; Path=/; HttpOnly`)
+
+    // Redirect back to SPA with success and token
+    const redirectUrl = new URL(c.env.FRONTEND_URL || 'https://dj.current.space')
+    redirectUrl.searchParams.set('spotify_token', tokenData.access_token)
+    redirectUrl.searchParams.set('auth_success', 'true')
+
+    return c.redirect(redirectUrl.toString())
+
+  } catch (error) {
+    console.error('Callback error:', error)
+    return c.redirect(`${c.env.FRONTEND_URL || 'https://dj.current.space'}?error=callback_failed`)
+  }
 })
 
 // Token exchange endpoint
