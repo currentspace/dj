@@ -8,10 +8,7 @@ const spotifyRouter = new Hono<{ Bindings: Env }>()
 
 const SPOTIFY_AUTH_URL = 'https://accounts.spotify.com/authorize'
 const SPOTIFY_TOKEN_URL = 'https://accounts.spotify.com/api/token'
-const REDIRECT_URI = 'https://dj.current.space/api/spotify/callback'
-
-// In-memory store for code verifiers (could be upgraded to KV storage)
-const codeVerifierStore = new Map<string, string>()
+const REDIRECT_URI = 'https://dj.current.space'
 
 // PKCE helper functions
 function generateCodeVerifier(): string {
@@ -56,12 +53,6 @@ spotifyRouter.get('/auth-url', async (c) => {
   const codeVerifier = generateCodeVerifier()
   const codeChallenge = await generateCodeChallenge(codeVerifier)
 
-  // Generate a unique state parameter to link the request
-  const state = crypto.randomUUID()
-
-  // Store the code verifier server-side with the state as key
-  codeVerifierStore.set(state, codeVerifier)
-
   const params = new URLSearchParams({
     client_id: c.env.SPOTIFY_CLIENT_ID,
     response_type: 'code',
@@ -69,83 +60,13 @@ spotifyRouter.get('/auth-url', async (c) => {
     code_challenge_method: 'S256',
     code_challenge: codeChallenge,
     scope: 'playlist-modify-public playlist-modify-private user-read-private',
-    show_dialog: 'true',
-    state: state // Include state for security and to retrieve verifier
+    show_dialog: 'true'
   })
 
   return c.json({
-    url: `${SPOTIFY_AUTH_URL}?${params.toString()}`
-    // No longer return codeVerifier to frontend - it's stored server-side
+    url: `${SPOTIFY_AUTH_URL}?${params.toString()}`,
+    codeVerifier // Return to frontend for sessionStorage
   })
-})
-
-// OAuth callback endpoint - handles Spotify redirect
-spotifyRouter.get('/callback', async (c) => {
-  try {
-    const code = c.req.query('code')
-    const state = c.req.query('state')
-    const error = c.req.query('error')
-
-    if (error) {
-      console.error('OAuth error:', error)
-      return c.redirect(`${c.env.FRONTEND_URL || 'https://dj.current.space'}?error=${encodeURIComponent(error)}`)
-    }
-
-    if (!code || !state) {
-      console.error('Missing code or state parameter')
-      return c.redirect(`${c.env.FRONTEND_URL || 'https://dj.current.space'}?error=missing_parameters`)
-    }
-
-    // Retrieve the code verifier using the state
-    const codeVerifier = codeVerifierStore.get(state)
-    if (!codeVerifier) {
-      console.error('Invalid or expired state parameter')
-      return c.redirect(`${c.env.FRONTEND_URL || 'https://dj.current.space'}?error=invalid_state`)
-    }
-
-    // Clean up the stored verifier
-    codeVerifierStore.delete(state)
-
-    // Exchange code for tokens
-    const tokenResponse = await fetch(SPOTIFY_TOKEN_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams({
-        grant_type: 'authorization_code',
-        code,
-        redirect_uri: REDIRECT_URI,
-        client_id: c.env.SPOTIFY_CLIENT_ID,
-        client_secret: c.env.SPOTIFY_CLIENT_SECRET,
-        code_verifier: codeVerifier,
-      }),
-    })
-
-    if (!tokenResponse.ok) {
-      const errorText = await tokenResponse.text()
-      console.error('Token exchange failed:', tokenResponse.status, errorText)
-      return c.redirect(`${c.env.FRONTEND_URL || 'https://dj.current.space'}?error=token_exchange_failed`)
-    }
-
-    const tokenData = await tokenResponse.json()
-
-    if (!tokenData.access_token) {
-      console.error('No access token in response')
-      return c.redirect(`${c.env.FRONTEND_URL || 'https://dj.current.space'}?error=no_access_token`)
-    }
-
-    // Redirect back to SPA with success and token
-    const redirectUrl = new URL(c.env.FRONTEND_URL || 'https://dj.current.space')
-    redirectUrl.searchParams.set('spotify_token', tokenData.access_token)
-    redirectUrl.searchParams.set('auth_success', 'true')
-
-    return c.redirect(redirectUrl.toString())
-
-  } catch (error) {
-    console.error('Callback error:', error)
-    return c.redirect(`${c.env.FRONTEND_URL || 'https://dj.current.space'}?error=callback_failed`)
-  }
 })
 
 // Token exchange endpoint
