@@ -23,7 +23,8 @@ const ChatRequestSchema = z.object({
   message: z.string().min(1).max(1000),
   conversationHistory: z.array(ChatMessageSchema).optional().default([]),
   selectedPlaylistId: z.string().optional(),
-  mode: z.enum(['create', 'edit']).optional().default('create')
+  playlistTracks: z.array(z.any()).optional().default([]),
+  mode: z.enum(['create', 'edit', 'analyze']).optional().default('create')
 });
 
 const ChatResponseSchema = z.object({
@@ -95,6 +96,40 @@ Examples:
 - User: "Remove all the slow songs" → You'll need to know current playlist contents
 - User: "Add something more upbeat" → Ask for clarification and suggest specific tracks`;
 
+const ANALYZE_SYSTEM_PROMPT = `You are an expert music analyst and DJ who helps users understand and discuss their playlists. You have deep knowledge of music history, genres, artists, eras, and musical characteristics.
+
+Your role is to:
+1. Analyze playlists and describe their musical characteristics
+2. Discuss the vibe, era, genre, and mood of playlists
+3. Explain musical patterns and connections between songs
+4. Suggest similar songs that would fit the playlist's style
+5. Have engaging conversations about music and musical taste
+
+When analyzing playlists, consider:
+- Genre and subgenres represented
+- Era/decade patterns
+- Musical characteristics (tempo, energy, mood)
+- Artist patterns and influences
+- Thematic connections
+- Production styles and sounds
+
+For song recommendations, provide specific suggestions formatted as JSON:
+{
+  "type": "recommendation",
+  "reasoning": "Brief explanation of why these songs fit",
+  "tracks": [
+    {"name": "Song Name", "artist": "Artist Name", "query": "artist song name"}
+  ]
+}
+
+Be conversational, knowledgeable, and passionate about music. Help users discover new aspects of their musical taste.
+
+Examples:
+- User: "Describe this playlist" → Analyze genres, eras, moods, and overall vibe
+- User: "What era is this from?" → Identify time periods and explain musical characteristics
+- User: "Recommend similar songs" → Suggest tracks that match the playlist's style
+- User: "What's the vibe of this playlist?" → Describe mood, energy, and atmosphere`;
+
 chatRouter.post('/message', async (c) => {
   try {
     const requestBody = await c.req.json();
@@ -104,11 +139,16 @@ chatRouter.post('/message', async (c) => {
       return c.json({ error: 'Invalid chat request' }, 400);
     }
 
-    const { message, conversationHistory = [], selectedPlaylistId, mode = 'create' } = request;
+    const { message, conversationHistory = [], selectedPlaylistId, playlistTracks = [], mode = 'create' } = request;
     const token = c.req.header('Authorization')?.replace('Bearer ', '');
 
     // Choose system prompt based on mode
-    const systemPrompt = mode === 'edit' ? EDIT_SYSTEM_PROMPT : CREATE_SYSTEM_PROMPT;
+    let systemPrompt = CREATE_SYSTEM_PROMPT;
+    if (mode === 'edit') {
+      systemPrompt = EDIT_SYSTEM_PROMPT;
+    } else if (mode === 'analyze') {
+      systemPrompt = ANALYZE_SYSTEM_PROMPT;
+    }
 
     // Initialize Langchain ChatAnthropic
     const chat = new ChatAnthropic({
@@ -126,8 +166,27 @@ chatRouter.post('/message', async (c) => {
           ? new HumanMessage(msg.content)
           : new AIMessage(msg.content)
       ),
-      new HumanMessage(message)
     ];
+
+    // Add playlist context for analyze mode
+    if (mode === 'analyze' && playlistTracks.length > 0) {
+      const trackList = playlistTracks
+        .slice(0, 50) // Limit to first 50 tracks to avoid token limits
+        .map((item: any) => {
+          const track = item.track;
+          if (track) {
+            return `"${track.name}" by ${track.artists?.map((a: any) => a.name).join(', ')}`;
+          }
+          return null;
+        })
+        .filter(Boolean)
+        .join('\n');
+
+      const contextMessage = `Here are the current tracks in this playlist:\n\n${trackList}\n\nUser question: ${message}`;
+      messages.push(new HumanMessage(contextMessage));
+    } else {
+      messages.push(new HumanMessage(message));
+    }
 
     // Get response from Claude
     const response = await chat.invoke(messages);
@@ -166,6 +225,31 @@ chatRouter.post('/message', async (c) => {
             cleanMessage = assistantMessage.replace(jsonMatch[0], '').trim();
             if (!cleanMessage) {
               cleanMessage = `I've created "${actionData.name}" for you! ${actionData.description}`;
+            }
+          }
+        } else if (actionData.type === 'recommendation') {
+          // Handle song recommendations
+          const { reasoning, tracks } = actionData;
+
+          if (tracks && tracks.length > 0) {
+            // Enrich tracks with Spotify data
+            const enrichedTracks = await enrichTracksWithSpotify(tracks, token);
+
+            // Remove JSON from message and add reasoning
+            cleanMessage = assistantMessage.replace(jsonMatch[0], '').trim();
+            if (!cleanMessage) {
+              cleanMessage = `${reasoning}\n\nHere are some recommendations that would fit perfectly:`;
+            }
+
+            // Add track suggestions to the message
+            const trackSuggestions = enrichedTracks
+              .map((track, index) => `${index + 1}. "${track.name}" by ${track.artist}`)
+              .join('\n');
+
+            cleanMessage += `\n\n${trackSuggestions}`;
+
+            if (enrichedTracks.some(track => track.spotifyUri)) {
+              cleanMessage += `\n\nWould you like me to add any of these to your playlist?`;
             }
           }
         } else if (actionData.type === 'modify' && selectedPlaylistId && token) {

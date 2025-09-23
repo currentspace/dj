@@ -28,15 +28,42 @@ interface ChatInterfaceProps {
 }
 
 export function ChatInterface({ selectedPlaylist, onPlaylistModified }: ChatInterfaceProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      role: 'assistant',
-      content: `Hey! I'm your AI DJ assistant. I can help you modify "${selectedPlaylist.name}" by adding or removing songs. Tell me what you'd like to add or remove, or ask me to suggest similar tracks!`
-    }
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [playlistTracks, setPlaylistTracks] = useState<any[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Load playlist tracks when playlist changes
+  useEffect(() => {
+    if (selectedPlaylist) {
+      loadPlaylistTracks();
+      setMessages([
+        {
+          role: 'assistant',
+          content: `Hey! I'm your AI DJ assistant. I'm analyzing "${selectedPlaylist.name}" to understand its vibe and style. Ask me to describe this playlist, suggest similar songs, or chat about its musical style!`
+        }
+      ]);
+    }
+  }, [selectedPlaylist.id]);
+
+  const loadPlaylistTracks = async () => {
+    try {
+      const response = await fetch(`/api/spotify/playlists/${selectedPlaylist.id}/tracks`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('spotify_token')}`
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setPlaylistTracks(data.items || []);
+        console.log('📀 Loaded playlist tracks:', data.items?.length || 0);
+      }
+    } catch (error) {
+      console.error('Failed to load playlist tracks:', error);
+    }
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -70,7 +97,8 @@ export function ChatInterface({ selectedPlaylist, onPlaylistModified }: ChatInte
           message: userMessage,
           conversationHistory: messages,
           selectedPlaylistId: selectedPlaylist.id,
-          mode: 'edit' // Indicate this is playlist editing mode
+          playlistTracks: playlistTracks,
+          mode: 'analyze' // Indicate this is playlist analysis mode
         })
       });
 
