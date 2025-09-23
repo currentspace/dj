@@ -23,7 +23,7 @@ An AI-powered DJ app that creates Spotify playlists using Anthropic's Claude API
 
 1. Install dependencies:
 ```bash
-npm install
+pnpm install
 ```
 
 2. Create `.dev.vars` file for local development:
@@ -36,10 +36,10 @@ SPOTIFY_CLIENT_SECRET=your_spotify_client_secret
 3. Run development servers:
 ```bash
 # Terminal 1: Start Cloudflare Worker
-npm run worker:dev
+pnpm run worker:dev
 
 # Terminal 2: Start React frontend
-npm run dev
+pnpm run dev
 ```
 
 ### Deployment
@@ -71,7 +71,7 @@ wrangler secret put SPOTIFY_CLIENT_SECRET
 
 2. Deploy to Cloudflare:
 ```bash
-npm run deploy
+pnpm run deploy
 ```
 
 ## Project Structure

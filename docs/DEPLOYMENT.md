@@ -48,7 +48,7 @@ wrangler secret put SPOTIFY_CLIENT_ID
 wrangler secret put SPOTIFY_CLIENT_SECRET
 
 # Deploy
-npm run deploy
+pnpm run deploy
 ```
 
 ## Deployment Workflow

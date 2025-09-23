@@ -18,7 +18,7 @@ pattern = "dj.current.space/*"
 zone_name = "current.space"
 
 [build]
-command = "npm run build"
+command = "pnpm run build"
 
 # Development environment
 [env.development]

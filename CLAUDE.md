@@ -8,21 +8,23 @@ DJ is an AI-powered playlist generator that combines Anthropic's Claude API with
 
 ## Development Commands
 
+**IMPORTANT: This project uses pnpm as the package manager. Always use pnpm instead of npm or yarn.**
+
 ```bash
 # Install dependencies
-npm install
+pnpm install
 
 # Development
-npm run dev          # Start React frontend (port 3000)
-npm run worker:dev   # Start Cloudflare Worker (port 8787)
+pnpm run dev          # Start React frontend (port 3000)
+pnpm run worker:dev   # Start Cloudflare Worker (port 8787)
 
 # Build & Deploy
-npm run build        # Build React app
-npm run deploy       # Build and deploy to Cloudflare
+pnpm run build        # Build React app
+pnpm run deploy       # Build and deploy to Cloudflare
 
 # Code Quality
-npm run typecheck    # Type checking
-npm run lint         # ESLint
+pnpm run typecheck    # Type checking
+pnpm run lint         # ESLint
 ```
 
 ## Architecture
