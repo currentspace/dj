@@ -1,7 +1,7 @@
 import { useState, Suspense, lazy } from 'react'
 import { PlaylistGenerator } from './components/PlaylistGenerator'
 import { SpotifyAuth } from './components/SpotifyAuth'
-import { ChatInterface } from './components/ChatInterfaceNew'
+import { ChatInterfaceStreaming } from './components/ChatInterfaceStreaming'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { useSpotifyAuth } from './hooks/useSpotifyAuth'
 import { preloadPlaylists } from './lib/playlist-resource'
@@ -44,7 +44,7 @@ function App() {
           <ErrorBoundary>
             <Suspense fallback={<div className="loading">Loading...</div>}>
               {view === 'chat' ? (
-                <ChatInterface />
+                <ChatInterfaceStreaming />
               ) : (
                 <LazyPlaylistGenerator />
               )}

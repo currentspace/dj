@@ -5,6 +5,7 @@ import { playlistRouter } from './routes/playlist'
 import { testRouter } from './routes/test'
 import { mcpRouter } from './routes/mcp'
 import { chatRouter } from './routes/chat-simple'
+import { chatStreamRouter } from './routes/chat-stream'
 import { chatTestRouter } from './routes/chat-test'
 import { anthropicStatusRouter } from './routes/anthropic-status'
 
@@ -28,6 +29,7 @@ app.get('/health', (c) => c.json({ status: 'healthy' }))
 app.route('/api/spotify', spotifyRouter)
 app.route('/api/playlist', playlistRouter)
 app.route('/api/chat', chatRouter) // Simplified chat endpoint with direct tool integration
+app.route('/api/chat-stream', chatStreamRouter) // SSE streaming chat endpoint
 app.route('/api/chat-test', chatTestRouter) // Test endpoints for debugging
 app.route('/api/anthropic', anthropicStatusRouter) // Anthropic rate limit and status checking
 app.route('/api/test', testRouter)
