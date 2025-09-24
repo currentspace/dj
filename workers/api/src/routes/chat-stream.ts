@@ -46,7 +46,8 @@ function sendSSE(stream: HonoStreamWriter, event: StreamEvent) {
 function createStreamingSpotifyTools(
   spotifyToken: string,
   stream: HonoStreamWriter,
-  contextPlaylistId?: string
+  contextPlaylistId?: string,
+  mode?: string
 ): DynamicStructuredTool[] {
   const tools: DynamicStructuredTool[] = [
     new DynamicStructuredTool({
@@ -113,21 +114,50 @@ function createStreamingSpotifyTools(
       name: 'get_audio_features',
       description: 'Get audio features for tracks',
       schema: z.object({
-        track_ids: z.array(z.string()).max(100)
+        track_ids: z.array(z.string()).max(100).optional()
       }),
       func: async (args) => {
+        let finalArgs = { ...args };
+
+        // Smart context inference: if no track_ids but we have playlist context
+        if ((!args.track_ids || args.track_ids.length === 0) && contextPlaylistId && mode === 'analyze') {
+          console.log(`[get_audio_features] Auto-fetching tracks from playlist: ${contextPlaylistId}`);
+
+          try {
+            // Fetch playlist tracks
+            const playlistResponse = await fetch(
+              `https://api.spotify.com/v1/playlists/${contextPlaylistId}/tracks?limit=100`,
+              { headers: { 'Authorization': `Bearer ${spotifyToken}` } }
+            );
+
+            if (playlistResponse.ok) {
+              const playlistData = await playlistResponse.json() as any;
+              const trackIds = playlistData.items
+                ?.map((item: any) => item.track?.id)
+                .filter((id: string) => id) || [];
+
+              if (trackIds.length > 0) {
+                finalArgs.track_ids = trackIds.slice(0, 100); // Limit to 100 tracks
+                console.log(`[get_audio_features] Auto-injected ${finalArgs.track_ids.length} track IDs from playlist`);
+              }
+            }
+          } catch (error) {
+            console.error(`[get_audio_features] Failed to auto-fetch playlist tracks:`, error);
+          }
+        }
+
         sendSSE(stream, {
           type: 'tool_start',
-          data: { tool: 'get_audio_features', args }
+          data: { tool: 'get_audio_features', args: finalArgs }
         });
 
-        const result = await executeSpotifyTool('get_audio_features', args, spotifyToken);
+        const result = await executeSpotifyTool('get_audio_features', finalArgs, spotifyToken);
 
         sendSSE(stream, {
           type: 'tool_end',
           data: {
             tool: 'get_audio_features',
-            result: `Analyzed ${args.track_ids.length} tracks`
+            result: finalArgs.track_ids ? `Analyzed ${finalArgs.track_ids.length} tracks` : 'Analysis complete'
           }
         });
 
@@ -144,12 +174,44 @@ function createStreamingSpotifyTools(
         limit: z.number().min(1).max(100).default(20)
       }),
       func: async (args) => {
+        let finalArgs = { ...args };
+
+        // Smart context inference: if no seeds but we have playlist context
+        if ((!args.seed_tracks || args.seed_tracks.length === 0) &&
+            (!args.seed_artists || args.seed_artists.length === 0) &&
+            contextPlaylistId && (mode === 'analyze' || mode === 'create')) {
+          console.log(`[get_recommendations] Auto-fetching seed tracks from playlist: ${contextPlaylistId}`);
+
+          try {
+            // Fetch playlist tracks to use as seeds
+            const playlistResponse = await fetch(
+              `https://api.spotify.com/v1/playlists/${contextPlaylistId}/tracks?limit=50`,
+              { headers: { 'Authorization': `Bearer ${spotifyToken}` } }
+            );
+
+            if (playlistResponse.ok) {
+              const playlistData = await playlistResponse.json() as any;
+              const trackIds = playlistData.items
+                ?.map((item: any) => item.track?.id)
+                .filter((id: string) => id)
+                .slice(0, 5) || []; // Use up to 5 tracks as seeds
+
+              if (trackIds.length > 0) {
+                finalArgs.seed_tracks = trackIds;
+                console.log(`[get_recommendations] Auto-injected ${finalArgs.seed_tracks.length} seed tracks from playlist`);
+              }
+            }
+          } catch (error) {
+            console.error(`[get_recommendations] Failed to auto-fetch seed tracks:`, error);
+          }
+        }
+
         sendSSE(stream, {
           type: 'tool_start',
-          data: { tool: 'get_recommendations', args }
+          data: { tool: 'get_recommendations', args: finalArgs }
         });
 
-        const result = await executeSpotifyTool('get_recommendations', args, spotifyToken);
+        const result = await executeSpotifyTool('get_recommendations', finalArgs, spotifyToken);
 
         sendSSE(stream, {
           type: 'tool_end',
@@ -297,7 +359,7 @@ chatStreamRouter.post('/message', async (c) => {
       sendSSE(stream, { type: 'thinking', data: 'Processing your request...' });
 
       // Create tools with streaming callbacks
-      const tools = createStreamingSpotifyTools(spotifyToken, stream, playlistId);
+      const tools = createStreamingSpotifyTools(spotifyToken, stream, playlistId, request.mode);
 
       // Initialize Claude with streaming
       const llm = new ChatAnthropic({
