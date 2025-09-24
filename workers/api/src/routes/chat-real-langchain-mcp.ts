@@ -63,7 +63,7 @@ realLangChainMcpRouter.post('/message', async (c) => {
 
     const client = new MultiServerMCPClient({
       spotify: {
-        transport: 'sse',
+        transport: 'http',
         url: mcpServerUrl,
         headers: {
           'Authorization': `Bearer ${sessionToken}`,
@@ -245,7 +245,7 @@ realLangChainMcpRouter.post('/test-connection', async (c) => {
 
     const client = new MultiServerMCPClient({
       spotify: {
-        transport: 'sse',
+        transport: 'http',
         url: mcpServerUrl,
         headers: {
           'Authorization': `Bearer ${sessionToken}`,
