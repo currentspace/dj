@@ -239,8 +239,19 @@ chatRouter.post('/message', async (c) => {
     console.log(`[Chat:${requestId}] Request body size: ${JSON.stringify(body).length} bytes`);
     console.log(`[Chat:${requestId}] Parsing and validating request...`);
     const request = ChatRequestSchema.parse(body);
+
+    // Extract playlist ID if present in message
+    let playlistId: string | null = null;
+    let actualMessage = request.message;
+    const playlistIdMatch = request.message.match(/^\[Playlist ID: ([^\]]+)\] (.+)$/);
+    if (playlistIdMatch) {
+      playlistId = playlistIdMatch[1];
+      actualMessage = playlistIdMatch[2];
+      console.log(`[Chat:${requestId}] Extracted playlist ID: ${playlistId}`);
+    }
+
     console.log(`[Chat:${requestId}] Mode: ${request.mode}`);
-    console.log(`[Chat:${requestId}] Message: "${request.message.substring(0, 100)}${request.message.length > 100 ? '...' : ''}"`);
+    console.log(`[Chat:${requestId}] Message: "${actualMessage.substring(0, 100)}${actualMessage.length > 100 ? '...' : ''}"`);
     console.log(`[Chat:${requestId}] Conversation history: ${request.conversationHistory.length} messages`);
 
     // Get Spotify token from Authorization header
@@ -289,7 +300,7 @@ When asked about music, tracks, or artists:
 1. ALWAYS search for tracks first using search_spotify_tracks
 2. Get audio features using get_audio_features for detailed analysis
 3. Provide specific data-driven insights
-
+${playlistId ? `\nThe user has selected a playlist for analysis. Playlist ID: ${playlistId}\nWhen the user asks about \"the playlist\" or \"selected playlist\", use analyze_playlist with this ID.` : ''}
 Be conversational but accurate. Use the tools to get real data.`,
 
       create: `You are an expert DJ creating perfect playlists.
@@ -309,7 +320,7 @@ When editing playlists:
 3. Check audio compatibility
 4. Modify the playlist with modify_playlist
 5. Explain your changes
-
+${playlistId ? `\nThe user has selected a playlist to edit. Playlist ID: ${playlistId}\nWhen the user refers to \"the playlist\" or \"selected playlist\", use this ID for analyze_playlist and modify_playlist.` : ''}
 Use tools to make informed decisions.`
     };
 
@@ -319,7 +330,7 @@ Use tools to make informed decisions.`
       ...request.conversationHistory.map((m) =>
         m.role === 'user' ? new HumanMessage(m.content) : new AIMessage(m.content)
       ),
-      new HumanMessage(request.message)
+      new HumanMessage(actualMessage) // Use the actual message without the playlist ID prefix
     ];
 
     console.log(`[Chat:${requestId}] === PREPARING CLAUDE INVOCATION ===`);
@@ -526,7 +537,7 @@ Use tools to make informed decisions.`
       message: responseContent,
       conversationHistory: [
         ...request.conversationHistory,
-        { role: 'user' as const, content: request.message },
+        { role: 'user' as const, content: actualMessage }, // Use actualMessage without playlist ID prefix
         { role: 'assistant' as const, content: responseContent }
       ],
       requestId,
