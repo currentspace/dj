@@ -19,11 +19,13 @@ export function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
-  const [mode, setMode] = useState<'analyze' | 'create' | 'edit'>('create')
+  const [mode, setMode] = useState<'analyze' | 'create' | 'edit'>('analyze') // Default to analyze to test
   const [playlists, setPlaylists] = useState<Playlist[]>([])
   const [selectedPlaylistId, setSelectedPlaylistId] = useState<string | null>(null)
   const [loadingPlaylists, setLoadingPlaylists] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  console.log('[ChatInterface] Component initialized with mode:', mode)
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -33,9 +35,16 @@ export function ChatInterface() {
     scrollToBottom()
   }, [messages])
 
+  // Debug selectedPlaylistId changes
+  useEffect(() => {
+    console.log(`[ChatInterface] 🎯 selectedPlaylistId changed to: "${selectedPlaylistId}"`)
+  }, [selectedPlaylistId])
+
   // Load user playlists when mode changes to analyze or edit
   useEffect(() => {
+    console.log(`[ChatInterface] Mode changed to: ${mode}`)
     if (mode === 'analyze' || mode === 'edit') {
+      console.log(`[ChatInterface] Mode requires playlists, loading...`)
       loadPlaylists()
     }
   }, [mode])
@@ -43,23 +52,44 @@ export function ChatInterface() {
   const loadPlaylists = async () => {
     if (playlists.length > 0) {
       console.log('[ChatInterface] Playlists already loaded:', playlists.length)
-      return // Already loaded
+      // Even if loaded, make sure we have a selection
+      if (!selectedPlaylistId && playlists.length > 0) {
+        const firstId = playlists[0].id
+        console.log(`[ChatInterface] No playlist selected, auto-selecting: ${firstId}`)
+        setSelectedPlaylistId(firstId)
+      }
+      return
     }
 
     console.log('[ChatInterface] Loading user playlists...')
     setLoadingPlaylists(true)
     try {
       const userPlaylists = await getUserPlaylists()
-      console.log('[ChatInterface] Loaded playlists:', userPlaylists.items?.length || 0)
-      setPlaylists(userPlaylists.items || [])
+      console.log('[ChatInterface] API returned playlists:', userPlaylists)
+      const items = userPlaylists.items || []
+      console.log('[ChatInterface] Loaded playlists count:', items.length)
+
+      if (items.length > 0) {
+        console.log('[ChatInterface] First playlist:', items[0])
+      }
+
+      setPlaylists(items)
+
       // Auto-select first playlist if available
-      if (userPlaylists.items?.length > 0) {
-        const firstId = userPlaylists.items[0].id
+      if (items.length > 0) {
+        const firstId = items[0].id
+        console.log(`[ChatInterface] Setting selectedPlaylistId to: "${firstId}" - ${items[0].name}`)
         setSelectedPlaylistId(firstId)
-        console.log(`[ChatInterface] Auto-selected first playlist: ${firstId} - ${userPlaylists.items[0].name}`)
+
+        // Force a re-render to ensure state is updated
+        setTimeout(() => {
+          console.log(`[ChatInterface] Verify selectedPlaylistId after setState: "${selectedPlaylistId}"`)
+        }, 100)
+      } else {
+        console.warn('[ChatInterface] No playlists available to select')
       }
     } catch (error) {
-      console.error('Failed to load playlists:', error)
+      console.error('[ChatInterface] Failed to load playlists:', error)
     } finally {
       setLoadingPlaylists(false)
     }
@@ -72,13 +102,18 @@ export function ChatInterface() {
     let userMessage = input.trim()
 
     // If analyzing or editing a playlist, include the playlist ID in the message
-    if ((mode === 'analyze' || mode === 'edit') && selectedPlaylistId) {
+    console.log(`[ChatInterface] Pre-injection check - Mode: ${mode}, Selected ID: "${selectedPlaylistId}", Type: ${typeof selectedPlaylistId}`)
+
+    if ((mode === 'analyze' || mode === 'edit') && selectedPlaylistId && selectedPlaylistId.trim() !== '') {
       // Inject playlist ID into the message for context
       userMessage = `[Playlist ID: ${selectedPlaylistId}] ${userMessage}`
-      console.log(`[ChatInterface] Injecting playlist ID: ${selectedPlaylistId}`)
+      console.log(`[ChatInterface] ✅ Injecting playlist ID: ${selectedPlaylistId}`)
       console.log(`[ChatInterface] Full message: ${userMessage}`)
     } else {
-      console.log(`[ChatInterface] No playlist ID to inject. Mode: ${mode}, Selected ID: ${selectedPlaylistId}`)
+      console.log(`[ChatInterface] ❌ No playlist ID to inject. Mode: ${mode}, Selected ID: "${selectedPlaylistId}"`)
+      if (mode === 'analyze' || mode === 'edit') {
+        console.warn(`[ChatInterface] WARNING: In ${mode} mode but no playlist selected!`)
+      }
     }
 
     setInput('')
