@@ -41,15 +41,22 @@ export function ChatInterface() {
   }, [mode])
 
   const loadPlaylists = async () => {
-    if (playlists.length > 0) return // Already loaded
+    if (playlists.length > 0) {
+      console.log('[ChatInterface] Playlists already loaded:', playlists.length)
+      return // Already loaded
+    }
 
+    console.log('[ChatInterface] Loading user playlists...')
     setLoadingPlaylists(true)
     try {
       const userPlaylists = await getUserPlaylists()
+      console.log('[ChatInterface] Loaded playlists:', userPlaylists.items?.length || 0)
       setPlaylists(userPlaylists.items || [])
       // Auto-select first playlist if available
       if (userPlaylists.items?.length > 0) {
-        setSelectedPlaylistId(userPlaylists.items[0].id)
+        const firstId = userPlaylists.items[0].id
+        setSelectedPlaylistId(firstId)
+        console.log(`[ChatInterface] Auto-selected first playlist: ${firstId} - ${userPlaylists.items[0].name}`)
       }
     } catch (error) {
       console.error('Failed to load playlists:', error)
@@ -68,6 +75,10 @@ export function ChatInterface() {
     if ((mode === 'analyze' || mode === 'edit') && selectedPlaylistId) {
       // Inject playlist ID into the message for context
       userMessage = `[Playlist ID: ${selectedPlaylistId}] ${userMessage}`
+      console.log(`[ChatInterface] Injecting playlist ID: ${selectedPlaylistId}`)
+      console.log(`[ChatInterface] Full message: ${userMessage}`)
+    } else {
+      console.log(`[ChatInterface] No playlist ID to inject. Mode: ${mode}, Selected ID: ${selectedPlaylistId}`)
     }
 
     setInput('')
@@ -154,7 +165,11 @@ export function ChatInterface() {
               ) : playlists.length > 0 ? (
                 <select
                   value={selectedPlaylistId || ''}
-                  onChange={(e) => setSelectedPlaylistId(e.target.value)}
+                  onChange={(e) => {
+                    const newId = e.target.value
+                    console.log(`[ChatInterface] Playlist selection changed to: ${newId}`)
+                    setSelectedPlaylistId(newId)
+                  }}
                 >
                   {playlists.map(playlist => (
                     <option key={playlist.id} value={playlist.id}>

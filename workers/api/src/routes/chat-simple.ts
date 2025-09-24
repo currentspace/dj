@@ -401,12 +401,17 @@ chatRouter.post('/message', async (c) => {
     if (playlistIdMatch) {
       playlistId = playlistIdMatch[1];
       actualMessage = playlistIdMatch[2];
-      console.log(`[Chat:${requestId}] Extracted playlist ID: ${playlistId}`);
+      console.log(`[Chat:${requestId}] ✅ Extracted playlist ID: ${playlistId}`);
+      console.log(`[Chat:${requestId}] Original message: "${request.message.substring(0, 100)}"`);
+      console.log(`[Chat:${requestId}] Actual message: "${actualMessage}"`);
+    } else {
+      console.log(`[Chat:${requestId}] ⚠️ No playlist ID in message`);
     }
 
     console.log(`[Chat:${requestId}] Mode: ${request.mode}`);
     console.log(`[Chat:${requestId}] Message: "${actualMessage.substring(0, 100)}${actualMessage.length > 100 ? '...' : ''}"`);
     console.log(`[Chat:${requestId}] Conversation history: ${request.conversationHistory.length} messages`);
+    console.log(`[Chat:${requestId}] Playlist context: ${playlistId ? `Yes (${playlistId})` : 'No'}`);
 
     // Get Spotify token from Authorization header
     const authorization = c.req.header('Authorization');
@@ -461,35 +466,59 @@ Available tools for music analysis:
 - get_album_info: Get album details and track listings
 - get_available_genres: See all available genre seeds
 - analyze_playlist: Analyze entire playlists
-${playlistId ? `\nThe user has selected a playlist for analysis. Playlist ID: ${playlistId}\nWhen the user asks about \"the playlist\" or \"selected playlist\", use analyze_playlist with this ID.` : ''}
+${playlistId ? `
+IMPORTANT: The user has a playlist currently selected. Playlist ID: ${playlistId}
+
+CRITICAL INSTRUCTIONS:
+- When the user asks about "songs I like", "ones you like", "my music", "similar songs", or any reference to music preferences, IMMEDIATELY use analyze_playlist with ID: ${playlistId}
+- This selected playlist represents the user's current music context
+- ANY request for recommendations, similar songs, or music analysis should START by analyzing this playlist
+- Do not ask what songs they like - use the selected playlist
+- Phrases like "find similar songs" mean "find songs similar to those in the selected playlist"` : ''}
 
 When analyzing music:
-1. Use search tools to find tracks/artists mentioned
+1. ${playlistId ? 'FIRST analyze the selected playlist if the request involves preferences or recommendations' : 'Use search tools to find tracks/artists mentioned'}
 2. Get audio features for detailed musical analysis
 3. Use get_track_details for complete track information
-4. Explore related artists for context
+4. Use get_recommendations based on playlist analysis
 5. Provide specific, data-driven insights
 
 Be thorough and use multiple tools to give comprehensive answers.`,
 
       create: `You are an expert DJ creating perfect playlists.
+${playlistId ? `
+CONTEXT: The user has a playlist selected. Playlist ID: ${playlistId}
+- If they ask to create something "similar" or "based on what I like", analyze this playlist first
+- Use it as a reference for musical taste when relevant` : ''}
+
 When creating playlists:
-1. Search for tracks based on the user's request
-2. Analyze audio features to ensure good flow
-3. Use recommendations to expand the playlist
-4. Create the playlist with create_playlist
-5. Explain your song choices
+1. ${playlistId ? 'If request relates to preferences, first analyze the selected playlist' : 'Search for tracks based on the user\'s request'}
+2. Search for tracks based on the user's request or playlist analysis
+3. Analyze audio features to ensure good flow
+4. Use get_recommendations to expand the playlist
+5. Create the playlist with create_playlist
+6. Explain your song choices
 
 Always use real Spotify data from the tools.`,
 
       edit: `You are a playlist curator who modifies existing playlists.
+${playlistId ? `
+IMPORTANT: The user has selected a playlist to edit. Playlist ID: ${playlistId}
+
+CRITICAL INSTRUCTIONS:
+- ALWAYS start by analyzing this playlist with analyze_playlist using ID: ${playlistId}
+- This is THE playlist to modify - do not ask which playlist
+- ANY edit request applies to this selected playlist
+- When adding songs, use the playlist's current vibe as reference
+- "Add similar songs" means analyze this playlist first, then find matches` : ''}
+
 When editing playlists:
-1. First analyze the playlist with analyze_playlist
+1. ${playlistId ? 'IMMEDIATELY analyze the selected playlist with analyze_playlist' : 'First analyze the playlist with analyze_playlist'}
 2. Search for new tracks that fit the vibe
-3. Check audio compatibility
-4. Modify the playlist with modify_playlist
-5. Explain your changes
-${playlistId ? `\nThe user has selected a playlist to edit. Playlist ID: ${playlistId}\nWhen the user refers to \"the playlist\" or \"selected playlist\", use this ID for analyze_playlist and modify_playlist.` : ''}
+3. Check audio compatibility with get_audio_features
+4. Use modify_playlist to make changes to playlist ID: ${playlistId || '[needs ID]'}
+5. Explain your changes based on the analysis
+
 Use tools to make informed decisions.`
     };
 
