@@ -49,21 +49,29 @@ mcpRouter.all('/', async (c) => {
     console.log(`[MCP:${requestId}] Origin: ${origin}`);
     console.log(`[MCP:${requestId}] Session-Id: ${sessionId?.substring(0, 8) || 'none'}`);
 
+  // Helper functions for safe header handling
+  const getHeader = (name: string) => c.req.header(name) ?? c.req.raw.headers.get(name);
+
+  const dumpHeaders = () => {
+    const entries = Array.from(c.req.raw.headers.entries());
+    return Object.fromEntries(
+      entries.map(([k, v]) => [
+        k,
+        k.toLowerCase() === 'authorization' ? '<redacted>' : v,
+      ])
+    );
+  };
+
   // Validate authorization
-  const authorization = c.req.header('Authorization');
+  const authorization = getHeader('authorization');
   console.log(`[MCP:${requestId}] Authorization header present: ${!!authorization}`);
   console.log(`[MCP:${requestId}] Authorization format correct: ${authorization?.startsWith('Bearer ')}`);
 
   if (!authorization?.startsWith('Bearer ')) {
     const duration = Date.now() - startTime;
     console.warn(`[MCP:${requestId}] UNAUTHORIZED - No bearer token provided (${duration}ms)`);
-    console.log(`[MCP:${requestId}] Authorization header value: ${authorization || 'undefined'}`);
-    try {
-      const headers = c.req.headers ? Object.fromEntries(c.req.headers.entries()) : 'Headers not available';
-      console.log(`[MCP:${requestId}] Available headers:`, headers);
-    } catch (headerError) {
-      console.log(`[MCP:${requestId}] Could not read headers:`, headerError);
-    }
+    console.log(`[MCP:${requestId}] Authorization header value: ${authorization ?? 'undefined'}`);
+    console.log(`[MCP:${requestId}] Available headers:`, dumpHeaders());
 
     return c.json({
       error: 'Unauthorized',
