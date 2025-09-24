@@ -1,5 +1,5 @@
 import { useState, useRef, use, Suspense, useCallback, useTransition, startTransition } from 'react'
-import { sendChatMessage, getUserPlaylists } from '../../lib/api-client'
+import { sendChatMessage } from '../../lib/api-client'
 import { createPlaylistResource } from '../../lib/playlist-resource'
 import { flushSync } from 'react-dom'
 
@@ -8,14 +8,6 @@ interface Message {
   content: string
 }
 
-interface Playlist {
-  id: string
-  name: string
-  description: string | null
-  images: Array<{ url: string }>
-  tracks: { total: number }
-  owner: { display_name: string }
-}
 
 // Playlist selector component that uses Suspense
 function PlaylistSelector({
@@ -50,7 +42,7 @@ function PlaylistSelector({
           value={selectedId || ''}
           onChange={(e) => onSelect(e.target.value)}
         >
-          {playlists.map(playlist => (
+          {playlists.map((playlist: any) => (
             <option key={playlist.id} value={playlist.id}>
               {playlist.name} ({playlist.tracks.total} tracks)
             </option>

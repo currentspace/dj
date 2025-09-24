@@ -1,5 +1,5 @@
 // Playlist resource management using React 19 patterns
-import { getUserPlaylists } from './api'
+import { getUserPlaylists } from './api-client'
 
 type PlaylistResource = {
   promise: Promise<any>
@@ -20,12 +20,12 @@ export function createPlaylistResource(key: string = 'default'): PlaylistResourc
   // Create new resource
   const resource: PlaylistResource = {
     promise: getUserPlaylists()
-      .then(data => {
+      .then((data: any) => {
         resource.status = 'fulfilled'
         resource.value = data
         return data
       })
-      .catch(error => {
+      .catch((error: any) => {
         resource.status = 'rejected'
         resource.error = error
         throw error

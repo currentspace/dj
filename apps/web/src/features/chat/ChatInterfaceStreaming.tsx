@@ -8,14 +8,6 @@ interface Message {
   content: string
 }
 
-interface Playlist {
-  id: string
-  name: string
-  description: string | null
-  images: Array<{ url: string }>
-  tracks: { total: number }
-  owner: { display_name: string }
-}
 
 interface StreamingStatus {
   isStreaming: boolean
@@ -58,7 +50,7 @@ function PlaylistSelector({
           value={selectedId || ''}
           onChange={(e) => onSelect(e.target.value)}
         >
-          {playlists.map(playlist => (
+          {playlists.map((playlist: any) => (
             <option key={playlist.id} value={playlist.id}>
               {playlist.name} ({playlist.tracks.total} tracks)
             </option>
@@ -133,7 +125,7 @@ export function ChatInterfaceStreaming() {
     toolsUsed: [],
     logs: []
   })
-  const [currentStreamContent, setCurrentStreamContent] = useState('')
+  const [, setCurrentStreamContent] = useState('')
   const [isPending, startTransition] = useTransition()
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -201,7 +193,7 @@ export function ChatInterfaceStreaming() {
           }))
         },
 
-        onToolStart: (tool, args) => {
+        onToolStart: (tool) => {
           setStreamingStatus(prev => ({
             ...prev,
             currentTool: tool,
