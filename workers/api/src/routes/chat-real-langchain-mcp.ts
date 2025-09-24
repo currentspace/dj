@@ -4,9 +4,7 @@ import { z } from 'zod';
 import { SessionManager } from '../lib/session-manager';
 import { ChatAnthropic } from '@langchain/anthropic';
 import { MultiServerMCPClient } from '@langchain/mcp-adapters';
-import { createReactAgent } from 'langchain/agents';
 import { HumanMessage, SystemMessage, AIMessage } from '@langchain/core/messages';
-import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts';
 import { withLoopbackFetch } from '../lib/withLoopbackFetch';
 import { withFetchLogging } from '../lib/withFetchLogging';
 import { convertMCPToolsToLangChain } from '../lib/mcp-to-langchain';
@@ -200,49 +198,75 @@ Always explain your reasoning for changes.`
       m.role === 'user' ? new HumanMessage(m.content) : new AIMessage(m.content)
     );
 
-    console.log(`[RealLangChainMCP:${requestId}] Creating ReAct agent with ${tools.length} tools`);
+    console.log(`[RealLangChainMCP:${requestId}] Using Claude's native tool calling with ${tools.length} tools`);
 
-    // Create prompt template with proper input variables
-    const prompt = ChatPromptTemplate.fromMessages([
-      ['system', systemPrompts[request.mode]],
-      new MessagesPlaceholder('chat_history'),
-      ['human', '{input}']
-    ]);
+    // Bind tools directly to the model (Claude supports native tool calling)
+    const modelWithTools = llm.bindTools(tools);
 
-    // Create and run ReAct agent with MCP tools
-    const agent = await createReactAgent({
-      llm,
-      tools,
-      prompt // Critical: provide the prompt template
-    });
+    // Build messages array
+    const messages = [
+      new SystemMessage(systemPrompts[request.mode]),
+      ...chatHistory,
+      new HumanMessage(request.message)
+    ];
 
-    console.log(`[RealLangChainMCP:${requestId}] Running agent with input and chat_history...`);
+    console.log(`[RealLangChainMCP:${requestId}] Invoking Claude with tools...`);
     const agentStartTime = Date.now();
 
-    // Invoke with the expected input variables
-    const result = await agent.invoke({
-      input: request.message,
-      chat_history: chatHistory
-    });
+    // Invoke the model with tools - Claude will handle tool calling automatically
+    const result = await modelWithTools.invoke(messages);
+
+    // If Claude called tools, execute them
+    let finalResponse = result;
+    if (result.tool_calls && result.tool_calls.length > 0) {
+      console.log(`[RealLangChainMCP:${requestId}] Claude called ${result.tool_calls.length} tool(s)`);
+
+      // Execute each tool call
+      const toolResults = [];
+      for (const toolCall of result.tool_calls) {
+        console.log(`[RealLangChainMCP:${requestId}] Executing tool: ${toolCall.name}`);
+        const tool = tools.find((t: any) => t.name === toolCall.name);
+        if (tool) {
+          try {
+            const toolResult = await tool.func(toolCall.args);
+            toolResults.push({
+              tool_call_id: toolCall.id,
+              result: toolResult
+            });
+            console.log(`[RealLangChainMCP:${requestId}] Tool ${toolCall.name} completed`);
+          } catch (error) {
+            console.error(`[RealLangChainMCP:${requestId}] Tool ${toolCall.name} failed:`, error);
+            toolResults.push({
+              tool_call_id: toolCall.id,
+              error: error instanceof Error ? error.message : String(error)
+            });
+          }
+        }
+      }
+
+      // Send tool results back to Claude for final response
+      const messagesWithTools = [
+        ...messages,
+        result, // The message with tool_calls
+        new SystemMessage(`Tool results: ${JSON.stringify(toolResults)}`)
+      ];
+
+      console.log(`[RealLangChainMCP:${requestId}] Getting final response from Claude...`);
+      finalResponse = await llm.invoke(messagesWithTools);
+    }
 
     const agentDuration = Date.now() - agentStartTime;
     console.log(`[RealLangChainMCP:${requestId}] Agent completed in ${agentDuration}ms`);
 
-    // Extract final response (ReAct agent returns { output: string })
+    // Extract final response
     let finalMessage = '';
-    if (typeof result?.output === 'string') {
-      finalMessage = result.output;
-    } else if (result?.output?.content) {
-      finalMessage = result.output.content;
-    } else if (result?.messages && Array.isArray(result.messages)) {
-      // Look for the last AI message
-      const lastMessage = result.messages[result.messages.length - 1];
-      if (lastMessage && typeof lastMessage.content === 'string') {
-        finalMessage = lastMessage.content;
-      }
+    if (typeof finalResponse?.content === 'string') {
+      finalMessage = finalResponse.content;
+    } else if (typeof finalResponse === 'string') {
+      finalMessage = finalResponse;
     } else {
-      console.warn(`[RealLangChainMCP:${requestId}] Unexpected result format:`, result);
-      finalMessage = JSON.stringify(result);
+      console.warn(`[RealLangChainMCP:${requestId}] Unexpected response format:`, finalResponse);
+      finalMessage = JSON.stringify(finalResponse);
     }
 
     console.log(`[RealLangChainMCP:${requestId}] Final response length: ${finalMessage.length} chars`);
