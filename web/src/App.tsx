@@ -1,12 +1,24 @@
-import { useState } from 'react'
+import { useState, Suspense, lazy } from 'react'
 import { PlaylistGenerator } from './components/PlaylistGenerator'
 import { SpotifyAuth } from './components/SpotifyAuth'
-import { ChatInterface } from './components/ChatInterface'
+import { ChatInterface } from './components/ChatInterfaceNew'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import { useSpotifyAuth } from './hooks/useSpotifyAuth'
+import { preloadPlaylists } from './lib/playlist-resource'
+
+// Lazy load PlaylistGenerator for better performance
+const LazyPlaylistGenerator = lazy(() =>
+  import('./components/PlaylistGenerator').then(m => ({ default: m.PlaylistGenerator }))
+)
 
 function App() {
   const { isAuthenticated, login, logout } = useSpotifyAuth()
   const [view, setView] = useState<'chat' | 'classic'>('chat')
+
+  // Preload playlists when authenticated
+  if (isAuthenticated) {
+    preloadPlaylists()
+  }
 
   return (
     <div className="app">
@@ -28,10 +40,16 @@ function App() {
       <main className="app-main">
         {!isAuthenticated ? (
           <SpotifyAuth onLogin={login} />
-        ) : view === 'chat' ? (
-          <ChatInterface />
         ) : (
-          <PlaylistGenerator />
+          <ErrorBoundary>
+            <Suspense fallback={<div className="loading">Loading...</div>}>
+              {view === 'chat' ? (
+                <ChatInterface />
+              ) : (
+                <LazyPlaylistGenerator />
+              )}
+            </Suspense>
+          </ErrorBoundary>
         )}
       </main>
     </div>

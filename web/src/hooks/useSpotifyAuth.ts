@@ -1,33 +1,58 @@
-import { useState, useEffect } from 'react'
+import { useSyncExternalStore, useCallback } from 'react'
 
-export function useSpotifyAuth() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [token, setToken] = useState<string | null>(null)
+// External store for auth state that syncs with localStorage
+const authStore = {
+  listeners: new Set<() => void>(),
 
-  useEffect(() => {
-    // Check for existing token in localStorage
-    const storedToken = localStorage.getItem('spotify_token')
-    if (storedToken) {
-      setToken(storedToken)
-      setIsAuthenticated(true)
-    }
-
-    // Check for token in URL hash (OAuth callback)
+  getSnapshot() {
+    // Check URL hash first for OAuth callback
     const hash = window.location.hash
     if (hash) {
       const params = new URLSearchParams(hash.substring(1))
       const accessToken = params.get('access_token')
       if (accessToken) {
         localStorage.setItem('spotify_token', accessToken)
-        setToken(accessToken)
-        setIsAuthenticated(true)
-        // Clean up URL
         window.location.hash = ''
+        return { token: accessToken, isAuthenticated: true }
       }
     }
-  }, [])
 
-  const login = async () => {
+    // Then check localStorage
+    const token = localStorage.getItem('spotify_token')
+    return { token, isAuthenticated: !!token }
+  },
+
+  subscribe(listener: () => void) {
+    authStore.listeners.add(listener)
+
+    // Listen for storage events from other tabs
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'spotify_token') {
+        listener()
+      }
+    }
+    window.addEventListener('storage', handleStorage)
+
+    return () => {
+      authStore.listeners.delete(listener)
+      window.removeEventListener('storage', handleStorage)
+    }
+  },
+
+  emit() {
+    authStore.listeners.forEach(listener => listener())
+  }
+}
+
+export function useSpotifyAuth() {
+  // Use React 18+ useSyncExternalStore to sync with localStorage
+  const { token, isAuthenticated } = useSyncExternalStore(
+    authStore.subscribe,
+    authStore.getSnapshot,
+    authStore.getSnapshot // server snapshot (same as client for localStorage)
+  )
+
+  const login = useCallback(async () => {
     try {
       const response = await fetch('/api/spotify/auth-url')
       const { url } = await response.json()
@@ -35,13 +60,12 @@ export function useSpotifyAuth() {
     } catch (error) {
       console.error('Failed to get auth URL:', error)
     }
-  }
+  }, [])
 
-  const logout = () => {
+  const logout = useCallback(() => {
     localStorage.removeItem('spotify_token')
-    setToken(null)
-    setIsAuthenticated(false)
-  }
+    authStore.emit() // Notify all listeners of the change
+  }, [])
 
   return {
     isAuthenticated,
