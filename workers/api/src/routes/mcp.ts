@@ -82,77 +82,52 @@ mcpRouter.all('/', async (c) => {
       return c.json({ error: 'Method not allowed' }, 405);
     }
 
-    // Initialize SSE stream
+    // Initialize SSE stream - simpler approach for Workers
     const duration = Date.now() - startTime;
     console.log(`[MCP:${requestId}] Initializing SSE stream (${duration}ms)`);
 
-    // Set up SSE headers
-    const headers = new Headers({
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Headers': 'Cache-Control'
-    });
-
-    // Create a readable stream for SSE
-    const { readable, writable } = new TransformStream();
-    const writer = writable.getWriter();
-    const encoder = new TextEncoder();
-
-    // Send initial connection message
-    const writeSSEMessage = async (data: any, event?: string) => {
-      let message = '';
-      if (event) {
-        message += `event: ${event}\n`;
-      }
-      message += `data: ${JSON.stringify(data)}\n\n`;
-      await writer.write(encoder.encode(message));
-    };
-
-    // Send initial connection established message
     try {
-      await writeSSEMessage({
-        jsonrpc: '2.0',
-        method: 'notifications/initialized',
-        params: {
-          serverInfo: {
-            name: 'spotify-mcp-server',
-            version: '2.0.0'
-          },
-          protocolVersion: '2025-06-18'
+      // Create SSE response with immediate initialization data
+      const sseData = [
+        'event: initialized',
+        `data: ${JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'notifications/initialized',
+          params: {
+            serverInfo: {
+              name: 'spotify-mcp-server',
+              version: '2.0.0'
+            },
+            protocolVersion: '2025-06-18',
+            capabilities: {
+              tools: {},
+              resources: {}
+            }
+          }
+        })}`,
+        '',
+        'event: ready',
+        'data: {"status": "ready"}',
+        '',
+        ''
+      ].join('\n');
+
+      console.log(`[MCP:${requestId}] SSE connection established with initialization data`);
+
+      return new Response(sseData, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Headers': 'Authorization, Content-Type, MCP-Protocol-Version'
         }
-      }, 'initialized');
-
-      console.log(`[MCP:${requestId}] SSE connection established successfully`);
-
-      // Keep the connection alive with periodic pings
-      const keepAlive = setInterval(async () => {
-        try {
-          await writeSSEMessage({ type: 'ping' }, 'ping');
-        } catch (error) {
-          console.log(`[MCP:${requestId}] SSE keepalive failed, client likely disconnected`);
-          clearInterval(keepAlive);
-        }
-      }, 30000); // Ping every 30 seconds
-
-      // Handle cleanup when client disconnects
-      const cleanup = () => {
-        clearInterval(keepAlive);
-        writer.close().catch(() => {});
-        console.log(`[MCP:${requestId}] SSE connection closed`);
-      };
-
-      // Set up connection close handler
-      c.req.raw.signal?.addEventListener('abort', cleanup);
+      });
 
     } catch (error) {
       console.error(`[MCP:${requestId}] SSE initialization error:`, error);
-      await writer.close();
       return c.json({ error: 'SSE initialization failed' }, 500);
     }
-
-    return new Response(readable, { headers });
   }
 
   if (method === 'POST') {
