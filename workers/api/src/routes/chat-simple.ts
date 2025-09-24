@@ -359,6 +359,15 @@ Use tools to make informed decisions.`
         if (invokeError instanceof Error) {
           console.error(`[Chat:${requestId}] Error name: ${invokeError.name}`);
           console.error(`[Chat:${requestId}] Error stack: ${invokeError.stack?.split('\n').slice(0, 3).join('\n')}`);
+
+          // Check for rate limit info in error
+          if (errorMessage.includes('429')) {
+            console.error(`[Chat:${requestId}] 🚫 RATE LIMIT HIT - This is an account/API key level limit`);
+            console.error(`[Chat:${requestId}] This means YOUR account has exceeded its rate limits`);
+          } else if (errorMessage.includes('529')) {
+            console.error(`[Chat:${requestId}] 🌍 GLOBAL OVERLOAD - This affects ALL Anthropic users`);
+            console.error(`[Chat:${requestId}] This is not specific to your account`);
+          }
         }
 
         // Check if it's an overload error
