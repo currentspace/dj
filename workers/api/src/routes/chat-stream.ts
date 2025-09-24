@@ -45,7 +45,8 @@ function sendSSE(stream: HonoStreamWriter, event: StreamEvent) {
  */
 function createStreamingSpotifyTools(
   spotifyToken: string,
-  stream: HonoStreamWriter
+  stream: HonoStreamWriter,
+  contextPlaylistId?: string
 ): DynamicStructuredTool[] {
   const tools: DynamicStructuredTool[] = [
     new DynamicStructuredTool({
@@ -79,15 +80,22 @@ function createStreamingSpotifyTools(
       name: 'analyze_playlist',
       description: 'Analyze a playlist',
       schema: z.object({
-        playlist_id: z.string()
+        playlist_id: z.string().optional()
       }),
       func: async (args) => {
+        // Auto-inject playlist ID if missing or empty
+        let finalArgs = { ...args };
+        if (!args.playlist_id && contextPlaylistId) {
+          console.log(`[analyze_playlist] Auto-injecting playlist_id: ${contextPlaylistId}`);
+          finalArgs.playlist_id = contextPlaylistId;
+        }
+
         sendSSE(stream, {
           type: 'tool_start',
-          data: { tool: 'analyze_playlist', args }
+          data: { tool: 'analyze_playlist', args: finalArgs }
         });
 
-        const result = await executeSpotifyTool('analyze_playlist', args, spotifyToken);
+        const result = await executeSpotifyTool('analyze_playlist', finalArgs, spotifyToken);
 
         sendSSE(stream, {
           type: 'tool_end',
@@ -289,7 +297,7 @@ chatStreamRouter.post('/message', async (c) => {
       sendSSE(stream, { type: 'thinking', data: 'Processing your request...' });
 
       // Create tools with streaming callbacks
-      const tools = createStreamingSpotifyTools(spotifyToken, stream);
+      const tools = createStreamingSpotifyTools(spotifyToken, stream, playlistId);
 
       // Initialize Claude with streaming
       const llm = new ChatAnthropic({
