@@ -22,7 +22,13 @@ export default defineConfig({
     'http',
     'https',
     'process',
-    'timers'
+    'timers',
+    // MCP stdio transport uses these - mark as external since we only use HTTP
+    'child_process',
+    'os',
+    'readline',
+    'tty',
+    'worker_threads'
   ],
   minify: true, // Recommended for production
   splitting: false, // Workers don't support code splitting
@@ -32,4 +38,17 @@ export default defineConfig({
   treeshake: true,
   bundle: true,
   skipNodeModulesBundle: false, // Important: bundle node_modules
+  define: {
+    // Mock Node.js modules that stdio transport tries to use
+    'process.platform': '"workers"',
+    'process.versions.node': '"18.0.0"'
+  },
+  esbuildOptions(options) {
+    // Additional configuration for problematic modules
+    options.external = options.external || []
+    options.external.push(
+      'cross-spawn', // Used by stdio transport
+      '@modelcontextprotocol/sdk/dist/client/stdio.js'
+    )
+  }
 })
