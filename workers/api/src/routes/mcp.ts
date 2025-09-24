@@ -185,7 +185,7 @@ async function handleMCPRequest(request: any, spotifyToken: string, requestId: s
       const initResult = {
         jsonrpc: '2.0',
         result: {
-          protocolVersion: '2025-03-26',
+          protocolVersion: '2025-06-18',
           capabilities: {
             tools: {},
             resources: {}
