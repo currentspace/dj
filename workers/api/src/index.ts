@@ -1,12 +1,9 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { anthropicRouter } from './routes/anthropic'
 import { spotifyRouter } from './routes/spotify'
 import { playlistRouter } from './routes/playlist'
-import { chatRouter } from './routes/chat'
 import { testRouter } from './routes/test'
 import { mcpRouter } from './routes/mcp'
-import { mcpChatRouter } from './routes/chat-mcp-integrated'
 import { realLangChainMcpRouter } from './routes/chat-real-langchain-mcp'
 
 export interface Env {
@@ -26,14 +23,11 @@ app.use('*', cors())
 app.get('/health', (c) => c.json({ status: 'healthy' }))
 
 // API routes
-app.route('/api/anthropic', anthropicRouter)
 app.route('/api/spotify', spotifyRouter)
 app.route('/api/playlist', playlistRouter)
-app.route('/api/chat', chatRouter)
-app.route('/api/chat-mcp', mcpChatRouter) // OLD: Direct MCP integration
-app.route('/api/chat-real-langchain-mcp', realLangChainMcpRouter) // NEW: Real LangChain MCP integration
+app.route('/api/chat', realLangChainMcpRouter) // Main chat endpoint using LangChain MCP
 app.route('/api/test', testRouter)
-app.route('/api/mcp', mcpRouter)
+app.route('/api/mcp', mcpRouter) // MCP server endpoint
 
 // Serve static files for non-API routes
 app.get('*', async (c) => {
