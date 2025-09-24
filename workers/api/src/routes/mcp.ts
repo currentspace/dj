@@ -32,20 +32,22 @@ mcpRouter.use('*', async (c, next) => {
  */
 mcpRouter.all('/', async (c) => {
   const startTime = Date.now();
-  const method = c.req.method;
-  const acceptHeader = c.req.header('Accept') || '';
-  const sessionId = c.req.header('Mcp-Session-Id');
-  const userAgent = c.req.header('User-Agent') || '';
-  const origin = c.req.header('Origin') || '';
   const requestId = crypto.randomUUID().substring(0, 8);
 
-  console.log(`[MCP:${requestId}] === MCP ENDPOINT HIT ===`);
-  console.log(`[MCP:${requestId}] URL: ${c.req.url}`);
-  console.log(`[MCP:${requestId}] Method: ${method}`);
-  console.log(`[MCP:${requestId}] Accept: ${acceptHeader}`);
-  console.log(`[MCP:${requestId}] User-Agent: ${userAgent.substring(0, 100)}${userAgent.length > 100 ? '...' : ''}`);
-  console.log(`[MCP:${requestId}] Origin: ${origin}`);
-  console.log(`[MCP:${requestId}] Session-Id: ${sessionId?.substring(0, 8) || 'none'}`);
+  try {
+    const method = c.req.method;
+    const acceptHeader = c.req.header('Accept') || '';
+    const sessionId = c.req.header('Mcp-Session-Id');
+    const userAgent = c.req.header('User-Agent') || '';
+    const origin = c.req.header('Origin') || '';
+
+    console.log(`[MCP:${requestId}] === MCP ENDPOINT HIT ===`);
+    console.log(`[MCP:${requestId}] URL: ${c.req.url}`);
+    console.log(`[MCP:${requestId}] Method: ${method}`);
+    console.log(`[MCP:${requestId}] Accept: ${acceptHeader}`);
+    console.log(`[MCP:${requestId}] User-Agent: ${userAgent.substring(0, 100)}${userAgent.length > 100 ? '...' : ''}`);
+    console.log(`[MCP:${requestId}] Origin: ${origin}`);
+    console.log(`[MCP:${requestId}] Session-Id: ${sessionId?.substring(0, 8) || 'none'}`);
 
   // Validate authorization
   const authorization = c.req.header('Authorization');
@@ -54,22 +56,49 @@ mcpRouter.all('/', async (c) => {
 
   if (!authorization?.startsWith('Bearer ')) {
     const duration = Date.now() - startTime;
-    console.error(`[MCP:${requestId}] UNAUTHORIZED - No bearer token provided (${duration}ms)`);
+    console.warn(`[MCP:${requestId}] UNAUTHORIZED - No bearer token provided (${duration}ms)`);
     console.log(`[MCP:${requestId}] Authorization header value: ${authorization || 'undefined'}`);
     console.log(`[MCP:${requestId}] Available headers:`, Object.fromEntries(c.req.headers.entries()));
-    return c.json({ error: 'Unauthorized', details: 'Missing or invalid Authorization header' }, 401);
+
+    return c.json({
+      error: 'Unauthorized',
+      details: 'Missing or invalid Authorization header',
+      expected: 'Authorization: Bearer <session-token>',
+      received: authorization || 'none',
+      requestId,
+      timestamp: Date.now()
+    }, 401);
   }
 
   const sessionToken = authorization.replace('Bearer ', '');
   console.log(`[MCP:${requestId}] Session token: ${sessionToken.substring(0, 8)}...${sessionToken.substring(-4)}`);
 
-  const spotifyToken = await sessionManager.validateSession(sessionToken);
+  console.log(`[MCP:${requestId}] Validating session with session manager...`);
+  let spotifyToken: string | null = null;
+
+  try {
+    spotifyToken = await sessionManager.validateSession(sessionToken);
+    console.log(`[MCP:${requestId}] Session validation completed, token found: ${!!spotifyToken}`);
+  } catch (sessionError) {
+    const duration = Date.now() - startTime;
+    console.error(`[MCP:${requestId}] SESSION VALIDATION ERROR after ${duration}ms:`, sessionError);
+    return c.json({
+      error: 'Session validation failed',
+      details: sessionError instanceof Error ? sessionError.message : 'Unknown session error',
+      requestId
+    }, 500);
+  }
 
   if (!spotifyToken) {
     const duration = Date.now() - startTime;
-    console.error(`[MCP:${requestId}] INVALID SESSION - Token not found or expired (${duration}ms)`);
+    console.warn(`[MCP:${requestId}] INVALID SESSION - Token not found or expired (${duration}ms)`);
     console.log(`[MCP:${requestId}] Session validation failed for: ${sessionToken.substring(0, 8)}...`);
-    return c.json({ error: 'Invalid or expired session' }, 401);
+    return c.json({
+      error: 'Invalid or expired session',
+      details: 'Session token not found or has expired',
+      requestId,
+      timestamp: Date.now()
+    }, 401);
   }
 
   console.log(`[MCP:${requestId}] Session validated successfully`);
@@ -240,9 +269,29 @@ mcpRouter.all('/', async (c) => {
     }
   }
 
-  const duration = Date.now() - startTime;
-  console.error(`[MCP:${requestId}] UNSUPPORTED METHOD: ${method} (${duration}ms)`);
-  return c.json({ error: 'Method not allowed' }, 405);
+    const duration = Date.now() - startTime;
+    console.error(`[MCP:${requestId}] UNSUPPORTED METHOD: ${method} (${duration}ms)`);
+    return c.json({ error: 'Method not allowed' }, 405);
+
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    console.error(`[MCP:${requestId}] FATAL ERROR after ${duration}ms:`, error);
+
+    if (error instanceof Error) {
+      console.error(`[MCP:${requestId}] Error name: ${error.name}`);
+      console.error(`[MCP:${requestId}] Error message: ${error.message}`);
+      console.error(`[MCP:${requestId}] Error stack: ${error.stack?.substring(0, 1000)}`);
+    } else {
+      console.error(`[MCP:${requestId}] Non-Error exception:`, String(error));
+    }
+
+    return c.json({
+      error: 'Internal server error',
+      message: error instanceof Error ? error.message : 'Unknown error',
+      requestId,
+      timestamp: Date.now()
+    }, 500);
+  }
 });
 
 async function handleMCPRequest(request: any, spotifyToken: string, requestId: string, sessionToken?: string) {
