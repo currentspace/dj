@@ -22,6 +22,8 @@ interface StreamingStatus {
   currentAction?: string
   currentTool?: string
   toolsUsed: string[]
+  logs: Array<{ level: 'info' | 'warn' | 'error'; message: string; timestamp: string }>
+  debugData?: any
 }
 
 // Playlist selector component that uses Suspense
@@ -71,7 +73,9 @@ function PlaylistSelector({
 
 // Tool status display component
 function StreamingStatusDisplay({ status }: { status: StreamingStatus }) {
-  if (!status.isStreaming) return null
+  if (!status.isStreaming && status.logs.length === 0) return null
+
+  const showDebugLogs = true // Toggle for debug mode
 
   return (
     <div className="streaming-status">
@@ -93,6 +97,28 @@ function StreamingStatusDisplay({ status }: { status: StreamingStatus }) {
           <span>Completed: {status.toolsUsed.join(', ')}</span>
         </div>
       )}
+
+      {showDebugLogs && status.logs.length > 0 && (
+        <details className="debug-logs">
+          <summary>📋 Debug Logs ({status.logs.length})</summary>
+          <div className="log-entries">
+            {status.logs.slice(-10).map((log, i) => (
+              <div key={i} className={`log-entry log-${log.level}`}>
+                <span className="log-time">{log.timestamp}</span>
+                <span className="log-level">{log.level.toUpperCase()}</span>
+                <span className="log-message">{log.message}</span>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
+
+      {showDebugLogs && status.debugData && (
+        <details className="debug-data">
+          <summary>🔍 Debug Data</summary>
+          <pre>{JSON.stringify(status.debugData, null, 2)}</pre>
+        </details>
+      )}
     </div>
   )
 }
@@ -104,7 +130,8 @@ export function ChatInterfaceStreaming() {
   const [selectedPlaylistId, setSelectedPlaylistId] = useState<string | null>(null)
   const [streamingStatus, setStreamingStatus] = useState<StreamingStatus>({
     isStreaming: false,
-    toolsUsed: []
+    toolsUsed: [],
+    logs: []
   })
   const [currentStreamContent, setCurrentStreamContent] = useState('')
   const [isPending, startTransition] = useTransition()
@@ -134,8 +161,12 @@ export function ChatInterfaceStreaming() {
     let userMessage = input.trim()
 
     // Inject playlist ID for analyze/edit modes
+    console.log(`[ChatStreaming] Pre-injection - Mode: ${mode}, SelectedID: ${selectedPlaylistId}`)
     if ((mode === 'analyze' || mode === 'edit') && selectedPlaylistId) {
       userMessage = `[Playlist ID: ${selectedPlaylistId}] ${userMessage}`
+      console.log(`[ChatStreaming] Injected playlist ID: ${userMessage}`)
+    } else {
+      console.warn(`[ChatStreaming] No playlist ID injected - Mode: ${mode}, ID: ${selectedPlaylistId}`)
     }
 
     const displayMessage = input.trim()
@@ -145,7 +176,8 @@ export function ChatInterfaceStreaming() {
     setStreamingStatus({
       isStreaming: true,
       currentAction: 'Processing your request...',
-      toolsUsed: []
+      toolsUsed: [],
+      logs: []
     })
     setCurrentStreamContent('')
 
@@ -208,12 +240,32 @@ export function ChatInterfaceStreaming() {
           scrollToBottom()
         },
 
+        onLog: (level, message) => {
+          console.log(`[Server ${level}] ${message}`)
+          setStreamingStatus(prev => ({
+            ...prev,
+            logs: [...prev.logs, {
+              level,
+              message,
+              timestamp: new Date().toLocaleTimeString()
+            }].slice(-20) // Keep last 20 logs
+          }))
+        },
+
+        onDebug: (data) => {
+          console.log('[Server Debug]', data)
+          setStreamingStatus(prev => ({
+            ...prev,
+            debugData: data
+          }))
+        },
+
         onError: (error) => {
-          setStreamingStatus({
+          setStreamingStatus(prev => ({
+            ...prev,
             isStreaming: false,
-            currentAction: undefined,
-            toolsUsed: []
-          })
+            currentAction: undefined
+          }))
           setMessages(prev => [
             ...prev,
             { role: 'assistant', content: `Error: ${error}` }
@@ -222,10 +274,12 @@ export function ChatInterfaceStreaming() {
         },
 
         onDone: () => {
-          setStreamingStatus({
+          setStreamingStatus(prev => ({
+            ...prev,
             isStreaming: false,
-            toolsUsed: []
-          })
+            currentAction: undefined,
+            currentTool: undefined
+          }))
           setCurrentStreamContent('')
           scrollToBottom()
         }

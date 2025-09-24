@@ -26,7 +26,9 @@ type StreamEvent =
   | { type: 'tool_end'; data: { tool: string; result: any } }
   | { type: 'content'; data: string }
   | { type: 'error'; data: string }
-  | { type: 'done'; data: null };
+  | { type: 'done'; data: null }
+  | { type: 'log'; data: { level: 'info' | 'warn' | 'error'; message: string } }
+  | { type: 'debug'; data: any };
 
 function sendSSE(writer: WritableStreamDefaultWriter, event: StreamEvent) {
   const encoder = new TextEncoder();
@@ -194,24 +196,67 @@ chatStreamRouter.post('/message', async (c) => {
     try {
       // Parse request
       const body = await c.req.json();
+      sendSSE(writer, {
+        type: 'log',
+        data: {
+          level: 'info',
+          message: `[${requestId}] Request received - Body size: ${JSON.stringify(body).length} bytes`
+        }
+      });
+
       const request = ChatRequestSchema.parse(body);
+
+      sendSSE(writer, {
+        type: 'debug',
+        data: {
+          requestId,
+          mode: request.mode,
+          messageLength: request.message.length,
+          historyLength: request.conversationHistory.length,
+          rawMessage: request.message.substring(0, 100)
+        }
+      });
 
       // Extract playlist ID if present
       let playlistId: string | null = null;
       let actualMessage = request.message;
       const playlistIdMatch = request.message.match(/^\[Playlist ID: ([^\]]+)\] (.+)$/);
+
       if (playlistIdMatch) {
         playlistId = playlistIdMatch[1];
         actualMessage = playlistIdMatch[2];
+        sendSSE(writer, {
+          type: 'log',
+          data: {
+            level: 'info',
+            message: `[${requestId}] ✅ Playlist ID extracted: ${playlistId}`
+          }
+        });
+      } else {
+        sendSSE(writer, {
+          type: 'log',
+          data: {
+            level: 'warn',
+            message: `[${requestId}] ⚠️ No playlist ID found in message: "${request.message.substring(0, 50)}..."`
+          }
+        });
       }
 
       // Get Spotify token
       const authorization = c.req.header('Authorization');
       if (!authorization?.startsWith('Bearer ')) {
-        sendSSE(writer, { type: 'error', data: 'Unauthorized' });
+        sendSSE(writer, { type: 'error', data: 'Unauthorized - Missing or invalid Authorization header' });
         return;
       }
       const spotifyToken = authorization.replace('Bearer ', '');
+
+      sendSSE(writer, {
+        type: 'log',
+        data: {
+          level: 'info',
+          message: `[${requestId}] Auth token present: ${spotifyToken.substring(0, 10)}...`
+        }
+      });
 
       // Send initial thinking message
       sendSSE(writer, { type: 'thinking', data: 'Processing your request...' });
@@ -233,8 +278,27 @@ chatStreamRouter.post('/message', async (c) => {
 
       // Build system prompt
       const systemPrompt = `You are an AI DJ assistant with access to Spotify.
-${playlistId ? `Selected playlist ID: ${playlistId}. Use this when the user refers to "the playlist".` : ''}
+${playlistId ? `IMPORTANT: The user has selected a playlist. Playlist ID: ${playlistId}
+When the user asks about "the playlist", "this playlist", "analyze this", or any reference to analyzing/editing without specifying what, use analyze_playlist with this ID: ${playlistId}
+Do NOT ask for a playlist ID - use the one provided above.` : ''}
 Be concise and helpful. Use tools to get real data.`;
+
+      sendSSE(writer, {
+        type: 'log',
+        data: {
+          level: 'info',
+          message: `[${requestId}] System prompt includes playlist: ${playlistId ? 'YES - ' + playlistId : 'NO'}`
+        }
+      });
+
+      sendSSE(writer, {
+        type: 'debug',
+        data: {
+          systemPromptLength: systemPrompt.length,
+          hasPlaylistContext: !!playlistId,
+          playlistId: playlistId
+        }
+      });
 
       // Build messages
       const messages = [
@@ -244,6 +308,14 @@ Be concise and helpful. Use tools to get real data.`;
         ),
         new HumanMessage(actualMessage)
       ];
+
+      sendSSE(writer, {
+        type: 'log',
+        data: {
+          level: 'info',
+          message: `[${requestId}] Messages prepared: ${messages.length} total, sending to Claude...`
+        }
+      });
 
       // Stream the response
       let fullResponse = '';

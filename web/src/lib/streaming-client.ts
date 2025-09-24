@@ -6,7 +6,9 @@ export type StreamEvent =
   | { type: 'tool_end'; data: { tool: string; result: any } }
   | { type: 'content'; data: string }
   | { type: 'error'; data: string }
-  | { type: 'done'; data: null };
+  | { type: 'done'; data: null }
+  | { type: 'log'; data: { level: 'info' | 'warn' | 'error'; message: string } }
+  | { type: 'debug'; data: any };
 
 export interface StreamCallbacks {
   onThinking?: (message: string) => void;
@@ -15,6 +17,8 @@ export interface StreamCallbacks {
   onContent?: (content: string) => void;
   onError?: (error: string) => void;
   onDone?: () => void;
+  onLog?: (level: 'info' | 'warn' | 'error', message: string) => void;
+  onDebug?: (data: any) => void;
 }
 
 export class ChatStreamClient {
@@ -128,6 +132,12 @@ export class ChatStreamClient {
         break;
       case 'done':
         callbacks.onDone?.();
+        break;
+      case 'log':
+        callbacks.onLog?.(event.data.level, event.data.message);
+        break;
+      case 'debug':
+        callbacks.onDebug?.(event.data);
         break;
     }
   }
