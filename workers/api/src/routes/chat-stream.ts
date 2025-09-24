@@ -375,7 +375,23 @@ chatStreamRouter.post('/message', async (c) => {
   const requestId = crypto.randomUUID().substring(0, 8);
   console.log(`[Stream:${requestId}] Starting streaming response`);
 
+  // Set SSE headers explicitly
+  c.header('Content-Type', 'text/event-stream');
+  c.header('Cache-Control', 'no-cache');
+  c.header('Connection', 'keep-alive');
+
   return stream(c, async (stream) => {
+    console.log(`[Stream:${requestId}] Stream callback started`);
+
+    // Heartbeat to keep connection alive
+    const heartbeatInterval = setInterval(() => {
+      try {
+        stream.write(': heartbeat\n\n');
+      } catch (e) {
+        console.log(`[Stream:${requestId}] Heartbeat failed, stream may be closed`);
+        clearInterval(heartbeatInterval);
+      }
+    }, 15000); // Send heartbeat every 15 seconds
 
     try {
       // Send build info as first event
@@ -540,48 +556,65 @@ Be concise and helpful. Use tools to get real data.`;
       let fullResponse = '';
       let toolCalls: any[] = [];
 
+      console.log(`[Stream:${requestId}] Starting Claude streaming...`);
       sendSSE(stream, { type: 'thinking', data: 'Analyzing your request...' });
 
       const response = await modelWithTools.stream(messages);
+      console.log(`[Stream:${requestId}] Claude stream initialized`);
 
+      let chunkCount = 0;
       for await (const chunk of response) {
+        chunkCount++;
         // Handle content chunks
         if (typeof chunk.content === 'string' && chunk.content) {
           fullResponse += chunk.content;
           sendSSE(stream, { type: 'content', data: chunk.content });
+          console.log(`[Stream:${requestId}] Content chunk ${chunkCount}: ${chunk.content.substring(0, 50)}...`);
         }
 
         // Handle tool calls
         if (chunk.tool_calls && chunk.tool_calls.length > 0) {
           toolCalls = chunk.tool_calls;
+          console.log(`[Stream:${requestId}] Tool calls received: ${chunk.tool_calls.map(tc => tc.name).join(', ')}`);
         }
       }
 
+      console.log(`[Stream:${requestId}] Initial streaming complete. Chunks: ${chunkCount}, Tool calls: ${toolCalls.length}`);
+
       // If there were tool calls, execute them
       if (toolCalls.length > 0) {
+        console.log(`[Stream:${requestId}] Executing ${toolCalls.length} tool calls...`);
         sendSSE(stream, { type: 'thinking', data: 'Using Spotify tools...' });
 
         // Execute tools
         const toolResults = [];
         for (const toolCall of toolCalls) {
+          console.log(`[Stream:${requestId}] Looking for tool: ${toolCall.name}`);
           const tool = tools.find(t => t.name === toolCall.name);
           if (tool) {
+            console.log(`[Stream:${requestId}] Executing tool: ${toolCall.name} with args:`, JSON.stringify(toolCall.args).substring(0, 200));
             try {
               const result = await tool.func(toolCall.args);
+              console.log(`[Stream:${requestId}] Tool ${toolCall.name} completed successfully`);
               toolResults.push({
                 tool_call_id: toolCall.id,
                 output: result
               });
             } catch (error) {
+              console.error(`[Stream:${requestId}] Tool ${toolCall.name} failed:`, error);
               toolResults.push({
                 tool_call_id: toolCall.id,
                 output: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
               });
             }
+          } else {
+            console.warn(`[Stream:${requestId}] Tool not found: ${toolCall.name}`);
           }
         }
+        console.log(`[Stream:${requestId}] All tools executed. Results: ${toolResults.length}`);
 
         // Get final response with tool results
+        console.log(`[Stream:${requestId}] Getting final response from Claude...`);
         sendSSE(stream, { type: 'thinking', data: 'Preparing response...' });
 
         const toolMessage = new ToolMessage({
@@ -589,6 +622,7 @@ Be concise and helpful. Use tools to get real data.`;
           tool_call_id: toolCalls[0].id
         });
 
+        console.log(`[Stream:${requestId}] Sending tool results back to Claude...`);
         const finalResponse = await llm.stream([
           ...messages,
           new AIMessage({ content: fullResponse, tool_calls: toolCalls }),
@@ -596,16 +630,23 @@ Be concise and helpful. Use tools to get real data.`;
         ]);
 
         fullResponse = '';
+        let finalChunkCount = 0;
+        console.log(`[Stream:${requestId}] Streaming final response...`);
         for await (const chunk of finalResponse) {
+          finalChunkCount++;
           if (typeof chunk.content === 'string' && chunk.content) {
             fullResponse += chunk.content;
             sendSSE(stream, { type: 'content', data: chunk.content });
+            console.log(`[Stream:${requestId}] Final chunk ${finalChunkCount}: ${chunk.content.substring(0, 50)}...`);
           }
         }
+        console.log(`[Stream:${requestId}] Final response complete. Chunks: ${finalChunkCount}`);
       }
 
       // Send completion
+      console.log(`[Stream:${requestId}] Sending done event`);
       sendSSE(stream, { type: 'done', data: null });
+      console.log(`[Stream:${requestId}] Stream complete - all events sent`);
 
     } catch (error) {
       console.error(`[Stream:${requestId}] Error:`, error);
@@ -614,7 +655,8 @@ Be concise and helpful. Use tools to get real data.`;
         data: error instanceof Error ? error.message : 'An error occurred'
       });
     } finally {
-      // Stream will be automatically closed by Hono
+      clearInterval(heartbeatInterval);
+      console.log(`[Stream:${requestId}] Stream cleanup complete, heartbeat cleared`);
     }
   });
 });
