@@ -3,6 +3,7 @@ import { PlaylistGenerator } from './components/PlaylistGenerator'
 import { SpotifyAuth } from './components/SpotifyAuth'
 import { ChatInterfaceStreaming } from './components/ChatInterfaceStreaming'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import { BuildInfo } from './components/BuildInfo'
 import { useSpotifyAuth } from './hooks/useSpotifyAuth'
 import { preloadPlaylists } from './lib/playlist-resource'
 
@@ -52,6 +53,8 @@ function App() {
           </ErrorBoundary>
         )}
       </main>
+
+      <BuildInfo />
     </div>
   )
 }

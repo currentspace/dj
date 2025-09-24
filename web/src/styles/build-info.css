@@ -1,0 +1,150 @@
+.build-info-toggle {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  background: rgba(102, 126, 234, 0.9);
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  z-index: 100;
+  backdrop-filter: blur(10px);
+}
+
+.build-info-toggle:hover {
+  background: rgba(102, 126, 234, 1);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.build-version {
+  font-family: 'Monaco', 'Courier New', monospace;
+  font-weight: 600;
+}
+
+.build-info-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease;
+}
+
+.build-info-content {
+  background: white;
+  border-radius: 12px;
+  padding: 2rem;
+  max-width: 500px;
+  width: 90%;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: slideUp 0.3s ease;
+  position: relative;
+}
+
+.build-info-content h3 {
+  margin: 0 0 1.5rem 0;
+  color: #333;
+  font-size: 1.5rem;
+}
+
+.close-btn {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  background: none;
+  border: none;
+  font-size: 2rem;
+  cursor: pointer;
+  color: #999;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.2s;
+}
+
+.close-btn:hover {
+  background: #f0f0f0;
+  color: #333;
+}
+
+.build-details {
+  margin: 1.5rem 0;
+}
+
+.build-row {
+  display: flex;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid #eee;
+}
+
+.build-row:last-child {
+  border-bottom: none;
+}
+
+.build-label {
+  font-weight: 600;
+  color: #666;
+  min-width: 100px;
+}
+
+.build-value {
+  color: #333;
+  font-family: 'Monaco', 'Courier New', monospace;
+  font-size: 0.9rem;
+}
+
+.build-message {
+  font-family: system-ui, -apple-system, sans-serif;
+  font-style: italic;
+}
+
+.build-footer {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #eee;
+  text-align: center;
+}
+
+.build-footer a {
+  color: #667eea;
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.2s;
+}
+
+.build-footer a:hover {
+  color: #764ba2;
+  text-decoration: underline;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}

@@ -194,6 +194,30 @@ chatStreamRouter.post('/message', async (c) => {
     const writer = stream.getWriter();
 
     try {
+      // Send build info as first event
+      let buildInfo = {
+        commitHash: 'unknown',
+        buildTime: new Date().toISOString(),
+        branch: 'unknown',
+        version: 'unknown'
+      };
+
+      try {
+        const info = await import('../build-info.json');
+        buildInfo = info.default;
+      } catch {
+        // Use defaults if not available
+      }
+
+      sendSSE(writer, {
+        type: 'debug',
+        data: {
+          buildInfo,
+          requestId,
+          serverTime: new Date().toISOString()
+        }
+      });
+
       // Parse request
       const body = await c.req.json();
       sendSSE(writer, {

@@ -31,3 +31,6 @@ dist-ssr
 # Cloudflare
 .wrangler
 .dev.vars
+
+# Generated build info
+**/build-info.json

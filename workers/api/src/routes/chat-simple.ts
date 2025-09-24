@@ -698,10 +698,18 @@ Use tools to make informed decisions.`
       console.log(`[Chat:${requestId}] Sending ${toolResults.length} tool results back to Claude`);
 
       const finalStartTime = Date.now();
+
+      // Create ToolMessage for the results (not SystemMessage)
+      const toolResponseMessage = {
+        role: 'tool' as const,
+        content: toolResults.map(r => JSON.stringify(r.output)).join('\n'),
+        tool_call_id: initialResponse.tool_calls[0].id
+      };
+
       finalResponse = await llm.invoke([
         ...messages,
         initialResponse,
-        new SystemMessage(`Tool execution results:\n${toolMessage.content}`)
+        toolResponseMessage
       ]);
 
       const finalDuration = Date.now() - finalStartTime;
