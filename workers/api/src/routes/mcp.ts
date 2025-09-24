@@ -58,7 +58,12 @@ mcpRouter.all('/', async (c) => {
     const duration = Date.now() - startTime;
     console.warn(`[MCP:${requestId}] UNAUTHORIZED - No bearer token provided (${duration}ms)`);
     console.log(`[MCP:${requestId}] Authorization header value: ${authorization || 'undefined'}`);
-    console.log(`[MCP:${requestId}] Available headers:`, Object.fromEntries(c.req.headers.entries()));
+    try {
+      const headers = c.req.headers ? Object.fromEntries(c.req.headers.entries()) : 'Headers not available';
+      console.log(`[MCP:${requestId}] Available headers:`, headers);
+    } catch (headerError) {
+      console.log(`[MCP:${requestId}] Could not read headers:`, headerError);
+    }
 
     return c.json({
       error: 'Unauthorized',
