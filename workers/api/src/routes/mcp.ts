@@ -12,8 +12,11 @@ const MCPRequestSchema = z.object({
   jsonrpc: z.literal('2.0'),
   method: z.string(),
   params: z.any().optional(),
-  id: z.union([z.string(), z.number()])
+  id: z.union([z.string(), z.number()]).nullable().optional() // Optional for notifications
 });
+
+// Check if method is a notification (no response expected)
+const isNotification = (method: string) => method.startsWith('notifications/');
 
 // Session manager instance
 let sessionManager: SessionManager;
@@ -245,6 +248,28 @@ mcpRouter.all('/', async (c) => {
 
         try {
           const mcpRequest = MCPRequestSchema.parse(request);
+
+          // Check if this is a notification
+          if (isNotification(mcpRequest.method)) {
+            console.log(`[MCP:${requestId}] Notification received: ${mcpRequest.method} (no response will be sent)`);
+            // Notifications don't get responses, skip to next
+            continue;
+          }
+
+          // For non-notifications, require an id
+          if (mcpRequest.id === undefined || mcpRequest.id === null) {
+            console.error(`[MCP:${requestId}] Non-notification ${mcpRequest.method} missing required id`);
+            responses.push({
+              jsonrpc: '2.0',
+              error: {
+                code: -32600,
+                message: 'Invalid Request: id required for non-notifications'
+              },
+              id: null
+            });
+            continue;
+          }
+
           const response = await handleMCPRequest(mcpRequest, spotifyToken, requestId, sessionToken);
           responses.push(response);
           console.log(`[MCP:${requestId}] Request ${i + 1} completed successfully`);
@@ -262,7 +287,13 @@ mcpRouter.all('/', async (c) => {
         }
       }
 
-      // Return single response or batch
+      // Return single response or batch (or 204 for notifications only)
+      if (responses.length === 0) {
+        // All were notifications, return 204 No Content
+        console.log(`[MCP:${requestId}] All requests were notifications, returning 204`);
+        return new Response(null, { status: 204 });
+      }
+
       const result = Array.isArray(body) ? responses : responses[0];
       const duration = Date.now() - startTime;
       const resultStr = JSON.stringify(result);

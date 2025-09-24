@@ -6,6 +6,7 @@ import { ChatAnthropic } from '@langchain/anthropic';
 import { MultiServerMCPClient } from '@langchain/mcp-adapters';
 import { createReactAgent } from 'langchain/agents';
 import { HumanMessage, SystemMessage, AIMessage } from '@langchain/core/messages';
+import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts';
 import { withLoopbackFetch } from '../lib/withLoopbackFetch';
 import { withFetchLogging } from '../lib/withFetchLogging';
 import { convertMCPToolsToLangChain } from '../lib/mcp-to-langchain';
@@ -194,46 +195,53 @@ WORKFLOW FOR PLAYLIST EDITING:
 Always explain your reasoning for changes.`
     };
 
-    // Build message history for LangChain
-    const messages = [
-      new SystemMessage(systemPrompts[request.mode]),
-      ...request.conversationHistory.map((m) =>
-        m.role === 'user' ? new HumanMessage(m.content) : new AIMessage(m.content)
-      ),
-      new HumanMessage(request.message)
-    ];
+    // Build conversation history for LangChain
+    const chatHistory = request.conversationHistory.map((m) =>
+      m.role === 'user' ? new HumanMessage(m.content) : new AIMessage(m.content)
+    );
 
     console.log(`[RealLangChainMCP:${requestId}] Creating ReAct agent with ${tools.length} tools`);
+
+    // Create prompt template with proper input variables
+    const prompt = ChatPromptTemplate.fromMessages([
+      ['system', systemPrompts[request.mode]],
+      new MessagesPlaceholder('chat_history'),
+      ['human', '{input}']
+    ]);
 
     // Create and run ReAct agent with MCP tools
     const agent = await createReactAgent({
       llm,
       tools,
-      messageModifier: new SystemMessage(systemPrompts[request.mode])
+      prompt // Critical: provide the prompt template
     });
 
-    console.log(`[RealLangChainMCP:${requestId}] Running agent with conversation...`);
+    console.log(`[RealLangChainMCP:${requestId}] Running agent with input and chat_history...`);
     const agentStartTime = Date.now();
 
+    // Invoke with the expected input variables
     const result = await agent.invoke({
-      messages: messages
+      input: request.message,
+      chat_history: chatHistory
     });
 
     const agentDuration = Date.now() - agentStartTime;
     console.log(`[RealLangChainMCP:${requestId}] Agent completed in ${agentDuration}ms`);
 
-    // Extract final response
+    // Extract final response (ReAct agent returns { output: string })
     let finalMessage = '';
-    if (result?.messages && Array.isArray(result.messages)) {
+    if (typeof result?.output === 'string') {
+      finalMessage = result.output;
+    } else if (result?.output?.content) {
+      finalMessage = result.output.content;
+    } else if (result?.messages && Array.isArray(result.messages)) {
+      // Look for the last AI message
       const lastMessage = result.messages[result.messages.length - 1];
       if (lastMessage && typeof lastMessage.content === 'string') {
         finalMessage = lastMessage.content;
       }
-    } else if (typeof result?.output === 'string') {
-      finalMessage = result.output;
-    } else if (result?.output?.content) {
-      finalMessage = result.output.content;
     } else {
+      console.warn(`[RealLangChainMCP:${requestId}] Unexpected result format:`, result);
       finalMessage = JSON.stringify(result);
     }
 
