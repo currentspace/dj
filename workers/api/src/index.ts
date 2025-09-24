@@ -4,7 +4,7 @@ import { spotifyRouter } from './routes/spotify'
 import { playlistRouter } from './routes/playlist'
 import { testRouter } from './routes/test'
 import { mcpRouter } from './routes/mcp'
-import { realLangChainMcpRouter } from './routes/chat-real-langchain-mcp'
+import { chatRouter } from './routes/chat-simple'
 
 export interface Env {
   ANTHROPIC_API_KEY: string
@@ -25,9 +25,9 @@ app.get('/health', (c) => c.json({ status: 'healthy' }))
 // API routes
 app.route('/api/spotify', spotifyRouter)
 app.route('/api/playlist', playlistRouter)
-app.route('/api/chat', realLangChainMcpRouter) // Main chat endpoint using LangChain MCP
+app.route('/api/chat', chatRouter) // Simplified chat endpoint with direct tool integration
 app.route('/api/test', testRouter)
-app.route('/api/mcp', mcpRouter) // MCP server endpoint
+app.route('/api/mcp', mcpRouter) // MCP server endpoint (keeping for backwards compat)
 
 // Serve static files for non-API routes
 app.get('*', async (c) => {
