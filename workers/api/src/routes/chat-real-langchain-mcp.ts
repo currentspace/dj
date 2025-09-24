@@ -216,24 +216,30 @@ Always explain your reasoning for changes.`
     // Invoke the model with tools - Claude will handle tool calling automatically
     const result = await modelWithTools.invoke(messages);
 
+    console.log(`[RealLangChainMCP:${requestId}] Claude response type:`, typeof result);
+    console.log(`[RealLangChainMCP:${requestId}] Claude response keys:`, result ? Object.keys(result) : 'null');
+    console.log(`[RealLangChainMCP:${requestId}] Tool calls present:`, !!(result?.tool_calls));
+    console.log(`[RealLangChainMCP:${requestId}] Tool calls count:`, result?.tool_calls?.length || 0);
+
     // If Claude called tools, execute them
     let finalResponse = result;
-    if (result.tool_calls && result.tool_calls.length > 0) {
-      console.log(`[RealLangChainMCP:${requestId}] Claude called ${result.tool_calls.length} tool(s)`);
+    if (result?.tool_calls && result.tool_calls.length > 0) {
+      console.log(`[RealLangChainMCP:${requestId}] Claude called ${result.tool_calls.length} tool(s):`, result.tool_calls.map((tc: any) => tc.name));
 
       // Execute each tool call
       const toolResults = [];
       for (const toolCall of result.tool_calls) {
-        console.log(`[RealLangChainMCP:${requestId}] Executing tool: ${toolCall.name}`);
+        console.log(`[RealLangChainMCP:${requestId}] Executing tool: ${toolCall.name} with args:`, toolCall.args);
         const tool = tools.find((t: any) => t.name === toolCall.name);
         if (tool) {
           try {
             const toolResult = await tool.func(toolCall.args);
+            console.log(`[RealLangChainMCP:${requestId}] Tool ${toolCall.name} result:`, JSON.stringify(toolResult).substring(0, 200));
             toolResults.push({
               tool_call_id: toolCall.id,
               result: toolResult
             });
-            console.log(`[RealLangChainMCP:${requestId}] Tool ${toolCall.name} completed`);
+            console.log(`[RealLangChainMCP:${requestId}] Tool ${toolCall.name} completed successfully`);
           } catch (error) {
             console.error(`[RealLangChainMCP:${requestId}] Tool ${toolCall.name} failed:`, error);
             toolResults.push({
@@ -241,6 +247,12 @@ Always explain your reasoning for changes.`
               error: error instanceof Error ? error.message : String(error)
             });
           }
+        } else {
+          console.error(`[RealLangChainMCP:${requestId}] Tool ${toolCall.name} not found in available tools`);
+          toolResults.push({
+            tool_call_id: toolCall.id,
+            error: `Tool ${toolCall.name} not found`
+          });
         }
       }
 
