@@ -51,7 +51,7 @@ realLangChainMcpRouter.post('/message', async (c) => {
     console.log(`[RealLangChainMCP:${requestId}] Body size: ${JSON.stringify(body).length} bytes`);
 
     const request = RealLangChainMCPRequestSchema.parse(body);
-    console.log(`[RealLangChainMCP:${requestId}] Mode: ${request.mode}, Message: "${request.message.substring(0, 50)}${request.message.length > 50 ? '...' : ''}"`);
+    console.log(`[RealLangChainMCP:${requestId}] Mode: ${request.mode}, Message: "${request.message ? request.message.substring(0, 50) : ''}${request.message && request.message.length > 50 ? '...' : ''}"`);
     console.log(`[RealLangChainMCP:${requestId}] Conversation history: ${request.conversationHistory.length} messages`);
 
     // Get authorization header
@@ -62,7 +62,7 @@ realLangChainMcpRouter.post('/message', async (c) => {
     }
 
     const spotifyToken = authorization.replace('Bearer ', '');
-    console.log(`[RealLangChainMCP:${requestId}] Spotify token: ${spotifyToken.substring(0, 8)}...`);
+    console.log(`[RealLangChainMCP:${requestId}] Spotify token: ${spotifyToken ? spotifyToken.substring(0, 8) + '...' : 'undefined'}`);
 
     // Check if it's an existing session token or a Spotify token
     const existingSession = await sessionManager.validateSession(spotifyToken);
@@ -217,7 +217,7 @@ realLangChainMcpRouter.post('/message', async (c) => {
     // Log the exact configuration being used
     console.log(`[RealLangChainMCP:${requestId}] === MCP CLIENT CONFIG ===`);
     console.log(`[RealLangChainMCP:${requestId}] URL: ${mcpServerUrl}`);
-    console.log(`[RealLangChainMCP:${requestId}] Session Token: ${sessionToken.substring(0, 8)}...`);
+    console.log(`[RealLangChainMCP:${requestId}] Session Token: ${sessionToken ? sessionToken.substring(0, 8) + '...' : 'undefined'}`);
     console.log(`[RealLangChainMCP:${requestId}] Transport: Starting with HTTP only for debugging`);
 
     try {
