@@ -122,14 +122,15 @@ realLangChainMcpRouter.post('/message', async (c) => {
       // @ts-ignore
       globalThis.fetch = async (input: RequestInfo, init?: RequestInit) => {
         try {
-          const url = typeof input === "string" ? input : (input as Request).url;
+          const url = typeof input === "string" ? input : ((input as Request)?.url || "unknown");
           let method = "GET";
           if (init?.method) {
             method = init.method;
-          } else if (typeof input !== "string" && (input as Request).method) {
+          } else if (typeof input !== "string" && (input as Request)?.method) {
             method = (input as Request).method;
           }
-          method = method.toUpperCase();
+          // Only call toUpperCase if method is defined
+          method = method ? method.toUpperCase() : "UNKNOWN";
           const hdrs = new Headers(
             init?.headers ?? (typeof input !== "string" ? (input as Request).headers : undefined)
           );

@@ -4,6 +4,7 @@
  */
 
 import { executeSpotifyTool, spotifyTools } from './spotify-tools';
+import { DynamicStructuredTool } from '@langchain/core/tools';
 import type { Env } from '../index';
 
 export interface InternalMCPTool {
@@ -42,14 +43,13 @@ export function createInternalMCPTools(spotifyToken: string): InternalMCPTool[] 
  * Convert internal MCP tools to LangChain-compatible tools
  */
 export function toLangChainTools(internalTools: InternalMCPTool[]): any[] {
-  return internalTools.map(tool => ({
+  return internalTools.map(tool => new DynamicStructuredTool({
     name: tool.name,
     description: tool.description,
     schema: tool.parameters,
     func: tool.func,
-    // LangChain expects these properties
-    call: tool.func,
-    invoke: tool.func,
-    _call: tool.func
+    // Add required properties
+    returnDirect: false,
+    verbose: false
   }));
 }
