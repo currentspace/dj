@@ -84,6 +84,20 @@ export function ChatInterface({ selectedPlaylist, onPlaylistModified }: ChatInte
     const newMessages = [...messages, { role: 'user' as const, content: userMessage }];
     setMessages(newMessages);
 
+    // Detect if user wants to create a new playlist
+    const createPlaylistKeywords = [
+      'create a new playlist',
+      'make a new playlist',
+      'build a playlist',
+      'generate a playlist',
+      'create playlist',
+      'make playlist'
+    ];
+
+    const isCreatingPlaylist = createPlaylistKeywords.some(keyword =>
+      userMessage.toLowerCase().includes(keyword)
+    );
+
     try {
       const response = await fetch('/api/chat/message', {
         method: 'POST',
@@ -98,7 +112,7 @@ export function ChatInterface({ selectedPlaylist, onPlaylistModified }: ChatInte
           conversationHistory: messages,
           selectedPlaylistId: selectedPlaylist.id,
           playlistTracks: playlistTracks,
-          mode: 'analyze' // Indicate this is playlist analysis mode
+          mode: isCreatingPlaylist ? 'create' : 'analyze'
         })
       });
 

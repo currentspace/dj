@@ -1,0 +1,508 @@
+// Spotify Tools for Anthropic Function Calling
+import { z } from 'zod';
+
+// Tool schemas
+export const SearchTracksSchema = z.object({
+  query: z.string().describe('Search query for tracks'),
+  limit: z.number().min(1).max(50).default(10).describe('Number of results to return'),
+  filters: z.object({
+    min_energy: z.number().min(0).max(1).optional(),
+    max_energy: z.number().min(0).max(1).optional(),
+    min_tempo: z.number().min(0).max(300).optional(),
+    max_tempo: z.number().min(0).max(300).optional(),
+    genre: z.string().optional()
+  }).optional()
+});
+
+export const GetAudioFeaturesSchema = z.object({
+  track_ids: z.array(z.string()).max(100).describe('Spotify track IDs to analyze')
+});
+
+export const GetRecommendationsSchema = z.object({
+  seed_tracks: z.array(z.string()).max(5).optional(),
+  seed_artists: z.array(z.string()).max(5).optional(),
+  seed_genres: z.array(z.string()).max(5).optional(),
+  target_energy: z.number().min(0).max(1).optional(),
+  target_danceability: z.number().min(0).max(1).optional(),
+  target_valence: z.number().min(0).max(1).optional(),
+  limit: z.number().min(1).max(100).default(20)
+});
+
+export const CreatePlaylistSchema = z.object({
+  name: z.string().min(1).max(100),
+  description: z.string().max(300).optional(),
+  public: z.boolean().default(false),
+  track_uris: z.array(z.string()).describe('Spotify track URIs to add')
+});
+
+export const ModifyPlaylistSchema = z.object({
+  playlist_id: z.string(),
+  action: z.enum(['add', 'remove', 'reorder']),
+  track_uris: z.array(z.string()),
+  position: z.number().optional().describe('Position to insert tracks (for add/reorder)')
+});
+
+// Tool definitions for Anthropic
+export const spotifyTools = [
+  {
+    name: 'search_spotify_tracks',
+    description: 'Search for tracks on Spotify with optional audio feature filters',
+    input_schema: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: 'Search query (artist name, song name, etc.)'
+        },
+        limit: {
+          type: 'number',
+          description: 'Number of results (1-50)',
+          default: 10
+        },
+        filters: {
+          type: 'object',
+          properties: {
+            min_energy: { type: 'number', minimum: 0, maximum: 1 },
+            max_energy: { type: 'number', minimum: 0, maximum: 1 },
+            min_tempo: { type: 'number', minimum: 0, maximum: 300 },
+            max_tempo: { type: 'number', minimum: 0, maximum: 300 },
+            genre: { type: 'string' }
+          }
+        }
+      },
+      required: ['query']
+    }
+  },
+  {
+    name: 'get_audio_features',
+    description: 'Get detailed audio features for tracks (energy, danceability, tempo, etc.)',
+    input_schema: {
+      type: 'object',
+      properties: {
+        track_ids: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Array of Spotify track IDs',
+          maxItems: 100
+        }
+      },
+      required: ['track_ids']
+    }
+  },
+  {
+    name: 'get_recommendations',
+    description: 'Get track recommendations based on seeds and target audio features',
+    input_schema: {
+      type: 'object',
+      properties: {
+        seed_tracks: {
+          type: 'array',
+          items: { type: 'string' },
+          maxItems: 5,
+          description: 'Seed track IDs'
+        },
+        seed_artists: {
+          type: 'array',
+          items: { type: 'string' },
+          maxItems: 5,
+          description: 'Seed artist IDs'
+        },
+        seed_genres: {
+          type: 'array',
+          items: { type: 'string' },
+          maxItems: 5,
+          description: 'Seed genres'
+        },
+        target_energy: { type: 'number', minimum: 0, maximum: 1 },
+        target_danceability: { type: 'number', minimum: 0, maximum: 1 },
+        target_valence: { type: 'number', minimum: 0, maximum: 1 },
+        limit: { type: 'number', minimum: 1, maximum: 100, default: 20 }
+      }
+    }
+  },
+  {
+    name: 'create_playlist',
+    description: 'Create a new Spotify playlist and add tracks',
+    input_schema: {
+      type: 'object',
+      properties: {
+        name: {
+          type: 'string',
+          description: 'Playlist name',
+          minLength: 1,
+          maxLength: 100
+        },
+        description: {
+          type: 'string',
+          description: 'Playlist description',
+          maxLength: 300
+        },
+        public: {
+          type: 'boolean',
+          description: 'Make playlist public',
+          default: false
+        },
+        track_uris: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Spotify track URIs to add (spotify:track:...)'
+        }
+      },
+      required: ['name', 'track_uris']
+    }
+  },
+  {
+    name: 'modify_playlist',
+    description: 'Add, remove, or reorder tracks in an existing playlist',
+    input_schema: {
+      type: 'object',
+      properties: {
+        playlist_id: {
+          type: 'string',
+          description: 'Spotify playlist ID'
+        },
+        action: {
+          type: 'string',
+          enum: ['add', 'remove', 'reorder'],
+          description: 'Action to perform'
+        },
+        track_uris: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Track URIs to add/remove/reorder'
+        },
+        position: {
+          type: 'number',
+          description: 'Position for insertion (add/reorder)',
+          minimum: 0
+        }
+      },
+      required: ['playlist_id', 'action', 'track_uris']
+    }
+  },
+  {
+    name: 'analyze_playlist',
+    description: 'Analyze an existing playlist to understand its characteristics',
+    input_schema: {
+      type: 'object',
+      properties: {
+        playlist_id: {
+          type: 'string',
+          description: 'Spotify playlist ID to analyze'
+        },
+        include_recommendations: {
+          type: 'boolean',
+          description: 'Include AI-generated recommendations',
+          default: false
+        }
+      },
+      required: ['playlist_id']
+    }
+  }
+];
+
+// Tool executor with logging
+export async function executeSpotifyTool(
+  toolName: string,
+  args: any,
+  token: string
+): Promise<any> {
+  console.log(`[Tool] Executing ${toolName} with args:`, JSON.stringify(args).substring(0, 200));
+  const startTime = Date.now();
+
+  try {
+    let result;
+    switch (toolName) {
+      case 'search_spotify_tracks':
+        result = await searchSpotifyTracks(args, token);
+        break;
+      case 'get_audio_features':
+        result = await getAudioFeatures(args, token);
+        break;
+      case 'get_recommendations':
+        result = await getRecommendations(args, token);
+        break;
+      case 'create_playlist':
+        result = await createPlaylist(args, token);
+        break;
+      case 'modify_playlist':
+        result = await modifyPlaylist(args, token);
+        break;
+      case 'analyze_playlist':
+        result = await analyzePlaylist(args, token);
+        break;
+      default:
+        console.error(`[Tool] Unknown tool: ${toolName}`);
+        throw new Error(`Unknown tool: ${toolName}`);
+    }
+
+    const duration = Date.now() - startTime;
+    console.log(`[Tool] ${toolName} completed successfully in ${duration}ms`);
+    return result;
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    console.error(`[Tool] ${toolName} failed after ${duration}ms:`, error);
+    throw error;
+  }
+}
+
+// Implementation functions
+async function searchSpotifyTracks(args: any, token: string) {
+  const { query, limit = 10, filters } = args;
+
+  const response = await fetch(
+    `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=track&limit=${limit}`,
+    {
+      headers: { 'Authorization': `Bearer ${token}` }
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`Spotify search failed: ${response.status}`);
+  }
+
+  const data = await response.json();
+  const tracks = data.tracks?.items || [];
+
+  // Apply filters if provided
+  if (filters && tracks.length > 0) {
+    const trackIds = tracks.map((t: any) => t.id);
+    const features = await getAudioFeatures({ track_ids: trackIds }, token);
+
+    return tracks.filter((track: any, index: number) => {
+      const feature = features[index];
+      if (!feature) return true;
+
+      if (filters.min_energy && feature.energy < filters.min_energy) return false;
+      if (filters.max_energy && feature.energy > filters.max_energy) return false;
+      if (filters.min_tempo && feature.tempo < filters.min_tempo) return false;
+      if (filters.max_tempo && feature.tempo > filters.max_tempo) return false;
+
+      return true;
+    });
+  }
+
+  return tracks;
+}
+
+async function getAudioFeatures(args: any, token: string) {
+  const { track_ids } = args;
+
+  const response = await fetch(
+    `https://api.spotify.com/v1/audio-features?ids=${track_ids.join(',')}`,
+    {
+      headers: { 'Authorization': `Bearer ${token}` }
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to get audio features: ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.audio_features || [];
+}
+
+async function getRecommendations(args: any, token: string) {
+  const params = new URLSearchParams();
+
+  if (args.seed_tracks) params.append('seed_tracks', args.seed_tracks.join(','));
+  if (args.seed_artists) params.append('seed_artists', args.seed_artists.join(','));
+  if (args.seed_genres) params.append('seed_genres', args.seed_genres.join(','));
+  if (args.target_energy !== undefined) params.append('target_energy', args.target_energy.toString());
+  if (args.target_danceability !== undefined) params.append('target_danceability', args.target_danceability.toString());
+  if (args.target_valence !== undefined) params.append('target_valence', args.target_valence.toString());
+  params.append('limit', (args.limit || 20).toString());
+
+  const response = await fetch(
+    `https://api.spotify.com/v1/recommendations?${params}`,
+    {
+      headers: { 'Authorization': `Bearer ${token}` }
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to get recommendations: ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.tracks || [];
+}
+
+async function createPlaylist(args: any, token: string) {
+  console.log(`[Tool:createPlaylist] Creating playlist: ${args.name}`);
+
+  // Get user ID first
+  const userResponse = await fetch('https://api.spotify.com/v1/me', {
+    headers: { 'Authorization': `Bearer ${token}` }
+  });
+
+  if (!userResponse.ok) {
+    console.error(`[Tool:createPlaylist] Failed to get user profile: ${userResponse.status}`);
+    throw new Error('Failed to get user profile');
+  }
+
+  const userData = await userResponse.json();
+  const userId = userData.id;
+  console.log(`[Tool:createPlaylist] User ID: ${userId}`);
+
+  // Create playlist
+  const createResponse = await fetch(
+    `https://api.spotify.com/v1/users/${userId}/playlists`,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        name: args.name,
+        description: args.description || '',
+        public: args.public || false
+      })
+    }
+  );
+
+  if (!createResponse.ok) {
+    console.error(`[Tool:createPlaylist] Failed to create playlist: ${createResponse.status}`);
+    throw new Error('Failed to create playlist');
+  }
+
+  const playlist = await createResponse.json();
+  console.log(`[Tool:createPlaylist] Playlist created with ID: ${playlist.id}`);
+
+  // Add tracks if provided
+  if (args.track_uris && args.track_uris.length > 0) {
+    const addResponse = await fetch(
+      `https://api.spotify.com/v1/playlists/${playlist.id}/tracks`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          uris: args.track_uris
+        })
+      }
+    );
+
+    if (!addResponse.ok) {
+      throw new Error('Failed to add tracks to playlist');
+    }
+  }
+
+  return playlist;
+}
+
+async function modifyPlaylist(args: any, token: string) {
+  const { playlist_id, action, track_uris, position } = args;
+
+  let url = `https://api.spotify.com/v1/playlists/${playlist_id}/tracks`;
+  let method = 'POST';
+  let body: any = {};
+
+  switch (action) {
+    case 'add':
+      body.uris = track_uris;
+      if (position !== undefined) body.position = position;
+      break;
+    case 'remove':
+      method = 'DELETE';
+      body.tracks = track_uris.map((uri: string) => ({ uri }));
+      break;
+    case 'reorder':
+      method = 'PUT';
+      body = {
+        range_start: position,
+        insert_before: args.insert_before,
+        range_length: track_uris.length
+      };
+      break;
+  }
+
+  const response = await fetch(url, {
+    method,
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(body)
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to ${action} tracks: ${response.status}`);
+  }
+
+  return { success: true, action, track_count: track_uris.length };
+}
+
+async function analyzePlaylist(args: any, token: string) {
+  const { playlist_id } = args;
+
+  // Get playlist details
+  const playlistResponse = await fetch(
+    `https://api.spotify.com/v1/playlists/${playlist_id}`,
+    {
+      headers: { 'Authorization': `Bearer ${token}` }
+    }
+  );
+
+  if (!playlistResponse.ok) {
+    throw new Error('Failed to get playlist');
+  }
+
+  const playlist = await playlistResponse.json();
+
+  // Get tracks
+  const tracksResponse = await fetch(
+    `https://api.spotify.com/v1/playlists/${playlist_id}/tracks?limit=100`,
+    {
+      headers: { 'Authorization': `Bearer ${token}` }
+    }
+  );
+
+  if (!tracksResponse.ok) {
+    throw new Error('Failed to get playlist tracks');
+  }
+
+  const tracksData = await tracksResponse.json();
+  const tracks = tracksData.items.map((item: any) => item.track).filter(Boolean);
+  const trackIds = tracks.map((t: any) => t.id).filter(Boolean);
+
+  // Get audio features
+  let audioFeatures = [];
+  if (trackIds.length > 0) {
+    const featuresResponse = await fetch(
+      `https://api.spotify.com/v1/audio-features?ids=${trackIds.slice(0, 100).join(',')}`,
+      {
+        headers: { 'Authorization': `Bearer ${token}` }
+      }
+    );
+
+    if (featuresResponse.ok) {
+      const featuresData = await featuresResponse.json();
+      audioFeatures = featuresData.audio_features || [];
+    }
+  }
+
+  // Calculate averages
+  const validFeatures = audioFeatures.filter((f: any) => f !== null);
+  const analysis = {
+    playlist_name: playlist.name,
+    playlist_description: playlist.description,
+    total_tracks: tracks.length,
+    audio_analysis: validFeatures.length > 0 ? {
+      avg_energy: validFeatures.reduce((sum: number, f: any) => sum + f.energy, 0) / validFeatures.length,
+      avg_danceability: validFeatures.reduce((sum: number, f: any) => sum + f.danceability, 0) / validFeatures.length,
+      avg_valence: validFeatures.reduce((sum: number, f: any) => sum + f.valence, 0) / validFeatures.length,
+      avg_tempo: validFeatures.reduce((sum: number, f: any) => sum + f.tempo, 0) / validFeatures.length,
+      avg_acousticness: validFeatures.reduce((sum: number, f: any) => sum + f.acousticness, 0) / validFeatures.length,
+      avg_instrumentalness: validFeatures.reduce((sum: number, f: any) => sum + f.instrumentalness, 0) / validFeatures.length,
+    } : null,
+    tracks: tracks.slice(0, 20), // First 20 tracks for context
+    audio_features: audioFeatures.slice(0, 20) // First 20 features
+  };
+
+  return analysis;
+}

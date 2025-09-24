@@ -5,11 +5,13 @@ import { spotifyRouter } from './routes/spotify'
 import { playlistRouter } from './routes/playlist'
 import { chatRouter } from './routes/chat'
 import { testRouter } from './routes/test'
+import { mcpRouter } from './routes/mcp'
 
 export interface Env {
   ANTHROPIC_API_KEY: string
   SPOTIFY_CLIENT_ID: string
   SPOTIFY_CLIENT_SECRET: string
+  SESSIONS?: KVNamespace // KV namespace for session storage
   ENVIRONMENT: string
   ASSETS: Fetcher
 }
@@ -27,6 +29,7 @@ app.route('/api/spotify', spotifyRouter)
 app.route('/api/playlist', playlistRouter)
 app.route('/api/chat', chatRouter)
 app.route('/api/test', testRouter)
+app.route('/api/mcp', mcpRouter)
 
 // Serve static files for non-API routes
 app.get('*', async (c) => {
