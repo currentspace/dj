@@ -2,47 +2,53 @@ import { defineConfig } from 'tsup'
 
 export default defineConfig({
   entry: ['src/index.ts'],
-  format: ['esm'],  // Workers use ESM only
-  platform: 'node', // Can use 'node' with nodejs_compat
-  target: 'es2022', // Workers runtime supports modern JS
-  noExternal: [/.*/], // Bundle ALL dependencies for Workers
+  format: ['esm'],
+  platform: 'browser', // V8 isolate (not Node.js)
+  target: 'es2022',
+  splitting: false,
+  sourcemap: true,
+  clean: true,
+  treeshake: true,
+  skipNodeModulesBundle: true, // Don't bundle all node_modules
+  minify: true,
+  // Important: keep Node stdlib out of the bundle (stdio path)
   external: [
-    // Keep Node.js built-ins external - Workers provides these
-    'node:*',
-    'buffer',
-    'crypto',
-    'stream',
-    'util',
-    'events',
-    'assert',
-    'path',
-    'fs',
-    'net',
-    'dns',
-    'http',
-    'https',
-    'process',
-    'timers',
-    // MCP stdio transport uses these - mark as external since we only use HTTP
-    'child_process',
-    'os',
-    'readline',
-    'tty',
-    'worker_threads',
-    // External packages that stdio transport imports but we don't need
+    // Node built-ins that trip Workers
+    'child_process', 'node:child_process',
+    'fs', 'node:fs',
+    'net', 'node:net',
+    'tls', 'node:tls',
+    'module', 'node:module',
+    'worker_threads', 'node:worker_threads',
+    'os', 'node:os',
+    'readline', 'node:readline',
+    'tty', 'node:tty',
+    'process', 'node:process',
+    'buffer', 'node:buffer',
+    'crypto', 'node:crypto',
+    'stream', 'node:stream',
+    'util', 'node:util',
+    'events', 'node:events',
+    'assert', 'node:assert',
+    'path', 'node:path',
+    'dns', 'node:dns',
+    'http', 'node:http',
+    'https', 'node:https',
+    'timers', 'node:timers',
+    // External packages that stdio transport imports
     'cross-spawn'
   ],
-  minify: true, // Recommended for production
-  splitting: false, // Workers don't support code splitting
-  sourcemap: true, // Helpful for debugging
-  clean: true,
-  // Workers-specific optimizations
-  treeshake: true,
-  bundle: true,
-  skipNodeModulesBundle: false, // Important: bundle node_modules
-  define: {
-    // Mock Node.js modules that stdio transport tries to use
-    'process.platform': '"workers"',
-    'process.versions.node': '"18.0.0"'
-  }
+  esbuildOptions(options) {
+    // Make sure ESBuild knows we target browser-ish runtime
+    options.platform = 'browser';
+    options.mainFields = ['module', 'browser', 'main'];
+    // Trim dead code paths more aggressively
+    options.treeShaking = true;
+    // If the lib checks process.env, prevent inlining Node shims
+    options.define = {
+      ...(options.define || {}),
+      'process.env.NODE_DEBUG': 'false',
+      'process.env.DEBUG': 'false',
+    };
+  },
 })
