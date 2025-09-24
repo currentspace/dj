@@ -1,11 +1,35 @@
-import { useState, useRef, use, Suspense, useCallback, useTransition, startTransition } from 'react'
+import { useState, useRef, useCallback, useTransition } from 'react'
 import { chatStreamClient } from '../../lib/streaming-client'
-import { createPlaylistResource } from '../../lib/playlist-resource'
 import { flushSync } from 'react-dom'
 
 interface Message {
   role: 'user' | 'assistant'
   content: string
+}
+
+interface SpotifyPlaylist {
+  id: string;
+  name: string;
+  description: string;
+  external_urls: {
+    spotify: string;
+  };
+  images: Array<{
+    url: string;
+    height: number;
+    width: number;
+  }>;
+  tracks: {
+    total: number;
+  };
+  public: boolean;
+  owner: {
+    display_name: string;
+  };
+}
+
+interface ChatInterfaceProps {
+  selectedPlaylist: SpotifyPlaylist | null;
 }
 
 
@@ -18,50 +42,6 @@ interface StreamingStatus {
   debugData?: any
 }
 
-// Playlist selector component that uses Suspense
-function PlaylistSelector({
-  mode,
-  selectedId,
-  onSelect
-}: {
-  mode: string
-  selectedId: string | null
-  onSelect: (id: string) => void
-}) {
-  if (mode !== 'analyze' && mode !== 'edit') {
-    return null
-  }
-
-  const playlistData = use(createPlaylistResource().promise)
-  const playlists = playlistData.items || []
-
-  // Auto-select first playlist if none selected
-  if (!selectedId && playlists.length > 0) {
-    startTransition(() => {
-      onSelect(playlists[0].id)
-    })
-  }
-
-  return (
-    <label className="playlist-selector">
-      Playlist:
-      {playlists.length > 0 ? (
-        <select
-          value={selectedId || ''}
-          onChange={(e) => onSelect(e.target.value)}
-        >
-          {playlists.map((playlist: any) => (
-            <option key={playlist.id} value={playlist.id}>
-              {playlist.name} ({playlist.tracks.total} tracks)
-            </option>
-          ))}
-        </select>
-      ) : (
-        <span> No playlists found</span>
-      )}
-    </label>
-  )
-}
 
 // Tool status display component
 function StreamingStatusDisplay({ status }: { status: StreamingStatus }) {
@@ -115,11 +95,10 @@ function StreamingStatusDisplay({ status }: { status: StreamingStatus }) {
   )
 }
 
-export function ChatInterface() {
+export function ChatInterface({ selectedPlaylist }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [mode, setMode] = useState<'analyze' | 'create' | 'edit'>('analyze')
-  const [selectedPlaylistId, setSelectedPlaylistId] = useState<string | null>(null)
   const [streamingStatus, setStreamingStatus] = useState<StreamingStatus>({
     isStreaming: false,
     toolsUsed: [],
@@ -136,14 +115,7 @@ export function ChatInterface() {
   const handleModeChange = useCallback((newMode: 'analyze' | 'create' | 'edit') => {
     startTransition(() => {
       setMode(newMode)
-      if (newMode === 'create') {
-        setSelectedPlaylistId(null)
-      }
     })
-  }, [])
-
-  const handlePlaylistSelect = useCallback((id: string) => {
-    setSelectedPlaylistId(id)
   }, [])
 
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
@@ -153,12 +125,12 @@ export function ChatInterface() {
     let userMessage = input.trim()
 
     // Inject playlist ID for analyze/edit modes
-    console.log(`[ChatStreaming] Pre-injection - Mode: ${mode}, SelectedID: ${selectedPlaylistId}`)
-    if ((mode === 'analyze' || mode === 'edit') && selectedPlaylistId) {
-      userMessage = `[Playlist ID: ${selectedPlaylistId}] ${userMessage}`
-      console.log(`[ChatStreaming] Injected playlist ID: ${userMessage}`)
+    console.log(`[ChatInterface] Pre-injection - Mode: ${mode}, SelectedID: ${selectedPlaylist?.id}`)
+    if ((mode === 'analyze' || mode === 'edit') && selectedPlaylist?.id) {
+      userMessage = `[Playlist ID: ${selectedPlaylist.id}] ${userMessage}`
+      console.log(`[ChatInterface] Injected playlist ID: ${userMessage}`)
     } else {
-      console.warn(`[ChatStreaming] No playlist ID injected - Mode: ${mode}, ID: ${selectedPlaylistId}`)
+      console.warn(`[ChatInterface] No playlist ID injected - Mode: ${mode}, ID: ${selectedPlaylist?.id}`)
     }
 
     const displayMessage = input.trim()
@@ -277,12 +249,25 @@ export function ChatInterface() {
         }
       }
     )
-  }, [input, streamingStatus.isStreaming, mode, selectedPlaylistId, messages, scrollToBottom])
+  }, [input, streamingStatus.isStreaming, mode, selectedPlaylist?.id, messages, scrollToBottom])
+
+  // If no playlist is selected, show selection prompt
+  if (!selectedPlaylist) {
+    return (
+      <div className="chat-interface">
+        <div className="no-playlist-selected">
+          <h2>🎵 Select a Playlist</h2>
+          <p>Choose a playlist from the left to start chatting with your AI DJ assistant!</p>
+          <p>I can help you analyze your music, create new playlists, or edit existing ones.</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="chat-interface">
       <div className="chat-header">
-        <h2>AI DJ Assistant (Streaming)</h2>
+        <h2>AI DJ Assistant</h2>
         <div className="mode-selector">
           <label>
             Mode:
@@ -293,13 +278,11 @@ export function ChatInterface() {
             </select>
           </label>
 
-          <Suspense fallback={<span className="playlist-selector"> Loading playlists...</span>}>
-            <PlaylistSelector
-              mode={mode}
-              selectedId={selectedPlaylistId}
-              onSelect={handlePlaylistSelect}
-            />
-          </Suspense>
+          {(mode === 'analyze' || mode === 'edit') && (
+            <div className="selected-playlist-info">
+              <span>🎵 {selectedPlaylist.name} ({selectedPlaylist.tracks.total} tracks)</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -308,13 +291,16 @@ export function ChatInterface() {
       <div className="chat-messages">
         {messages.length === 0 && (
           <div className="welcome-message">
-            <p>Hi! I'm your AI DJ assistant with real-time streaming.</p>
+            <p>Hi! I'm your AI DJ assistant. I can help you:</p>
             <ul>
-              <li>🎵 Watch as I analyze tracks and artists</li>
-              <li>📝 See playlist creation in real-time</li>
-              <li>✏️ Track every step of playlist editing</li>
+              <li>🎵 Analyze tracks and artists in your playlists</li>
+              <li>📝 Create custom playlists based on your taste</li>
+              <li>✏️ Edit existing playlists with smart suggestions</li>
             </ul>
-            <p>What kind of music are you in the mood for today?</p>
+            <p>{selectedPlaylist
+              ? `Ready to work with "${selectedPlaylist.name}"! What would you like to do?`
+              : 'What kind of music are you in the mood for today?'
+            }</p>
           </div>
         )}
 
