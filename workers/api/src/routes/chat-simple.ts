@@ -275,8 +275,13 @@ chatRouter.post('/message', async (c) => {
 
     console.log(`[Chat:${requestId}] Claude client initialized with maxRetries: 2`);
 
-    // Bind tools to the model
-    const modelWithTools = llm.bindTools(tools);
+    // For now, let's try without tools when getting errors
+    const useTools = true; // Toggle this to test without tools
+
+    // Bind tools to the model (or use base model)
+    const modelWithTools = useTools ? llm.bindTools(tools) : llm;
+
+    console.log(`[Chat:${requestId}] Tools bound to model: ${useTools ? 'Yes' : 'No (fallback mode)'}`);
 
     // System prompts based on mode
     const systemPrompts = {

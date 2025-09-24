@@ -5,6 +5,7 @@ import { playlistRouter } from './routes/playlist'
 import { testRouter } from './routes/test'
 import { mcpRouter } from './routes/mcp'
 import { chatRouter } from './routes/chat-simple'
+import { chatTestRouter } from './routes/chat-test'
 
 export interface Env {
   ANTHROPIC_API_KEY: string
@@ -26,6 +27,7 @@ app.get('/health', (c) => c.json({ status: 'healthy' }))
 app.route('/api/spotify', spotifyRouter)
 app.route('/api/playlist', playlistRouter)
 app.route('/api/chat', chatRouter) // Simplified chat endpoint with direct tool integration
+app.route('/api/chat-test', chatTestRouter) // Test endpoints for debugging
 app.route('/api/test', testRouter)
 app.route('/api/mcp', mcpRouter) // MCP server endpoint (keeping for backwards compat)
 
