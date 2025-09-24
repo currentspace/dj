@@ -5,6 +5,8 @@ import { TestPage } from './features/test/TestPage';
 import { UserPlaylists } from './features/playlist/UserPlaylists';
 import { ErrorBoundary, PlaylistErrorBoundary } from './app/ErrorBoundary';
 import { useSpotifyAuth } from './hooks/useSpotifyAuth';
+import { BuildInfo } from './components/BuildInfo';
+import './styles/build-info.css';
 
 
 interface SpotifyPlaylist {
@@ -178,6 +180,8 @@ function App() {
             }
           }
         `}</style>
+
+        <BuildInfo />
       </div>
     </ErrorBoundary>
   );

@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
-// Import build info - will be generated at build time
-let buildInfo = {
+// Default build info for development
+const defaultBuildInfo = {
   commitHash: 'dev',
   buildTime: new Date().toISOString(),
   branch: 'local',
@@ -9,16 +9,18 @@ let buildInfo = {
   version: 'dev-local'
 }
 
-try {
-  // Try to load actual build info
-  const info = await import('../build-info.json')
-  buildInfo = info.default
-} catch {
-  // Use defaults in dev
-}
-
 export function BuildInfo() {
   const [isOpen, setIsOpen] = useState(false)
+  const [buildInfo, setBuildInfo] = useState(defaultBuildInfo)
+
+  useEffect(() => {
+    // Try to load actual build info
+    import('../build-info.json')
+      .then(module => setBuildInfo(module.default))
+      .catch(() => {
+        console.log('Using default build info (dev mode)')
+      })
+  }, [])
 
   return (
     <>

@@ -1,5 +1,5 @@
 // Playlist resource management using React 19 patterns
-import { getUserPlaylists } from './api-client'
+import { getUserPlaylists } from './api'
 
 type PlaylistResource = {
   promise: Promise<any>

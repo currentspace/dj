@@ -1,6 +1,6 @@
 import { useState, useRef, use, Suspense, useCallback, useTransition, startTransition } from 'react'
-import { chatStreamClient } from '../lib/streaming-client'
-import { createPlaylistResource } from '../lib/playlist-resource'
+import { chatStreamClient } from '../../lib/streaming-client'
+import { createPlaylistResource } from '../../lib/playlist-resource'
 import { flushSync } from 'react-dom'
 
 interface Message {

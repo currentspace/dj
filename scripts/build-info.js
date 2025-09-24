@@ -25,7 +25,7 @@ const buildInfo = {
 
 // Write to multiple locations
 const locations = [
-  './web/src/build-info.json',
+  './apps/web/src/build-info.json',
   './workers/api/src/build-info.json'
 ];
 
