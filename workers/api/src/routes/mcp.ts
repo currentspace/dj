@@ -82,15 +82,32 @@ mcpRouter.all('/', async (c) => {
       return c.json({ error: 'Method not allowed' }, 405);
     }
 
-    // Initialize SSE stream - simpler approach for Workers
+    // Initialize Worker-safe SSE stream
     const duration = Date.now() - startTime;
-    console.log(`[MCP:${requestId}] Initializing SSE stream (${duration}ms)`);
+    console.log(`[MCP:${requestId}] Initializing Worker-safe SSE stream (${duration}ms)`);
 
-    try {
-      // Create SSE response with immediate initialization data
-      const sseData = [
-        'event: initialized',
-        `data: ${JSON.stringify({
+    const headers = {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'Authorization, Content-Type, MCP-Protocol-Version'
+    };
+
+    const stream = new ReadableStream({
+      start(controller) {
+        const enc = new TextEncoder();
+
+        const send = (data: unknown, event?: string) => {
+          let message = '';
+          if (event) {
+            message += `event: ${event}\n`;
+          }
+          message += `data: ${JSON.stringify(data)}\n\n`;
+          controller.enqueue(enc.encode(message));
+        };
+
+        // Send initialization event immediately
+        send({
           jsonrpc: '2.0',
           method: 'notifications/initialized',
           params: {
@@ -104,30 +121,35 @@ mcpRouter.all('/', async (c) => {
               resources: {}
             }
           }
-        })}`,
-        '',
-        'event: ready',
-        'data: {"status": "ready"}',
-        '',
-        ''
-      ].join('\n');
+        }, 'initialized');
 
-      console.log(`[MCP:${requestId}] SSE connection established with initialization data`);
+        // Send ready event
+        send({ type: 'ready', timestamp: Date.now() }, 'ready');
 
-      return new Response(sseData, {
-        headers: {
-          'Content-Type': 'text/event-stream',
-          'Cache-Control': 'no-cache',
-          'Connection': 'keep-alive',
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Headers': 'Authorization, Content-Type, MCP-Protocol-Version'
-        }
-      });
+        console.log(`[MCP:${requestId}] SSE connection established, events sent`);
 
-    } catch (error) {
-      console.error(`[MCP:${requestId}] SSE initialization error:`, error);
-      return c.json({ error: 'SSE initialization failed' }, 500);
-    }
+        // Heartbeat every 20 seconds to prevent 522s
+        const heartbeat = setInterval(() => {
+          try {
+            send({ type: 'heartbeat', timestamp: Date.now() }, 'ping');
+          } catch (error) {
+            console.log(`[MCP:${requestId}] Heartbeat failed, client likely disconnected`);
+            clearInterval(heartbeat);
+          }
+        }, 20000);
+
+        // Clean up on client disconnect
+        c.req.raw.signal?.addEventListener('abort', () => {
+          clearInterval(heartbeat);
+          try {
+            controller.close();
+          } catch {}
+          console.log(`[MCP:${requestId}] SSE connection closed`);
+        });
+      }
+    });
+
+    return new Response(stream, { status: 200, headers });
   }
 
   if (method === 'POST') {
