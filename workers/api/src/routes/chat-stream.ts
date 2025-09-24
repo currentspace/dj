@@ -306,8 +306,16 @@ chatStreamRouter.post('/message', async (c) => {
       // Build system prompt
       const systemPrompt = `You are an AI DJ assistant with access to Spotify.
 ${playlistId ? `IMPORTANT: The user has selected a playlist. Playlist ID: ${playlistId}
-When the user asks about "the playlist", "this playlist", "analyze this", or any reference to analyzing/editing without specifying what, use analyze_playlist with playlist_id: "${playlistId}"
-Do NOT ask for a playlist ID - use the one provided above: ${playlistId}` : ''}
+
+CRITICAL INSTRUCTIONS:
+- When the user asks ANYTHING about this playlist, IMMEDIATELY call analyze_playlist with the parameter: {"playlist_id": "${playlistId}"}
+- Examples that require analyze_playlist:
+  * "test" → call analyze_playlist({"playlist_id": "${playlistId}"})
+  * "analyze this" → call analyze_playlist({"playlist_id": "${playlistId}"})
+  * "what failed" → call analyze_playlist({"playlist_id": "${playlistId}"})
+  * "tell me about this playlist" → call analyze_playlist({"playlist_id": "${playlistId}"})
+
+NEVER call analyze_playlist with empty arguments {}. ALWAYS include playlist_id: "${playlistId}"` : ''}
 Be concise and helpful. Use tools to get real data.`;
 
       sendSSE(stream, {

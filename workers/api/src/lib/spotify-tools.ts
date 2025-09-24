@@ -512,7 +512,17 @@ async function modifyPlaylist(args: any, token: string) {
 async function analyzePlaylist(args: any, token: string) {
   const { playlist_id } = args;
 
+  console.log(`[analyzePlaylist] Starting analysis with args:`, JSON.stringify(args));
+  console.log(`[analyzePlaylist] Extracted playlist_id: "${playlist_id}"`);
+  console.log(`[analyzePlaylist] Token present: ${token ? 'YES' : 'NO'}`);
+
+  if (!playlist_id) {
+    console.error(`[analyzePlaylist] CRITICAL: playlist_id is missing or empty!`);
+    throw new Error('playlist_id parameter is required');
+  }
+
   // Get playlist details
+  console.log(`[analyzePlaylist] Fetching playlist details for ID: ${playlist_id}`);
   const playlistResponse = await fetch(
     `https://api.spotify.com/v1/playlists/${playlist_id}`,
     {
@@ -520,13 +530,19 @@ async function analyzePlaylist(args: any, token: string) {
     }
   );
 
+  console.log(`[analyzePlaylist] Playlist API response status: ${playlistResponse.status}`);
+
   if (!playlistResponse.ok) {
-    throw new Error('Failed to get playlist');
+    const errorText = await playlistResponse.text();
+    console.error(`[analyzePlaylist] Failed to get playlist: ${playlistResponse.status} - ${errorText}`);
+    throw new Error(`Failed to get playlist: ${playlistResponse.status}`);
   }
 
   const playlist = await playlistResponse.json() as any;
+  console.log(`[analyzePlaylist] Successfully got playlist: "${playlist.name}" (${playlist.tracks?.total} tracks)`);
 
   // Get tracks
+  console.log(`[analyzePlaylist] Fetching playlist tracks...`);
   const tracksResponse = await fetch(
     `https://api.spotify.com/v1/playlists/${playlist_id}/tracks?limit=100`,
     {
@@ -534,17 +550,23 @@ async function analyzePlaylist(args: any, token: string) {
     }
   );
 
+  console.log(`[analyzePlaylist] Tracks API response status: ${tracksResponse.status}`);
+
   if (!tracksResponse.ok) {
-    throw new Error('Failed to get playlist tracks');
+    const errorText = await tracksResponse.text();
+    console.error(`[analyzePlaylist] Failed to get playlist tracks: ${tracksResponse.status} - ${errorText}`);
+    throw new Error(`Failed to get playlist tracks: ${tracksResponse.status}`);
   }
 
   const tracksData = await tracksResponse.json() as any;
   const tracks = tracksData.items.map((item: any) => item.track).filter(Boolean);
   const trackIds = tracks.map((t: any) => t.id).filter(Boolean);
+  console.log(`[analyzePlaylist] Found ${tracks.length} tracks, ${trackIds.length} with valid IDs`);
 
   // Get audio features
   let audioFeatures = [];
   if (trackIds.length > 0) {
+    console.log(`[analyzePlaylist] Fetching audio features for ${trackIds.length} tracks...`);
     const featuresResponse = await fetch(
       `https://api.spotify.com/v1/audio-features?ids=${trackIds.slice(0, 100).join(',')}`,
       {
@@ -552,14 +574,22 @@ async function analyzePlaylist(args: any, token: string) {
       }
     );
 
+    console.log(`[analyzePlaylist] Audio features API response status: ${featuresResponse.status}`);
+
     if (featuresResponse.ok) {
       const featuresData = await featuresResponse.json() as any;
       audioFeatures = featuresData.audio_features || [];
+      console.log(`[analyzePlaylist] Got audio features for ${audioFeatures.filter(f => f).length} tracks`);
+    } else {
+      console.warn(`[analyzePlaylist] Failed to get audio features: ${featuresResponse.status}`);
     }
   }
 
   // Calculate averages
+  console.log(`[analyzePlaylist] Calculating audio analysis from ${audioFeatures.length} features...`);
   const validFeatures = audioFeatures.filter((f: any) => f !== null);
+  console.log(`[analyzePlaylist] Valid features: ${validFeatures.length}/${audioFeatures.length}`);
+
   const analysis = {
     playlist_name: playlist.name,
     playlist_description: playlist.description,
@@ -576,6 +606,7 @@ async function analyzePlaylist(args: any, token: string) {
     audio_features: audioFeatures.slice(0, 20) // First 20 features
   };
 
+  console.log(`[analyzePlaylist] Analysis complete! Playlist: "${analysis.playlist_name}", Tracks: ${analysis.total_tracks}, Audio data: ${analysis.audio_analysis ? 'YES' : 'NO'}`);
   return analysis;
 }
 
