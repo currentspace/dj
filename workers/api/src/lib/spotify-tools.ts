@@ -231,6 +231,27 @@ export async function executeSpotifyTool(
       case 'analyze_playlist':
         result = await analyzePlaylist(args, token);
         break;
+      case 'get_track_details':
+        result = await getTrackDetails(args, token);
+        break;
+      case 'get_artist_info':
+        result = await getArtistInfo(args, token);
+        break;
+      case 'get_artist_top_tracks':
+        result = await getArtistTopTracks(args, token);
+        break;
+      case 'search_artists':
+        result = await searchArtists(args, token);
+        break;
+      case 'get_related_artists':
+        result = await getRelatedArtists(args, token);
+        break;
+      case 'get_album_info':
+        result = await getAlbumInfo(args, token);
+        break;
+      case 'get_available_genres':
+        result = await getAvailableGenres(token);
+        break;
       default:
         console.error(`[Tool] Unknown tool: ${toolName}`);
         throw new Error(`Unknown tool: ${toolName}`);
@@ -261,7 +282,7 @@ async function searchSpotifyTracks(args: any, token: string) {
     throw new Error(`Spotify search failed: ${response.status}`);
   }
 
-  const data = await response.json();
+  const data = await response.json() as any;
   const tracks = data.tracks?.items || [];
 
   // Apply filters if provided
@@ -269,7 +290,7 @@ async function searchSpotifyTracks(args: any, token: string) {
     const trackIds = tracks.map((t: any) => t.id);
     const features = await getAudioFeatures({ track_ids: trackIds }, token);
 
-    return tracks.filter((track: any, index: number) => {
+    return tracks.filter((_track: any, index: number) => {
       const feature = features[index];
       if (!feature) return true;
 
@@ -299,7 +320,7 @@ async function getAudioFeatures(args: any, token: string) {
     throw new Error(`Failed to get audio features: ${response.status}`);
   }
 
-  const data = await response.json();
+  const data = await response.json() as any;
   return data.audio_features || [];
 }
 
@@ -325,7 +346,7 @@ async function getRecommendations(args: any, token: string) {
     throw new Error(`Failed to get recommendations: ${response.status}`);
   }
 
-  const data = await response.json();
+  const data = await response.json() as any;
   return data.tracks || [];
 }
 
@@ -342,7 +363,7 @@ async function createPlaylist(args: any, token: string) {
     throw new Error('Failed to get user profile');
   }
 
-  const userData = await userResponse.json();
+  const userData = await userResponse.json() as any;
   const userId = userData.id;
   console.log(`[Tool:createPlaylist] User ID: ${userId}`);
 
@@ -368,7 +389,7 @@ async function createPlaylist(args: any, token: string) {
     throw new Error('Failed to create playlist');
   }
 
-  const playlist = await createResponse.json();
+  const playlist = await createResponse.json() as any;
   console.log(`[Tool:createPlaylist] Playlist created with ID: ${playlist.id}`);
 
   // Add tracks if provided
@@ -452,7 +473,7 @@ async function analyzePlaylist(args: any, token: string) {
     throw new Error('Failed to get playlist');
   }
 
-  const playlist = await playlistResponse.json();
+  const playlist = await playlistResponse.json() as any;
 
   // Get tracks
   const tracksResponse = await fetch(
@@ -466,7 +487,7 @@ async function analyzePlaylist(args: any, token: string) {
     throw new Error('Failed to get playlist tracks');
   }
 
-  const tracksData = await tracksResponse.json();
+  const tracksData = await tracksResponse.json() as any;
   const tracks = tracksData.items.map((item: any) => item.track).filter(Boolean);
   const trackIds = tracks.map((t: any) => t.id).filter(Boolean);
 
@@ -481,7 +502,7 @@ async function analyzePlaylist(args: any, token: string) {
     );
 
     if (featuresResponse.ok) {
-      const featuresData = await featuresResponse.json();
+      const featuresData = await featuresResponse.json() as any;
       audioFeatures = featuresData.audio_features || [];
     }
   }
@@ -505,4 +526,179 @@ async function analyzePlaylist(args: any, token: string) {
   };
 
   return analysis;
+}
+
+async function getTrackDetails(args: any, token: string) {
+  const { track_id } = args;
+
+  const response = await fetch(
+    `https://api.spotify.com/v1/tracks/${track_id}`,
+    {
+      headers: { 'Authorization': `Bearer ${token}` }
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to get track details: ${response.status}`);
+  }
+
+  const track = await response.json() as any;
+
+  // Also get audio features for complete info
+  const featuresResponse = await fetch(
+    `https://api.spotify.com/v1/audio-features/${track_id}`,
+    {
+      headers: { 'Authorization': `Bearer ${token}` }
+    }
+  );
+
+  let audioFeatures = null;
+  if (featuresResponse.ok) {
+    audioFeatures = await featuresResponse.json();
+  }
+
+  return {
+    id: track.id,
+    name: track.name,
+    artists: track.artists,
+    album: {
+      id: track.album.id,
+      name: track.album.name,
+      release_date: track.album.release_date,
+      images: track.album.images
+    },
+    duration_ms: track.duration_ms,
+    explicit: track.explicit,
+    popularity: track.popularity,
+    preview_url: track.preview_url,
+    uri: track.uri,
+    audio_features: audioFeatures
+  };
+}
+
+async function getArtistInfo(args: any, token: string) {
+  const { artist_id } = args;
+
+  const response = await fetch(
+    `https://api.spotify.com/v1/artists/${artist_id}`,
+    {
+      headers: { 'Authorization': `Bearer ${token}` }
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to get artist info: ${response.status}`);
+  }
+
+  return await response.json();
+}
+
+async function getArtistTopTracks(args: any, token: string) {
+  const { artist_id, market = 'US' } = args;
+
+  const response = await fetch(
+    `https://api.spotify.com/v1/artists/${artist_id}/top-tracks?market=${market}`,
+    {
+      headers: { 'Authorization': `Bearer ${token}` }
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to get artist top tracks: ${response.status}`);
+  }
+
+  const data = await response.json() as any;
+  return data.tracks || [];
+}
+
+async function searchArtists(args: any, token: string) {
+  const { query, limit = 10 } = args;
+
+  const response = await fetch(
+    `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=artist&limit=${limit}`,
+    {
+      headers: { 'Authorization': `Bearer ${token}` }
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to search artists: ${response.status}`);
+  }
+
+  const data = await response.json() as any;
+  return data.artists?.items || [];
+}
+
+async function getRelatedArtists(args: any, token: string) {
+  const { artist_id } = args;
+
+  const response = await fetch(
+    `https://api.spotify.com/v1/artists/${artist_id}/related-artists`,
+    {
+      headers: { 'Authorization': `Bearer ${token}` }
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to get related artists: ${response.status}`);
+  }
+
+  const data = await response.json() as any;
+  return data.artists || [];
+}
+
+async function getAlbumInfo(args: any, token: string) {
+  const { album_id } = args;
+
+  const response = await fetch(
+    `https://api.spotify.com/v1/albums/${album_id}`,
+    {
+      headers: { 'Authorization': `Bearer ${token}` }
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to get album info: ${response.status}`);
+  }
+
+  const album = await response.json() as any;
+
+  // Get track IDs for audio features
+  const trackIds = album.tracks?.items?.map((t: any) => t.id).filter(Boolean) || [];
+
+  let audioFeatures = [];
+  if (trackIds.length > 0) {
+    const featuresResponse = await fetch(
+      `https://api.spotify.com/v1/audio-features?ids=${trackIds.join(',')}`,
+      {
+        headers: { 'Authorization': `Bearer ${token}` }
+      }
+    );
+
+    if (featuresResponse.ok) {
+      const featuresData = await featuresResponse.json() as any;
+      audioFeatures = featuresData.audio_features || [];
+    }
+  }
+
+  return {
+    ...(album as object),
+    track_audio_features: audioFeatures
+  };
+}
+
+async function getAvailableGenres(token: string) {
+  const response = await fetch(
+    'https://api.spotify.com/v1/recommendations/available-genre-seeds',
+    {
+      headers: { 'Authorization': `Bearer ${token}` }
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to get available genres: ${response.status}`);
+  }
+
+  const data = await response.json() as any;
+  return data.genres || [];
 }
