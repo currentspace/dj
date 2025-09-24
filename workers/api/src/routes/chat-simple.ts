@@ -256,12 +256,13 @@ chatRouter.post('/message', async (c) => {
     const tools = createSpotifyTools(spotifyToken);
     console.log(`[Chat:${requestId}] Created ${tools.length} Spotify tools`);
 
-    // Initialize Claude with tools
+    // Initialize Claude with tools and retry configuration
     const llm = new ChatAnthropic({
       apiKey: c.env.ANTHROPIC_API_KEY,
       model: 'claude-3-5-sonnet-20241022',
       temperature: 0.2,
-      maxTokens: 2000
+      maxTokens: 2000,
+      maxRetries: 2,  // Retry on failures
     });
 
     // Bind tools to the model
@@ -309,8 +310,40 @@ Use tools to make informed decisions.`
 
     console.log(`[Chat:${requestId}] Invoking Claude with ${tools.length} tools...`);
 
-    // First invocation - Claude may call tools
-    const initialResponse = await modelWithTools.invoke(messages);
+    let initialResponse;
+    let retryCount = 0;
+    const maxRetries = 3;
+
+    // Retry logic for overload errors
+    while (retryCount < maxRetries) {
+      try {
+        // First invocation - Claude may call tools
+        initialResponse = await modelWithTools.invoke(messages);
+        break; // Success, exit retry loop
+      } catch (invokeError) {
+        const errorMessage = invokeError instanceof Error ? invokeError.message : String(invokeError);
+
+        // Check if it's an overload error
+        if (errorMessage.includes('529') || errorMessage.includes('overloaded')) {
+          retryCount++;
+          if (retryCount < maxRetries) {
+            const backoffTime = Math.min(1000 * Math.pow(2, retryCount), 5000); // Exponential backoff
+            console.log(`[Chat:${requestId}] Anthropic overloaded, retrying ${retryCount}/${maxRetries} after ${backoffTime}ms...`);
+            await new Promise(resolve => setTimeout(resolve, backoffTime));
+          } else {
+            console.error(`[Chat:${requestId}] Max retries reached for overload error`);
+            throw invokeError;
+          }
+        } else {
+          // Not an overload error, throw immediately
+          throw invokeError;
+        }
+      }
+    }
+
+    if (!initialResponse) {
+      throw new Error('Failed to get response from Claude after retries');
+    }
 
     let finalResponse = initialResponse;
 
@@ -423,6 +456,24 @@ Use tools to make informed decisions.`
       }
 
       // Check for specific error types
+      if (error.message.includes('429') || error.message.includes('rate_limit')) {
+        console.error(`[Chat:${requestId}] Rate limit error detected`);
+        return c.json({
+          error: 'Rate limit exceeded. Please try again in a few moments.',
+          requestId,
+          duration
+        }, 429);
+      }
+
+      if (error.message.includes('529') || error.message.includes('overloaded')) {
+        console.error(`[Chat:${requestId}] Anthropic service overloaded`);
+        return c.json({
+          error: 'AI service is currently overloaded. Please try again in a few moments.',
+          requestId,
+          duration
+        }, 503);
+      }
+
       if (error.message.includes('Anthropic')) {
         console.error(`[Chat:${requestId}] Anthropic API error detected`);
         return c.json({

@@ -36,6 +36,11 @@ export function ChatInterface() {
     try {
       const response = await sendChatMessage(userMessage, messages, mode)
 
+      // Check if this was a fallback response
+      if (response.fallbackMode) {
+        console.warn('Using fallback mode due to service overload')
+      }
+
       // Add assistant response to chat
       setMessages([...newMessages, {
         role: 'assistant',
@@ -43,9 +48,24 @@ export function ChatInterface() {
       }])
     } catch (error) {
       console.error('Chat error:', error)
+
+      let errorMessage = 'Sorry, I encountered an error.'
+
+      if (error instanceof Error) {
+        if (error.message.includes('overloaded') || error.message.includes('503')) {
+          errorMessage = '🔄 The AI service is currently experiencing high demand. Please try again in a moment. This usually resolves quickly!'
+        } else if (error.message.includes('rate limit') || error.message.includes('429')) {
+          errorMessage = '⏳ Rate limit reached. Please wait a few seconds before sending another message.'
+        } else if (error.message.includes('Authentication')) {
+          errorMessage = '🔑 Your Spotify session has expired. Please refresh the page and log in again.'
+        } else {
+          errorMessage = `Sorry, I encountered an error: ${error.message}`
+        }
+      }
+
       setMessages([...newMessages, {
         role: 'assistant',
-        content: `Sorry, I encountered an error: ${error instanceof Error ? error.message : 'Unknown error'}`
+        content: errorMessage
       }])
     } finally {
       setLoading(false)
