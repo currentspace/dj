@@ -44,8 +44,10 @@ function sendSSE(stream: HonoStreamWriter, event: StreamEvent) {
  * Create Spotify tools with streaming callbacks
  */
 // Helper function to send progress updates to UI
-function sendProgress(stream: HonoStreamWriter, message: string) {
-  sendSSE(stream, { type: 'thinking', data: message });
+async function sendProgress(writer: WritableStreamDefaultWriter, encoder: TextEncoder, message: string) {
+  const event = { type: 'thinking', data: message };
+  const sseMessage = `data: ${JSON.stringify(event)}\n\n`;
+  await writer.write(encoder.encode(sseMessage));
 }
 
 // Enhanced tool executor with progress streaming
@@ -53,7 +55,8 @@ async function executeSpotifyToolWithProgress(
   toolName: string,
   args: Record<string, unknown>,
   token: string,
-  stream: HonoStreamWriter
+  writer: WritableStreamDefaultWriter,
+  encoder: TextEncoder
 ): Promise<unknown> {
   console.log(`[Tool] Executing ${toolName} with args:`, JSON.stringify(args).substring(0, 200));
 
@@ -61,10 +64,10 @@ async function executeSpotifyToolWithProgress(
     const { playlist_id } = args;
 
     try {
-      sendProgress(stream, '📊 Starting playlist analysis...');
+      await sendProgress(writer, encoder, '📊 Starting playlist analysis...');
 
       // Step 1: Get playlist details
-      sendProgress(stream, '🔍 Fetching playlist information...');
+      await sendProgress(writer, encoder, '🔍 Fetching playlist information...');
       const playlistResponse = await fetch(
         `https://api.spotify.com/v1/playlists/${playlist_id}`,
         { headers: { 'Authorization': `Bearer ${token}` } }
@@ -75,10 +78,10 @@ async function executeSpotifyToolWithProgress(
       }
 
       const playlist = await playlistResponse.json() as any;
-      sendProgress(stream, `🎼 Found "${playlist.name}" with ${playlist.tracks?.total || 0} tracks`);
+      await sendProgress(writer, encoder, `🎼 Found "${playlist.name}" with ${playlist.tracks?.total || 0} tracks`);
 
       // Step 2: Get tracks
-      sendProgress(stream, '🎵 Fetching track details...');
+      await sendProgress(writer, encoder, '🎵 Fetching track details...');
       const tracksResponse = await fetch(
         `https://api.spotify.com/v1/playlists/${playlist_id}/tracks?limit=100`,
         { headers: { 'Authorization': `Bearer ${token}` } }
@@ -92,12 +95,12 @@ async function executeSpotifyToolWithProgress(
       const tracks = tracksData.items.map((item: any) => item.track).filter(Boolean);
       const trackIds = tracks.map((t: any) => t.id).filter(Boolean);
 
-      sendProgress(stream, `✅ Loaded ${tracks.length} tracks successfully`);
+      await sendProgress(writer, encoder, `✅ Loaded ${tracks.length} tracks successfully`);
 
       // Step 3: Get audio features
       let audioFeatures = [];
       if (trackIds.length > 0) {
-        sendProgress(stream, `🎚️ Analyzing audio characteristics of ${trackIds.length} tracks...`);
+        await sendProgress(writer, encoder, `🎚️ Analyzing audio characteristics of ${trackIds.length} tracks...`);
 
         const featuresResponse = await fetch(
           `https://api.spotify.com/v1/audio-features?ids=${trackIds.slice(0, 100).join(',')}`,
@@ -108,16 +111,16 @@ async function executeSpotifyToolWithProgress(
           const featuresData = await featuresResponse.json() as any;
           audioFeatures = featuresData.audio_features || [];
           const validFeatures = audioFeatures.filter((f: any) => f !== null);
-          sendProgress(stream, `🎯 Audio analysis complete! Got data for ${validFeatures.length} tracks`);
+          await sendProgress(writer, encoder, `🎯 Audio analysis complete! Got data for ${validFeatures.length} tracks`);
         } else {
           const errorText = await featuresResponse.text();
           console.error(`[analyze_playlist] Audio features failed: ${featuresResponse.status} - ${errorText}`);
-          sendProgress(stream, `⚠️ Audio features unavailable (${featuresResponse.status}) - continuing with basic analysis`);
+          await sendProgress(writer, encoder, `⚠️ Audio features unavailable (${featuresResponse.status}) - continuing with basic analysis`);
         }
       }
 
       // Step 4: Calculate analysis
-      sendProgress(stream, '🧮 Computing musical insights...');
+      await sendProgress(writer, encoder, '🧮 Computing musical insights...');
       const validFeatures = audioFeatures.filter((f: any) => f !== null);
 
       const analysis = {
@@ -136,13 +139,13 @@ async function executeSpotifyToolWithProgress(
         audio_features: audioFeatures.slice(0, 20)
       };
 
-      sendProgress(stream, `🎉 Analysis complete for "${analysis.playlist_name}"!`);
+      await sendProgress(writer, encoder, `🎉 Analysis complete for "${analysis.playlist_name}"!`);
       console.log(`[Tool] analyze_playlist completed successfully`);
       return analysis;
 
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-      sendProgress(stream, `❌ Analysis failed: ${errorMsg}`);
+      await sendProgress(writer, encoder, `❌ Analysis failed: ${errorMsg}`);
       console.error(`[Tool] analyze_playlist failed:`, error);
       throw error;
     }
@@ -155,10 +158,17 @@ async function executeSpotifyToolWithProgress(
 
 function createStreamingSpotifyTools(
   spotifyToken: string,
-  stream: HonoStreamWriter,
+  writer: WritableStreamDefaultWriter,
+  encoder: TextEncoder,
   contextPlaylistId?: string,
   mode?: string
 ): DynamicStructuredTool[] {
+  // Helper to write SSE messages
+  const writeSSE = async (event: any) => {
+    const message = `data: ${JSON.stringify(event)}\n\n`;
+    await writer.write(encoder.encode(message));
+  };
+
   const tools: DynamicStructuredTool[] = [
     new DynamicStructuredTool({
       name: 'search_spotify_tracks',
@@ -168,14 +178,14 @@ function createStreamingSpotifyTools(
         limit: z.number().min(1).max(50).default(10)
       }),
       func: async (args) => {
-        sendSSE(stream, {
+        await writeSSE({
           type: 'tool_start',
           data: { tool: 'search_spotify_tracks', args }
         });
 
         const result = await executeSpotifyTool('search_spotify_tracks', args, spotifyToken);
 
-        sendSSE(stream, {
+        await writeSSE({
           type: 'tool_end',
           data: {
             tool: 'search_spotify_tracks',
@@ -201,15 +211,15 @@ function createStreamingSpotifyTools(
           finalArgs.playlist_id = contextPlaylistId;
         }
 
-        sendSSE(stream, {
+        await writeSSE({
           type: 'tool_start',
           data: { tool: 'analyze_playlist', args: finalArgs }
         });
 
         // Use enhanced executeSpotifyTool with progress streaming
-        const result = await executeSpotifyToolWithProgress('analyze_playlist', finalArgs, spotifyToken, stream);
+        const result = await executeSpotifyToolWithProgress('analyze_playlist', finalArgs, spotifyToken, writer, encoder);
 
-        sendSSE(stream, {
+        await writeSSE({
           type: 'tool_end',
           data: {
             tool: 'analyze_playlist',
@@ -257,14 +267,14 @@ function createStreamingSpotifyTools(
           }
         }
 
-        sendSSE(stream, {
+        await writeSSE({
           type: 'tool_start',
           data: { tool: 'get_audio_features', args: finalArgs }
         });
 
         const result = await executeSpotifyTool('get_audio_features', finalArgs, spotifyToken);
 
-        sendSSE(stream, {
+        await writeSSE({
           type: 'tool_end',
           data: {
             tool: 'get_audio_features',
@@ -317,14 +327,14 @@ function createStreamingSpotifyTools(
           }
         }
 
-        sendSSE(stream, {
+        await writeSSE({
           type: 'tool_start',
           data: { tool: 'get_recommendations', args: finalArgs }
         });
 
         const result = await executeSpotifyTool('get_recommendations', finalArgs, spotifyToken);
 
-        sendSSE(stream, {
+        await writeSSE({
           type: 'tool_end',
           data: {
             tool: 'get_recommendations',
@@ -345,14 +355,14 @@ function createStreamingSpotifyTools(
         track_uris: z.array(z.string())
       }),
       func: async (args) => {
-        sendSSE(stream, {
+        await writeSSE({
           type: 'tool_start',
           data: { tool: 'create_playlist', args: { name: args.name, tracks: args.track_uris.length } }
         });
 
         const result = await executeSpotifyTool('create_playlist', args, spotifyToken);
 
-        sendSSE(stream, {
+        await writeSSE({
           type: 'tool_end',
           data: {
             tool: 'create_playlist',
@@ -375,23 +385,38 @@ chatStreamRouter.post('/message', async (c) => {
   const requestId = crypto.randomUUID().substring(0, 8);
   console.log(`[Stream:${requestId}] Starting streaming response`);
 
-  // Set SSE headers explicitly
-  c.header('Content-Type', 'text/event-stream');
-  c.header('Cache-Control', 'no-cache');
-  c.header('Connection', 'keep-alive');
+  // Create a TransformStream for proper SSE handling in Cloudflare Workers
+  const { readable, writable } = new TransformStream();
+  const writer = writable.getWriter();
+  const encoder = new TextEncoder();
 
-  return stream(c, async (stream) => {
-    console.log(`[Stream:${requestId}] Stream callback started`);
+  // Helper to write SSE messages
+  const writeSSE = async (event: any) => {
+    const message = `data: ${JSON.stringify(event)}\n\n`;
+    await writer.write(encoder.encode(message));
+  };
+
+  // Set SSE headers
+  const headers = new Headers({
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'Access-Control-Allow-Origin': '*'
+  });
+
+  // Process the request and stream responses
+  const processStream = async () => {
+    console.log(`[Stream:${requestId}] Starting async stream processing`);
 
     // Heartbeat to keep connection alive
-    const heartbeatInterval = setInterval(() => {
+    const heartbeatInterval = setInterval(async () => {
       try {
-        stream.write(': heartbeat\n\n');
+        await writer.write(encoder.encode(': heartbeat\n\n'));
       } catch (e) {
         console.log(`[Stream:${requestId}] Heartbeat failed, stream may be closed`);
         clearInterval(heartbeatInterval);
       }
-    }, 15000); // Send heartbeat every 15 seconds
+    }, 15000);
 
     try {
       // Send build info as first event
@@ -409,7 +434,7 @@ chatStreamRouter.post('/message', async (c) => {
         // Use defaults if not available
       }
 
-      sendSSE(stream, {
+      await writeSSE({
         type: 'debug',
         data: {
           buildInfo,
@@ -420,7 +445,7 @@ chatStreamRouter.post('/message', async (c) => {
 
       // Parse request
       const body = await c.req.json();
-      sendSSE(stream, {
+      await writeSSE({
         type: 'log',
         data: {
           level: 'info',
@@ -430,7 +455,7 @@ chatStreamRouter.post('/message', async (c) => {
 
       const request = ChatRequestSchema.parse(body);
 
-      sendSSE(stream, {
+      await writeSSE({
         type: 'debug',
         data: {
           requestId,
@@ -449,7 +474,7 @@ chatStreamRouter.post('/message', async (c) => {
       if (playlistIdMatch) {
         playlistId = playlistIdMatch[1];
         actualMessage = playlistIdMatch[2];
-        sendSSE(stream, {
+        await writeSSE({
           type: 'log',
           data: {
             level: 'info',
@@ -457,7 +482,7 @@ chatStreamRouter.post('/message', async (c) => {
           }
         });
       } else {
-        sendSSE(stream, {
+        await writeSSE({
           type: 'log',
           data: {
             level: 'warn',
@@ -469,12 +494,12 @@ chatStreamRouter.post('/message', async (c) => {
       // Get Spotify token
       const authorization = c.req.header('Authorization');
       if (!authorization?.startsWith('Bearer ')) {
-        sendSSE(stream, { type: 'error', data: 'Unauthorized - Missing or invalid Authorization header' });
+        await writeSSE({ type: 'error', data: 'Unauthorized - Missing or invalid Authorization header' });
         return;
       }
       const spotifyToken = authorization.replace('Bearer ', '');
 
-      sendSSE(stream, {
+      await writeSSE({
         type: 'log',
         data: {
           level: 'info',
@@ -483,10 +508,10 @@ chatStreamRouter.post('/message', async (c) => {
       });
 
       // Send initial thinking message
-      sendSSE(stream, { type: 'thinking', data: 'Processing your request...' });
+      await writeSSE({ type: 'thinking', data: 'Processing your request...' });
 
       // Create tools with streaming callbacks
-      const tools = createStreamingSpotifyTools(spotifyToken, stream, playlistId, request.mode);
+      const tools = createStreamingSpotifyTools(spotifyToken, writer, encoder, playlistId, request.mode);
 
       // Initialize Claude with streaming
       const llm = new ChatAnthropic({
@@ -518,7 +543,7 @@ If you don't have the required parameters for a tool, explain what you need from
 
 Be concise and helpful. Use tools to get real data.`;
 
-      sendSSE(stream, {
+      await writeSSE({
         type: 'log',
         data: {
           level: 'info',
@@ -526,7 +551,7 @@ Be concise and helpful. Use tools to get real data.`;
         }
       });
 
-      sendSSE(stream, {
+      await writeSSE({
         type: 'debug',
         data: {
           systemPromptLength: systemPrompt.length,
@@ -544,7 +569,7 @@ Be concise and helpful. Use tools to get real data.`;
         new HumanMessage(actualMessage)
       ];
 
-      sendSSE(stream, {
+      await writeSSE({
         type: 'log',
         data: {
           level: 'info',
@@ -557,7 +582,7 @@ Be concise and helpful. Use tools to get real data.`;
       let toolCalls: any[] = [];
 
       console.log(`[Stream:${requestId}] Starting Claude streaming...`);
-      sendSSE(stream, { type: 'thinking', data: 'Analyzing your request...' });
+      await writeSSE({ type: 'thinking', data: 'Analyzing your request...' });
 
       const response = await modelWithTools.stream(messages);
       console.log(`[Stream:${requestId}] Claude stream initialized`);
@@ -568,7 +593,7 @@ Be concise and helpful. Use tools to get real data.`;
         // Handle content chunks
         if (typeof chunk.content === 'string' && chunk.content) {
           fullResponse += chunk.content;
-          sendSSE(stream, { type: 'content', data: chunk.content });
+          await writeSSE({ type: 'content', data: chunk.content });
           console.log(`[Stream:${requestId}] Content chunk ${chunkCount}: ${chunk.content.substring(0, 50)}...`);
         }
 
@@ -584,7 +609,7 @@ Be concise and helpful. Use tools to get real data.`;
       // If there were tool calls, execute them
       if (toolCalls.length > 0) {
         console.log(`[Stream:${requestId}] Executing ${toolCalls.length} tool calls...`);
-        sendSSE(stream, { type: 'thinking', data: 'Using Spotify tools...' });
+        await writeSSE({ type: 'thinking', data: 'Using Spotify tools...' });
 
         // Execute tools
         const toolResults = [];
@@ -615,7 +640,7 @@ Be concise and helpful. Use tools to get real data.`;
 
         // Get final response with tool results
         console.log(`[Stream:${requestId}] Getting final response from Claude...`);
-        sendSSE(stream, { type: 'thinking', data: 'Preparing response...' });
+        await writeSSE({ type: 'thinking', data: 'Preparing response...' });
 
         const toolMessage = new ToolMessage({
           content: JSON.stringify(toolResults),
@@ -636,7 +661,7 @@ Be concise and helpful. Use tools to get real data.`;
           finalChunkCount++;
           if (typeof chunk.content === 'string' && chunk.content) {
             fullResponse += chunk.content;
-            sendSSE(stream, { type: 'content', data: chunk.content });
+            await writeSSE({ type: 'content', data: chunk.content });
             console.log(`[Stream:${requestId}] Final chunk ${finalChunkCount}: ${chunk.content.substring(0, 50)}...`);
           }
         }
@@ -645,20 +670,30 @@ Be concise and helpful. Use tools to get real data.`;
 
       // Send completion
       console.log(`[Stream:${requestId}] Sending done event`);
-      sendSSE(stream, { type: 'done', data: null });
+      await writeSSE({ type: 'done', data: null });
       console.log(`[Stream:${requestId}] Stream complete - all events sent`);
 
     } catch (error) {
       console.error(`[Stream:${requestId}] Error:`, error);
-      sendSSE(stream, {
+      await writeSSE({
         type: 'error',
         data: error instanceof Error ? error.message : 'An error occurred'
       });
     } finally {
       clearInterval(heartbeatInterval);
+      console.log(`[Stream:${requestId}] Closing writer...`);
+      await writer.close();
       console.log(`[Stream:${requestId}] Stream cleanup complete, heartbeat cleared`);
     }
+  };
+
+  // Start processing without blocking the response
+  processStream().catch(error => {
+    console.error(`[Stream:${requestId}] Unhandled error in processStream:`, error);
   });
+
+  // Return the SSE response immediately
+  return new Response(readable, { headers });
 });
 
 export { chatStreamRouter };
