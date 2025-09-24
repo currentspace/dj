@@ -1,13 +1,12 @@
-// Chat Route with Official LangChain MCP Adapters
 import { Hono } from 'hono';
 import type { Env } from '../index';
-import { SessionManager } from '../lib/session-manager';
 import { z } from 'zod';
-
+import { SessionManager } from '../lib/session-manager';
 import { ChatAnthropic } from '@langchain/anthropic';
 import { MultiServerMCPClient } from '@langchain/mcp-adapters';
 import { createReactAgent } from 'langchain/agents';
 import { HumanMessage, SystemMessage, AIMessage } from '@langchain/core/messages';
+import app from '../index';
 
 const realLangChainMcpRouter = new Hono<{ Bindings: Env }>();
 
@@ -17,13 +16,14 @@ const RealLangChainMCPRequestSchema = z.object({
   conversationHistory: z.array(z.object({
     role: z.enum(['user', 'assistant']),
     content: z.string()
-  })).optional().default([]),
-  mode: z.enum(['create', 'edit', 'analyze']).optional().default('analyze')
+  })).max(20).default([]),
+  mode: z.enum(['analyze', 'create', 'edit']).default('analyze')
 });
 
 // Session manager instance
 let sessionManager: SessionManager;
 
+// Initialize session manager
 realLangChainMcpRouter.use('*', async (c, next) => {
   if (!sessionManager) {
     sessionManager = new SessionManager(c.env.SESSIONS);
@@ -44,61 +44,131 @@ realLangChainMcpRouter.post('/message', async (c) => {
   console.log(`[RealLangChainMCP:${requestId}] Method: ${c.req.method}`);
   console.log(`[RealLangChainMCP:${requestId}] Content-Type: ${c.req.header('Content-Type')}`);
   console.log(`[RealLangChainMCP:${requestId}] Authorization present: ${!!c.req.header('Authorization')}`);
-  console.log(`[RealLangChainMCP:${requestId}] User-Agent: ${c.req.header('User-Agent')?.substring(0, 100)}`);
 
   try {
-    console.log(`[RealLangChainMCP:${requestId}] Parsing request body...`);
-    let body: any;
-    try {
-      body = await c.req.json();
-      console.log(`[RealLangChainMCP:${requestId}] Body parsed successfully:`, JSON.stringify(body).substring(0, 200));
-    } catch (jsonError) {
-      console.error(`[RealLangChainMCP:${requestId}] JSON parsing failed:`, jsonError);
-      return c.json({
-        error: 'Invalid JSON in request body',
-        details: jsonError instanceof Error ? jsonError.message : 'Unknown JSON error',
-        requestId
-      }, 400);
+    // Parse request
+    const body = await c.req.json();
+    console.log(`[RealLangChainMCP:${requestId}] Body size: ${JSON.stringify(body).length} bytes`);
+
+    const request = RealLangChainMCPRequestSchema.parse(body);
+    console.log(`[RealLangChainMCP:${requestId}] Mode: ${request.mode}, Message: "${request.message.substring(0, 50)}${request.message.length > 50 ? '...' : ''}"`);
+    console.log(`[RealLangChainMCP:${requestId}] Conversation history: ${request.conversationHistory.length} messages`);
+
+    // Get authorization header
+    const authorization = c.req.header('Authorization');
+    if (!authorization?.startsWith('Bearer ')) {
+      console.warn(`[RealLangChainMCP:${requestId}] No authorization header provided`);
+      return c.json({ error: 'Unauthorized' }, 401);
     }
 
-    console.log(`[RealLangChainMCP:${requestId}] Validating request schema...`);
-    let request: any;
-    try {
-      request = RealLangChainMCPRequestSchema.parse(body);
-      console.log(`[RealLangChainMCP:${requestId}] Schema validation successful`);
-    } catch (schemaError) {
-      console.error(`[RealLangChainMCP:${requestId}] Schema validation failed:`, schemaError);
-      return c.json({
-        error: 'Invalid request format',
-        details: schemaError instanceof Error ? schemaError.message : 'Schema validation failed',
-        requestId
-      }, 400);
-    }
+    const spotifyToken = authorization.replace('Bearer ', '');
+    console.log(`[RealLangChainMCP:${requestId}] Spotify token: ${spotifyToken.substring(0, 8)}...`);
 
-    console.log(`[RealLangChainMCP:${requestId}] Mode: ${request.mode}, Message: "${request.message.substring(0, 50)}..."`);
-
-    // Get Spotify token
-    console.log(`[RealLangChainMCP:${requestId}] Extracting Spotify token...`);
-    const spotifyToken = c.req.header('Authorization')?.replace('Bearer ', '');
-    if (!spotifyToken) {
-      console.warn(`[RealLangChainMCP:${requestId}] No Spotify token provided`);
-      return c.json({ error: 'Spotify token required', requestId }, 401);
-    }
-    console.log(`[RealLangChainMCP:${requestId}] Spotify token extracted: ${spotifyToken.substring(0, 20)}...`);
-
-    // Create session for MCP authentication
-    console.log(`[RealLangChainMCP:${requestId}] Creating MCP session...`);
+    // Check if it's an existing session token or a Spotify token
+    const existingSession = await sessionManager.validateSession(spotifyToken);
     let sessionToken: string;
-    try {
-      sessionToken = await sessionManager.createSession(spotifyToken);
-      console.log(`[RealLangChainMCP:${requestId}] Session created successfully: ${sessionToken.substring(0, 8)}...`);
-    } catch (sessionError) {
-      console.error(`[RealLangChainMCP:${requestId}] Session creation failed:`, sessionError);
-      return c.json({
-        error: 'Failed to create session',
-        details: sessionError instanceof Error ? sessionError.message : 'Session creation error',
-        requestId
-      }, 500);
+
+    if (existingSession) {
+      console.log(`[RealLangChainMCP:${requestId}] Using existing session: ${existingSession.id}`);
+      sessionToken = existingSession.id;
+      // Update session activity
+      await sessionManager.touchSession(existingSession.id);
+    } else {
+      // Create new session with the Spotify token
+      const session = await sessionManager.createSession(spotifyToken, 'unknown');
+      sessionToken = session.id;
+      console.log(`[RealLangChainMCP:${requestId}] Created session: ${sessionToken}`);
+    }
+
+    // === DEBUGGING HELPER FUNCTIONS ===
+
+    // Loopback smoke test
+    async function loopbackMcpInit(c: any, sessionToken: string) {
+      const smokeId = crypto.randomUUID().slice(0, 8);
+      const origin = new URL(c.req.url).origin;
+      const url = `${origin}/api/mcp`;
+
+      const headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "MCP-Protocol-Version": "2025-06-18",
+        "Authorization": `Bearer ${sessionToken}`,
+      };
+
+      const body = JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
+
+      console.log(`[Smoke:${smokeId}] POST ${url}`);
+      console.log(`[Smoke:${smokeId}] Headers:`, Object.fromEntries(new Headers(headers).entries()));
+      const t0 = Date.now();
+      const res = await fetch(url, { method: "POST", headers, body });
+      const t1 = Date.now();
+      console.log(`[Smoke:${smokeId}] Status: ${res.status} in ${t1 - t0}ms`);
+
+      const text = await res.text().catch(() => "");
+      console.log(`[Smoke:${smokeId}] Body: ${text.slice(0, 500)}`);
+
+      return { status: res.status, ok: res.ok, text };
+    }
+
+    // Wrap fetch to log adapter's HTTP calls
+    async function withFetchLogging<T>(fn: () => Promise<T>): Promise<T> {
+      const orig = fetch.bind(globalThis);
+      // @ts-ignore
+      globalThis.fetch = async (input: RequestInfo, init?: RequestInit) => {
+        try {
+          const url = typeof input === "string" ? input : (input as Request).url;
+          const method = (init?.method ?? (typeof input !== "string" ? (input as Request).method : "GET")).toUpperCase();
+          const hdrs = new Headers(
+            init?.headers ?? (typeof input !== "string" ? (input as Request).headers : undefined)
+          );
+          const hObj = Object.fromEntries(hdrs.entries());
+          if (hObj.authorization) hObj.authorization = "<redacted>";
+
+          // Short body preview for POST/JSON
+          let preview = "";
+          if (init?.body && typeof init.body === "string") {
+            preview = init.body.slice(0, 300);
+          }
+
+          const t0 = Date.now();
+          const res = await orig(input as any, init);
+          const t1 = Date.now();
+
+          console.log(`[fetch] ${method} ${url} -> ${res.status} in ${t1 - t0}ms`);
+          console.log(`[fetch] headers:`, hObj);
+          if (preview) console.log(`[fetch] body: ${preview}`);
+
+          // Peek at response text only for errors to avoid consuming bodies
+          if (!res.ok) {
+            const copy = res.clone();
+            const text = await copy.text().catch(() => "");
+            console.log(`[fetch] resp (first 500): ${text.slice(0, 500)}`);
+          }
+          return res;
+        } catch (e) {
+          console.error(`[fetch] threw:`, e);
+          throw e;
+        }
+      };
+      try {
+        return await fn();
+      } finally {
+        // @ts-ignore
+        globalThis.fetch = orig;
+      }
+    }
+
+    // Internal dispatch (bypass network)
+    async function internalDispatch(c: any, path: string, init: RequestInit) {
+      const url = new URL(path, c.req.url);
+      const req = new Request(url.toString(), init);
+      // @ts-ignore
+      return app.fetch(req, c.env, c.executionCtx);
     }
 
     // 1) Initialize official LangChain MCP client
@@ -108,147 +178,141 @@ realLangChainMcpRouter.post('/message', async (c) => {
 
     console.log(`[RealLangChainMCP:${requestId}] MCP server URL: ${mcpServerUrl}`);
 
-    // Try SSE first, fallback to HTTP if it fails
+    // === DEBUGGING STEP 1: Run loopback smoke test ===
+    console.log(`[RealLangChainMCP:${requestId}] === RUNNING LOOPBACK SMOKE TEST ===`);
+    const smoke = await loopbackMcpInit(c, sessionToken);
+    if (!smoke.ok) {
+      console.error(`[RealLangChainMCP:${requestId}] Loopback MCP initialize failed!`);
+      console.error(`[RealLangChainMCP:${requestId}] Smoke test result:`, smoke);
+      // Don't fail yet, let's see what the adapter does
+    } else {
+      console.log(`[RealLangChainMCP:${requestId}] ✓ Loopback smoke test PASSED`);
+    }
+
+    // === DEBUGGING STEP 2: Test internal dispatch ===
+    console.log(`[RealLangChainMCP:${requestId}] === TESTING INTERNAL DISPATCH ===`);
+    try {
+      const internalRes = await internalDispatch(c, "/api/mcp", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+          "MCP-Protocol-Version": "2025-06-18",
+          "Authorization": `Bearer ${sessionToken}`,
+        },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "initialize", params: {} }),
+      });
+      const internalText = await internalRes.text();
+      console.log(`[RealLangChainMCP:${requestId}] Internal dispatch status=${internalRes.status}`);
+      console.log(`[RealLangChainMCP:${requestId}] Internal dispatch body=${internalText.slice(0, 300)}`);
+    } catch (internalError) {
+      console.error(`[RealLangChainMCP:${requestId}] Internal dispatch error:`, internalError);
+    }
+
+    // Try HTTP first for cleaner debugging (no SSE variables)
     let client: MultiServerMCPClient;
-    let transportUsed = 'sse';
+    let transportUsed = 'http';
     let tools: any[];
 
     // Log the exact configuration being used
     console.log(`[RealLangChainMCP:${requestId}] === MCP CLIENT CONFIG ===`);
     console.log(`[RealLangChainMCP:${requestId}] URL: ${mcpServerUrl}`);
     console.log(`[RealLangChainMCP:${requestId}] Session Token: ${sessionToken.substring(0, 8)}...`);
-    console.log(`[RealLangChainMCP:${requestId}] Transport: SSE first, then HTTP fallback`);
-
-    // Test if we can make a direct fetch to our own MCP endpoint
-    console.log(`[RealLangChainMCP:${requestId}] Testing direct fetch to MCP endpoint...`);
-    try {
-      const testResponse = await fetch(mcpServerUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${sessionToken}`,
-          'MCP-Protocol-Version': '2025-06-18',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          method: 'tools/list',
-          id: 'test-' + requestId
-        })
-      });
-
-      console.log(`[RealLangChainMCP:${requestId}] Direct fetch status: ${testResponse.status}`);
-      console.log(`[RealLangChainMCP:${requestId}] Direct fetch headers:`, Object.fromEntries(testResponse.headers.entries()));
-
-      if (testResponse.ok) {
-        const testData = await testResponse.json();
-        console.log(`[RealLangChainMCP:${requestId}] Direct fetch SUCCESS! Response:`, JSON.stringify(testData).substring(0, 200));
-      } else {
-        const errorText = await testResponse.text();
-        console.log(`[RealLangChainMCP:${requestId}] Direct fetch failed with ${testResponse.status}: ${errorText.substring(0, 200)}`);
-      }
-    } catch (fetchError) {
-      console.error(`[RealLangChainMCP:${requestId}] Direct fetch FAILED:`, fetchError);
-      console.error(`[RealLangChainMCP:${requestId}] This suggests Cloudflare Workers may have issues with self-requests`);
-    }
+    console.log(`[RealLangChainMCP:${requestId}] Transport: Starting with HTTP only for debugging`);
 
     try {
-      console.log(`[RealLangChainMCP:${requestId}] === ATTEMPTING SSE TRANSPORT ===`);
-      console.log(`[RealLangChainMCP:${requestId}] Creating MultiServerMCPClient with SSE transport...`);
+      console.log(`[RealLangChainMCP:${requestId}] === ATTEMPTING HTTP TRANSPORT (DEBUGGING MODE) ===`);
 
-      try {
+      const result = await withFetchLogging(async () => {
+        console.log(`[RealLangChainMCP:${requestId}] Creating MultiServerMCPClient with HTTP transport...`);
+
         client = new MultiServerMCPClient({
           spotify: {
-            transport: 'sse',
+            transport: 'http', // Start with HTTP for simpler debugging
             url: mcpServerUrl,
             headers: {
               'Authorization': `Bearer ${sessionToken}`,
               'MCP-Protocol-Version': '2025-06-18',
+              'Accept': 'application/json', // Explicitly set for HTTP
+              'User-Agent': 'langchain-mcp-worker/1.0' // Add UA for tracking
             }
           }
         });
-        console.log(`[RealLangChainMCP:${requestId}] SSE MCP client created successfully`);
-      } catch (clientCreationError) {
-        console.error(`[RealLangChainMCP:${requestId}] SSE client creation failed:`, clientCreationError);
-        throw clientCreationError;
-      }
 
-      // 2) Discover MCP tools via official LangChain adapter
-      console.log(`[RealLangChainMCP:${requestId}] Calling client.getTools() via SSE...`);
-      const toolsStartTime = Date.now();
+        console.log(`[RealLangChainMCP:${requestId}] HTTP MCP client created, calling getTools()...`);
+        const toolsStartTime = Date.now();
 
-      try {
-        tools = await client.getTools();
+        const tools = await client.getTools();
         const toolsDuration = Date.now() - toolsStartTime;
-        console.log(`[RealLangChainMCP:${requestId}] SSE getTools() successful! (${toolsDuration}ms)`);
-        console.log(`[RealLangChainMCP:${requestId}] Discovered ${tools.length} tools via SSE`);
+
+        console.log(`[RealLangChainMCP:${requestId}] HTTP getTools() successful! (${toolsDuration}ms)`);
+        console.log(`[RealLangChainMCP:${requestId}] Discovered ${tools.length} tools`);
 
         if (tools.length > 0) {
-          console.log(`[RealLangChainMCP:${requestId}] Tool names: [${tools.map(t => t.name || 'unnamed').join(', ')}]`);
+          console.log(`[RealLangChainMCP:${requestId}] Tool names: [${tools.map((t: any) => t.name || 'unnamed').join(', ')}]`);
         }
-      } catch (getToolsError) {
-        console.error(`[RealLangChainMCP:${requestId}] SSE getTools() failed after ${Date.now() - toolsStartTime}ms:`, getToolsError);
-        throw getToolsError;
-      }
 
-    } catch (sseError) {
-      const sseErrorMessage = sseError instanceof Error ? sseError.message : String(sseError);
-      console.warn(`[RealLangChainMCP:${requestId}] === SSE TRANSPORT FAILED, TRYING HTTP ===`);
-      console.warn(`[RealLangChainMCP:${requestId}] SSE error: ${sseErrorMessage}`);
+        return tools;
+      });
+
+      tools = result;
+      transportUsed = 'http';
+
+    } catch (httpError) {
+      const httpErrorMessage = httpError instanceof Error ? httpError.message : String(httpError);
+      console.error(`[RealLangChainMCP:${requestId}] === HTTP TRANSPORT FAILED ===`);
+      console.error(`[RealLangChainMCP:${requestId}] HTTP error: ${httpErrorMessage}`);
 
       // Check for 522 error specifically
-      if (sseErrorMessage.includes('522')) {
+      if (httpErrorMessage.includes('522')) {
         console.error(`[RealLangChainMCP:${requestId}] ⚠️ 522 ERROR DETECTED - Cloudflare Connection Timeout`);
-        console.error(`[RealLangChainMCP:${requestId}] This means the request never reached our MCP endpoint`);
-        console.error(`[RealLangChainMCP:${requestId}] Likely cause: LangChain MCP adapter issue with Cloudflare Workers`);
+        console.error(`[RealLangChainMCP:${requestId}] Request never reached our MCP endpoint`);
+        console.error(`[RealLangChainMCP:${requestId}] Compare [Smoke] vs [fetch] logs above to find the difference`);
       }
 
-      transportUsed = 'http';
+      // Try SSE as fallback
+      console.log(`[RealLangChainMCP:${requestId}] === ATTEMPTING SSE TRANSPORT AS FALLBACK ===`);
+      transportUsed = 'sse';
 
       try {
         await client?.close();
-        console.log(`[RealLangChainMCP:${requestId}] Closed failed SSE client`);
-      } catch (closeError) {
-        console.warn(`[RealLangChainMCP:${requestId}] Error closing SSE client:`, closeError);
-      }
+      } catch {}
 
-      console.log(`[RealLangChainMCP:${requestId}] Creating HTTP MCP client...`);
       try {
-        client = new MultiServerMCPClient({
-          spotify: {
-            transport: 'http',
-            url: mcpServerUrl,
-            headers: {
-              'Authorization': `Bearer ${sessionToken}`,
-              'MCP-Protocol-Version': '2025-06-18',
+        const sseResult = await withFetchLogging(async () => {
+          console.log(`[RealLangChainMCP:${requestId}] Creating SSE MCP client...`);
+          client = new MultiServerMCPClient({
+            spotify: {
+              transport: 'sse',
+              url: mcpServerUrl,
+              headers: {
+                'Authorization': `Bearer ${sessionToken}`,
+                'MCP-Protocol-Version': '2025-06-18',
+                'User-Agent': 'langchain-mcp-worker-sse/1.0'
+              }
             }
-          }
+          });
+
+          console.log(`[RealLangChainMCP:${requestId}] SSE client created, calling getTools()...`);
+          return await client.getTools();
         });
-        console.log(`[RealLangChainMCP:${requestId}] HTTP MCP client created successfully`);
-      } catch (httpClientError) {
-        console.error(`[RealLangChainMCP:${requestId}] HTTP client creation failed:`, httpClientError);
-        throw new Error(`Both SSE and HTTP client creation failed. SSE: ${sseErrorMessage}, HTTP: ${httpClientError instanceof Error ? httpClientError.message : String(httpClientError)}`);
-      }
 
-      console.log(`[RealLangChainMCP:${requestId}] Calling client.getTools() via HTTP...`);
-      const httpToolsStartTime = Date.now();
+        tools = sseResult;
+      } catch (sseError) {
+        const sseErrorMessage = sseError instanceof Error ? sseError.message : String(sseError);
+        const errorMessage = `Both HTTP and SSE transports failed. HTTP: ${httpErrorMessage}, SSE: ${sseErrorMessage}`;
+        console.error(`[RealLangChainMCP:${requestId}] ${errorMessage}`);
+        console.error(`[RealLangChainMCP:${requestId}] Error after ${Date.now() - startTime}ms`);
 
-      try {
-        tools = await client.getTools();
-        const httpToolsDuration = Date.now() - httpToolsStartTime;
-        console.log(`[RealLangChainMCP:${requestId}] HTTP getTools() successful! (${httpToolsDuration}ms)`);
-        console.log(`[RealLangChainMCP:${requestId}] Discovered ${tools.length} tools via HTTP`);
-
-        if (tools.length > 0) {
-          console.log(`[RealLangChainMCP:${requestId}] Tool names: [${tools.map(t => t.name || 'unnamed').join(', ')}]`);
-        }
-      } catch (httpGetToolsError) {
-        console.error(`[RealLangChainMCP:${requestId}] HTTP getTools() failed after ${Date.now() - httpToolsStartTime}ms:`, httpGetToolsError);
-        throw new Error(`Both SSE and HTTP getTools() failed. SSE: ${sseErrorMessage}, HTTP: ${httpGetToolsError instanceof Error ? httpGetToolsError.message : String(httpGetToolsError)}`);
+        return c.json({
+          error: errorMessage,
+          errorType: 'Error',
+          requestId
+        }, 500);
       }
     }
 
-    if (!tools.length) {
+    if (!tools || !tools.length) {
       console.error(`[RealLangChainMCP:${requestId}] No MCP tools available`);
       return c.json({ error: 'No MCP tools available' }, 500);
     }
@@ -345,76 +409,63 @@ Always explain your reasoning for changes.`
     // 8) Build conversation history
     const finalHistory = [
       ...request.conversationHistory,
-      { role: 'user', content: request.message },
-      { role: 'assistant', content: finalMessage }
+      { role: 'user' as const, content: request.message },
+      { role: 'assistant' as const, content: finalMessage }
     ];
 
-    const totalDuration = Date.now() - startTime;
-    console.log(`[RealLangChainMCP:${requestId}] === CHAT COMPLETE === (${totalDuration}ms, Real LangChain MCP via ${transportUsed})`);
-
-    // 9) Clean up MCP client
-    try {
-      await client.close();
-      console.log(`[RealLangChainMCP:${requestId}] MCP client closed`);
-    } catch (closeError) {
-      console.warn(`[RealLangChainMCP:${requestId}] Error closing MCP client:`, closeError);
-    }
+    const duration = Date.now() - startTime;
+    console.log(`[RealLangChainMCP:${requestId}] === REQUEST COMPLETE (${duration}ms) ===`);
+    console.log(`[RealLangChainMCP:${requestId}] Transport used: ${transportUsed}`);
+    console.log(`[RealLangChainMCP:${requestId}] Total messages: ${finalHistory.length}`);
 
     return c.json({
       message: finalMessage,
       conversationHistory: finalHistory,
-      mcpIntegration: {
-        serverUrl: mcpServerUrl,
-        toolsDiscovered: tools.length,
-        toolNames: tools.map(t => t.name),
-        transportUsed: transportUsed,
-        sessionToken: sessionToken.substring(0, 8) + '...',
-        usedRealLangChain: true
-      },
-      executionTime: totalDuration,
-      agentExecutionTime: agentDuration,
-      requestId
+      requestId,
+      duration,
+      transport: transportUsed
     });
 
   } catch (error) {
     const duration = Date.now() - startTime;
     console.error(`[RealLangChainMCP:${requestId}] Error after ${duration}ms:`, error);
 
-    // Log detailed error info
-    if (error instanceof Error) {
-      console.error(`[RealLangChainMCP:${requestId}] Error details:`, {
-        name: error.name,
-        message: error.message,
-        stack: error.stack?.substring(0, 500)
-      });
-    }
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : undefined;
+
+    console.error(`[RealLangChainMCP:${requestId}] Error details:`, {
+      message: errorMessage,
+      stack: errorStack?.substring(0, 1000),
+      type: error instanceof Error ? error.name : typeof error
+    });
 
     return c.json({
-      error: error instanceof Error ? error.message : 'Chat request failed',
-      errorType: error instanceof Error ? error.name : 'Unknown',
-      requestId
+      error: errorMessage,
+      errorType: error instanceof Error ? error.name : 'UnknownError',
+      requestId,
+      duration
     }, 500);
   }
 });
 
 /**
- * Debug endpoint to test MCP client connection
+ * Test endpoint for MCP integration
  */
-realLangChainMcpRouter.post('/test-connection', async (c) => {
+realLangChainMcpRouter.get('/test', async (c) => {
   const testId = crypto.randomUUID().substring(0, 8);
-  console.log(`[RealLangChainMCP:${testId}] === TESTING MCP CONNECTION ===`);
+  console.log(`[RealLangChainMCP:${testId}] === TEST ENDPOINT HIT ===`);
 
   try {
-    const spotifyToken = c.req.header('Authorization')?.replace('Bearer ', '');
-    if (!spotifyToken) {
-      return c.json({ error: 'Spotify token required' }, 401);
-    }
+    // Create test session
+    const testSession = await sessionManager.createSession('test-spotify-token', 'test-user');
+    const sessionToken = testSession.id;
 
-    const sessionToken = await sessionManager.createSession(spotifyToken);
+    console.log(`[RealLangChainMCP:${testId}] Created test session: ${sessionToken}`);
+
     const origin = new URL(c.req.url).origin;
     const mcpServerUrl = `${origin}/api/mcp`;
 
-    console.log(`[RealLangChainMCP:${testId}] Testing connection to: ${mcpServerUrl}`);
+    console.log(`[RealLangChainMCP:${testId}] MCP server URL: ${mcpServerUrl}`);
 
     // Try SSE first, fallback to HTTP
     let client: MultiServerMCPClient;
@@ -434,6 +485,7 @@ realLangChainMcpRouter.post('/test-connection', async (c) => {
         }
       });
       tools = await client.getTools();
+      console.log(`[RealLangChainMCP:${testId}] SSE transport successful`);
     } catch (sseError) {
       console.warn(`[RealLangChainMCP:${testId}] SSE failed, trying HTTP:`, sseError);
       transportUsed = 'http';
@@ -451,26 +503,30 @@ realLangChainMcpRouter.post('/test-connection', async (c) => {
         }
       });
       tools = await client.getTools();
+      console.log(`[RealLangChainMCP:${testId}] HTTP transport successful`);
     }
 
-    console.log(`[RealLangChainMCP:${testId}] Connection successful! Tools: ${tools.length}`);
+    const toolNames = tools.map(t => t.name);
+    console.log(`[RealLangChainMCP:${testId}] Discovered ${tools.length} tools`);
 
-    await client.close();
+    // Clean up
+    try { await client.close(); } catch {}
 
     return c.json({
       success: true,
-      mcpServerUrl,
-      transportUsed,
-      toolsDiscovered: tools.length,
-      toolNames: tools.map(t => t.name),
-      sessionToken: sessionToken.substring(0, 8) + '...',
+      transport: transportUsed,
+      serverUrl: mcpServerUrl,
+      sessionId: sessionToken,
+      toolCount: tools.length,
+      tools: toolNames,
       testId
     });
 
   } catch (error) {
-    console.error(`[RealLangChainMCP:${testId}] Connection test failed:`, error);
+    console.error(`[RealLangChainMCP:${testId}] Test failed:`, error);
     return c.json({
-      error: error instanceof Error ? error.message : 'Connection test failed',
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
       testId
     }, 500);
   }
