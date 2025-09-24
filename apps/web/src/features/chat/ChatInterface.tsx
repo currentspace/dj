@@ -1,34 +1,9 @@
 import { useState, useRef, useCallback, useTransition } from 'react'
 import { chatStreamClient } from '../../lib/streaming-client'
 import { flushSync } from 'react-dom'
+import type { ChatMessage, SpotifyPlaylist } from '@dj/shared-types'
 import '../../styles/streaming.css'
 import '../../styles/chat-interface.css'
-
-interface Message {
-  role: 'user' | 'assistant'
-  content: string
-}
-
-interface SpotifyPlaylist {
-  id: string;
-  name: string;
-  description: string;
-  external_urls: {
-    spotify: string;
-  };
-  images: Array<{
-    url: string;
-    height: number;
-    width: number;
-  }>;
-  tracks: {
-    total: number;
-  };
-  public: boolean;
-  owner: {
-    display_name: string;
-  };
-}
 
 interface ChatInterfaceProps {
   selectedPlaylist: SpotifyPlaylist | null;
@@ -74,7 +49,7 @@ function StreamingStatusDisplay({ status }: { status: StreamingStatus }) {
 }
 
 export function ChatInterface({ selectedPlaylist }: ChatInterfaceProps) {
-  const [messages, setMessages] = useState<Message[]>([])
+  const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [mode, setMode] = useState<'analyze' | 'create' | 'edit'>('analyze')
   const [streamingStatus, setStreamingStatus] = useState<StreamingStatus>({
@@ -154,7 +129,7 @@ export function ChatInterface({ selectedPlaylist }: ChatInterfaceProps) {
             ...prev,
             currentTool: undefined,
             toolsUsed: [...prev.toolsUsed, tool],
-            currentAction: result
+            currentAction: typeof result === 'string' ? result : `${tool} completed`
           }))
         },
 

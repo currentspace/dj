@@ -83,3 +83,71 @@ export interface ChatResponse {
   playlistModified?: boolean;
   conversationHistory: ChatMessage[];
 }
+
+// Spotify API response types
+export interface SpotifyTrack {
+  id: string;
+  name: string;
+  artists: Array<{ id: string; name: string }>;
+  album: {
+    id: string;
+    name: string;
+    images: Array<{ url: string; height: number; width: number }>;
+  };
+  preview_url: string | null;
+  external_urls: { spotify: string };
+  uri: string;
+}
+
+export interface SpotifyPlaylist {
+  id: string;
+  name: string;
+  description: string;
+  external_urls: { spotify: string };
+  images: Array<{ url: string; height: number; width: number }>;
+  tracks: { total: number };
+  public: boolean;
+  owner: { display_name: string };
+}
+
+export interface SpotifyAudioFeatures {
+  id: string;
+  danceability: number;
+  energy: number;
+  valence: number;
+  tempo: number;
+  acousticness: number;
+  instrumentalness: number;
+  speechiness: number;
+  liveness: number;
+  loudness: number;
+  key: number;
+  mode: number;
+}
+
+export interface SpotifyUser {
+  id: string;
+  display_name: string;
+  email?: string;
+  images: Array<{ url: string; height: number; width: number }>;
+}
+
+// Streaming types
+export interface StreamToolData {
+  tool: string;
+  args: Record<string, unknown>;
+}
+
+export interface StreamToolResult {
+  tool: string;
+  result: unknown;
+}
+
+export interface StreamDebugData {
+  [key: string]: unknown;
+}
+
+export interface StreamLogData {
+  level: 'info' | 'warn' | 'error';
+  message: string;
+}

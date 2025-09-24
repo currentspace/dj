@@ -1,11 +1,16 @@
 // Playlist resource management using React 19 patterns
 import { getUserPlaylists } from './api-client'
+import type { SpotifyPlaylist } from '@dj/shared-types'
+
+interface PlaylistsResponse {
+  items: SpotifyPlaylist[]
+}
 
 type PlaylistResource = {
-  promise: Promise<any>
+  promise: Promise<PlaylistsResponse>
   status: 'pending' | 'fulfilled' | 'rejected'
-  value?: any
-  error?: any
+  value?: PlaylistsResponse
+  error?: Error
 }
 
 const cache = new Map<string, PlaylistResource>()
@@ -20,12 +25,12 @@ export function createPlaylistResource(key: string = 'default'): PlaylistResourc
   // Create new resource
   const resource: PlaylistResource = {
     promise: getUserPlaylists()
-      .then((data: any) => {
+      .then((data: PlaylistsResponse) => {
         resource.status = 'fulfilled'
         resource.value = data
         return data
       })
-      .catch((error: any) => {
+      .catch((error: Error) => {
         resource.status = 'rejected'
         resource.error = error
         throw error

@@ -1,24 +1,25 @@
 // SSE streaming client for real-time chat responses
+import type { StreamToolData, StreamToolResult, StreamDebugData, StreamLogData } from '@dj/shared-types';
 
 export type StreamEvent =
   | { type: 'thinking'; data: string }
-  | { type: 'tool_start'; data: { tool: string; args: any } }
-  | { type: 'tool_end'; data: { tool: string; result: any } }
+  | { type: 'tool_start'; data: StreamToolData }
+  | { type: 'tool_end'; data: StreamToolResult }
   | { type: 'content'; data: string }
   | { type: 'error'; data: string }
   | { type: 'done'; data: null }
-  | { type: 'log'; data: { level: 'info' | 'warn' | 'error'; message: string } }
-  | { type: 'debug'; data: any };
+  | { type: 'log'; data: StreamLogData }
+  | { type: 'debug'; data: StreamDebugData };
 
 export interface StreamCallbacks {
   onThinking?: (message: string) => void;
-  onToolStart?: (tool: string, args: any) => void;
-  onToolEnd?: (tool: string, result: any) => void;
+  onToolStart?: (tool: string, args: Record<string, unknown>) => void;
+  onToolEnd?: (tool: string, result: unknown) => void;
   onContent?: (content: string) => void;
   onError?: (error: string) => void;
   onDone?: () => void;
   onLog?: (level: 'info' | 'warn' | 'error', message: string) => void;
-  onDebug?: (data: any) => void;
+  onDebug?: (data: StreamDebugData) => void;
 }
 
 export class ChatStreamClient {

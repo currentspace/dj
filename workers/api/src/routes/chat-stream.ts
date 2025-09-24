@@ -6,6 +6,7 @@ import { ChatAnthropic } from '@langchain/anthropic';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { HumanMessage, SystemMessage, AIMessage, ToolMessage } from '@langchain/core/messages';
 import { executeSpotifyTool } from '../lib/spotify-tools';
+import type { StreamToolData, StreamToolResult, StreamDebugData, StreamLogData } from '@dj/shared-types';
 
 const chatStreamRouter = new Hono<{ Bindings: Env }>();
 
@@ -22,15 +23,19 @@ const ChatRequestSchema = z.object({
 // SSE message types
 type StreamEvent =
   | { type: 'thinking'; data: string }
-  | { type: 'tool_start'; data: { tool: string; args: any } }
-  | { type: 'tool_end'; data: { tool: string; result: any } }
+  | { type: 'tool_start'; data: StreamToolData }
+  | { type: 'tool_end'; data: StreamToolResult }
   | { type: 'content'; data: string }
   | { type: 'error'; data: string }
   | { type: 'done'; data: null }
-  | { type: 'log'; data: { level: 'info' | 'warn' | 'error'; message: string } }
-  | { type: 'debug'; data: any };
+  | { type: 'log'; data: StreamLogData }
+  | { type: 'debug'; data: StreamDebugData };
 
-function sendSSE(stream: any, event: StreamEvent) {
+interface HonoStreamWriter {
+  write: (data: string) => void;
+}
+
+function sendSSE(stream: HonoStreamWriter, event: StreamEvent) {
   const message = `data: ${JSON.stringify(event)}\n\n`;
   stream.write(message);
 }
@@ -40,7 +45,7 @@ function sendSSE(stream: any, event: StreamEvent) {
  */
 function createStreamingSpotifyTools(
   spotifyToken: string,
-  stream: any
+  stream: HonoStreamWriter
 ): DynamicStructuredTool[] {
   const tools: DynamicStructuredTool[] = [
     new DynamicStructuredTool({

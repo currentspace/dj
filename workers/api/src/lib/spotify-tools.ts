@@ -1,6 +1,56 @@
 // Spotify Tools for Anthropic Function Calling
 import { z } from 'zod';
 
+// Spotify API response schemas
+const SpotifyTrackSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  artists: z.array(z.object({
+    id: z.string(),
+    name: z.string()
+  })),
+  album: z.object({
+    id: z.string(),
+    name: z.string(),
+    images: z.array(z.object({
+      url: z.string(),
+      height: z.number(),
+      width: z.number()
+    }))
+  }),
+  preview_url: z.string().nullable(),
+  external_urls: z.object({ spotify: z.string() }),
+  uri: z.string()
+});
+
+const SpotifySearchResponseSchema = z.object({
+  tracks: z.object({
+    items: z.array(SpotifyTrackSchema)
+  })
+});
+
+const SpotifyAudioFeaturesSchema = z.object({
+  id: z.string(),
+  danceability: z.number(),
+  energy: z.number(),
+  valence: z.number(),
+  tempo: z.number(),
+  acousticness: z.number(),
+  instrumentalness: z.number(),
+  speechiness: z.number(),
+  liveness: z.number(),
+  loudness: z.number(),
+  key: z.number(),
+  mode: z.number()
+});
+
+const SpotifyAudioFeaturesResponseSchema = z.object({
+  audio_features: z.array(SpotifyAudioFeaturesSchema.nullable())
+});
+
+type SpotifyTrack = z.infer<typeof SpotifyTrackSchema>;
+type SpotifyAudioFeatures = z.infer<typeof SpotifyAudioFeaturesSchema>;
+
 // Tool schemas
 export const SearchTracksSchema = z.object({
   query: z.string().describe('Search query for tracks'),
@@ -204,9 +254,9 @@ export const spotifyTools = [
 // Tool executor with logging
 export async function executeSpotifyTool(
   toolName: string,
-  args: any,
+  args: Record<string, unknown>,
   token: string
-): Promise<any> {
+): Promise<unknown> {
   console.log(`[Tool] Executing ${toolName} with args:`, JSON.stringify(args).substring(0, 200));
   const startTime = Date.now();
 
@@ -268,7 +318,7 @@ export async function executeSpotifyTool(
 }
 
 // Implementation functions
-async function searchSpotifyTracks(args: any, token: string) {
+async function searchSpotifyTracks(args: z.infer<typeof SearchTracksSchema>, token: string): Promise<SpotifyTrack[]> {
   const { query, limit = 10, filters } = args;
 
   const response = await fetch(
@@ -282,15 +332,16 @@ async function searchSpotifyTracks(args: any, token: string) {
     throw new Error(`Spotify search failed: ${response.status}`);
   }
 
-  const data = await response.json() as any;
-  const tracks = data.tracks?.items || [];
+  const rawData = await response.json();
+  const data = SpotifySearchResponseSchema.parse(rawData);
+  const tracks = data.tracks.items;
 
   // Apply filters if provided
   if (filters && tracks.length > 0) {
-    const trackIds = tracks.map((t: any) => t.id);
+    const trackIds = tracks.map((track) => track.id);
     const features = await getAudioFeatures({ track_ids: trackIds }, token);
 
-    return tracks.filter((_track: any, index: number) => {
+    return tracks.filter((_track, index) => {
       const feature = features[index];
       if (!feature) return true;
 
