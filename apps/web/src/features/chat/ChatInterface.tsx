@@ -1,6 +1,8 @@
 import { useState, useRef, useCallback, useTransition } from 'react'
 import { chatStreamClient } from '../../lib/streaming-client'
 import { flushSync } from 'react-dom'
+import '../../styles/streaming.css'
+import '../../styles/chat-interface.css'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -38,16 +40,13 @@ interface StreamingStatus {
   currentAction?: string
   currentTool?: string
   toolsUsed: string[]
-  logs: Array<{ level: 'info' | 'warn' | 'error'; message: string; timestamp: string }>
-  debugData?: any
 }
 
 
 // Tool status display component
 function StreamingStatusDisplay({ status }: { status: StreamingStatus }) {
-  if (!status.isStreaming && status.logs.length === 0) return null
+  if (!status.isStreaming && status.toolsUsed.length === 0) return null
 
-  const showDebugLogs = true // Toggle for debug mode
 
   return (
     <div className="streaming-status">
@@ -70,27 +69,6 @@ function StreamingStatusDisplay({ status }: { status: StreamingStatus }) {
         </div>
       )}
 
-      {showDebugLogs && status.logs.length > 0 && (
-        <details className="debug-logs">
-          <summary>📋 Debug Logs ({status.logs.length})</summary>
-          <div className="log-entries">
-            {status.logs.slice(-10).map((log, i) => (
-              <div key={i} className={`log-entry log-${log.level}`}>
-                <span className="log-time">{log.timestamp}</span>
-                <span className="log-level">{log.level.toUpperCase()}</span>
-                <span className="log-message">{log.message}</span>
-              </div>
-            ))}
-          </div>
-        </details>
-      )}
-
-      {showDebugLogs && status.debugData && (
-        <details className="debug-data">
-          <summary>🔍 Debug Data</summary>
-          <pre>{JSON.stringify(status.debugData, null, 2)}</pre>
-        </details>
-      )}
     </div>
   )
 }
@@ -101,8 +79,7 @@ export function ChatInterface({ selectedPlaylist }: ChatInterfaceProps) {
   const [mode, setMode] = useState<'analyze' | 'create' | 'edit'>('analyze')
   const [streamingStatus, setStreamingStatus] = useState<StreamingStatus>({
     isStreaming: false,
-    toolsUsed: [],
-    logs: []
+    toolsUsed: []
   })
   const [, setCurrentStreamContent] = useState('')
   const [isPending, startTransition] = useTransition()
@@ -140,8 +117,7 @@ export function ChatInterface({ selectedPlaylist }: ChatInterfaceProps) {
     setStreamingStatus({
       isStreaming: true,
       currentAction: 'Processing your request...',
-      toolsUsed: [],
-      logs: []
+      toolsUsed: []
     })
     setCurrentStreamContent('')
 
@@ -204,25 +180,7 @@ export function ChatInterface({ selectedPlaylist }: ChatInterfaceProps) {
           scrollToBottom()
         },
 
-        onLog: (level, message) => {
-          console.log(`[Server ${level}] ${message}`)
-          setStreamingStatus(prev => ({
-            ...prev,
-            logs: [...prev.logs, {
-              level,
-              message,
-              timestamp: new Date().toLocaleTimeString()
-            }].slice(-20) // Keep last 20 logs
-          }))
-        },
-
-        onDebug: (data) => {
-          console.log('[Server Debug]', data)
-          setStreamingStatus(prev => ({
-            ...prev,
-            debugData: data
-          }))
-        },
+        // onLog and onDebug are handled directly in streaming-client.ts
 
         onError: (error) => {
           setStreamingStatus(prev => ({

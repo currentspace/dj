@@ -134,10 +134,12 @@ export class ChatStreamClient {
         callbacks.onDone?.();
         break;
       case 'log':
-        callbacks.onLog?.(event.data.level, event.data.message);
+        // Log to browser console instead of UI
+        console.log(`[Server ${event.data.level}]`, event.data.message);
         break;
       case 'debug':
-        callbacks.onDebug?.(event.data);
+        // Log to browser console instead of UI
+        console.log('[Server Debug]', event.data);
         break;
     }
   }

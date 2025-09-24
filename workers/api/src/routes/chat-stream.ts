@@ -30,10 +30,9 @@ type StreamEvent =
   | { type: 'log'; data: { level: 'info' | 'warn' | 'error'; message: string } }
   | { type: 'debug'; data: any };
 
-function sendSSE(writer: WritableStreamDefaultWriter, event: StreamEvent) {
-  const encoder = new TextEncoder();
+function sendSSE(stream: any, event: StreamEvent) {
   const message = `data: ${JSON.stringify(event)}\n\n`;
-  writer.write(encoder.encode(message));
+  stream.write(message);
 }
 
 /**
@@ -41,7 +40,7 @@ function sendSSE(writer: WritableStreamDefaultWriter, event: StreamEvent) {
  */
 function createStreamingSpotifyTools(
   spotifyToken: string,
-  writer: WritableStreamDefaultWriter
+  stream: any
 ): DynamicStructuredTool[] {
   const tools: DynamicStructuredTool[] = [
     new DynamicStructuredTool({
@@ -52,14 +51,14 @@ function createStreamingSpotifyTools(
         limit: z.number().min(1).max(50).default(10)
       }),
       func: async (args) => {
-        sendSSE(writer, {
+        sendSSE(stream, {
           type: 'tool_start',
           data: { tool: 'search_spotify_tracks', args }
         });
 
         const result = await executeSpotifyTool('search_spotify_tracks', args, spotifyToken);
 
-        sendSSE(writer, {
+        sendSSE(stream, {
           type: 'tool_end',
           data: {
             tool: 'search_spotify_tracks',
@@ -78,14 +77,14 @@ function createStreamingSpotifyTools(
         playlist_id: z.string()
       }),
       func: async (args) => {
-        sendSSE(writer, {
+        sendSSE(stream, {
           type: 'tool_start',
           data: { tool: 'analyze_playlist', args }
         });
 
         const result = await executeSpotifyTool('analyze_playlist', args, spotifyToken);
 
-        sendSSE(writer, {
+        sendSSE(stream, {
           type: 'tool_end',
           data: {
             tool: 'analyze_playlist',
@@ -104,14 +103,14 @@ function createStreamingSpotifyTools(
         track_ids: z.array(z.string()).max(100)
       }),
       func: async (args) => {
-        sendSSE(writer, {
+        sendSSE(stream, {
           type: 'tool_start',
           data: { tool: 'get_audio_features', args }
         });
 
         const result = await executeSpotifyTool('get_audio_features', args, spotifyToken);
 
-        sendSSE(writer, {
+        sendSSE(stream, {
           type: 'tool_end',
           data: {
             tool: 'get_audio_features',
@@ -132,14 +131,14 @@ function createStreamingSpotifyTools(
         limit: z.number().min(1).max(100).default(20)
       }),
       func: async (args) => {
-        sendSSE(writer, {
+        sendSSE(stream, {
           type: 'tool_start',
           data: { tool: 'get_recommendations', args }
         });
 
         const result = await executeSpotifyTool('get_recommendations', args, spotifyToken);
 
-        sendSSE(writer, {
+        sendSSE(stream, {
           type: 'tool_end',
           data: {
             tool: 'get_recommendations',
@@ -160,14 +159,14 @@ function createStreamingSpotifyTools(
         track_uris: z.array(z.string())
       }),
       func: async (args) => {
-        sendSSE(writer, {
+        sendSSE(stream, {
           type: 'tool_start',
           data: { tool: 'create_playlist', args: { name: args.name, tracks: args.track_uris.length } }
         });
 
         const result = await executeSpotifyTool('create_playlist', args, spotifyToken);
 
-        sendSSE(writer, {
+        sendSSE(stream, {
           type: 'tool_end',
           data: {
             tool: 'create_playlist',
@@ -191,7 +190,6 @@ chatStreamRouter.post('/message', async (c) => {
   console.log(`[Stream:${requestId}] Starting streaming response`);
 
   return stream(c, async (stream) => {
-    const writer = stream.getWriter();
 
     try {
       // Send build info as first event
@@ -209,7 +207,7 @@ chatStreamRouter.post('/message', async (c) => {
         // Use defaults if not available
       }
 
-      sendSSE(writer, {
+      sendSSE(stream, {
         type: 'debug',
         data: {
           buildInfo,
@@ -220,7 +218,7 @@ chatStreamRouter.post('/message', async (c) => {
 
       // Parse request
       const body = await c.req.json();
-      sendSSE(writer, {
+      sendSSE(stream, {
         type: 'log',
         data: {
           level: 'info',
@@ -230,7 +228,7 @@ chatStreamRouter.post('/message', async (c) => {
 
       const request = ChatRequestSchema.parse(body);
 
-      sendSSE(writer, {
+      sendSSE(stream, {
         type: 'debug',
         data: {
           requestId,
@@ -249,7 +247,7 @@ chatStreamRouter.post('/message', async (c) => {
       if (playlistIdMatch) {
         playlistId = playlistIdMatch[1];
         actualMessage = playlistIdMatch[2];
-        sendSSE(writer, {
+        sendSSE(stream, {
           type: 'log',
           data: {
             level: 'info',
@@ -257,7 +255,7 @@ chatStreamRouter.post('/message', async (c) => {
           }
         });
       } else {
-        sendSSE(writer, {
+        sendSSE(stream, {
           type: 'log',
           data: {
             level: 'warn',
@@ -269,12 +267,12 @@ chatStreamRouter.post('/message', async (c) => {
       // Get Spotify token
       const authorization = c.req.header('Authorization');
       if (!authorization?.startsWith('Bearer ')) {
-        sendSSE(writer, { type: 'error', data: 'Unauthorized - Missing or invalid Authorization header' });
+        sendSSE(stream, { type: 'error', data: 'Unauthorized - Missing or invalid Authorization header' });
         return;
       }
       const spotifyToken = authorization.replace('Bearer ', '');
 
-      sendSSE(writer, {
+      sendSSE(stream, {
         type: 'log',
         data: {
           level: 'info',
@@ -283,10 +281,10 @@ chatStreamRouter.post('/message', async (c) => {
       });
 
       // Send initial thinking message
-      sendSSE(writer, { type: 'thinking', data: 'Processing your request...' });
+      sendSSE(stream, { type: 'thinking', data: 'Processing your request...' });
 
       // Create tools with streaming callbacks
-      const tools = createStreamingSpotifyTools(spotifyToken, writer);
+      const tools = createStreamingSpotifyTools(spotifyToken, stream);
 
       // Initialize Claude with streaming
       const llm = new ChatAnthropic({
@@ -307,7 +305,7 @@ When the user asks about "the playlist", "this playlist", "analyze this", or any
 Do NOT ask for a playlist ID - use the one provided above.` : ''}
 Be concise and helpful. Use tools to get real data.`;
 
-      sendSSE(writer, {
+      sendSSE(stream, {
         type: 'log',
         data: {
           level: 'info',
@@ -315,7 +313,7 @@ Be concise and helpful. Use tools to get real data.`;
         }
       });
 
-      sendSSE(writer, {
+      sendSSE(stream, {
         type: 'debug',
         data: {
           systemPromptLength: systemPrompt.length,
@@ -333,7 +331,7 @@ Be concise and helpful. Use tools to get real data.`;
         new HumanMessage(actualMessage)
       ];
 
-      sendSSE(writer, {
+      sendSSE(stream, {
         type: 'log',
         data: {
           level: 'info',
@@ -345,7 +343,7 @@ Be concise and helpful. Use tools to get real data.`;
       let fullResponse = '';
       let toolCalls: any[] = [];
 
-      sendSSE(writer, { type: 'thinking', data: 'Analyzing your request...' });
+      sendSSE(stream, { type: 'thinking', data: 'Analyzing your request...' });
 
       const response = await modelWithTools.stream(messages);
 
@@ -353,7 +351,7 @@ Be concise and helpful. Use tools to get real data.`;
         // Handle content chunks
         if (typeof chunk.content === 'string' && chunk.content) {
           fullResponse += chunk.content;
-          sendSSE(writer, { type: 'content', data: chunk.content });
+          sendSSE(stream, { type: 'content', data: chunk.content });
         }
 
         // Handle tool calls
@@ -364,7 +362,7 @@ Be concise and helpful. Use tools to get real data.`;
 
       // If there were tool calls, execute them
       if (toolCalls.length > 0) {
-        sendSSE(writer, { type: 'thinking', data: 'Using Spotify tools...' });
+        sendSSE(stream, { type: 'thinking', data: 'Using Spotify tools...' });
 
         // Execute tools
         const toolResults = [];
@@ -387,7 +385,7 @@ Be concise and helpful. Use tools to get real data.`;
         }
 
         // Get final response with tool results
-        sendSSE(writer, { type: 'thinking', data: 'Preparing response...' });
+        sendSSE(stream, { type: 'thinking', data: 'Preparing response...' });
 
         const toolMessage = new ToolMessage({
           content: JSON.stringify(toolResults),
@@ -404,22 +402,22 @@ Be concise and helpful. Use tools to get real data.`;
         for await (const chunk of finalResponse) {
           if (typeof chunk.content === 'string' && chunk.content) {
             fullResponse += chunk.content;
-            sendSSE(writer, { type: 'content', data: chunk.content });
+            sendSSE(stream, { type: 'content', data: chunk.content });
           }
         }
       }
 
       // Send completion
-      sendSSE(writer, { type: 'done', data: null });
+      sendSSE(stream, { type: 'done', data: null });
 
     } catch (error) {
       console.error(`[Stream:${requestId}] Error:`, error);
-      sendSSE(writer, {
+      sendSSE(stream, {
         type: 'error',
         data: error instanceof Error ? error.message : 'An error occurred'
       });
     } finally {
-      writer.close();
+      // Stream will be automatically closed by Hono
     }
   });
 });
