@@ -28,7 +28,9 @@ export default defineConfig({
     'os',
     'readline',
     'tty',
-    'worker_threads'
+    'worker_threads',
+    // External packages that stdio transport imports but we don't need
+    'cross-spawn'
   ],
   minify: true, // Recommended for production
   splitting: false, // Workers don't support code splitting
@@ -42,13 +44,5 @@ export default defineConfig({
     // Mock Node.js modules that stdio transport tries to use
     'process.platform': '"workers"',
     'process.versions.node': '"18.0.0"'
-  },
-  esbuildOptions(options) {
-    // Additional configuration for problematic modules
-    options.external = options.external || []
-    options.external.push(
-      'cross-spawn', // Used by stdio transport
-      '@modelcontextprotocol/sdk/dist/client/stdio.js'
-    )
   }
 })
