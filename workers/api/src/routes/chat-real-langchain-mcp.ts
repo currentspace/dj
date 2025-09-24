@@ -7,6 +7,7 @@ import { MultiServerMCPClient } from '@langchain/mcp-adapters';
 import { createReactAgent } from 'langchain/agents';
 import { HumanMessage, SystemMessage, AIMessage } from '@langchain/core/messages';
 import app from '../index';
+import { createInternalMCPTools, toLangChainTools } from '../lib/internal-mcp-client';
 
 const realLangChainMcpRouter = new Hono<{ Bindings: Env }>();
 
@@ -122,7 +123,13 @@ realLangChainMcpRouter.post('/message', async (c) => {
       globalThis.fetch = async (input: RequestInfo, init?: RequestInit) => {
         try {
           const url = typeof input === "string" ? input : (input as Request).url;
-          const method = (init?.method ?? (typeof input !== "string" ? (input as Request).method : "GET")).toUpperCase();
+          let method = "GET";
+          if (init?.method) {
+            method = init.method;
+          } else if (typeof input !== "string" && (input as Request).method) {
+            method = (input as Request).method;
+          }
+          method = method.toUpperCase();
           const hdrs = new Headers(
             init?.headers ?? (typeof input !== "string" ? (input as Request).headers : undefined)
           );
@@ -195,7 +202,12 @@ realLangChainMcpRouter.post('/message', async (c) => {
     if (!smoke.ok) {
       console.error(`[RealLangChainMCP:${requestId}] Loopback MCP initialize failed!`);
       console.error(`[RealLangChainMCP:${requestId}] Smoke test result:`, smoke);
-      // Don't fail yet, let's see what the adapter does
+
+      if (smoke.status === 522) {
+        console.error(`[RealLangChainMCP:${requestId}] ⚠️ 522 on direct fetch - Cloudflare Workers cannot make HTTP requests to themselves`);
+        console.error(`[RealLangChainMCP:${requestId}] This is a known Cloudflare limitation - workers cannot fetch their own URLs`);
+        console.error(`[RealLangChainMCP:${requestId}] Solution: Use internal dispatch or service bindings instead`);
+      }
     } else {
       console.log(`[RealLangChainMCP:${requestId}] ✓ Loopback smoke test PASSED`);
     }
@@ -311,15 +323,31 @@ realLangChainMcpRouter.post('/message', async (c) => {
         tools = sseResult;
       } catch (sseError) {
         const sseErrorMessage = sseError instanceof Error ? sseError.message : String(sseError);
-        const errorMessage = `Both HTTP and SSE transports failed. HTTP: ${httpErrorMessage}, SSE: ${sseErrorMessage}`;
-        console.error(`[RealLangChainMCP:${requestId}] ${errorMessage}`);
-        console.error(`[RealLangChainMCP:${requestId}] Error after ${Date.now() - startTime}ms`);
+        console.error(`[RealLangChainMCP:${requestId}] Both HTTP and SSE failed`);
+        console.error(`[RealLangChainMCP:${requestId}] HTTP error: ${httpErrorMessage}`);
+        console.error(`[RealLangChainMCP:${requestId}] SSE error: ${sseErrorMessage}`);
 
-        return c.json({
-          error: errorMessage,
-          errorType: 'Error',
-          requestId
-        }, 500);
+        // FALLBACK: Use internal MCP tools that bypass HTTP
+        console.log(`[RealLangChainMCP:${requestId}] === FALLING BACK TO INTERNAL MCP TOOLS ===`);
+        console.log(`[RealLangChainMCP:${requestId}] This bypasses Cloudflare's worker self-request limitation`);
+
+        try {
+          const internalTools = createInternalMCPTools(spotifyToken);
+          tools = toLangChainTools(internalTools);
+          transportUsed = 'internal';
+          console.log(`[RealLangChainMCP:${requestId}] Successfully created ${tools.length} internal MCP tools`);
+          console.log(`[RealLangChainMCP:${requestId}] Tool names: [${tools.map((t: any) => t.name).join(', ')}]`);
+        } catch (internalError) {
+          const internalErrorMsg = internalError instanceof Error ? internalError.message : String(internalError);
+          console.error(`[RealLangChainMCP:${requestId}] Internal MCP tools also failed: ${internalErrorMsg}`);
+
+          return c.json({
+            error: `All MCP transports failed. HTTP: ${httpErrorMessage}, SSE: ${sseErrorMessage}, Internal: ${internalErrorMsg}`,
+            errorType: 'Error',
+            requestId,
+            note: 'Cloudflare Workers cannot make HTTP requests to themselves (522 error)'
+          }, 500);
+        }
       }
     }
 
