@@ -270,16 +270,15 @@ chatRouter.post('/message', async (c) => {
       model: 'claude-3-5-sonnet-20241022',
       temperature: 0.2,
       maxTokens: 2000,
-      maxRetries: 2,  // Retry on failures
+      maxRetries: 0,  // Disable Langchain retries, we handle manually
+      timeout: 30000,  // 30 second timeout
     });
 
-    console.log(`[Chat:${requestId}] Claude client initialized with maxRetries: 2`);
+    console.log(`[Chat:${requestId}] Claude client initialized with maxRetries: 0 (manual retry enabled)`);
 
-    // For now, let's try without tools when getting errors
-    const useTools = true; // Toggle this to test without tools
-
-    // Bind tools to the model (or use base model)
-    const modelWithTools = useTools ? llm.bindTools(tools) : llm;
+    // Start with tools enabled, but can fallback if needed
+    let useTools = true;
+    let modelWithTools = llm.bindTools(tools);
 
     console.log(`[Chat:${requestId}] Tools bound to model: ${useTools ? 'Yes' : 'No (fallback mode)'}`);
 
@@ -360,18 +359,25 @@ Use tools to make informed decisions.`
           console.error(`[Chat:${requestId}] Error name: ${invokeError.name}`);
           console.error(`[Chat:${requestId}] Error stack: ${invokeError.stack?.split('\n').slice(0, 3).join('\n')}`);
 
+          // Check response status if available
+          const errorAny = invokeError as any;
+          if (errorAny.response?.status) {
+            console.error(`[Chat:${requestId}] HTTP Status: ${errorAny.response.status}`);
+          }
+
           // Check for rate limit info in error
-          if (errorMessage.includes('429')) {
+          if (errorMessage.includes('429') || (errorAny.response?.status === 429)) {
             console.error(`[Chat:${requestId}] 🚫 RATE LIMIT HIT - This is an account/API key level limit`);
             console.error(`[Chat:${requestId}] This means YOUR account has exceeded its rate limits`);
-          } else if (errorMessage.includes('529')) {
+          } else if (errorMessage.includes('529') || (errorAny.response?.status === 529)) {
             console.error(`[Chat:${requestId}] 🌍 GLOBAL OVERLOAD - This affects ALL Anthropic users`);
             console.error(`[Chat:${requestId}] This is not specific to your account`);
           }
         }
 
-        // Check if it's an overload error
-        if (errorMessage.includes('529') || errorMessage.includes('overloaded')) {
+        // Check if it's an overload error (real 529)
+        const errorAny = invokeError as any;
+        if (errorMessage.includes('529') || errorMessage.includes('overloaded') || errorAny.response?.status === 529) {
           retryCount++;
           if (retryCount < maxRetries) {
             const backoffTime = Math.min(1000 * Math.pow(2, retryCount), 5000); // Exponential backoff
@@ -382,9 +388,15 @@ Use tools to make informed decisions.`
             console.error(`[Chat:${requestId}] ❌ Max retries (${maxRetries}) exhausted for overload error`);
             throw invokeError;
           }
-        } else if (errorMessage.includes('429') || errorMessage.includes('rate_limit')) {
+        } else if (errorMessage.includes('429') || errorMessage.includes('rate_limit') || errorAny.response?.status === 429) {
           console.error(`[Chat:${requestId}] ⏳ Rate limit error detected, not retrying`);
           throw invokeError;
+        } else if (useTools && (errorMessage.includes('tool') || errorMessage.includes('bind'))) {
+          // Tool binding issue - retry without tools
+          console.warn(`[Chat:${requestId}] Tool binding issue detected, retrying without tools`);
+          useTools = false;
+          modelWithTools = llm;
+          retryCount++; // Count this as a retry
         } else {
           // Not a retryable error, throw immediately
           console.error(`[Chat:${requestId}] Non-retryable error, failing immediately`);
