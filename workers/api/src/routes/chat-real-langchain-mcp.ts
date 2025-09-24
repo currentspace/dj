@@ -113,6 +113,45 @@ realLangChainMcpRouter.post('/message', async (c) => {
     let transportUsed = 'sse';
     let tools: any[];
 
+    // Log the exact configuration being used
+    console.log(`[RealLangChainMCP:${requestId}] === MCP CLIENT CONFIG ===`);
+    console.log(`[RealLangChainMCP:${requestId}] URL: ${mcpServerUrl}`);
+    console.log(`[RealLangChainMCP:${requestId}] Session Token: ${sessionToken.substring(0, 8)}...`);
+    console.log(`[RealLangChainMCP:${requestId}] Transport: SSE first, then HTTP fallback`);
+
+    // Test if we can make a direct fetch to our own MCP endpoint
+    console.log(`[RealLangChainMCP:${requestId}] Testing direct fetch to MCP endpoint...`);
+    try {
+      const testResponse = await fetch(mcpServerUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${sessionToken}`,
+          'MCP-Protocol-Version': '2025-06-18',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'tools/list',
+          id: 'test-' + requestId
+        })
+      });
+
+      console.log(`[RealLangChainMCP:${requestId}] Direct fetch status: ${testResponse.status}`);
+      console.log(`[RealLangChainMCP:${requestId}] Direct fetch headers:`, Object.fromEntries(testResponse.headers.entries()));
+
+      if (testResponse.ok) {
+        const testData = await testResponse.json();
+        console.log(`[RealLangChainMCP:${requestId}] Direct fetch SUCCESS! Response:`, JSON.stringify(testData).substring(0, 200));
+      } else {
+        const errorText = await testResponse.text();
+        console.log(`[RealLangChainMCP:${requestId}] Direct fetch failed with ${testResponse.status}: ${errorText.substring(0, 200)}`);
+      }
+    } catch (fetchError) {
+      console.error(`[RealLangChainMCP:${requestId}] Direct fetch FAILED:`, fetchError);
+      console.error(`[RealLangChainMCP:${requestId}] This suggests Cloudflare Workers may have issues with self-requests`);
+    }
+
     try {
       console.log(`[RealLangChainMCP:${requestId}] === ATTEMPTING SSE TRANSPORT ===`);
       console.log(`[RealLangChainMCP:${requestId}] Creating MultiServerMCPClient with SSE transport...`);
@@ -156,6 +195,14 @@ realLangChainMcpRouter.post('/message', async (c) => {
       const sseErrorMessage = sseError instanceof Error ? sseError.message : String(sseError);
       console.warn(`[RealLangChainMCP:${requestId}] === SSE TRANSPORT FAILED, TRYING HTTP ===`);
       console.warn(`[RealLangChainMCP:${requestId}] SSE error: ${sseErrorMessage}`);
+
+      // Check for 522 error specifically
+      if (sseErrorMessage.includes('522')) {
+        console.error(`[RealLangChainMCP:${requestId}] ⚠️ 522 ERROR DETECTED - Cloudflare Connection Timeout`);
+        console.error(`[RealLangChainMCP:${requestId}] This means the request never reached our MCP endpoint`);
+        console.error(`[RealLangChainMCP:${requestId}] Likely cause: LangChain MCP adapter issue with Cloudflare Workers`);
+      }
+
       transportUsed = 'http';
 
       try {
