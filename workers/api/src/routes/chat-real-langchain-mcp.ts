@@ -61,20 +61,52 @@ realLangChainMcpRouter.post('/message', async (c) => {
 
     console.log(`[RealLangChainMCP:${requestId}] Initializing MultiServerMCPClient with server: ${mcpServerUrl}`);
 
-    const client = new MultiServerMCPClient({
-      spotify: {
-        transport: 'sse',
-        url: mcpServerUrl,
-        headers: {
-          'Authorization': `Bearer ${sessionToken}`,
-          'MCP-Protocol-Version': '2025-06-18', // Updated to current spec
-        }
-      }
-    });
+    // Try SSE first, fallback to HTTP if it fails
+    let client: MultiServerMCPClient;
+    let transportUsed = 'sse';
+    let tools: any[];
 
-    // 2) Discover MCP tools via official LangChain adapter
-    console.log(`[RealLangChainMCP:${requestId}] Getting tools from MCP server...`);
-    const tools = await client.getTools();
+    try {
+      console.log(`[RealLangChainMCP:${requestId}] Attempting SSE transport first...`);
+      client = new MultiServerMCPClient({
+        spotify: {
+          transport: 'sse',
+          url: mcpServerUrl,
+          headers: {
+            'Authorization': `Bearer ${sessionToken}`,
+            'MCP-Protocol-Version': '2025-06-18',
+          }
+        }
+      });
+
+      // 2) Discover MCP tools via official LangChain adapter
+      console.log(`[RealLangChainMCP:${requestId}] Getting tools from MCP server via SSE...`);
+      tools = await client.getTools();
+      console.log(`[RealLangChainMCP:${requestId}] SSE transport successful!`);
+
+    } catch (sseError) {
+      console.warn(`[RealLangChainMCP:${requestId}] SSE transport failed, trying HTTP:`, sseError);
+      transportUsed = 'http';
+
+      try {
+        await client?.close();
+      } catch {}
+
+      client = new MultiServerMCPClient({
+        spotify: {
+          transport: 'http',
+          url: mcpServerUrl,
+          headers: {
+            'Authorization': `Bearer ${sessionToken}`,
+            'MCP-Protocol-Version': '2025-06-18',
+          }
+        }
+      });
+
+      console.log(`[RealLangChainMCP:${requestId}] Getting tools from MCP server via HTTP...`);
+      tools = await client.getTools();
+      console.log(`[RealLangChainMCP:${requestId}] HTTP transport successful!`);
+    }
 
     if (!tools.length) {
       console.error(`[RealLangChainMCP:${requestId}] No MCP tools available`);
@@ -178,7 +210,7 @@ Always explain your reasoning for changes.`
     ];
 
     const totalDuration = Date.now() - startTime;
-    console.log(`[RealLangChainMCP:${requestId}] === CHAT COMPLETE === (${totalDuration}ms, Real LangChain MCP)`);
+    console.log(`[RealLangChainMCP:${requestId}] === CHAT COMPLETE === (${totalDuration}ms, Real LangChain MCP via ${transportUsed})`);
 
     // 9) Clean up MCP client
     try {
@@ -195,6 +227,7 @@ Always explain your reasoning for changes.`
         serverUrl: mcpServerUrl,
         toolsDiscovered: tools.length,
         toolNames: tools.map(t => t.name),
+        transportUsed: transportUsed,
         sessionToken: sessionToken.substring(0, 8) + '...',
         usedRealLangChain: true
       },
@@ -243,18 +276,42 @@ realLangChainMcpRouter.post('/test-connection', async (c) => {
 
     console.log(`[RealLangChainMCP:${testId}] Testing connection to: ${mcpServerUrl}`);
 
-    const client = new MultiServerMCPClient({
-      spotify: {
-        transport: 'sse',
-        url: mcpServerUrl,
-        headers: {
-          'Authorization': `Bearer ${sessionToken}`,
-          'MCP-Protocol-Version': '2025-06-18'
-        }
-      }
-    });
+    // Try SSE first, fallback to HTTP
+    let client: MultiServerMCPClient;
+    let transportUsed = 'sse';
+    let tools: any[];
 
-    const tools = await client.getTools();
+    try {
+      console.log(`[RealLangChainMCP:${testId}] Trying SSE transport...`);
+      client = new MultiServerMCPClient({
+        spotify: {
+          transport: 'sse',
+          url: mcpServerUrl,
+          headers: {
+            'Authorization': `Bearer ${sessionToken}`,
+            'MCP-Protocol-Version': '2025-06-18'
+          }
+        }
+      });
+      tools = await client.getTools();
+    } catch (sseError) {
+      console.warn(`[RealLangChainMCP:${testId}] SSE failed, trying HTTP:`, sseError);
+      transportUsed = 'http';
+
+      try { await client?.close(); } catch {}
+
+      client = new MultiServerMCPClient({
+        spotify: {
+          transport: 'http',
+          url: mcpServerUrl,
+          headers: {
+            'Authorization': `Bearer ${sessionToken}`,
+            'MCP-Protocol-Version': '2025-06-18'
+          }
+        }
+      });
+      tools = await client.getTools();
+    }
 
     console.log(`[RealLangChainMCP:${testId}] Connection successful! Tools: ${tools.length}`);
 
@@ -263,6 +320,7 @@ realLangChainMcpRouter.post('/test-connection', async (c) => {
     return c.json({
       success: true,
       mcpServerUrl,
+      transportUsed,
       toolsDiscovered: tools.length,
       toolNames: tools.map(t => t.name),
       sessionToken: sessionToken.substring(0, 8) + '...',
