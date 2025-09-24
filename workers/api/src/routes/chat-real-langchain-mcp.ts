@@ -75,9 +75,9 @@ realLangChainMcpRouter.post('/message', async (c) => {
       await sessionManager.touchSession(existingSession.id);
     } else {
       // Create new session with the Spotify token
-      const session = await sessionManager.createSession(spotifyToken, 'unknown');
-      sessionToken = session.id;
-      console.log(`[RealLangChainMCP:${requestId}] Created session: ${sessionToken}`);
+      // Note: createSession returns the session token string directly, not an object!
+      sessionToken = await sessionManager.createSession(spotifyToken, 'unknown');
+      console.log(`[RealLangChainMCP:${requestId}] Created new session token: ${sessionToken}`);
     }
 
     // === DEBUGGING HELPER FUNCTIONS ===
@@ -180,6 +180,17 @@ realLangChainMcpRouter.post('/message', async (c) => {
 
     // === DEBUGGING STEP 1: Run loopback smoke test ===
     console.log(`[RealLangChainMCP:${requestId}] === RUNNING LOOPBACK SMOKE TEST ===`);
+    console.log(`[RealLangChainMCP:${requestId}] Session token for smoke test: ${sessionToken || 'UNDEFINED!'}`);
+
+    if (!sessionToken) {
+      console.error(`[RealLangChainMCP:${requestId}] ERROR: Session token is undefined, cannot proceed with tests`);
+      return c.json({
+        error: 'Failed to create session token',
+        requestId,
+        debug: 'Session creation returned undefined'
+      }, 500);
+    }
+
     const smoke = await loopbackMcpInit(c, sessionToken);
     if (!smoke.ok) {
       console.error(`[RealLangChainMCP:${requestId}] Loopback MCP initialize failed!`);
@@ -456,9 +467,8 @@ realLangChainMcpRouter.get('/test', async (c) => {
   console.log(`[RealLangChainMCP:${testId}] === TEST ENDPOINT HIT ===`);
 
   try {
-    // Create test session
-    const testSession = await sessionManager.createSession('test-spotify-token', 'test-user');
-    const sessionToken = testSession.id;
+    // Create test session (returns string token directly)
+    const sessionToken = await sessionManager.createSession('test-spotify-token', 'test-user');
 
     console.log(`[RealLangChainMCP:${testId}] Created test session: ${sessionToken}`);
 
