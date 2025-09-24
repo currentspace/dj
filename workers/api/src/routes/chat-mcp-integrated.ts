@@ -109,101 +109,58 @@ Always explain your reasoning for changes.`
       messages.unshift(...request.conversationHistory);
     }
 
-    console.log(`[Chat:${requestId}] Calling Claude with ${messages.length} messages and ${spotifyTools.length} tools`);
+    console.log(`[Chat:${requestId}] Calling Claude with MCP server: https://dj.current.space/api/mcp`);
 
-    // Call Claude with tools
+    // Call Claude with MCP connector (BETA)
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 2000,
       system: systemPrompts[request.mode],
       messages,
-      tools: spotifyTools.map(tool => ({
-        name: tool.name,
-        description: tool.description,
-        input_schema: tool.input_schema
-      })),
-      tool_choice: { type: 'any' } // Force tool usage
+      mcp_servers: [
+        {
+          type: 'url',
+          url: 'https://dj.current.space/api/mcp',
+          name: 'spotify-dj',
+          authorization_token: sessionToken,
+          tool_configuration: {
+            enabled: true,
+            allowed_tools: [
+              'search_spotify_tracks',
+              'get_audio_features',
+              'get_recommendations',
+              'create_playlist',
+              'modify_playlist',
+              'analyze_playlist'
+            ]
+          }
+        }
+      ]
+    }, {
+      headers: {
+        'anthropic-beta': 'mcp-client-2025-04-04'
+      }
     });
 
-    console.log(`[Chat:${requestId}] Claude response received, processing...`);
+    console.log(`[Chat:${requestId}] Claude response received with MCP integration`);
 
-    // Process response and handle tool calls
+    // With MCP connector, Claude handles tool calls automatically
     let assistantResponse = '';
-    const toolCalls: any[] = [];
-    const toolResults: any[] = [];
+    const toolCallsDetected: string[] = [];
 
+    // Extract response content
     for (const contentBlock of response.content) {
       if (contentBlock.type === 'text') {
         assistantResponse += contentBlock.text;
       } else if (contentBlock.type === 'tool_use') {
-        console.log(`[Chat:${requestId}] Tool call requested: ${contentBlock.name}`);
-
-        const toolCall = {
-          id: contentBlock.id,
-          name: contentBlock.name,
-          input: contentBlock.input
-        };
-        toolCalls.push(toolCall);
-
-        try {
-          // Execute tool directly through our MCP implementation
-          const toolResult = await executeSpotifyTool(
-            contentBlock.name,
-            contentBlock.input,
-            spotifyToken
-          );
-
-          console.log(`[Chat:${requestId}] Tool ${contentBlock.name} completed successfully`);
-
-          toolResults.push({
-            tool_call_id: contentBlock.id,
-            output: JSON.stringify(toolResult, null, 2)
-          });
-
-        } catch (toolError) {
-          console.error(`[Chat:${requestId}] Tool ${contentBlock.name} failed:`, toolError);
-          toolResults.push({
-            tool_call_id: contentBlock.id,
-            output: `Error: ${toolError instanceof Error ? toolError.message : 'Tool execution failed'}`,
-            is_error: true
-          });
-        }
+        // This shouldn't happen with MCP connector, but log if it does
+        console.log(`[Chat:${requestId}] Unexpected tool_use block: ${contentBlock.name}`);
+        toolCallsDetected.push(contentBlock.name);
       }
     }
 
-    // If tools were called, make follow-up request to Claude with results
-    if (toolCalls.length > 0) {
-      console.log(`[Chat:${requestId}] Making follow-up call to Claude with ${toolResults.length} tool results`);
-
-      const followUpMessages = [
-        ...messages,
-        {
-          role: 'assistant',
-          content: response.content
-        },
-        {
-          role: 'user',
-          content: toolResults.map(result =>
-            `Tool ${result.tool_call_id} result:\n${result.output}`
-          ).join('\n\n')
-        }
-      ];
-
-      const followUpResponse = await anthropic.messages.create({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 2000,
-        system: systemPrompts[request.mode],
-        messages: followUpMessages
-      });
-
-      // Extract final response
-      assistantResponse = '';
-      for (const contentBlock of followUpResponse.content) {
-        if (contentBlock.type === 'text') {
-          assistantResponse += contentBlock.text;
-        }
-      }
-    }
+    console.log(`[Chat:${requestId}] Response content blocks: ${response.content.length}`);
+    console.log(`[Chat:${requestId}] Response length: ${assistantResponse.length} characters`);
 
     // Build response
     const finalHistory = [
@@ -213,12 +170,14 @@ Always explain your reasoning for changes.`
     ];
 
     const duration = Date.now() - startTime;
-    console.log(`[Chat:${requestId}] === CHAT COMPLETE === (${duration}ms, ${toolCalls.length} tools used)`);
+    console.log(`[Chat:${requestId}] === CHAT COMPLETE === (${duration}ms, MCP integration active)`);
 
     return c.json({
       message: assistantResponse,
       conversationHistory: finalHistory,
-      toolsUsed: toolCalls.map(tc => tc.name),
+      mcpServer: 'https://dj.current.space/api/mcp',
+      mcpIntegration: true,
+      toolCallsDetected: toolCallsDetected,
       executionTime: duration,
       requestId
     });
@@ -251,47 +210,39 @@ mcpChatRouter.post('/debug', async (c) => {
       apiKey: c.env.ANTHROPIC_API_KEY,
     });
 
-    console.log(`[Debug:${debugId}] Testing basic Claude call with tools...`);
+    // Create session for MCP authentication
+    const sessionToken = await sessionManager.createSession(spotifyToken);
+    console.log(`[Debug:${debugId}] Created session: ${sessionToken.substring(0, 8)}...`);
 
-    // Test with explicit tool request
+    console.log(`[Debug:${debugId}] Testing MCP connector with Claude...`);
+
+    // Test with MCP connector
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 1000,
-      system: `You are a music assistant with access to Spotify tools. You MUST use tools to answer questions.
-
-AVAILABLE TOOLS:
-- search_spotify_tracks: Search for tracks on Spotify
-- get_audio_features: Get detailed audio analysis
-
-IMPORTANT: When a user asks about music, ALWAYS use the search_spotify_tracks tool first.`,
+      system: `You are a music assistant with access to Spotify tools via MCP. You MUST use tools to answer questions about music. Search for tracks when asked.`,
       messages: [
         {
           role: 'user',
-          content: 'Search for exactly 3 rock tracks from the 90s. Use the search tool.'
+          content: 'Search for exactly 3 upbeat workout tracks. Use the search_spotify_tracks tool.'
         }
       ],
-      tools: [
+      mcp_servers: [
         {
-          name: 'search_spotify_tracks',
-          description: 'Search for tracks on Spotify with optional filters',
-          input_schema: {
-            type: 'object',
-            properties: {
-              query: {
-                type: 'string',
-                description: 'Search query (artist, song, genre, etc.)'
-              },
-              limit: {
-                type: 'number',
-                description: 'Number of results (1-50)',
-                default: 10
-              }
-            },
-            required: ['query']
+          type: 'url',
+          url: 'https://dj.current.space/api/mcp',
+          name: 'spotify-debug',
+          authorization_token: sessionToken,
+          tool_configuration: {
+            enabled: true,
+            allowed_tools: ['search_spotify_tracks', 'get_audio_features']
           }
         }
-      ],
-      tool_choice: { type: 'any' } // Force tool usage
+      ]
+    }, {
+      headers: {
+        'anthropic-beta': 'mcp-client-2025-04-04'
+      }
     });
 
     console.log(`[Debug:${debugId}] Claude response received`);
@@ -299,9 +250,13 @@ IMPORTANT: When a user asks about music, ALWAYS use the search_spotify_tracks to
 
     const result = {
       debugId,
+      mcpServer: 'https://dj.current.space/api/mcp',
+      sessionToken: sessionToken.substring(0, 8) + '...',
+      mcpConnectorUsed: true,
+      betaHeader: 'mcp-client-2025-04-04',
       contentBlocks: response.content.map(block => ({
         type: block.type,
-        ...(block.type === 'text' ? { text: block.text.substring(0, 100) } : {}),
+        ...(block.type === 'text' ? { text: block.text.substring(0, 200) } : {}),
         ...(block.type === 'tool_use' ? { tool_name: block.name, tool_input: block.input } : {})
       })),
       hasToolCalls: response.content.some(block => block.type === 'tool_use'),

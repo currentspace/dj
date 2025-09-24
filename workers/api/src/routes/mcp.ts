@@ -1,6 +1,5 @@
-// MCP Server Implementation for Cloudflare Workers
+// MCP Server - Streamable HTTP Transport (2025-03-26)
 import { Hono } from 'hono';
-import { bearerAuth } from 'hono/bearer-auth';
 import type { Env } from '../index';
 import { SessionManager } from '../lib/session-manager';
 import { executeSpotifyTool, spotifyTools } from '../lib/spotify-tools';
@@ -16,12 +15,7 @@ const MCPRequestSchema = z.object({
   id: z.union([z.string(), z.number()])
 });
 
-const ToolCallSchema = z.object({
-  name: z.string(),
-  arguments: z.any()
-});
-
-// Session manager instance (reused across requests)
+// Session manager instance
 let sessionManager: SessionManager;
 
 // Initialize session manager
@@ -33,284 +27,182 @@ mcpRouter.use('*', async (c, next) => {
 });
 
 /**
- * MCP Initialize - Called when Claude connects
+ * STREAMABLE HTTP TRANSPORT (2025-03-26) - Main MCP Endpoint
+ * Single endpoint handling both POST and GET with proper headers
  */
-mcpRouter.post('/initialize', async (c) => {
-  console.log('[MCP] Initialize request received');
+mcpRouter.all('/', async (c) => {
+  const method = c.req.method;
+  const acceptHeader = c.req.header('Accept') || '';
+  const sessionId = c.req.header('Mcp-Session-Id');
+  const requestId = crypto.randomUUID().substring(0, 8);
 
+  console.log(`[MCP:${requestId}] ${method} request to main endpoint`);
+  console.log(`[MCP:${requestId}] Accept: ${acceptHeader}`);
+  console.log(`[MCP:${requestId}] Session-Id: ${sessionId?.substring(0, 8) || 'none'}`);
+
+  // Validate authorization
   const authorization = c.req.header('Authorization');
   if (!authorization?.startsWith('Bearer ')) {
-    console.warn('[MCP] Initialize failed: No bearer token');
+    console.warn(`[MCP:${requestId}] No bearer token provided`);
     return c.json({ error: 'Unauthorized' }, 401);
   }
 
   const sessionToken = authorization.replace('Bearer ', '');
-  console.log(`[MCP] Validating session: ${sessionToken.substring(0, 8)}...`);
-
   const spotifyToken = await sessionManager.validateSession(sessionToken);
 
   if (!spotifyToken) {
-    console.warn(`[MCP] Invalid or expired session: ${sessionToken.substring(0, 8)}...`);
+    console.warn(`[MCP:${requestId}] Invalid session: ${sessionToken.substring(0, 8)}...`);
     return c.json({ error: 'Invalid or expired session' }, 401);
   }
 
-  console.log('[MCP] Session validated, returning capabilities');
+  if (method === 'GET') {
+    // GET requests should support text/event-stream
+    if (!acceptHeader.includes('text/event-stream')) {
+      console.warn(`[MCP:${requestId}] GET without SSE accept header`);
+      return c.json({ error: 'Method not allowed' }, 405);
+    }
 
-  return c.json({
-    jsonrpc: '2.0',
-    result: {
-      protocolVersion: '2024-11-05',
-      capabilities: {
-        tools: {},
-        resources: {},
-        prompts: {}
-      },
-      serverInfo: {
-        name: 'spotify-mcp-server',
-        version: '1.0.0'
+    // For now, return 405 as we don't support SSE streaming yet
+    console.log(`[MCP:${requestId}] GET/SSE not implemented yet`);
+    return c.json({ error: 'Method not allowed' }, 405);
+  }
+
+  if (method === 'POST') {
+    // POST requests must support application/json
+    if (!acceptHeader.includes('application/json')) {
+      console.warn(`[MCP:${requestId}] POST without JSON accept header`);
+      return c.json({ error: 'Bad Request' }, 400);
+    }
+
+    try {
+      const body = await c.req.json();
+      console.log(`[MCP:${requestId}] Request:`, JSON.stringify(body).substring(0, 200));
+
+      // Handle single request or batch
+      const requests = Array.isArray(body) ? body : [body];
+      const responses: any[] = [];
+
+      for (const request of requests) {
+        try {
+          const mcpRequest = MCPRequestSchema.parse(request);
+          const response = await handleMCPRequest(mcpRequest, spotifyToken, requestId, sessionToken);
+          responses.push(response);
+        } catch (error) {
+          console.error(`[MCP:${requestId}] Request validation error:`, error);
+          responses.push({
+            jsonrpc: '2.0',
+            error: {
+              code: -32602,
+              message: 'Invalid params'
+            },
+            id: request.id || null
+          });
+        }
       }
-    },
-    id: 1
-  });
-});
 
-/**
- * MCP List Tools - Returns available Spotify tools
- */
-mcpRouter.post('/tools/list', async (c) => {
-  const authorization = c.req.header('Authorization');
-  if (!authorization?.startsWith('Bearer ')) {
-    return c.json({ error: 'Unauthorized' }, 401);
-  }
+      // Return single response or batch
+      const result = Array.isArray(body) ? responses : responses[0];
+      console.log(`[MCP:${requestId}] Responding with ${responses.length} message(s)`);
 
-  const sessionToken = authorization.replace('Bearer ', '');
-  const spotifyToken = await sessionManager.validateSession(sessionToken);
+      return c.json(result);
 
-  if (!spotifyToken) {
-    return c.json({ error: 'Invalid or expired session' }, 401);
-  }
-
-  return c.json({
-    jsonrpc: '2.0',
-    result: {
-      tools: spotifyTools.map(tool => ({
-        name: tool.name,
-        description: tool.description,
-        inputSchema: tool.input_schema
-      }))
-    },
-    id: c.req.header('X-Request-Id') || '1'
-  });
-});
-
-/**
- * MCP Call Tool - Execute a Spotify tool
- */
-mcpRouter.post('/tools/call', async (c) => {
-  const startTime = Date.now();
-  let toolName = 'unknown';
-
-  try {
-    const authorization = c.req.header('Authorization');
-    if (!authorization?.startsWith('Bearer ')) {
-      console.warn('[MCP] Tool call failed: No bearer token');
-      return c.json({ error: 'Unauthorized' }, 401);
-    }
-
-    const sessionToken = authorization.replace('Bearer ', '');
-    const spotifyToken = await sessionManager.validateSession(sessionToken);
-
-    if (!spotifyToken) {
-      console.warn(`[MCP] Tool call failed: Invalid session ${sessionToken.substring(0, 8)}...`);
-      return c.json({ error: 'Invalid or expired session' }, 401);
-    }
-
-    const body = await c.req.json();
-    const request = MCPRequestSchema.parse(body);
-
-    if (request.method !== 'tools/call') {
-      console.warn(`[MCP] Invalid method: ${request.method}`);
+    } catch (error) {
+      console.error(`[MCP:${requestId}] POST error:`, error);
       return c.json({
+        jsonrpc: '2.0',
+        error: {
+          code: -32603,
+          message: 'Internal error'
+        },
+        id: null
+      }, 500);
+    }
+  }
+
+  return c.json({ error: 'Method not allowed' }, 405);
+});
+
+async function handleMCPRequest(request: any, spotifyToken: string, requestId: string, sessionToken?: string) {
+  console.log(`[MCP:${requestId}] Handling method: ${request.method}`);
+
+  switch (request.method) {
+    case 'initialize':
+      return {
+        jsonrpc: '2.0',
+        result: {
+          protocolVersion: '2025-03-26',
+          capabilities: {
+            tools: {},
+            resources: {}
+          },
+          serverInfo: {
+            name: 'spotify-mcp-server',
+            version: '2.0.0'
+          }
+        },
+        id: request.id
+      };
+
+    case 'tools/list':
+      return {
+        jsonrpc: '2.0',
+        result: {
+          tools: spotifyTools.map(tool => ({
+            name: tool.name,
+            description: tool.description,
+            inputSchema: tool.input_schema
+          }))
+        },
+        id: request.id
+      };
+
+    case 'tools/call':
+      const { name, arguments: args } = request.params;
+      console.log(`[MCP:${requestId}] Executing tool: ${name}`);
+
+      try {
+        const result = await executeSpotifyTool(name, args, spotifyToken);
+        if (sessionToken) {
+          await sessionManager.touchSession(sessionToken);
+        }
+        console.log(`[MCP:${requestId}] Tool ${name} completed successfully`);
+
+        return {
+          jsonrpc: '2.0',
+          result: {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify(result, null, 2)
+              }
+            ]
+          },
+          id: request.id
+        };
+      } catch (toolError) {
+        console.error(`[MCP:${requestId}] Tool ${name} failed:`, toolError);
+        return {
+          jsonrpc: '2.0',
+          error: {
+            code: -32603,
+            message: toolError instanceof Error ? toolError.message : 'Tool execution failed'
+          },
+          id: request.id
+        };
+      }
+
+    default:
+      console.warn(`[MCP:${requestId}] Unknown method: ${request.method}`);
+      return {
         jsonrpc: '2.0',
         error: {
           code: -32601,
           message: 'Method not found'
         },
         id: request.id
-      });
-    }
-
-    const { name, arguments: args } = request.params as any;
-    toolName = name;
-
-    console.log(`[MCP] Executing tool: ${toolName}`);
-    console.log(`[MCP] Tool args:`, JSON.stringify(args).substring(0, 200));
-
-    // Execute the Spotify tool
-    try {
-      const result = await executeSpotifyTool(name, args, spotifyToken);
-
-      // Touch session to keep it alive
-      await sessionManager.touchSession(sessionToken);
-
-      const duration = Date.now() - startTime;
-      console.log(`[MCP] Tool ${toolName} completed in ${duration}ms`);
-
-      return c.json({
-        jsonrpc: '2.0',
-        result: {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(result, null, 2)
-            }
-          ]
-        },
-        id: request.id
-      });
-    } catch (toolError) {
-      const duration = Date.now() - startTime;
-      console.error(`[MCP] Tool ${toolName} execution error after ${duration}ms:`, toolError);
-      return c.json({
-        jsonrpc: '2.0',
-        error: {
-          code: -32603,
-          message: toolError instanceof Error ? toolError.message : 'Tool execution failed'
-        },
-        id: request.id
-      });
-    }
-  } catch (error) {
-    const duration = Date.now() - startTime;
-    console.error(`[MCP] Request error after ${duration}ms:`, error);
-    return c.json({
-      jsonrpc: '2.0',
-      error: {
-        code: -32603,
-        message: 'Internal error'
-      },
-      id: body?.id || null
-    });
+      };
   }
-});
-
-/**
- * MCP List Resources - Returns available playlists as resources
- */
-mcpRouter.post('/resources/list', async (c) => {
-  const authorization = c.req.header('Authorization');
-  if (!authorization?.startsWith('Bearer ')) {
-    return c.json({ error: 'Unauthorized' }, 401);
-  }
-
-  const sessionToken = authorization.replace('Bearer ', '');
-  const spotifyToken = await sessionManager.validateSession(sessionToken);
-
-  if (!spotifyToken) {
-    return c.json({ error: 'Invalid or expired session' }, 401);
-  }
-
-  try {
-    // Get user's playlists
-    const response = await fetch('https://api.spotify.com/v1/me/playlists?limit=50', {
-      headers: {
-        'Authorization': `Bearer ${spotifyToken}`
-      }
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to fetch playlists');
-    }
-
-    const data = await response.json();
-    const playlists = data.items || [];
-
-    return c.json({
-      jsonrpc: '2.0',
-      result: {
-        resources: playlists.map((playlist: any) => ({
-          uri: `spotify:playlist:${playlist.id}`,
-          name: playlist.name,
-          description: playlist.description || `${playlist.tracks.total} tracks`,
-          mimeType: 'application/json'
-        }))
-      },
-      id: c.req.header('X-Request-Id') || '1'
-    });
-  } catch (error) {
-    console.error('Error fetching playlists:', error);
-    return c.json({
-      jsonrpc: '2.0',
-      result: { resources: [] },
-      id: c.req.header('X-Request-Id') || '1'
-    });
-  }
-});
-
-/**
- * MCP Read Resource - Get playlist details
- */
-mcpRouter.post('/resources/read', async (c) => {
-  const authorization = c.req.header('Authorization');
-  if (!authorization?.startsWith('Bearer ')) {
-    return c.json({ error: 'Unauthorized' }, 401);
-  }
-
-  const sessionToken = authorization.replace('Bearer ', '');
-  const spotifyToken = await sessionManager.validateSession(sessionToken);
-
-  if (!spotifyToken) {
-    return c.json({ error: 'Invalid or expired session' }, 401);
-  }
-
-  try {
-    const body = await c.req.json();
-    const { uri } = body.params;
-
-    // Extract playlist ID from URI (spotify:playlist:ID)
-    const playlistId = uri.split(':').pop();
-
-    // Get playlist details
-    const response = await fetch(
-      `https://api.spotify.com/v1/playlists/${playlistId}`,
-      {
-        headers: {
-          'Authorization': `Bearer ${spotifyToken}`
-        }
-      }
-    );
-
-    if (!response.ok) {
-      throw new Error('Failed to fetch playlist');
-    }
-
-    const playlist = await response.json();
-
-    return c.json({
-      jsonrpc: '2.0',
-      result: {
-        contents: [
-          {
-            uri,
-            mimeType: 'application/json',
-            text: JSON.stringify(playlist, null, 2)
-          }
-        ]
-      },
-      id: body.id
-    });
-  } catch (error) {
-    console.error('Error reading resource:', error);
-    return c.json({
-      jsonrpc: '2.0',
-      error: {
-        code: -32603,
-        message: 'Failed to read resource'
-      },
-      id: body?.id || null
-    });
-  }
-});
+}
 
 /**
  * Session Creation Endpoint - Called after Spotify auth
