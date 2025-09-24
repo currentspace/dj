@@ -49,11 +49,15 @@ mcpRouter.all('/', async (c) => {
 
   // Validate authorization
   const authorization = c.req.header('Authorization');
+  console.log(`[MCP:${requestId}] Authorization header present: ${!!authorization}`);
+  console.log(`[MCP:${requestId}] Authorization format correct: ${authorization?.startsWith('Bearer ')}`);
+
   if (!authorization?.startsWith('Bearer ')) {
     const duration = Date.now() - startTime;
     console.error(`[MCP:${requestId}] UNAUTHORIZED - No bearer token provided (${duration}ms)`);
+    console.log(`[MCP:${requestId}] Authorization header value: ${authorization || 'undefined'}`);
     console.log(`[MCP:${requestId}] Available headers:`, Object.fromEntries(c.req.headers.entries()));
-    return c.json({ error: 'Unauthorized' }, 401);
+    return c.json({ error: 'Unauthorized', details: 'Missing or invalid Authorization header' }, 401);
   }
 
   const sessionToken = authorization.replace('Bearer ', '');
@@ -73,13 +77,20 @@ mcpRouter.all('/', async (c) => {
 
   if (method === 'GET') {
     // GET requests should support text/event-stream
-    console.log(`[MCP:${requestId}] Processing GET request`);
+    console.log(`[MCP:${requestId}] Processing GET request for SSE`);
+    console.log(`[MCP:${requestId}] All headers:`, Object.fromEntries(c.req.headers.entries()));
 
     if (!acceptHeader.includes('text/event-stream')) {
       const duration = Date.now() - startTime;
       console.warn(`[MCP:${requestId}] GET REJECTED - Missing text/event-stream accept header (${duration}ms)`);
       console.log(`[MCP:${requestId}] Expected: text/event-stream, Got: ${acceptHeader}`);
-      return c.json({ error: 'Method not allowed' }, 405);
+
+      // For debugging, also try to serve SSE even without the header
+      if (c.req.url.includes('debug-sse')) {
+        console.log(`[MCP:${requestId}] DEBUG MODE - Serving SSE anyway`);
+      } else {
+        return c.json({ error: 'Method not allowed', expected: 'Accept: text/event-stream', received: acceptHeader }, 405);
+      }
     }
 
     // Initialize Worker-safe SSE stream
@@ -467,6 +478,77 @@ mcpRouter.post('/session/create', async (c) => {
       requestId: sessionRequestId
     }, 500);
   }
+});
+
+/**
+ * Simple SSE test endpoint (no auth required)
+ */
+mcpRouter.get('/test-sse', async (c) => {
+  const testId = crypto.randomUUID().substring(0, 8);
+  console.log(`[SSE-Test:${testId}] === SSE TEST ENDPOINT ===`);
+
+  const headers = {
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-cache, no-transform',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Authorization, Content-Type'
+  };
+
+  const stream = new ReadableStream({
+    start(controller) {
+      const enc = new TextEncoder();
+      let counter = 0;
+
+      const send = (data: unknown, event?: string) => {
+        let message = '';
+        if (event) {
+          message += `event: ${event}\n`;
+        }
+        message += `data: ${JSON.stringify(data)}\n\n`;
+        controller.enqueue(enc.encode(message));
+        console.log(`[SSE-Test:${testId}] Sent: ${event || 'data'} - ${JSON.stringify(data).substring(0, 100)}`);
+      };
+
+      // Send immediate events
+      send({ type: 'connected', timestamp: Date.now(), testId }, 'connected');
+      send({ type: 'ready', message: 'SSE test endpoint ready' }, 'ready');
+
+      // Send periodic test events
+      const interval = setInterval(() => {
+        counter++;
+        try {
+          send({
+            type: 'test',
+            counter,
+            timestamp: Date.now(),
+            message: `Test event #${counter}`
+          }, 'test');
+
+          if (counter >= 5) {
+            send({ type: 'complete', message: 'Test complete' }, 'complete');
+            clearInterval(interval);
+            controller.close();
+            console.log(`[SSE-Test:${testId}] Test completed, connection closed`);
+          }
+        } catch (error) {
+          console.log(`[SSE-Test:${testId}] Send failed:`, error);
+          clearInterval(interval);
+          controller.close();
+        }
+      }, 2000);
+
+      // Cleanup on disconnect
+      c.req.raw.signal?.addEventListener('abort', () => {
+        console.log(`[SSE-Test:${testId}] Client disconnected`);
+        clearInterval(interval);
+        try { controller.close(); } catch {}
+      });
+
+      console.log(`[SSE-Test:${testId}] SSE stream started`);
+    }
+  });
+
+  return new Response(stream, { status: 200, headers });
 });
 
 /**
