@@ -306,8 +306,8 @@ chatStreamRouter.post('/message', async (c) => {
       // Build system prompt
       const systemPrompt = `You are an AI DJ assistant with access to Spotify.
 ${playlistId ? `IMPORTANT: The user has selected a playlist. Playlist ID: ${playlistId}
-When the user asks about "the playlist", "this playlist", "analyze this", or any reference to analyzing/editing without specifying what, use analyze_playlist with this ID: ${playlistId}
-Do NOT ask for a playlist ID - use the one provided above.` : ''}
+When the user asks about "the playlist", "this playlist", "analyze this", or any reference to analyzing/editing without specifying what, use analyze_playlist with playlist_id: "${playlistId}"
+Do NOT ask for a playlist ID - use the one provided above: ${playlistId}` : ''}
 Be concise and helpful. Use tools to get real data.`;
 
       sendSSE(stream, {
