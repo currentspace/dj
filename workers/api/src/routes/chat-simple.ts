@@ -227,12 +227,17 @@ chatRouter.post('/message', async (c) => {
   const requestId = crypto.randomUUID().substring(0, 8);
   const startTime = Date.now();
 
-  console.log(`[Chat:${requestId}] === NEW REQUEST ===`);
+  console.log(`[Chat:${requestId}] ${'='.repeat(50)}`);
+  console.log(`[Chat:${requestId}] === NEW CHAT REQUEST ===`);
+  console.log(`[Chat:${requestId}] Request ID: ${requestId}`);
+  console.log(`[Chat:${requestId}] Timestamp: ${new Date().toISOString()}`);
+  console.log(`[Chat:${requestId}] Origin: ${c.req.header('origin') || 'unknown'}`);
 
   try {
     // Parse request
     const body = await c.req.json();
-    console.log(`[Chat:${requestId}] Parsing request body`);
+    console.log(`[Chat:${requestId}] Request body size: ${JSON.stringify(body).length} bytes`);
+    console.log(`[Chat:${requestId}] Parsing and validating request...`);
     const request = ChatRequestSchema.parse(body);
     console.log(`[Chat:${requestId}] Mode: ${request.mode}`);
     console.log(`[Chat:${requestId}] Message: "${request.message.substring(0, 100)}${request.message.length > 100 ? '...' : ''}"`);
@@ -257,6 +262,9 @@ chatRouter.post('/message', async (c) => {
     console.log(`[Chat:${requestId}] Created ${tools.length} Spotify tools`);
 
     // Initialize Claude with tools and retry configuration
+    console.log(`[Chat:${requestId}] === INITIALIZING CLAUDE CLIENT ===`);
+    console.log(`[Chat:${requestId}] API Key: ${c.env.ANTHROPIC_API_KEY ? 'Present (' + c.env.ANTHROPIC_API_KEY.substring(0, 10) + '...)' : 'MISSING!'}`);
+
     const llm = new ChatAnthropic({
       apiKey: c.env.ANTHROPIC_API_KEY,
       model: 'claude-3-5-sonnet-20241022',
@@ -264,6 +272,8 @@ chatRouter.post('/message', async (c) => {
       maxTokens: 2000,
       maxRetries: 2,  // Retry on failures
     });
+
+    console.log(`[Chat:${requestId}] Claude client initialized with maxRetries: 2`);
 
     // Bind tools to the model
     const modelWithTools = llm.bindTools(tools);
@@ -308,7 +318,12 @@ Use tools to make informed decisions.`
       new HumanMessage(request.message)
     ];
 
-    console.log(`[Chat:${requestId}] Invoking Claude with ${tools.length} tools...`);
+    console.log(`[Chat:${requestId}] === PREPARING CLAUDE INVOCATION ===`);
+    console.log(`[Chat:${requestId}] Total messages: ${messages.length}`);
+    console.log(`[Chat:${requestId}] System prompt length: ${systemPrompts[request.mode].length} chars`);
+    console.log(`[Chat:${requestId}] Available tools: ${tools.map(t => t.name).join(', ')}`);
+    console.log(`[Chat:${requestId}] Model: claude-3-5-sonnet-20241022`);
+    console.log(`[Chat:${requestId}] Temperature: 0.2, Max tokens: 2000`);
 
     let initialResponse;
     let retryCount = 0;
@@ -317,49 +332,78 @@ Use tools to make informed decisions.`
     // Retry logic for overload errors
     while (retryCount < maxRetries) {
       try {
+        const invokeStartTime = Date.now();
+        console.log(`[Chat:${requestId}] Attempt ${retryCount + 1}/${maxRetries}: Invoking Claude...`);
+
         // First invocation - Claude may call tools
         initialResponse = await modelWithTools.invoke(messages);
+
+        const invokeDuration = Date.now() - invokeStartTime;
+        console.log(`[Chat:${requestId}] ✅ Claude responded successfully in ${invokeDuration}ms`);
+        console.log(`[Chat:${requestId}] Response type: ${typeof initialResponse}`);
+        console.log(`[Chat:${requestId}] Has tool calls: ${!!(initialResponse?.tool_calls && initialResponse.tool_calls.length > 0)}`);
+        if (initialResponse?.tool_calls) {
+          console.log(`[Chat:${requestId}] Tool calls requested: ${initialResponse.tool_calls.map((tc: any) => tc.name).join(', ')}`);
+        }
         break; // Success, exit retry loop
       } catch (invokeError) {
         const errorMessage = invokeError instanceof Error ? invokeError.message : String(invokeError);
+        console.error(`[Chat:${requestId}] ❌ Attempt ${retryCount + 1} failed: ${errorMessage}`);
+
+        // Log error details
+        if (invokeError instanceof Error) {
+          console.error(`[Chat:${requestId}] Error name: ${invokeError.name}`);
+          console.error(`[Chat:${requestId}] Error stack: ${invokeError.stack?.split('\n').slice(0, 3).join('\n')}`);
+        }
 
         // Check if it's an overload error
         if (errorMessage.includes('529') || errorMessage.includes('overloaded')) {
           retryCount++;
           if (retryCount < maxRetries) {
             const backoffTime = Math.min(1000 * Math.pow(2, retryCount), 5000); // Exponential backoff
-            console.log(`[Chat:${requestId}] Anthropic overloaded, retrying ${retryCount}/${maxRetries} after ${backoffTime}ms...`);
+            console.log(`[Chat:${requestId}] 🔄 Anthropic overloaded (529), waiting ${backoffTime}ms before retry ${retryCount + 1}/${maxRetries}...`);
             await new Promise(resolve => setTimeout(resolve, backoffTime));
+            console.log(`[Chat:${requestId}] Resuming after backoff, attempting retry...`);
           } else {
-            console.error(`[Chat:${requestId}] Max retries reached for overload error`);
+            console.error(`[Chat:${requestId}] ❌ Max retries (${maxRetries}) exhausted for overload error`);
             throw invokeError;
           }
+        } else if (errorMessage.includes('429') || errorMessage.includes('rate_limit')) {
+          console.error(`[Chat:${requestId}] ⏳ Rate limit error detected, not retrying`);
+          throw invokeError;
         } else {
-          // Not an overload error, throw immediately
+          // Not a retryable error, throw immediately
+          console.error(`[Chat:${requestId}] Non-retryable error, failing immediately`);
           throw invokeError;
         }
       }
     }
 
     if (!initialResponse) {
+      console.error(`[Chat:${requestId}] ❌ No response received from Claude after all retries`);
       throw new Error('Failed to get response from Claude after retries');
     }
 
+    console.log(`[Chat:${requestId}] === PROCESSING CLAUDE RESPONSE ===`);
     let finalResponse = initialResponse;
 
     // If Claude called tools, execute them and get final response
     if (initialResponse?.tool_calls && initialResponse.tool_calls.length > 0) {
       console.log(`[Chat:${requestId}] Claude called ${initialResponse.tool_calls.length} tool(s): ${initialResponse.tool_calls.map(tc => tc.name).join(', ')}`);
 
+      console.log(`[Chat:${requestId}] === EXECUTING ${initialResponse.tool_calls.length} TOOL CALLS ===`);
+
       // Execute each tool call
       const toolResults = [];
       for (let i = 0; i < initialResponse.tool_calls.length; i++) {
         const toolCall = initialResponse.tool_calls[i];
-        console.log(`[Chat:${requestId}] Executing tool ${i + 1}/${initialResponse.tool_calls.length}: ${toolCall.name}`);
+        const toolStartTime = Date.now();
+        console.log(`[Chat:${requestId}] [Tool ${i + 1}/${initialResponse.tool_calls.length}] Starting: ${toolCall.name}`);
+        console.log(`[Chat:${requestId}] [Tool ${i + 1}/${initialResponse.tool_calls.length}] Arguments: ${JSON.stringify(toolCall.args).substring(0, 200)}`);
 
         const tool = tools.find(t => t.name === toolCall.name);
         if (!tool) {
-          console.error(`[Chat:${requestId}] Tool '${toolCall.name}' not found in available tools`);
+          console.error(`[Chat:${requestId}] ❌ Tool '${toolCall.name}' not found in available tools: [${tools.map(t => t.name).join(', ')}]`);
           toolResults.push({
             tool_call_id: toolCall.id,
             output: `Error: Tool ${toolCall.name} not found`
@@ -369,16 +413,32 @@ Use tools to make informed decisions.`
 
         try {
           const result = await tool.func(toolCall.args);
+          const toolDuration = Date.now() - toolStartTime;
+
+          // Log result summary
+          let resultSummary = 'Unknown result';
+          if (Array.isArray(result)) {
+            resultSummary = `Array with ${result.length} items`;
+          } else if (result && typeof result === 'object') {
+            resultSummary = `Object with keys: ${Object.keys(result).slice(0, 5).join(', ')}`;
+          } else {
+            resultSummary = String(result).substring(0, 100);
+          }
+
+          console.log(`[Chat:${requestId}] ✅ [Tool ${i + 1}/${initialResponse.tool_calls.length}] ${toolCall.name} completed in ${toolDuration}ms`);
+          console.log(`[Chat:${requestId}] [Tool ${i + 1}/${initialResponse.tool_calls.length}] Result: ${resultSummary}`);
+
           toolResults.push({
             tool_call_id: toolCall.id,
             output: result
           });
-          console.log(`[Chat:${requestId}] Tool ${toolCall.name} completed successfully`);
         } catch (error) {
+          const toolDuration = Date.now() - toolStartTime;
           const errorMessage = error instanceof Error ? error.message : String(error);
-          console.error(`[Chat:${requestId}] Tool ${toolCall.name} failed with error: ${errorMessage}`);
+          console.error(`[Chat:${requestId}] ❌ [Tool ${i + 1}/${initialResponse.tool_calls.length}] ${toolCall.name} failed after ${toolDuration}ms`);
+          console.error(`[Chat:${requestId}] [Tool ${i + 1}/${initialResponse.tool_calls.length}] Error: ${errorMessage}`);
           if (error instanceof Error && error.stack) {
-            console.error(`[Chat:${requestId}] Stack trace:`, error.stack.split('\n').slice(0, 5).join('\n'));
+            console.error(`[Chat:${requestId}] [Tool ${i + 1}/${initialResponse.tool_calls.length}] Stack:`, error.stack.split('\n').slice(0, 3).join('\n'));
           }
           toolResults.push({
             tool_call_id: toolCall.id,
@@ -386,6 +446,8 @@ Use tools to make informed decisions.`
           });
         }
       }
+
+      console.log(`[Chat:${requestId}] === ALL TOOL CALLS COMPLETE ===`);
 
       // Create tool response message
       const toolMessage = {
@@ -397,12 +459,20 @@ Use tools to make informed decisions.`
       };
 
       // Get final response from Claude with tool results
-      console.log(`[Chat:${requestId}] Getting final response with tool results...`);
+      console.log(`[Chat:${requestId}] === GETTING FINAL RESPONSE FROM CLAUDE ===`);
+      console.log(`[Chat:${requestId}] Sending ${toolResults.length} tool results back to Claude`);
+
+      const finalStartTime = Date.now();
       finalResponse = await llm.invoke([
         ...messages,
         initialResponse,
         new SystemMessage(`Tool execution results:\n${toolMessage.content}`)
       ]);
+
+      const finalDuration = Date.now() - finalStartTime;
+      console.log(`[Chat:${requestId}] ✅ Final response received in ${finalDuration}ms`);
+      console.log(`[Chat:${requestId}] Final response type: ${typeof finalResponse?.content}`);
+      console.log(`[Chat:${requestId}] Final response length: ${typeof finalResponse?.content === 'string' ? finalResponse.content.length : 'N/A'} chars`);
     }
 
     // Extract response content with proper type guard
@@ -421,7 +491,10 @@ Use tools to make informed decisions.`
     }
 
     const duration = Date.now() - startTime;
-    console.log(`[Chat:${requestId}] === COMPLETE (${duration}ms) ===`);
+    console.log(`[Chat:${requestId}] === REQUEST COMPLETE ===`);
+    console.log(`[Chat:${requestId}] Total duration: ${duration}ms`);
+    console.log(`[Chat:${requestId}] Response preview: "${responseContent.substring(0, 100)}${responseContent.length > 100 ? '...' : ''}"`);
+    console.log(`[Chat:${requestId}] Conversation length: ${[...request.conversationHistory, { role: 'user', content: request.message }].length + 1} messages`);
 
     return c.json({
       message: responseContent,
@@ -436,11 +509,18 @@ Use tools to make informed decisions.`
 
   } catch (error) {
     const duration = Date.now() - startTime;
+    console.error(`[Chat:${requestId}] ${'='.repeat(50)}`);
+    console.error(`[Chat:${requestId}] === REQUEST FAILED ===`);
+    console.error(`[Chat:${requestId}] Duration: ${duration}ms`);
+    console.error(`[Chat:${requestId}] Error type: ${error instanceof Error ? error.constructor.name : typeof error}`);
 
     // Detailed error logging
     if (error instanceof z.ZodError) {
-      console.error(`[Chat:${requestId}] Request validation failed after ${duration}ms`);
-      console.error(`[Chat:${requestId}] Validation errors:`, error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', '));
+      console.error(`[Chat:${requestId}] ❌ Request validation failed`);
+      console.error(`[Chat:${requestId}] Validation errors:`);
+      error.errors.forEach((e, i) => {
+        console.error(`[Chat:${requestId}]   ${i + 1}. ${e.path.join('.')}: ${e.message}`);
+      });
       return c.json({
         error: 'Invalid request format',
         details: error.errors,
@@ -493,9 +573,11 @@ Use tools to make informed decisions.`
       }
     }
 
-    console.error(`[Chat:${requestId}] Unexpected error after ${duration}ms:`, error);
+    console.error(`[Chat:${requestId}] ❌ Unexpected error:`, error);
+    console.error(`[Chat:${requestId}] ${'='.repeat(50)}`);
     return c.json({
       error: error instanceof Error ? error.message : 'An unexpected error occurred',
+      errorType: error instanceof Error ? error.constructor.name : 'UnknownError',
       requestId,
       duration
     }, 500);
