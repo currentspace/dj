@@ -30,13 +30,13 @@ pnpm run lint         # ESLint
 
 ## Architecture
 
-### Frontend (web/)
+### Frontend (apps/web/)
 - **React 19.1** with TypeScript
 - **Vite** for build tooling
-- Located in `web/src/`
-- Components in `web/src/components/`
-- API client in `web/src/lib/api.ts`
-- Spotify auth hook in `web/src/hooks/useSpotifyAuth.ts`
+- Located in `apps/web/src/`
+- Components in `apps/web/src/components/`
+- API client in `apps/web/src/lib/api-client.ts`
+- Spotify auth hook in `apps/web/src/hooks/useSpotifyAuth.ts`
 
 ### Backend (workers/api/)
 - **Cloudflare Worker** using Hono framework

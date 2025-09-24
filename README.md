@@ -78,16 +78,21 @@ pnpm run deploy
 
 ```
 /
-├── web/              # React frontend
-│   └── src/
-│       ├── components/
-│       ├── hooks/
-│       └── lib/
-├── src/
-│   └── worker/       # Cloudflare Worker backend
-│       └── routes/   # API endpoints
-├── dist/            # Build output
-└── wrangler.toml    # Cloudflare configuration
+├── apps/
+│   └── web/          # React frontend application
+│       └── src/
+│           ├── components/
+│           ├── features/
+│           ├── hooks/
+│           └── lib/
+├── packages/
+│   ├── api-client/   # Shared API client
+│   └── shared-types/ # Shared TypeScript types
+├── workers/
+│   ├── api/          # Main Cloudflare Worker backend
+│   │   └── src/routes/   # API endpoints
+│   └── webhooks/     # Webhook handler worker
+└── scripts/          # Build and utility scripts
 ```
 
 ## Tech Stack
