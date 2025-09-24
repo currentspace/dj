@@ -39,13 +39,13 @@ mcpRouter.all('/', async (c) => {
   const origin = c.req.header('Origin') || '';
   const requestId = crypto.randomUUID().substring(0, 8);
 
-  console.log(`[MCP:${requestId}] === STREAMABLE HTTP REQUEST ===`);
+  console.log(`[MCP:${requestId}] === MCP ENDPOINT HIT ===`);
+  console.log(`[MCP:${requestId}] URL: ${c.req.url}`);
   console.log(`[MCP:${requestId}] Method: ${method}`);
   console.log(`[MCP:${requestId}] Accept: ${acceptHeader}`);
   console.log(`[MCP:${requestId}] User-Agent: ${userAgent.substring(0, 100)}${userAgent.length > 100 ? '...' : ''}`);
   console.log(`[MCP:${requestId}] Origin: ${origin}`);
   console.log(`[MCP:${requestId}] Session-Id: ${sessionId?.substring(0, 8) || 'none'}`);
-  console.log(`[MCP:${requestId}] URL: ${c.req.url}`);
 
   // Validate authorization
   const authorization = c.req.header('Authorization');
@@ -478,6 +478,22 @@ mcpRouter.post('/session/create', async (c) => {
       requestId: sessionRequestId
     }, 500);
   }
+});
+
+/**
+ * Simple health check endpoint (no auth required)
+ */
+mcpRouter.get('/health', async (c) => {
+  const healthId = crypto.randomUUID().substring(0, 8);
+  console.log(`[MCP-Health:${healthId}] Health check requested`);
+
+  return c.json({
+    status: 'healthy',
+    timestamp: Date.now(),
+    server: 'spotify-mcp-server',
+    version: '2.0.0',
+    healthId
+  });
 });
 
 /**
