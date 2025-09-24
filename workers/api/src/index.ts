@@ -7,6 +7,7 @@ import { chatRouter } from './routes/chat'
 import { testRouter } from './routes/test'
 import { mcpRouter } from './routes/mcp'
 import { mcpChatRouter } from './routes/chat-mcp-integrated'
+import { langchainMcpChatRouter } from './routes/chat-langchain-mcp'
 
 export interface Env {
   ANTHROPIC_API_KEY: string
@@ -30,6 +31,7 @@ app.route('/api/spotify', spotifyRouter)
 app.route('/api/playlist', playlistRouter)
 app.route('/api/chat', chatRouter)
 app.route('/api/chat-mcp', mcpChatRouter) // NEW: Direct MCP integration
+app.route('/api/chat-langchain-mcp', langchainMcpChatRouter) // NEW: LangChain-style MCP integration
 app.route('/api/test', testRouter)
 app.route('/api/mcp', mcpRouter)
 
