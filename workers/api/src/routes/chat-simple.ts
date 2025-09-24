@@ -548,7 +548,10 @@ Use tools to make informed decisions.`
       if (error.message.includes('529') || error.message.includes('overloaded')) {
         console.error(`[Chat:${requestId}] Anthropic service overloaded`);
         return c.json({
-          error: 'AI service is currently overloaded. Please try again in a few moments.',
+          error: 'The AI service is experiencing high demand right now. Please try again in a few moments - this usually resolves quickly.',
+          errorType: 'ServiceOverloaded',
+          retryable: true,
+          suggestedWaitTime: 30,
           requestId,
           duration
         }, 503);

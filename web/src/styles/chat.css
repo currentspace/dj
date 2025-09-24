@@ -109,6 +109,18 @@
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
+.message-content strong {
+  color: #333;
+  font-weight: 600;
+  display: block;
+  margin-bottom: 0.5rem;
+}
+
+.message-content ul {
+  margin: 0.5rem 0;
+  padding-left: 1.5rem;
+}
+
 .message.user .message-content {
   background: #667eea;
   color: white;

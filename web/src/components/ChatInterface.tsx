@@ -50,17 +50,32 @@ export function ChatInterface() {
       console.error('Chat error:', error)
 
       let errorMessage = 'Sorry, I encountered an error.'
+      let isRetryable = false
 
-      if (error instanceof Error) {
+      // Check if it's an API response error with details
+      if (error instanceof Error && error.message.includes('high demand')) {
+        errorMessage = `🔄 **Service Temporarily Busy**\n\nThe AI service is experiencing high demand right now. This is temporary and usually resolves within a minute.\n\n**What you can do:**\n• Wait about 30 seconds and try again\n• Your message is saved above - just click Send again\n• This typically clears up quickly during peak times`
+        isRetryable = true
+      } else if (error instanceof Error) {
         if (error.message.includes('overloaded') || error.message.includes('503')) {
-          errorMessage = '🔄 The AI service is currently experiencing high demand. Please try again in a moment. This usually resolves quickly!'
+          errorMessage = `🔄 **Service Temporarily Unavailable**\n\nThe AI DJ is taking a quick break due to high demand.\n\n• Please try again in about 30 seconds\n• Your conversation is saved\n• This usually resolves quickly!`
+          isRetryable = true
         } else if (error.message.includes('rate limit') || error.message.includes('429')) {
-          errorMessage = '⏳ Rate limit reached. Please wait a few seconds before sending another message.'
+          errorMessage = '⏳ **Rate Limit Reached**\n\nYou\'re sending messages too quickly. Please wait about 10 seconds before trying again.'
+          isRetryable = true
         } else if (error.message.includes('Authentication')) {
-          errorMessage = '🔑 Your Spotify session has expired. Please refresh the page and log in again.'
+          errorMessage = '🔑 **Session Expired**\n\nYour Spotify session has expired. Please refresh the page and log in again.'
         } else {
           errorMessage = `Sorry, I encountered an error: ${error.message}`
         }
+      }
+
+      // Add retry hint if applicable
+      if (isRetryable && !loading) {
+        setTimeout(() => {
+          // Re-enable the input after suggested wait time
+          setLoading(false)
+        }, 5000)
       }
 
       setMessages([...newMessages, {
@@ -107,7 +122,16 @@ export function ChatInterface() {
               {message.role === 'user' ? '👤' : '🎧'}
             </div>
             <div className="message-content">
-              {message.content}
+              {message.content.includes('**') ? (
+                <div dangerouslySetInnerHTML={{
+                  __html: message.content
+                    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                    .replace(/\n/g, '<br />')
+                    .replace(/• /g, '&bull; ')
+                }} />
+              ) : (
+                message.content
+              )}
             </div>
           </div>
         ))}
