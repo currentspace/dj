@@ -43,6 +43,11 @@ function sendSSE(stream: HonoStreamWriter, event: StreamEvent) {
 /**
  * Create Spotify tools with streaming callbacks
  */
+// Helper function to send progress updates to UI
+function sendProgress(stream: HonoStreamWriter, message: string) {
+  sendSSE(stream, { type: 'thinking', data: message });
+}
+
 function createStreamingSpotifyTools(
   spotifyToken: string,
   stream: HonoStreamWriter,
@@ -88,6 +93,7 @@ function createStreamingSpotifyTools(
         let finalArgs = { ...args };
         if (!args.playlist_id && contextPlaylistId) {
           console.log(`[analyze_playlist] Auto-injecting playlist_id: ${contextPlaylistId}`);
+          sendProgress(stream, `🎵 Using selected playlist for analysis...`);
           finalArgs.playlist_id = contextPlaylistId;
         }
 
@@ -96,17 +102,97 @@ function createStreamingSpotifyTools(
           data: { tool: 'analyze_playlist', args: finalArgs }
         });
 
-        const result = await executeSpotifyTool('analyze_playlist', finalArgs, spotifyToken);
+        // Enhanced progress tracking
+        sendProgress(stream, '📊 Starting playlist analysis...');
 
-        sendSSE(stream, {
-          type: 'tool_end',
-          data: {
-            tool: 'analyze_playlist',
-            result: result?.playlist_name ? `Analyzed "${result.playlist_name}"` : 'Analysis complete'
+        try {
+          // Step 1: Get playlist details
+          sendProgress(stream, '🔍 Fetching playlist information...');
+          const playlistResponse = await fetch(
+            `https://api.spotify.com/v1/playlists/${finalArgs.playlist_id}`,
+            { headers: { 'Authorization': `Bearer ${spotifyToken}` } }
+          );
+
+          if (!playlistResponse.ok) {
+            throw new Error(`Failed to get playlist: ${playlistResponse.status}`);
           }
-        });
 
-        return result;
+          const playlist = await playlistResponse.json() as any;
+          sendProgress(stream, `🎼 Found "${playlist.name}" with ${playlist.tracks?.total || 0} tracks`);
+
+          // Step 2: Get tracks
+          sendProgress(stream, '🎵 Fetching track details...');
+          const tracksResponse = await fetch(
+            `https://api.spotify.com/v1/playlists/${finalArgs.playlist_id}/tracks?limit=100`,
+            { headers: { 'Authorization': `Bearer ${spotifyToken}` } }
+          );
+
+          if (!tracksResponse.ok) {
+            throw new Error(`Failed to get tracks: ${tracksResponse.status}`);
+          }
+
+          const tracksData = await tracksResponse.json() as any;
+          const tracks = tracksData.items.map((item: any) => item.track).filter(Boolean);
+          const trackIds = tracks.map((t: any) => t.id).filter(Boolean);
+
+          sendProgress(stream, `✅ Loaded ${tracks.length} tracks successfully`);
+
+          // Step 3: Get audio features
+          let audioFeatures = [];
+          if (trackIds.length > 0) {
+            sendProgress(stream, `🎚️ Analyzing audio characteristics of ${trackIds.length} tracks...`);
+
+            const featuresResponse = await fetch(
+              `https://api.spotify.com/v1/audio-features?ids=${trackIds.slice(0, 100).join(',')}`,
+              { headers: { 'Authorization': `Bearer ${spotifyToken}` } }
+            );
+
+            if (featuresResponse.ok) {
+              const featuresData = await featuresResponse.json() as any;
+              audioFeatures = featuresData.audio_features || [];
+              const validFeatures = audioFeatures.filter((f: any) => f !== null);
+              sendProgress(stream, `🎯 Audio analysis complete! Got data for ${validFeatures.length} tracks`);
+            } else {
+              sendProgress(stream, `⚠️ Audio features unavailable (${featuresResponse.status}) - continuing with basic analysis`);
+            }
+          }
+
+          // Step 4: Calculate analysis
+          sendProgress(stream, '🧮 Computing musical insights...');
+          const validFeatures = audioFeatures.filter((f: any) => f !== null);
+
+          const analysis = {
+            playlist_name: playlist.name,
+            playlist_description: playlist.description,
+            total_tracks: tracks.length,
+            audio_analysis: validFeatures.length > 0 ? {
+              avg_energy: validFeatures.reduce((sum: number, f: any) => sum + f.energy, 0) / validFeatures.length,
+              avg_danceability: validFeatures.reduce((sum: number, f: any) => sum + f.danceability, 0) / validFeatures.length,
+              avg_valence: validFeatures.reduce((sum: number, f: any) => sum + f.valence, 0) / validFeatures.length,
+              avg_tempo: validFeatures.reduce((sum: number, f: any) => sum + f.tempo, 0) / validFeatures.length,
+              avg_acousticness: validFeatures.reduce((sum: number, f: any) => sum + f.acousticness, 0) / validFeatures.length,
+              avg_instrumentalness: validFeatures.reduce((sum: number, f: any) => sum + f.instrumentalness, 0) / validFeatures.length,
+            } : null,
+            tracks: tracks.slice(0, 20),
+            audio_features: audioFeatures.slice(0, 20)
+          };
+
+          sendProgress(stream, `🎉 Analysis complete for "${analysis.playlist_name}"!`);
+
+          sendSSE(stream, {
+            type: 'tool_end',
+            data: {
+              tool: 'analyze_playlist',
+              result: `Analyzed "${analysis.playlist_name}" with ${analysis.total_tracks} tracks`
+            }
+          });
+
+          return analysis;
+
+        } catch (error) {
+          sendProgress(stream, `❌ Analysis failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          throw error;
+        }
       }
     }),
 

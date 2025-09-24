@@ -596,7 +596,10 @@ async function analyzePlaylist(args: any, token: string) {
       audioFeatures = featuresData.audio_features || [];
       console.log(`[analyzePlaylist] Got audio features for ${audioFeatures.filter(f => f).length} tracks`);
     } else {
-      console.warn(`[analyzePlaylist] Failed to get audio features: ${featuresResponse.status}`);
+      const errorText = await featuresResponse.text();
+      console.error(`[analyzePlaylist] Failed to get audio features: ${featuresResponse.status} - ${errorText}`);
+      console.error(`[analyzePlaylist] Request URL: https://api.spotify.com/v1/audio-features?ids=${trackIds.slice(0, 100).join(',').substring(0, 200)}...`);
+      console.error(`[analyzePlaylist] Token starts with: ${token.substring(0, 10)}...`);
     }
   }
 

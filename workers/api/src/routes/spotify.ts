@@ -110,7 +110,7 @@ spotifyRouter.get('/auth-url', async (c) => {
     redirect_uri: REDIRECT_URI,
     code_challenge_method: 'S256',
     code_challenge: codeChallenge,
-    scope: 'playlist-modify-public playlist-modify-private user-read-private',
+    scope: 'playlist-modify-public playlist-modify-private user-read-private user-read-playback-state user-read-currently-playing user-read-recently-played user-top-read',
     show_dialog: 'true',
     state: state // Only random state in URL, no secrets
   })
