@@ -60,9 +60,15 @@ mcpChatRouter.post('/message', async (c) => {
 
     // Build system prompt based on mode
     const systemPrompts = {
-      analyze: `You are an expert music analyst with access to Spotify tools. Analyze playlists thoroughly using available tools.
+      analyze: `You are an expert music analyst with access to Spotify tools. You MUST use tools to answer any music-related questions.
 
-AVAILABLE TOOLS - USE THEM ACTIVELY:
+CRITICAL INSTRUCTIONS:
+1. NEVER answer music questions without using tools first
+2. ALWAYS search for tracks before discussing them
+3. ALWAYS get audio features before analyzing energy/mood
+4. Use multiple tools in sequence for complete analysis
+
+AVAILABLE TOOLS - USE THEM FOR EVERY RESPONSE:
 - search_spotify_tracks: Search for tracks with filters
 - get_audio_features: Get detailed audio analysis
 - get_recommendations: Get AI recommendations
@@ -70,7 +76,7 @@ AVAILABLE TOOLS - USE THEM ACTIVELY:
 - create_playlist: Create new playlists
 - modify_playlist: Add/remove tracks
 
-IMPORTANT: Always use tools to provide data-driven analysis. Don't make assumptions.`,
+WORKFLOW: search_spotify_tracks → get_audio_features → analyze → respond`,
 
       create: `You are an expert DJ with access to Spotify tools. Create perfect playlists using real-time data.
 
@@ -116,7 +122,7 @@ Always explain your reasoning for changes.`
         description: tool.description,
         input_schema: tool.input_schema
       })),
-      tool_choice: { type: 'auto' }
+      tool_choice: { type: 'any' } // Force tool usage
     });
 
     console.log(`[Chat:${requestId}] Claude response received, processing...`);
@@ -223,6 +229,94 @@ Always explain your reasoning for changes.`
     return c.json({
       error: error instanceof Error ? error.message : 'Chat request failed',
       requestId
+    }, 500);
+  }
+});
+
+/**
+ * Debug endpoint to verify tool setup
+ */
+mcpChatRouter.post('/debug', async (c) => {
+  const debugId = crypto.randomUUID().substring(0, 8);
+  console.log(`[Debug:${debugId}] === DEBUGGING TOOL SETUP ===`);
+
+  try {
+    const spotifyToken = c.req.header('Authorization')?.replace('Bearer ', '');
+    if (!spotifyToken) {
+      return c.json({ error: 'Spotify token required' }, 401);
+    }
+
+    // Initialize Anthropic
+    const anthropic = new Anthropic({
+      apiKey: c.env.ANTHROPIC_API_KEY,
+    });
+
+    console.log(`[Debug:${debugId}] Testing basic Claude call with tools...`);
+
+    // Test with explicit tool request
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1000,
+      system: `You are a music assistant with access to Spotify tools. You MUST use tools to answer questions.
+
+AVAILABLE TOOLS:
+- search_spotify_tracks: Search for tracks on Spotify
+- get_audio_features: Get detailed audio analysis
+
+IMPORTANT: When a user asks about music, ALWAYS use the search_spotify_tracks tool first.`,
+      messages: [
+        {
+          role: 'user',
+          content: 'Search for exactly 3 rock tracks from the 90s. Use the search tool.'
+        }
+      ],
+      tools: [
+        {
+          name: 'search_spotify_tracks',
+          description: 'Search for tracks on Spotify with optional filters',
+          input_schema: {
+            type: 'object',
+            properties: {
+              query: {
+                type: 'string',
+                description: 'Search query (artist, song, genre, etc.)'
+              },
+              limit: {
+                type: 'number',
+                description: 'Number of results (1-50)',
+                default: 10
+              }
+            },
+            required: ['query']
+          }
+        }
+      ],
+      tool_choice: { type: 'any' } // Force tool usage
+    });
+
+    console.log(`[Debug:${debugId}] Claude response received`);
+    console.log(`[Debug:${debugId}] Content blocks:`, response.content.length);
+
+    const result = {
+      debugId,
+      contentBlocks: response.content.map(block => ({
+        type: block.type,
+        ...(block.type === 'text' ? { text: block.text.substring(0, 100) } : {}),
+        ...(block.type === 'tool_use' ? { tool_name: block.name, tool_input: block.input } : {})
+      })),
+      hasToolCalls: response.content.some(block => block.type === 'tool_use'),
+      anthropicModel: 'claude-sonnet-4-20250514'
+    };
+
+    console.log(`[Debug:${debugId}] Tool calls detected:`, result.hasToolCalls);
+
+    return c.json(result);
+
+  } catch (error) {
+    console.error(`[Debug:${debugId}] Debug failed:`, error);
+    return c.json({
+      error: error instanceof Error ? error.message : 'Debug failed',
+      debugId
     }, 500);
   }
 });
