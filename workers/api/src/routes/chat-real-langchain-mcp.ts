@@ -8,6 +8,7 @@ import { createReactAgent } from 'langchain/agents';
 import { HumanMessage, SystemMessage, AIMessage } from '@langchain/core/messages';
 import { withLoopbackFetch } from '../lib/withLoopbackFetch';
 import { withFetchLogging } from '../lib/withFetchLogging';
+import { convertMCPToolsToLangChain } from '../lib/mcp-to-langchain';
 
 const realLangChainMcpRouter = new Hono<{ Bindings: Env }>();
 
@@ -107,22 +108,27 @@ realLangChainMcpRouter.post('/message', async (c) => {
 
             console.log(`[RealLangChainMCP:${requestId}] Calling getTools()...`);
             const toolsStartTime = Date.now();
-            const tools = await client.getTools();
+            const mcpTools = await client.getTools();
             const toolsDuration = Date.now() - toolsStartTime;
 
             console.log(`[RealLangChainMCP:${requestId}] getTools() completed in ${toolsDuration}ms`);
-            console.log(`[RealLangChainMCP:${requestId}] Discovered ${tools.length} tools`);
+            console.log(`[RealLangChainMCP:${requestId}] Discovered ${mcpTools.length} MCP tools`);
 
-            if (tools.length > 0) {
-              console.log(`[RealLangChainMCP:${requestId}] Tool names: [${tools.map((t: any) => t.name || 'unnamed').join(', ')}]`);
+            if (mcpTools.length > 0) {
+              console.log(`[RealLangChainMCP:${requestId}] MCP tool names: [${mcpTools.map((t: any) => t.name || 'unnamed').join(', ')}]`);
             }
+
+            // Convert MCP tools to LangChain format
+            console.log(`[RealLangChainMCP:${requestId}] Converting MCP tools to LangChain format...`);
+            const langchainTools = convertMCPToolsToLangChain(mcpTools, sessionToken);
+            console.log(`[RealLangChainMCP:${requestId}] Converted ${langchainTools.length} tools to LangChain format`);
 
             // Clean up
             try {
               await client.close();
             } catch {}
 
-            return tools;
+            return langchainTools;
           }),
         { pathPrefix: '/api/mcp' }
       );
