@@ -360,6 +360,15 @@ async function searchSpotifyTracks(args: z.infer<typeof SearchTracksSchema>, tok
 async function getAudioFeatures(args: any, token: string) {
   const { track_ids } = args;
 
+  console.log(`[getAudioFeatures] Starting with args:`, JSON.stringify(args));
+  console.log(`[getAudioFeatures] Extracted track_ids:`, track_ids);
+
+  if (!track_ids || !Array.isArray(track_ids) || track_ids.length === 0) {
+    console.error(`[getAudioFeatures] CRITICAL: track_ids is missing, not an array, or empty!`);
+    throw new Error('track_ids parameter is required and must be a non-empty array');
+  }
+
+  console.log(`[getAudioFeatures] Fetching audio features for ${track_ids.length} tracks`);
   const response = await fetch(
     `https://api.spotify.com/v1/audio-features?ids=${track_ids.join(',')}`,
     {
@@ -367,12 +376,18 @@ async function getAudioFeatures(args: any, token: string) {
     }
   );
 
+  console.log(`[getAudioFeatures] API response status: ${response.status}`);
+
   if (!response.ok) {
+    const errorText = await response.text();
+    console.error(`[getAudioFeatures] Failed to get audio features: ${response.status} - ${errorText}`);
     throw new Error(`Failed to get audio features: ${response.status}`);
   }
 
   const data = await response.json() as any;
-  return data.audio_features || [];
+  const features = data.audio_features || [];
+  console.log(`[getAudioFeatures] Retrieved ${features.length} audio features`);
+  return features;
 }
 
 async function getRecommendations(args: any, token: string) {

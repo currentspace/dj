@@ -316,14 +316,17 @@ chatStreamRouter.post('/message', async (c) => {
 ${playlistId ? `IMPORTANT: The user has selected a playlist. Playlist ID: ${playlistId}
 
 CRITICAL INSTRUCTIONS:
-- When the user asks ANYTHING about this playlist, IMMEDIATELY call analyze_playlist with the parameter: {"playlist_id": "${playlistId}"}
-- Examples that require analyze_playlist:
-  * "test" → call analyze_playlist({"playlist_id": "${playlistId}"})
-  * "analyze this" → call analyze_playlist({"playlist_id": "${playlistId}"})
-  * "what failed" → call analyze_playlist({"playlist_id": "${playlistId}"})
-  * "tell me about this playlist" → call analyze_playlist({"playlist_id": "${playlistId}"})
+- When the user asks ANYTHING about this playlist, IMMEDIATELY call analyze_playlist with: {"playlist_id": "${playlistId}"}
+- NEVER call any tool with empty arguments {}
+- ALL tools require specific parameters - do not guess or call with {}
 
-NEVER call analyze_playlist with empty arguments {}. ALWAYS include playlist_id: "${playlistId}"` : ''}
+TOOL USAGE EXAMPLES:
+- analyze_playlist: ALWAYS use {"playlist_id": "${playlistId}"}
+- search_spotify_tracks: ALWAYS use {"query": "search term", "limit": 10}
+- get_audio_features: ALWAYS use {"track_ids": ["track_id_1", "track_id_2"]}
+
+If you don't have the required parameters for a tool, explain what you need from the user instead of calling the tool with empty args.` : ''}
+
 Be concise and helpful. Use tools to get real data.`;
 
       sendSSE(stream, {
