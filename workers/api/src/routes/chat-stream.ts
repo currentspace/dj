@@ -645,6 +645,7 @@ Be concise and helpful. Use tools to get real data.`;
           message: `[${requestId}] Messages prepared: ${messages.length} total, sending to Claude...`
         }
       });
+      console.log(`[Stream:${requestId}] User message: "${actualMessage}"`);
 
       // Stream the response
       let fullResponse = '';
@@ -701,7 +702,7 @@ Be concise and helpful. Use tools to get real data.`;
         }
       }
 
-      console.log(`[Stream:${requestId}] Initial streaming complete. Chunks: ${chunkCount}, Tool calls: ${toolCalls.length}`);
+      console.log(`[Stream:${requestId}] Initial streaming complete. Chunks: ${chunkCount}, Tool calls: ${toolCalls.length}, Content length: ${fullResponse.length}`);
 
       // If there were tool calls, execute them
       if (toolCalls.length > 0) {
@@ -757,13 +758,18 @@ Be concise and helpful. Use tools to get real data.`;
         await sseWriter.write({ type: 'thinking', data: 'Preparing response...' });
 
         console.log(`[Stream:${requestId}] Sending tool results back to Claude...`);
+        console.log(`[Stream:${requestId}] Full response so far: "${fullResponse.substring(0, 100)}"`);
 
         // Build the full conversation including tool results
+        // If Claude sent no content initially, we still need to pass something
+        const aiMessageContent = fullResponse || '';
+        console.log(`[Stream:${requestId}] Creating AIMessage with content length: ${aiMessageContent.length}, tool calls: ${toolCalls.length}`);
         const finalMessages = [
           ...messages,
-          new AIMessage({ content: fullResponse, tool_calls: toolCalls }),
+          new AIMessage({ content: aiMessageContent, tool_calls: toolCalls }),
           ...toolMessages
         ];
+        console.log(`[Stream:${requestId}] Final messages array has ${finalMessages.length} messages`);
 
         const finalResponse = await modelWithTools.stream(finalMessages, { signal: abortController.signal });
 
@@ -782,7 +788,13 @@ Be concise and helpful. Use tools to get real data.`;
             console.log(`[Stream:${requestId}] Final chunk ${finalChunkCount}: ${chunk.content.substring(0, 50)}...`);
           }
         }
-        console.log(`[Stream:${requestId}] Final response complete. Chunks: ${finalChunkCount}`);
+        console.log(`[Stream:${requestId}] Final response complete. Chunks: ${finalChunkCount}, Total content: ${fullResponse.length} chars`);
+
+        // If still no response after tool execution, something went wrong
+        if (fullResponse.length === 0) {
+          console.error(`[Stream:${requestId}] WARNING: No content received from Claude after tool execution!`);
+          await sseWriter.write({ type: 'content', data: 'I analyzed your playlist but encountered an issue generating a response. The playlist has been successfully analyzed though.' });
+        }
       }
 
       // Send completion
