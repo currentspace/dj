@@ -69,6 +69,7 @@ export class ChatStreamClient {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'text/event-stream',
           'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
@@ -83,6 +84,14 @@ export class ChatStreamClient {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
+      // Validate content-type
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('text/event-stream')) {
+        // Try to get error details if server sent JSON
+        const errorText = await response.text().catch(() => 'Unknown error');
+        throw new Error(`Unexpected content-type: ${contentType}. Response: ${errorText}`);
+      }
+
       if (!response.body) {
         throw new Error('No response body');
       }
@@ -92,34 +101,92 @@ export class ChatStreamClient {
       const decoder = new TextDecoder();
       let buffer = '';
 
+      // Helper to process complete SSE events (events are separated by blank lines)
+      const processSSEEvents = (): boolean => {
+        // Normalize CRLF to LF and split by double-newline (event boundary)
+        const normalizedBuffer = buffer.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+        const events = normalizedBuffer.split('\n\n');
+
+        // Keep the last incomplete event in the buffer
+        buffer = events.pop() || '';
+
+        for (const eventBlock of events) {
+          if (!eventBlock.trim()) continue;
+
+          // Parse the event block
+          const lines = eventBlock.split('\n');
+          let eventType = 'message';
+          const dataLines: string[] = [];
+          let eventId: string | undefined;
+
+          for (const line of lines) {
+            // Skip comments (lines starting with ':')
+            if (line.startsWith(':') || !line.trim()) continue;
+
+            if (line.startsWith('event:')) {
+              eventType = line.slice(6).trim();
+            } else if (line.startsWith('data:')) {
+              dataLines.push(line.slice(5).trimStart());
+            } else if (line.startsWith('id:')) {
+              eventId = line.slice(3).trim();
+            }
+          }
+
+          // Process the collected data lines
+          if (dataLines.length > 0) {
+            const dataStr = dataLines.join('\n');
+
+            // Handle heartbeat messages
+            if (dataStr.trim() === '') {
+              continue; // Skip empty data (heartbeats)
+            }
+
+            try {
+              const parsed = JSON.parse(dataStr);
+
+              // Handle our event format: {type: string, data: any}
+              if (typeof parsed === 'object' && parsed && 'type' in parsed) {
+                const event = parsed as StreamEvent;
+
+                // Check for done event
+                if (event.type === 'done') {
+                  callbacks.onDone?.();
+                  return true; // Signal to stop processing
+                }
+
+                // Handle the event
+                this.handleEvent(event, callbacks);
+              } else {
+                // Fallback for non-standard events
+                console.warn('Unexpected SSE event format:', parsed);
+              }
+            } catch (error) {
+              console.error('Failed to parse SSE data:', error, dataStr);
+            }
+          }
+        }
+
+        return false; // Continue processing
+      };
+
+      // Read and process the stream
       while (true) {
         const { done, value } = await reader.read();
 
         if (done) {
+          // Process any remaining buffered data
+          if (buffer.trim()) {
+            processSSEEvents();
+          }
           break;
         }
 
         buffer += decoder.decode(value, { stream: true });
 
-        // Process complete events from buffer
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || ''; // Keep incomplete line in buffer
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6);
-            if (data === '[DONE]') {
-              callbacks.onDone?.();
-              return;
-            }
-
-            try {
-              const event: StreamEvent = JSON.parse(data);
-              this.handleEvent(event, callbacks);
-            } catch (error) {
-              console.error('Failed to parse SSE event:', data);
-            }
-          }
+        // Process complete events in the buffer
+        if (processSSEEvents()) {
+          // Done event received, stop processing
+          break;
         }
       }
 
@@ -183,7 +250,7 @@ export class ChatStreamClient {
       this.eventSource = null;
     }
     if (this.abortController) {
-      this.abortController.abort();
+      this.abortController.abort('Client requested close');
       this.abortController = null;
     }
   }
