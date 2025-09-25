@@ -723,28 +723,21 @@ Be concise and helpful. Use tools to get real data.`;
             try {
               const result = await tool.func(toolCall.args);
               console.log(`[Stream:${requestId}] Tool ${toolCall.name} completed successfully`);
+              console.log(`[Stream:${requestId}] Tool result type: ${typeof result}`);
+              console.log(`[Stream:${requestId}] Tool result keys: ${typeof result === 'object' ? Object.keys(result || {}).join(', ') : 'N/A'}`);
 
-              // Create a summary instead of full JSON for Claude
-              let toolResultSummary = '';
-              if (toolCall.name === 'analyze_playlist' && result && typeof result === 'object') {
-                const r = result as any;
-                toolResultSummary = `Playlist Analysis Results:
-- Name: ${r.playlist_name || 'Unknown'}
-- Total tracks: ${r.total_tracks || 0}
-- Audio analysis: ${r.audio_analysis ? 'Available' : 'Not available (403 error)'}
-- Tracks found: ${r.tracks?.length || 0} tracks loaded`;
-              } else {
-                toolResultSummary = typeof result === 'string' ? result : JSON.stringify(result).slice(0, 500);
-              }
-
-              console.log(`[Stream:${requestId}] Tool result summary: ${toolResultSummary.substring(0, 200)}`);
+              const toolContent = JSON.stringify(result);
+              console.log(`[Stream:${requestId}] Tool result JSON length: ${toolContent.length}`);
+              console.log(`[Stream:${requestId}] Tool result preview: ${toolContent.substring(0, 300)}...`);
 
               toolMessages.push(
                 new ToolMessage({
-                  content: toolResultSummary,
+                  content: toolContent,
                   tool_call_id: toolCall.id
                 })
               );
+
+              console.log(`[Stream:${requestId}] Created ToolMessage with call_id: ${toolCall.id}`);
             } catch (error) {
               if (abortController.signal.aborted) {
                 throw new Error('Request aborted');
@@ -791,8 +784,14 @@ Be concise and helpful. Use tools to get real data.`;
         console.log(`[Stream:${requestId}] Final messages structure:`);
         finalMessages.forEach((msg, i) => {
           const msgType = msg.constructor.name;
-          const contentPreview = msg.content?.toString().slice(0, 100) || 'no content';
+          const contentPreview = msg.content?.toString().slice(0, 200) || 'no content';
           console.log(`[Stream:${requestId}]   ${i}: ${msgType} - ${contentPreview}`);
+          if (msgType === 'ToolMessage') {
+            console.log(`[Stream:${requestId}]     Tool call ID: ${(msg as any).tool_call_id}`);
+            console.log(`[Stream:${requestId}]     Content length: ${msg.content?.toString().length || 0}`);
+          } else if (msgType === 'AIMessage' && (msg as any).tool_calls) {
+            console.log(`[Stream:${requestId}]     Tool calls: ${(msg as any).tool_calls.map((tc: any) => `${tc.name}(id:${tc.id})`).join(', ')}`);
+          }
         });
 
         const finalResponse = await modelWithTools.stream(finalMessages, { signal: abortController.signal });
@@ -809,7 +808,9 @@ Be concise and helpful. Use tools to get real data.`;
           console.log(`[Stream:${requestId}] Final response chunk ${finalChunkCount}:`, {
             hasContent: !!chunk.content,
             contentLength: chunk.content?.length || 0,
-            chunkKeys: Object.keys(chunk)
+            chunkKeys: Object.keys(chunk),
+            chunkType: chunk.type || 'unknown',
+            fullChunk: finalChunkCount <= 5 ? chunk : 'truncated'
           });
 
           if (typeof chunk.content === 'string' && chunk.content) {
