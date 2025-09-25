@@ -404,6 +404,11 @@ chatStreamRouter.post('/message', async (c) => {
     'Access-Control-Allow-Origin': '*'
   });
 
+  // Get request body, authorization, and environment before starting async processing
+  const requestBody = await c.req.json();
+  const authorization = c.req.header('Authorization');
+  const env = c.env;
+
   // Process the request and stream responses
   const processStream = async () => {
     console.log(`[Stream:${requestId}] Starting async stream processing`);
@@ -444,7 +449,7 @@ chatStreamRouter.post('/message', async (c) => {
       });
 
       // Parse request
-      const body = await c.req.json();
+      const body = requestBody;
       await writeSSE({
         type: 'log',
         data: {
@@ -492,7 +497,6 @@ chatStreamRouter.post('/message', async (c) => {
       }
 
       // Get Spotify token
-      const authorization = c.req.header('Authorization');
       if (!authorization?.startsWith('Bearer ')) {
         await writeSSE({ type: 'error', data: 'Unauthorized - Missing or invalid Authorization header' });
         return;
@@ -514,8 +518,15 @@ chatStreamRouter.post('/message', async (c) => {
       const tools = createStreamingSpotifyTools(spotifyToken, writer, encoder, playlistId, request.mode);
 
       // Initialize Claude with streaming
+      if (!env.ANTHROPIC_API_KEY) {
+        console.error(`[Stream:${requestId}] CRITICAL: ANTHROPIC_API_KEY is not set`);
+        throw new Error('Anthropic API key is not configured');
+      }
+
+      console.log(`[Stream:${requestId}] Initializing Claude with API key: ${env.ANTHROPIC_API_KEY.substring(0, 10)}...`);
+
       const llm = new ChatAnthropic({
-        apiKey: c.env.ANTHROPIC_API_KEY,
+        apiKey: env.ANTHROPIC_API_KEY,
         model: 'claude-3-5-sonnet-20241022',
         temperature: 0.2,
         maxTokens: 2000,
@@ -584,8 +595,24 @@ Be concise and helpful. Use tools to get real data.`;
       console.log(`[Stream:${requestId}] Starting Claude streaming...`);
       await writeSSE({ type: 'thinking', data: 'Analyzing your request...' });
 
-      const response = await modelWithTools.stream(messages);
-      console.log(`[Stream:${requestId}] Claude stream initialized`);
+      let response;
+      try {
+        console.log(`[Stream:${requestId}] Calling modelWithTools.stream() with ${messages.length} messages`);
+        response = await modelWithTools.stream(messages);
+        console.log(`[Stream:${requestId}] Claude stream initialized`);
+      } catch (apiError) {
+        console.error(`[Stream:${requestId}] Anthropic API call failed:`, apiError);
+        if (apiError instanceof Error) {
+          console.error(`[Stream:${requestId}] Error details:`, {
+            name: apiError.name,
+            message: apiError.message,
+            stack: apiError.stack?.substring(0, 500)
+          });
+        }
+        // Try to parse and provide more details
+        const errorMessage = apiError instanceof Error ? apiError.message : 'Unknown API error';
+        throw new Error(`Claude API failed: ${errorMessage}`);
+      }
 
       let chunkCount = 0;
       for await (const chunk of response) {
