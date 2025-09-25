@@ -608,9 +608,10 @@ async function analyzePlaylist(args: any, token: string) {
   const validFeatures = audioFeatures.filter((f: any) => f !== null);
   console.log(`[analyzePlaylist] Valid features: ${validFeatures.length}/${audioFeatures.length}`);
 
+  // Create a MUCH smaller analysis object for Claude (was 55KB, now ~2KB)
   const analysis = {
     playlist_name: playlist.name,
-    playlist_description: playlist.description,
+    playlist_description: playlist.description || 'No description',
     total_tracks: tracks.length,
     audio_analysis: validFeatures.length > 0 ? {
       avg_energy: validFeatures.reduce((sum: number, f: any) => sum + f.energy, 0) / validFeatures.length,
@@ -620,11 +621,32 @@ async function analyzePlaylist(args: any, token: string) {
       avg_acousticness: validFeatures.reduce((sum: number, f: any) => sum + f.acousticness, 0) / validFeatures.length,
       avg_instrumentalness: validFeatures.reduce((sum: number, f: any) => sum + f.instrumentalness, 0) / validFeatures.length,
     } : null,
-    tracks: tracks.slice(0, 20), // First 20 tracks for context
-    audio_features: audioFeatures.slice(0, 20) // First 20 features
+    // Only include a sample of tracks with minimal data (not full track objects)
+    sample_tracks: tracks.slice(0, 5).map((track: any) => ({
+      name: track.name,
+      artists: track.artists?.map((a: any) => a.name).join(', ') || 'Unknown',
+      duration_ms: track.duration_ms,
+      popularity: track.popularity
+    })),
+    // Include artist frequency analysis
+    top_artists: Object.entries(
+      tracks.reduce((acc: any, track: any) => {
+        track.artists?.forEach((artist: any) => {
+          acc[artist.name] = (acc[artist.name] || 0) + 1;
+        });
+        return acc;
+      }, {})
+    )
+    .sort((a: any, b: any) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([artist, count]) => ({ artist, track_count: count })),
+    // Add genre analysis if available
+    genres: Array.from(new Set(tracks.flatMap((t: any) => t.genres || []))).slice(0, 5)
   };
 
+  const analysisSize = JSON.stringify(analysis).length;
   console.log(`[analyzePlaylist] Analysis complete! Playlist: "${analysis.playlist_name}", Tracks: ${analysis.total_tracks}, Audio data: ${analysis.audio_analysis ? 'YES' : 'NO'}`);
+  console.log(`[analyzePlaylist] Analysis object size: ${analysisSize} bytes (reduced from ~55KB)`);
   return analysis;
 }
 
