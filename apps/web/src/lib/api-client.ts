@@ -271,7 +271,8 @@ export async function streamChatMessage(
   message: string,
   history: ChatMessage[],
   mode: 'analyze' | 'create' | 'edit',
-  callbacks: Parameters<typeof chatStreamClient.streamMessage>[3]
+  callbacks: Parameters<typeof chatStreamClient.streamMessage>[3],
+  options?: Parameters<typeof chatStreamClient.streamMessage>[4]
 ) {
-  return chatStreamClient.streamMessage(message, history, mode, callbacks)
+  return chatStreamClient.streamMessage(message, history, mode, callbacks, options)
 }

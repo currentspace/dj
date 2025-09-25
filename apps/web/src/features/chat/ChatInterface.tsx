@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useTransition } from 'react'
+import { useState, useRef, useCallback, useTransition, useEffect } from 'react'
 import { chatStreamClient } from '../../lib/streaming-client'
 import { flushSync } from 'react-dom'
 import type { ChatMessage, SpotifyPlaylist } from '@dj/shared-types'
@@ -59,6 +59,7 @@ export function ChatInterface({ selectedPlaylist }: ChatInterfaceProps) {
   const [, setCurrentStreamContent] = useState('')
   const [isPending, startTransition] = useTransition()
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const streamHandleRef = useRef<{ close: () => void } | null>(null)
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -103,7 +104,7 @@ export function ChatInterface({ selectedPlaylist }: ChatInterfaceProps) {
     scrollToBottom()
 
     // Stream the response
-    await chatStreamClient.streamMessage(
+    streamHandleRef.current = await chatStreamClient.streamMessage(
       userMessage,
       messages,
       mode,
@@ -183,6 +184,14 @@ export function ChatInterface({ selectedPlaylist }: ChatInterfaceProps) {
       }
     )
   }, [input, streamingStatus.isStreaming, mode, selectedPlaylist?.id, messages, scrollToBottom])
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      // Cancel any ongoing stream when component unmounts
+      streamHandleRef.current?.close()
+    }
+  }, [])
 
   // If no playlist is selected, show selection prompt
   if (!selectedPlaylist) {

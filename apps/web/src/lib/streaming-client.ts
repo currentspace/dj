@@ -23,35 +23,33 @@ export interface StreamCallbacks {
 }
 
 export class ChatStreamClient {
-  private eventSource: EventSource | null = null;
   private abortController: AbortController | null = null;
-  private useEventSource = false; // Set to true to use EventSource instead of fetch
+  private static readonly MAX_BUFFER_SIZE = 2 * 1024 * 1024; // 2MB safety cap
 
   async streamMessage(
     message: string,
     conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>,
     mode: 'analyze' | 'create' | 'edit',
-    callbacks: StreamCallbacks
-  ): Promise<void> {
+    callbacks: StreamCallbacks,
+    options?: { signal?: AbortSignal }
+  ): Promise<{ close: () => void }> {
     // Get auth token
     const token = localStorage.getItem('spotify_token');
     if (!token) {
       callbacks.onError?.('Not authenticated');
-      return;
+      return { close: () => {} }; // Return no-op handle
     }
 
     // Close any existing connection
     this.close();
 
-    if (this.useEventSource) {
-      // EventSource approach - can't send POST body, would need different architecture
-      // This would require a stateful session on the server or passing all data in URL
-      callbacks.onError?.('EventSource mode not yet implemented');
-      return;
-    }
-
     // Use fetch with ReadableStream for better control
-    await this.streamWithFetch(message, conversationHistory, mode, token, callbacks);
+    await this.streamWithFetch(message, conversationHistory, mode, token, callbacks, options);
+
+    // Return handle for cancellation
+    return {
+      close: () => this.close()
+    };
   }
 
   private async streamWithFetch(
@@ -59,10 +57,17 @@ export class ChatStreamClient {
     conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>,
     mode: 'analyze' | 'create' | 'edit',
     token: string,
-    callbacks: StreamCallbacks
+    callbacks: StreamCallbacks,
+    options?: { signal?: AbortSignal }
   ): Promise<void> {
     // Create abort controller for fetch
     this.abortController = new AbortController();
+    let finished = false;
+
+    // Link external abort signal if provided
+    if (options?.signal) {
+      options.signal.addEventListener('abort', () => this.abortController?.abort());
+    }
 
     try {
       const response = await fetch('/api/chat-stream/message', {
@@ -81,15 +86,29 @@ export class ChatStreamClient {
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        // Special handling for 401 - clear token and notify
+        if (response.status === 401) {
+          this.clearToken();
+          callbacks.onError?.('Authentication expired. Please log in again.');
+          return;
+        }
+
+        // Try to get error details from response
+        const errorText = await response.text().catch(() => '');
+        throw new Error(`HTTP ${response.status}: ${response.statusText}${errorText ? ` - ${errorText.slice(0, 300)}` : ''}`);
       }
 
       // Validate content-type
       const contentType = response.headers.get('content-type') || '';
       if (!contentType.includes('text/event-stream')) {
         // Try to get error details if server sent JSON
-        const errorText = await response.text().catch(() => 'Unknown error');
-        throw new Error(`Unexpected content-type: ${contentType}. Response: ${errorText}`);
+        const errorText = await response.text().catch(() => '');
+        try {
+          const json = JSON.parse(errorText);
+          throw new Error(json.error || json.message || JSON.stringify(json));
+        } catch {
+          throw new Error(`Unexpected content-type: ${contentType}${errorText ? `. Response: ${errorText.slice(0, 300)}` : ''}`);
+        }
       }
 
       if (!response.body) {
@@ -152,7 +171,18 @@ export class ChatStreamClient {
 
                 // Check for done event
                 if (event.type === 'done') {
-                  callbacks.onDone?.();
+                  if (!finished) {
+                    callbacks.onDone?.();
+                    finished = true;
+                  }
+                  return true; // Signal to stop processing
+                }
+
+                // Check for error event - terminate stream
+                if (event.type === 'error') {
+                  callbacks.onError?.(typeof event.data === 'string' ? event.data : 'Stream error');
+                  finished = true;
+                  this.abortController?.abort('Server error');
                   return true; // Signal to stop processing
                 }
 
@@ -185,22 +215,37 @@ export class ChatStreamClient {
 
         buffer += decoder.decode(value, { stream: true });
 
+        // Safety cap on buffer size to prevent memory issues
+        if (buffer.length > ChatStreamClient.MAX_BUFFER_SIZE) {
+          console.warn('[ChatStream] Buffer size exceeded limit, truncating...');
+          // Keep the last portion of the buffer
+          buffer = buffer.slice(-ChatStreamClient.MAX_BUFFER_SIZE);
+        }
+
         // Process complete events in the buffer
         if (processSSEEvents()) {
-          // Done event received, stop processing
+          // Done or error event received, stop processing
           break;
         }
       }
 
-      callbacks.onDone?.();
+      // Call onDone if not already called
+      if (!finished) {
+        callbacks.onDone?.();
+      }
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         // Stream was intentionally aborted
-        console.log('[ChatStream] Stream aborted by client');
+        console.log('[ChatStream] Stream aborted');
+        if (!finished) {
+          callbacks.onError?.('Stream cancelled');
+        }
         return;
       }
       console.error('[ChatStream] Stream error:', error);
-      callbacks.onError?.(error instanceof Error ? error.message : 'Stream failed');
+      if (!finished) {
+        callbacks.onError?.(error instanceof Error ? error.message : 'Stream failed');
+      }
     } finally {
       this.abortController = null;
     }
@@ -246,11 +291,13 @@ export class ChatStreamClient {
     }
   }
 
-  close() {
-    if (this.eventSource) {
-      this.eventSource.close();
-      this.eventSource = null;
+  private clearToken(): void {
+    if (typeof window !== 'undefined' && 'localStorage' in window) {
+      localStorage.removeItem('spotify_token');
     }
+  }
+
+  close() {
     if (this.abortController) {
       this.abortController.abort('Client requested close');
       this.abortController = null;
