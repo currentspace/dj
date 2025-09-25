@@ -70,6 +70,9 @@ export class ChatStreamClient {
     }
 
     try {
+      console.log('[ChatStream] Starting stream request to /api/chat-stream/message');
+      console.log('[ChatStream] Request body:', { message, conversationHistory, mode });
+
       const response = await fetch('/api/chat-stream/message', {
         method: 'POST',
         headers: {
@@ -85,9 +88,13 @@ export class ChatStreamClient {
         signal: this.abortController.signal,
       });
 
+      console.log('[ChatStream] Response status:', response.status, response.statusText);
+      console.log('[ChatStream] Response headers:', Object.fromEntries(response.headers.entries()));
+
       if (!response.ok) {
         // Special handling for 401 - clear token and notify
         if (response.status === 401) {
+          console.error('[ChatStream] 401 Unauthorized - clearing token');
           this.clearToken();
           callbacks.onError?.('Authentication expired. Please log in again.');
           return;
@@ -95,6 +102,7 @@ export class ChatStreamClient {
 
         // Try to get error details from response
         const errorText = await response.text().catch(() => '');
+        console.error('[ChatStream] Error response:', errorText);
         throw new Error(`HTTP ${response.status}: ${response.statusText}${errorText ? ` - ${errorText.slice(0, 300)}` : ''}`);
       }
 
@@ -116,9 +124,11 @@ export class ChatStreamClient {
       }
 
       // Read the stream
+      console.log('[ChatStream] Starting to read stream...');
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
+      let chunkCount = 0;
 
       // Helper to process complete SSE events (events are separated by blank lines)
       const processSSEEvents = (): boolean => {
@@ -168,6 +178,7 @@ export class ChatStreamClient {
               // Handle our event format: {type: string, data: any}
               if (typeof parsed === 'object' && parsed && 'type' in parsed) {
                 const event = parsed as StreamEvent;
+                console.log('[ChatStream] Parsed event:', event.type, event.data);
 
                 // Check for done event
                 if (event.type === 'done') {
@@ -204,6 +215,7 @@ export class ChatStreamClient {
       // Read and process the stream
       while (true) {
         const { done, value } = await reader.read();
+        chunkCount++;
 
         if (done) {
           // Process any remaining buffered data
@@ -213,7 +225,9 @@ export class ChatStreamClient {
           break;
         }
 
-        buffer += decoder.decode(value, { stream: true });
+        const chunk = decoder.decode(value, { stream: true });
+        console.log(`[ChatStream] Chunk #${chunkCount} received (${chunk.length} bytes):`, chunk.slice(0, 100));
+        buffer += chunk;
 
         // Safety cap on buffer size to prevent memory issues
         if (buffer.length > ChatStreamClient.MAX_BUFFER_SIZE) {
@@ -231,7 +245,10 @@ export class ChatStreamClient {
 
       // Call onDone if not already called
       if (!finished) {
+        console.log('[ChatStream] Stream complete, calling onDone');
         callbacks.onDone?.();
+      } else {
+        console.log('[ChatStream] Stream already finished, skipping onDone');
       }
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {

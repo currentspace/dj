@@ -256,7 +256,7 @@ function createStreamingSpotifyTools(
           type: 'tool_end',
           data: {
             tool: 'analyze_playlist',
-            result: result?.playlist_name ? `Analyzed "${result.playlist_name}"` : 'Analysis complete'
+            result: (result as any)?.playlist_name ? `Analyzed "${(result as any).playlist_name}"` : 'Analysis complete'
           }
         });
 
@@ -405,7 +405,7 @@ function createStreamingSpotifyTools(
           type: 'tool_end',
           data: {
             tool: 'create_playlist',
-            result: result?.id ? `Created playlist: ${args.name}` : 'Playlist created'
+            result: (result as any)?.id ? `Created playlist: ${args.name}` : 'Playlist created'
           }
         });
 
@@ -423,7 +423,10 @@ function createStreamingSpotifyTools(
  */
 chatStreamRouter.post('/message', async (c) => {
   const requestId = crypto.randomUUID().substring(0, 8);
-  console.log(`[Stream:${requestId}] Starting streaming response`);
+  console.log(`[Stream:${requestId}] ========== NEW STREAMING REQUEST ==========`);
+  console.log(`[Stream:${requestId}] Method: ${c.req.method}`);
+  console.log(`[Stream:${requestId}] URL: ${c.req.url}`);
+  console.log(`[Stream:${requestId}] Headers:`, Object.fromEntries(c.req.raw.headers.entries()));
 
   // Create abort controller for client disconnect handling
   const abortController = new AbortController();
@@ -450,15 +453,26 @@ chatStreamRouter.post('/message', async (c) => {
   });
 
   // Get request body, authorization, and environment before starting async processing
-  const requestBody = await c.req.json();
+  let requestBody;
+  try {
+    requestBody = await c.req.json();
+    console.log(`[Stream:${requestId}] Request body parsed:`, JSON.stringify(requestBody).slice(0, 200));
+  } catch (error) {
+    console.error(`[Stream:${requestId}] Failed to parse request body:`, error);
+    return c.text('Invalid JSON', 400);
+  }
 
   // Get auth token from header (we'll migrate to query param later)
   const authorization = c.req.header('Authorization');
   const env = c.env;
 
+  console.log(`[Stream:${requestId}] Auth header present: ${!!authorization}`);
+  console.log(`[Stream:${requestId}] Env keys:`, Object.keys(env));
+
   // Process the request and stream responses
   const processStream = async () => {
     console.log(`[Stream:${requestId}] Starting async stream processing`);
+    console.log(`[Stream:${requestId}] SSEWriter created, starting heartbeat`);
 
     // Heartbeat to keep connection alive
     const heartbeatInterval = setInterval(async () => {
@@ -466,6 +480,7 @@ chatStreamRouter.post('/message', async (c) => {
         clearInterval(heartbeatInterval);
         return;
       }
+      console.log(`[Stream:${requestId}] Sending heartbeat`);
       await sseWriter.writeHeartbeat();
     }, 15000);
 
@@ -475,6 +490,7 @@ chatStreamRouter.post('/message', async (c) => {
         throw new Error('Request aborted');
       }
 
+      console.log(`[Stream:${requestId}] Sending initial debug event`);
       // Send debug info as first event
       await sseWriter.write({
         type: 'debug',
@@ -557,7 +573,7 @@ chatStreamRouter.post('/message', async (c) => {
       await sseWriter.write({ type: 'thinking', data: 'Processing your request...' });
 
       // Create tools with streaming callbacks
-      const tools = createStreamingSpotifyTools(spotifyToken, sseWriter, playlistId, request.mode, abortController.signal);
+      const tools = createStreamingSpotifyTools(spotifyToken, sseWriter, playlistId || undefined, request.mode, abortController.signal);
 
       // Initialize Claude with streaming
       if (!env.ANTHROPIC_API_KEY) {
@@ -799,7 +815,10 @@ Be concise and helpful. Use tools to get real data.`;
   });
 
   // Return the SSE response immediately
-  return new Response(readable, { headers });
+  console.log(`[Stream:${requestId}] Returning Response with SSE headers`);
+  const response = new Response(readable, { headers });
+  console.log(`[Stream:${requestId}] Response created, headers:`, Object.fromEntries(headers.entries()));
+  return response;
 });
 
 /**

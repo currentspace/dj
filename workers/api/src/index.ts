@@ -8,6 +8,7 @@ import { chatRouter } from './routes/chat-simple'
 import { chatStreamRouter } from './routes/chat-stream'
 import { chatTestRouter } from './routes/chat-test'
 import { anthropicStatusRouter } from './routes/anthropic-status'
+import { sseTestRouter } from './routes/sse-test'
 
 export interface Env {
   ANTHROPIC_API_KEY: string
@@ -34,6 +35,7 @@ app.route('/api/chat-test', chatTestRouter) // Test endpoints for debugging
 app.route('/api/anthropic', anthropicStatusRouter) // Anthropic rate limit and status checking
 app.route('/api/test', testRouter)
 app.route('/api/mcp', mcpRouter) // MCP server endpoint (keeping for backwards compat)
+app.route('/api/sse-test', sseTestRouter) // SSE test endpoints for debugging
 
 // Serve static files for non-API routes
 app.get('*', async (c) => {
