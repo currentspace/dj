@@ -578,6 +578,25 @@ async function analyzePlaylist(args: any, token: string) {
   const trackIds = tracks.map((t: any) => t.id).filter(Boolean);
   console.log(`[analyzePlaylist] Found ${tracks.length} tracks, ${trackIds.length} with valid IDs`);
 
+  // Log the structure of a single track object to see what Spotify returns
+  if (tracks.length > 0) {
+    const sampleTrack = tracks[0];
+    console.log(`[analyzePlaylist] Sample track object keys: ${Object.keys(sampleTrack).join(', ')}`);
+    console.log(`[analyzePlaylist] Single track JSON size: ${JSON.stringify(sampleTrack).length} bytes`);
+
+    // Log size of specific fields
+    if (sampleTrack.album) {
+      console.log(`[analyzePlaylist]   - album field size: ${JSON.stringify(sampleTrack.album).length} bytes`);
+      console.log(`[analyzePlaylist]   - album keys: ${Object.keys(sampleTrack.album).join(', ')}`);
+    }
+    if (sampleTrack.available_markets) {
+      console.log(`[analyzePlaylist]   - available_markets count: ${sampleTrack.available_markets.length} countries`);
+    }
+    if (sampleTrack.external_ids) {
+      console.log(`[analyzePlaylist]   - external_ids: ${JSON.stringify(sampleTrack.external_ids)}`);
+    }
+  }
+
   // Get audio features
   let audioFeatures = [];
   if (trackIds.length > 0) {
@@ -647,6 +666,24 @@ async function analyzePlaylist(args: any, token: string) {
   const analysisSize = JSON.stringify(analysis).length;
   console.log(`[analyzePlaylist] Analysis complete! Playlist: "${analysis.playlist_name}", Tracks: ${analysis.total_tracks}, Audio data: ${analysis.audio_analysis ? 'YES' : 'NO'}`);
   console.log(`[analyzePlaylist] Analysis object size: ${analysisSize} bytes (reduced from ~55KB)`);
+
+  // Log what would have been sent in the old version
+  const oldAnalysis = {
+    playlist_name: playlist.name,
+    playlist_description: playlist.description,
+    total_tracks: tracks.length,
+    audio_analysis: analysis.audio_analysis,
+    tracks: tracks.slice(0, 20), // This was the problem!
+    audio_features: audioFeatures.slice(0, 20) // And this!
+  };
+  const oldSize = JSON.stringify(oldAnalysis).length;
+  console.log(`[analyzePlaylist] OLD analysis size would have been: ${oldSize} bytes`);
+  console.log(`[analyzePlaylist] Size breakdown of old format:`);
+  console.log(`[analyzePlaylist]   - tracks field: ${JSON.stringify(tracks.slice(0, 20)).length} bytes`);
+  console.log(`[analyzePlaylist]   - audio_features field: ${JSON.stringify(audioFeatures.slice(0, 20)).length} bytes`);
+  console.log(`[analyzePlaylist]   - other fields: ${oldSize - JSON.stringify(tracks.slice(0, 20)).length - JSON.stringify(audioFeatures.slice(0, 20)).length} bytes`);
+  console.log(`[analyzePlaylist] Size reduction: ${oldSize} → ${analysisSize} (${Math.round((1 - analysisSize/oldSize) * 100)}% smaller)`);
+
   return analysis;
 }
 
