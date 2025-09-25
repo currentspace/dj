@@ -115,20 +115,22 @@ export class ChatStreamClient {
 
           // Parse the event block
           const lines = eventBlock.split('\n');
-          let eventType = 'message';
+          // let eventType = 'message'; // Reserved for future use when we need event types
           const dataLines: string[] = [];
-          let eventId: string | undefined;
+          // let eventId: string | undefined; // Reserved for future use when we need event IDs
 
           for (const line of lines) {
             // Skip comments (lines starting with ':')
             if (line.startsWith(':') || !line.trim()) continue;
 
             if (line.startsWith('event:')) {
-              eventType = line.slice(6).trim();
+              // eventType = line.slice(6).trim(); // Reserved for future use
+              continue;
             } else if (line.startsWith('data:')) {
               dataLines.push(line.slice(5).trimStart());
             } else if (line.startsWith('id:')) {
-              eventId = line.slice(3).trim();
+              // eventId = line.slice(3).trim(); // Reserved for future use
+              continue;
             }
           }
 
