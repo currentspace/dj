@@ -25,6 +25,7 @@ export interface StreamCallbacks {
 export class ChatStreamClient {
   private eventSource: EventSource | null = null;
   private abortController: AbortController | null = null;
+  private useEventSource = false; // Set to true to use EventSource instead of fetch
 
   async streamMessage(
     message: string,
@@ -42,6 +43,24 @@ export class ChatStreamClient {
     // Close any existing connection
     this.close();
 
+    if (this.useEventSource) {
+      // EventSource approach - can't send POST body, would need different architecture
+      // This would require a stateful session on the server or passing all data in URL
+      callbacks.onError?.('EventSource mode not yet implemented');
+      return;
+    }
+
+    // Use fetch with ReadableStream for better control
+    await this.streamWithFetch(message, conversationHistory, mode, token, callbacks);
+  }
+
+  private async streamWithFetch(
+    message: string,
+    conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>,
+    mode: 'analyze' | 'create' | 'edit',
+    token: string,
+    callbacks: StreamCallbacks
+  ): Promise<void> {
     // Create abort controller for fetch
     this.abortController = new AbortController();
 
@@ -108,40 +127,53 @@ export class ChatStreamClient {
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         // Stream was intentionally aborted
+        console.log('[ChatStream] Stream aborted by client');
         return;
       }
+      console.error('[ChatStream] Stream error:', error);
       callbacks.onError?.(error instanceof Error ? error.message : 'Stream failed');
+    } finally {
+      this.abortController = null;
     }
   }
 
   private handleEvent(event: StreamEvent, callbacks: StreamCallbacks) {
-    switch (event.type) {
-      case 'thinking':
-        callbacks.onThinking?.(event.data);
-        break;
-      case 'tool_start':
-        callbacks.onToolStart?.(event.data.tool, event.data.args);
-        break;
-      case 'tool_end':
-        callbacks.onToolEnd?.(event.data.tool, event.data.result);
-        break;
-      case 'content':
-        callbacks.onContent?.(event.data);
-        break;
-      case 'error':
-        callbacks.onError?.(event.data);
-        break;
-      case 'done':
-        callbacks.onDone?.();
-        break;
-      case 'log':
-        // Log to browser console instead of UI
-        console.log(`[Server ${event.data.level}]`, event.data.message);
-        break;
-      case 'debug':
-        // Log to browser console instead of UI
-        console.log('[Server Debug]', event.data);
-        break;
+    try {
+      switch (event.type) {
+        case 'thinking':
+          callbacks.onThinking?.(event.data);
+          break;
+        case 'tool_start':
+          callbacks.onToolStart?.(event.data.tool, event.data.args);
+          break;
+        case 'tool_end':
+          callbacks.onToolEnd?.(event.data.tool, event.data.result);
+          break;
+        case 'content':
+          callbacks.onContent?.(event.data);
+          break;
+        case 'error':
+          callbacks.onError?.(event.data);
+          break;
+        case 'done':
+          callbacks.onDone?.();
+          break;
+        case 'log':
+          // Log to browser console with better formatting
+          const logColor = event.data.level === 'error' ? 'color: red' :
+                          event.data.level === 'warn' ? 'color: orange' :
+                          'color: blue';
+          console.log(`%c[Server ${event.data.level}]`, logColor, event.data.message);
+          break;
+        case 'debug':
+          // Log debug info in collapsed group for cleaner console
+          console.groupCollapsed('[Server Debug]');
+          console.log(event.data);
+          console.groupEnd();
+          break;
+      }
+    } catch (error) {
+      console.error('[ChatStream] Error handling event:', event, error);
     }
   }
 
