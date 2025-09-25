@@ -48,25 +48,27 @@ function App() {
           <p className="app-subtitle">AI-Powered Playlist Generator</p>
           <div className="header-buttons">
             {isAuthenticated && (
-              <button onClick={logout} className="logout-button">
-                Logout from Spotify
-              </button>
+              <>
+                <button onClick={() => { setShowSSETest(!showSSETest); setShowTestPage(false); }} className="test-button">
+                  {showSSETest ? '🎵 Back to Chat' : '🔧 SSE Debug'}
+                </button>
+                <button onClick={() => { setShowTestPage(!showTestPage); setShowSSETest(false); }} className="test-button">
+                  {showTestPage ? '🎵 Back to Chat' : '🧪 Test Mode'}
+                </button>
+                <button onClick={logout} className="logout-button">
+                  Logout from Spotify
+                </button>
+              </>
             )}
-            <button onClick={() => { setShowTestPage(!showTestPage); setShowSSETest(false); }} className="test-button">
-              {showTestPage ? '🎵 Back to App' : '🧪 Test Mode'}
-            </button>
-            <button onClick={() => { setShowSSETest(!showSSETest); setShowTestPage(false); }} className="test-button">
-              {showSSETest ? '🎵 Back to App' : '🔧 SSE Debug'}
-            </button>
           </div>
         </header>
 
         <main className="app-main">
-          {showSSETest ? (
+          {showSSETest && isAuthenticated ? (
             <Suspense fallback={<div className="loading">Loading SSE test page...</div>}>
               <SSETestPage />
             </Suspense>
-          ) : showTestPage ? (
+          ) : showTestPage && isAuthenticated ? (
             <Suspense fallback={<div className="loading">Loading test page...</div>}>
               <TestPage />
             </Suspense>
