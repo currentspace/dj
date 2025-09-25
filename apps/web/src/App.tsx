@@ -2,6 +2,7 @@ import { Suspense, useState } from 'react';
 import { ChatInterface } from './features/chat/ChatInterface';
 import { SpotifyAuth } from './features/auth/SpotifyAuth';
 import { TestPage } from './features/test/TestPage';
+import { SSETestPage } from './pages/SSETestPage';
 import { UserPlaylists } from './features/playlist/UserPlaylists';
 import { ErrorBoundary, PlaylistErrorBoundary } from './app/ErrorBoundary';
 import { useSpotifyAuth } from './hooks/useSpotifyAuth';
@@ -33,6 +34,7 @@ function App() {
   const { isAuthenticated, login, logout } = useSpotifyAuth();
   const [selectedPlaylist, setSelectedPlaylist] = useState<SpotifyPlaylist | null>(null);
   const [showTestPage, setShowTestPage] = useState(false);
+  const [showSSETest, setShowSSETest] = useState(false);
 
   const handlePlaylistSelect = (playlist: SpotifyPlaylist) => {
     setSelectedPlaylist(playlist);
@@ -50,14 +52,21 @@ function App() {
                 Logout from Spotify
               </button>
             )}
-            <button onClick={() => setShowTestPage(!showTestPage)} className="test-button">
+            <button onClick={() => { setShowTestPage(!showTestPage); setShowSSETest(false); }} className="test-button">
               {showTestPage ? '🎵 Back to App' : '🧪 Test Mode'}
+            </button>
+            <button onClick={() => { setShowSSETest(!showSSETest); setShowTestPage(false); }} className="test-button">
+              {showSSETest ? '🎵 Back to App' : '🔧 SSE Debug'}
             </button>
           </div>
         </header>
 
         <main className="app-main">
-          {showTestPage ? (
+          {showSSETest ? (
+            <Suspense fallback={<div className="loading">Loading SSE test page...</div>}>
+              <SSETestPage />
+            </Suspense>
+          ) : showTestPage ? (
             <Suspense fallback={<div className="loading">Loading test page...</div>}>
               <TestPage />
             </Suspense>
