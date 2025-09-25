@@ -723,9 +723,25 @@ Be concise and helpful. Use tools to get real data.`;
             try {
               const result = await tool.func(toolCall.args);
               console.log(`[Stream:${requestId}] Tool ${toolCall.name} completed successfully`);
+
+              // Create a summary instead of full JSON for Claude
+              let toolResultSummary = '';
+              if (toolCall.name === 'analyze_playlist' && result && typeof result === 'object') {
+                const r = result as any;
+                toolResultSummary = `Playlist Analysis Results:
+- Name: ${r.playlist_name || 'Unknown'}
+- Total tracks: ${r.total_tracks || 0}
+- Audio analysis: ${r.audio_analysis ? 'Available' : 'Not available (403 error)'}
+- Tracks found: ${r.tracks?.length || 0} tracks loaded`;
+              } else {
+                toolResultSummary = typeof result === 'string' ? result : JSON.stringify(result).slice(0, 500);
+              }
+
+              console.log(`[Stream:${requestId}] Tool result summary: ${toolResultSummary.substring(0, 200)}`);
+
               toolMessages.push(
                 new ToolMessage({
-                  content: JSON.stringify(result),
+                  content: toolResultSummary,
                   tool_call_id: toolCall.id
                 })
               );
