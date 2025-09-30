@@ -183,7 +183,7 @@ async function executeSpotifyToolWithProgress(
       const analysisJson = JSON.stringify(analysis);
       console.log(`[Tool] analyze_playlist completed successfully`);
       console.log(`[Tool] Analysis JSON size: ${analysisJson.length} bytes (${(analysisJson.length / 1024).toFixed(1)}KB)`);
-      console.log(`[Tool] Returning ${analysis.tracks.length} compact tracks and ${analysis.audio_features?.length || 0} audio features`);
+      console.log(`[Tool] Returning summary with ${trackIds.length} track IDs and ${validFeatures.length > 0 ? 'audio analysis' : 'no audio analysis'}`);
 
       return analysis;
 
@@ -990,12 +990,20 @@ Be concise and helpful. Fetch data iteratively based on what the user actually a
 
           finalChunkCount++;
           // Log ALL chunks to see what Claude is actually sending
+          const contentPreview = typeof chunk.content === 'string'
+            ? chunk.content.substring(0, 100)
+            : Array.isArray(chunk.content)
+            ? JSON.stringify(chunk.content).substring(0, 100)
+            : chunk.content
+            ? String(chunk.content).substring(0, 100)
+            : 'no content';
+
           console.log(`[Stream:${requestId}] Final response chunk ${finalChunkCount}:`, {
             hasContent: !!chunk.content,
-            contentLength: chunk.content?.length || 0,
+            contentLength: typeof chunk.content === 'string' ? chunk.content.length : 0,
             chunkKeys: Object.keys(chunk),
             chunkType: chunk.type || 'unknown',
-            chunkContent: chunk.content ? chunk.content.substring(0, 100) : 'no content'
+            chunkContent: contentPreview
           });
 
           if (typeof chunk.content === 'string' && chunk.content) {
