@@ -784,19 +784,19 @@ ${playlistId ? `CONTEXT: User has selected playlist ID: ${playlistId}
 WORKFLOW FOR THIS PLAYLIST:
 1. If user asks about the playlist, start with: analyze_playlist({"playlist_id": "${playlistId}"})
 2. analyze_playlist returns:
-   - If audio_analysis is present: Use those values (avg_tempo, avg_energy, etc.)
-   - If audio_analysis is null: Audio features unavailable, describe based on playlist description and genre
+   - If audio_analysis is present: Use those values (avg_tempo, avg_energy, etc.) to describe the playlist
+   - If audio_analysis is null: Audio features unavailable, describe based on playlist name/description only
 3. To see track names: get_playlist_tracks({"playlist_id": "${playlistId}", "offset": 0, "limit": 20})
 4. To get more tracks: use different offset (20, 40, 60, etc.)
 5. For specific track details: get_track_details({"track_ids": ["id1", "id2", ...]})
 
-CRITICAL: If analyze_playlist returns audio_analysis: null, DO NOT call get_audio_features.
-Audio features are unavailable. Describe the playlist based on its name, description, and genre instead.
+CRITICAL: There is NO get_audio_features tool. Audio features are ONLY available through analyze_playlist.
+If analyze_playlist returns audio_analysis: null, you MUST describe the playlist based ONLY on its name and description.
 
 EXAMPLE QUESTIONS:
 - "What's the tempo?" → analyze_playlist only
-  - If has avg_tempo: Report it
-  - If audio_analysis is null: Say "Audio analysis unavailable, but based on the playlist description '[description]', this appears to be [genre] music"
+  - If has avg_tempo: Report it (e.g., "The playlist has an average tempo of 120 BPM")
+  - If audio_analysis is null: Say "Audio analysis is unavailable for this playlist. Based on the description '[description]', this appears to be [genre] music."
 - "List the first 10 tracks" → analyze_playlist + get_playlist_tracks(limit: 10)
 - "What album is track 5 from?" → get_playlist_tracks + get_track_details for that track` : ''}
 
@@ -805,7 +805,7 @@ TOOL RULES:
 - ALWAYS provide required parameters
 - Use pagination (offset/limit) for large playlists
 - Only fetch what you need to answer the user's question
-- If audio_analysis is null, DO NOT call get_audio_features - describe based on playlist metadata
+- There is NO get_audio_features tool - audio data comes from analyze_playlist only
 
 Be concise and helpful. Fetch data iteratively based on what the user actually asks for.`;
 
