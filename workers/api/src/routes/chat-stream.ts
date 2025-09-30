@@ -209,58 +209,52 @@ async function executeSpotifyToolWithProgress(
       const oldestYear = releaseYears.length > 0 ? Math.min(...releaseYears) : null;
       const newestYear = releaseYears.length > 0 ? Math.max(...releaseYears) : null;
 
-      // Step 6: Optional audio enrichment (if RapidAPI key available)
-      let audioFeaturesData = null;
-      if (env?.RAPIDAPI_KEY && env?.AUDIO_FEATURES_CACHE) {
+      // Step 6: Optional BPM enrichment (free Deezer + MusicBrainz APIs)
+      let bpmData = null;
+      if (env?.AUDIO_FEATURES_CACHE) {
         try {
-          await sseWriter.write({ type: 'thinking', data: '🎚️ Enriching with audio features (tempo, energy, key)...' });
+          await sseWriter.write({ type: 'thinking', data: '🎵 Enriching with BPM data from Deezer...' });
 
-          const enrichmentService = new AudioEnrichmentService(
-            env.RAPIDAPI_KEY,
-            env.AUDIO_FEATURES_CACHE
-          );
+          const enrichmentService = new AudioEnrichmentService(env.AUDIO_FEATURES_CACHE);
 
-          // Get audio features for first 20 tracks (to stay within rate limits)
-          const tracksToEnrich = validTracks.slice(0, 20).map((t: any) => ({
+          // Get BPM for first 30 tracks (free APIs, but rate limited)
+          const tracksToEnrich = validTracks.slice(0, 30).map((t: any) => ({
+            id: t.id,
             name: t.name,
-            artists: t.artists?.map((a: any) => a.name).join(', ') || 'Unknown',
-            id: t.id
+            duration_ms: t.duration_ms,
+            artists: t.artists || [],
+            external_ids: t.external_ids
           }));
 
-          const featuresMap = await enrichmentService.batchGetAudioFeatures(tracksToEnrich);
+          const bpmMap = await enrichmentService.batchEnrichTracks(tracksToEnrich);
 
-          if (featuresMap.size > 0) {
-            // Calculate averages from enriched features
-            const features = Array.from(featuresMap.values());
-            const avgTempo = features.reduce((sum, f) => sum + f.tempo, 0) / features.length;
-            const avgEnergy = features.reduce((sum, f) => sum + f.energy, 0) / features.length;
-            const avgDanceability = features.reduce((sum, f) => sum + f.danceability, 0) / features.length;
-            const avgValence = features.reduce((sum, f) => sum + f.valence, 0) / features.length;
+          if (bpmMap.size > 0) {
+            // Calculate average BPM from enriched tracks
+            const validBPMs = Array.from(bpmMap.values())
+              .filter(e => e.bpm !== null && AudioEnrichmentService.isValidBPM(e.bpm))
+              .map(e => e.bpm as number);
 
-            // Get most common key
-            const keyCount = new Map<string, number>();
-            features.forEach(f => {
-              const key = f.camelot || `${f.key} ${f.mode}`;
-              keyCount.set(key, (keyCount.get(key) || 0) + 1);
-            });
-            const dominantKey = Array.from(keyCount.entries())
-              .sort((a, b) => b[1] - a[1])[0]?.[0] || 'Unknown';
+            if (validBPMs.length > 0) {
+              const avgBPM = validBPMs.reduce((sum, bpm) => sum + bpm, 0) / validBPMs.length;
+              const minBPM = Math.min(...validBPMs);
+              const maxBPM = Math.max(...validBPMs);
 
-            audioFeaturesData = {
-              avg_tempo: Math.round(avgTempo),
-              avg_energy: Math.round(avgEnergy * 100),
-              avg_danceability: Math.round(avgDanceability * 100),
-              avg_valence: Math.round(avgValence * 100),
-              dominant_key: dominantKey,
-              sample_size: features.length,
-              source: 'soundnet'
-            };
+              bpmData = {
+                avg_bpm: Math.round(avgBPM),
+                bpm_range: { min: minBPM, max: maxBPM },
+                sample_size: validBPMs.length,
+                total_checked: tracksToEnrich.length,
+                source: 'deezer'
+              };
 
-            await sseWriter.write({ type: 'thinking', data: `✅ Enriched ${features.length} tracks with audio features!` });
+              await sseWriter.write({ type: 'thinking', data: `✅ Found BPM for ${validBPMs.length}/${tracksToEnrich.length} tracks!` });
+            } else {
+              await sseWriter.write({ type: 'thinking', data: '⚠️ No BPM data available for these tracks' });
+            }
           }
         } catch (error) {
-          console.error('[AudioEnrichment] Failed:', error);
-          await sseWriter.write({ type: 'thinking', data: '⚠️ Audio enrichment unavailable - continuing with metadata only' });
+          console.error('[BPMEnrichment] Failed:', error);
+          await sseWriter.write({ type: 'thinking', data: '⚠️ BPM enrichment unavailable - continuing with metadata only' });
         }
       }
 
@@ -284,11 +278,11 @@ async function executeSpotifyToolWithProgress(
           } : null,
           total_artists: artistIdsArray.length
         },
-        audio_features: audioFeaturesData, // Enriched data from SoundNet if available
+        bpm_analysis: bpmData, // BPM data from Deezer if available
         track_ids: trackIds,
-        message: audioFeaturesData
-          ? 'Audio features restored via SoundNet API! Use get_playlist_tracks for track details, or get_track_details for specific tracks.'
-          : 'Use get_playlist_tracks to fetch track details in batches, or get_track_details for specific tracks. Audio features can be enabled with RapidAPI key.'
+        message: bpmData
+          ? 'BPM data enriched via free Deezer API! Use get_playlist_tracks for track details, or get_track_details for specific tracks.'
+          : 'Use get_playlist_tracks to fetch track details in batches, or get_track_details for specific tracks. BPM enrichment available when KV cache is configured.'
       };
 
       await sseWriter.write({ type: 'thinking', data: `🎉 Analysis complete for "${analysis.playlist_name}"!` });
@@ -876,7 +870,7 @@ chatStreamRouter.post('/message', async (c) => {
       // Build system prompt
       const systemPrompt = `You are an AI DJ assistant with access to Spotify.
 
-IMPORTANT: Spotify deprecated audio features on Nov 27, 2024, BUT we've restored them via SoundNet API!
+IMPORTANT: Spotify deprecated audio features on Nov 27, 2024, BUT we've restored BPM data via free Deezer API!
 
 analyze_playlist now returns TWO types of data:
 1. metadata_analysis (always available):
@@ -886,16 +880,14 @@ analyze_playlist now returns TWO types of data:
    - Average track duration
    - Explicit content percentage
 
-2. audio_features (if RAPIDAPI_KEY configured):
-   - avg_tempo: BPM (beats per minute)
-   - avg_energy: 0-100 scale
-   - avg_danceability: 0-100 scale
-   - avg_valence: 0-100 scale (happiness)
-   - dominant_key: Camelot key for harmonic mixing
-   - source: 'soundnet'
+2. bpm_analysis (if KV cache configured):
+   - avg_bpm: Average BPM (beats per minute)
+   - bpm_range: { min, max } BPM range
+   - sample_size: Number of tracks with BPM data found
+   - source: 'deezer'
 
 ITERATIVE DATA FETCHING WORKFLOW:
-1. analyze_playlist returns SUMMARY with metadata + audio features (if available) + track_ids
+1. analyze_playlist returns SUMMARY with metadata + BPM analysis (if available) + track_ids
 2. get_playlist_tracks gets compact track info in batches (20 at a time)
 3. get_track_details gets full metadata when needed (album art, release dates, etc.)
 
@@ -907,7 +899,7 @@ WORKFLOW FOR THIS PLAYLIST:
 1. If user asks about the playlist, start with: analyze_playlist({"playlist_id": "${playlistId}"})
 2. analyze_playlist returns:
    - metadata_analysis with avg_popularity, top_genres, release_year_range, etc.
-   - audio_features (if available) with avg_tempo, avg_energy, dominant_key, etc.
+   - bpm_analysis (if available) with avg_bpm, bpm_range, sample_size, etc.
    - top_genres: Most common genres across artists
    - release_year_range: Time span of music (e.g., 1980-2024)
    - avg_duration_minutes: Average track length
@@ -917,8 +909,8 @@ WORKFLOW FOR THIS PLAYLIST:
 5. For specific track details: get_track_details({"track_ids": ["id1", "id2", ...]})
 
 EXAMPLE QUESTIONS & RESPONSES:
-- "What's the tempo?" → "Audio features (tempo, energy) were deprecated by Spotify. Based on the genres [list genres] and description, this appears to be [describe music style]."
-- "What's the vibe?" → Use popularity, genres, release years, and description to describe the playlist's vibe
+- "What's the tempo?" → If bpm_analysis exists, use avg_bpm. Otherwise: "BPM data not available for these tracks. Based on the genres [list genres], this appears to be [describe music style and likely tempo range]."
+- "What's the vibe?" → Use popularity, genres, release years, BPM (if available), and description to describe the playlist's vibe
 - "Is this music old or new?" → Use release_year_range to answer
 - "What genres?" → Use top_genres from metadata_analysis
 - "List the first 10 tracks" → analyze_playlist + get_playlist_tracks(limit: 10)

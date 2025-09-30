@@ -14,9 +14,8 @@ export interface Env {
   ANTHROPIC_API_KEY: string
   SPOTIFY_CLIENT_ID: string
   SPOTIFY_CLIENT_SECRET: string
-  RAPIDAPI_KEY?: string // For SoundNet audio features
   SESSIONS?: KVNamespace // KV namespace for session storage
-  AUDIO_FEATURES_CACHE?: KVNamespace // KV namespace for cached audio features
+  AUDIO_FEATURES_CACHE?: KVNamespace // KV namespace for BPM cache (Deezer + MusicBrainz)
   ENVIRONMENT: string
   ASSETS: Fetcher
 }
