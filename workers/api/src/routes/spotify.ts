@@ -520,4 +520,86 @@ spotifyRouter.get('/playlists/:id/tracks', async (c) => {
   }
 })
 
+// Debug endpoint: Check current token scopes and permissions
+spotifyRouter.get('/debug/scopes', async (c) => {
+  try {
+    const token = c.req.header('Authorization')?.replace('Bearer ', '')
+
+    if (!token) {
+      return c.json({ error: 'No authorization token' }, 401)
+    }
+
+    // Get current user profile to verify token works
+    const meResponse = await fetch('https://api.spotify.com/v1/me', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+
+    if (!meResponse.ok) {
+      return c.json({
+        error: 'Token validation failed',
+        status: meResponse.status,
+        statusText: meResponse.statusText
+      }, meResponse.status)
+    }
+
+    const userData = await meResponse.json() as any
+
+    // Test audio features endpoint
+    const testTrackId = '11dFghVXANMlKmJXsNCbNl' // Random track for testing
+    const audioFeaturesResponse = await fetch(
+      `https://api.spotify.com/v1/audio-features/${testTrackId}`,
+      { headers: { 'Authorization': `Bearer ${token}` } }
+    )
+
+    // Test playlists endpoint
+    const playlistsResponse = await fetch(
+      'https://api.spotify.com/v1/me/playlists?limit=1',
+      { headers: { 'Authorization': `Bearer ${token}` } }
+    )
+
+    return c.json({
+      token_info: {
+        user_id: userData.id,
+        display_name: userData.display_name,
+        email: userData.email,
+        product: userData.product,
+        country: userData.country
+      },
+      scope_tests: {
+        'user-read-private': meResponse.ok,
+        'playlist-read-private': playlistsResponse.ok,
+        'audio-features': {
+          accessible: audioFeaturesResponse.ok,
+          status: audioFeaturesResponse.status,
+          note: audioFeaturesResponse.ok
+            ? 'Audio features working!'
+            : audioFeaturesResponse.status === 403
+            ? 'Forbidden - token missing required scopes'
+            : `Failed with status ${audioFeaturesResponse.status}`
+        }
+      },
+      required_scopes: [
+        'playlist-modify-public',
+        'playlist-modify-private',
+        'user-read-private',
+        'playlist-read-private',
+        'playlist-read-collaborative',
+        'user-read-playback-state',
+        'user-read-currently-playing',
+        'user-read-recently-played',
+        'user-top-read'
+      ],
+      instructions: {
+        if_audio_features_forbidden: 'Log out and log in again to request updated scopes',
+        logout_method: 'Click "Logout from Spotify" button in top-right',
+        login_method: 'Click "Login with Spotify" to get fresh token with all scopes'
+      }
+    })
+  } catch (error) {
+    console.error('Scope debug error:', error)
+    const message = error instanceof Error ? error.message : 'Scope check failed'
+    return c.json({ error: message }, 500)
+  }
+})
+
 export { spotifyRouter }
