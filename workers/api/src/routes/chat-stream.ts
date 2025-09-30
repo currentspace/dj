@@ -1224,14 +1224,20 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
 
       console.log(`[Stream:${requestId}] Initial streaming complete. Chunks: ${chunkCount}, Tool calls: ${toolCalls.length}, Content length: ${fullResponse.length}`);
 
-      // If there were tool calls, execute them
-      if (toolCalls.length > 0) {
-        console.log(`[Stream:${requestId}] Executing ${toolCalls.length} tool calls...`);
+      // Agentic loop: Keep executing tools until Claude stops requesting them
+      let conversationMessages = [...messages];
+      let currentToolCalls = toolCalls;
+      let turnCount = 0;
+      const MAX_TURNS = 15; // Prevent infinite loops
+
+      while (currentToolCalls.length > 0 && turnCount < MAX_TURNS) {
+        turnCount++;
+        console.log(`[Stream:${requestId}] 🔄 Agentic loop turn ${turnCount}: Executing ${currentToolCalls.length} tool calls...`);
         await sseWriter.write({ type: 'thinking', data: 'Using Spotify tools...' });
 
         // Execute tools and build ToolMessages properly
         const toolMessages = [];
-        for (const toolCall of toolCalls) {
+        for (const toolCall of currentToolCalls) {
           if (abortController.signal.aborted) {
             throw new Error('Request aborted');
           }
@@ -1286,30 +1292,30 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
         }
         console.log(`[Stream:${requestId}] All tools executed. Results: ${toolMessages.length}`);
 
-        // Get final response with tool results - keep using modelWithTools for consistency
-        console.log(`[Stream:${requestId}] Getting final response from Claude...`);
+        // Get next response with tool results
+        console.log(`[Stream:${requestId}] Getting next response from Claude (turn ${turnCount})...`);
         await sseWriter.write({ type: 'thinking', data: 'Preparing response...' });
 
         console.log(`[Stream:${requestId}] Sending tool results back to Claude...`);
         console.log(`[Stream:${requestId}] Full response so far: "${fullResponse.substring(0, 100)}"`);
 
-        // Build the full conversation including tool results
-        // If Claude sent no content initially, we still need to pass something
+        // Build the conversation including tool results
         const aiMessageContent = fullResponse || '';
-        console.log(`[Stream:${requestId}] Creating AIMessage with content length: ${aiMessageContent.length}, tool calls: ${toolCalls.length}`);
-        const finalMessages = [
-          ...messages,
-          new AIMessage({ content: aiMessageContent, tool_calls: toolCalls }),
-          ...toolMessages
-        ];
-        console.log(`[Stream:${requestId}] Final messages array has ${finalMessages.length} messages`);
+        console.log(`[Stream:${requestId}] Creating AIMessage with content length: ${aiMessageContent.length}, tool calls: ${currentToolCalls.length}`);
 
-        console.log(`[Stream:${requestId}] Attempting to get final response from Claude...`);
-        console.log(`[Stream:${requestId}] Final messages structure:`);
-        finalMessages.forEach((msg, i) => {
+        // Add the AI's message with tool calls
+        conversationMessages.push(new AIMessage({ content: aiMessageContent, tool_calls: currentToolCalls }));
+        // Add the tool results
+        conversationMessages.push(...toolMessages);
+
+        console.log(`[Stream:${requestId}] Conversation now has ${conversationMessages.length} messages`);
+
+        console.log(`[Stream:${requestId}] Attempting to get next response from Claude...`);
+        console.log(`[Stream:${requestId}] Message structure (last 5):`);
+        conversationMessages.slice(-5).forEach((msg, i) => {
           const msgType = msg.constructor.name;
           const contentPreview = msg.content?.toString().slice(0, 200) || 'no content';
-          console.log(`[Stream:${requestId}]   ${i}: ${msgType} - ${contentPreview}`);
+          console.log(`[Stream:${requestId}]   ${conversationMessages.length - 5 + i}: ${msgType} - ${contentPreview}`);
           if (msgType === 'ToolMessage') {
             console.log(`[Stream:${requestId}]     Tool call ID: ${(msg as any).tool_call_id}`);
             console.log(`[Stream:${requestId}]     Content length: ${msg.content?.toString().length || 0}`);
@@ -1318,18 +1324,20 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
           }
         });
 
-        const finalResponse = await modelWithTools.stream(finalMessages, { signal: abortController.signal });
+        const nextResponse = await modelWithTools.stream(conversationMessages, { signal: abortController.signal });
 
         fullResponse = '';
-        let finalChunkCount = 0;
-        console.log(`[Stream:${requestId}] Streaming final response from Claude with tool results...`);
+        let nextChunkCount = 0;
+        let nextToolCalls: any[] = [];
+        console.log(`[Stream:${requestId}] Streaming response from Claude (turn ${turnCount})...`);
         let contentStarted = false;
-        for await (const chunk of finalResponse) {
+
+        for await (const chunk of nextResponse) {
           if (abortController.signal.aborted) {
             throw new Error('Request aborted');
           }
 
-          finalChunkCount++;
+          nextChunkCount++;
           // Log ALL chunks to see what Claude is actually sending
           const contentPreview = typeof chunk.content === 'string'
             ? chunk.content.substring(0, 100)
@@ -1339,12 +1347,12 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
             ? String(chunk.content).substring(0, 100)
             : 'no content';
 
-          console.log(`[Stream:${requestId}] Final response chunk ${finalChunkCount}:`, {
+          console.log(`[Stream:${requestId}] Turn ${turnCount} chunk ${nextChunkCount}:`, {
             hasContent: !!chunk.content,
             contentLength: typeof chunk.content === 'string' ? chunk.content.length : 0,
             chunkKeys: Object.keys(chunk),
-            chunkType: chunk.type || 'unknown',
-            chunkContent: contentPreview
+            chunkContent: contentPreview,
+            hasToolCalls: !!chunk.tool_calls
           });
 
           // Handle both string content and array content blocks (Claude API format)
@@ -1362,43 +1370,37 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
 
           if (textContent) {
             if (!contentStarted) {
-              console.log(`[Stream:${requestId}] CONTENT STARTED at chunk ${finalChunkCount}: ${textContent.substring(0, 100)}`);
+              console.log(`[Stream:${requestId}] CONTENT STARTED at turn ${turnCount} chunk ${nextChunkCount}: ${textContent.substring(0, 100)}`);
               contentStarted = true;
             }
             fullResponse += textContent;
             await sseWriter.write({ type: 'content', data: textContent });
           }
-        }
-        console.log(`[Stream:${requestId}] Final response complete. Chunks: ${finalChunkCount}, Total content: ${fullResponse.length} chars`);
 
-        // If still no response after tool execution, log debug info and try alternative
-        if (fullResponse.length === 0) {
-          console.error(`[Stream:${requestId}] WARNING: No content received from Claude after tool execution!`);
-          console.error(`[Stream:${requestId}] Debug info - Tool messages:`, toolMessages.length);
-          console.error(`[Stream:${requestId}] Debug info - Final chunks received:`, finalChunkCount);
-
-          // Try a simple direct prompt instead
-          console.log(`[Stream:${requestId}] Trying simple direct approach...`);
-          try {
-            const simplePrompt = 'Based on the playlist analysis that just completed, please provide a brief summary of the "Lover" playlist with 17 tracks.';
-            const simpleResponse = await llm.stream([new HumanMessage(simplePrompt)]);
-
-            let alternativeResponse = '';
-            for await (const chunk of simpleResponse) {
-              if (typeof chunk.content === 'string' && chunk.content) {
-                alternativeResponse += chunk.content;
-                await sseWriter.write({ type: 'content', data: chunk.content });
-              }
-            }
-
-            if (alternativeResponse.length === 0) {
-              await sseWriter.write({ type: 'content', data: 'I successfully analyzed your "Lover" playlist and found 17 tracks. The analysis completed successfully!' });
-            }
-          } catch (error) {
-            console.error(`[Stream:${requestId}] Simple approach also failed:`, error);
-            await sseWriter.write({ type: 'content', data: 'I successfully analyzed your "Lover" playlist and found 17 tracks. The analysis completed successfully!' });
+          // Check for MORE tool calls in the response
+          if (chunk.tool_calls && chunk.tool_calls.length > 0) {
+            nextToolCalls = chunk.tool_calls;
+            console.log(`[Stream:${requestId}] ⚠️ Additional tool calls detected (turn ${turnCount}): ${chunk.tool_calls.map((tc: any) => tc.name).join(', ')}`);
           }
         }
+        console.log(`[Stream:${requestId}] Turn ${turnCount} complete. Chunks: ${nextChunkCount}, Content: ${fullResponse.length} chars, Next tool calls: ${nextToolCalls.length}`);
+
+        // Update for next iteration
+        currentToolCalls = nextToolCalls;
+      }
+
+      // Check if we hit the max turns limit
+      if (turnCount >= MAX_TURNS) {
+        console.warn(`[Stream:${requestId}] ⚠️ Hit max turn limit (${MAX_TURNS}). Ending conversation.`);
+        await sseWriter.write({ type: 'thinking', data: 'Conversation limit reached, wrapping up...' });
+      }
+
+      console.log(`[Stream:${requestId}] Agentic loop complete after ${turnCount} turns`);
+
+      // If still no response after all turns, provide fallback
+      if (fullResponse.length === 0) {
+        console.error(`[Stream:${requestId}] WARNING: No content received from Claude after ${turnCount} turns!`);
+        await sseWriter.write({ type: 'content', data: 'I completed the analysis successfully!' });
       }
 
       // Send completion
