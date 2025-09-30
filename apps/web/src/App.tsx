@@ -3,6 +3,7 @@ import { ChatInterface } from './features/chat/ChatInterface';
 import { SpotifyAuth } from './features/auth/SpotifyAuth';
 import { TestPage } from './features/test/TestPage';
 import { SSETestPage } from './pages/SSETestPage';
+import { ScopeDebugger } from './features/debug/ScopeDebugger';
 import { UserPlaylists } from './features/playlist/UserPlaylists';
 import { ErrorBoundary, PlaylistErrorBoundary } from './app/ErrorBoundary';
 import { useSpotifyAuth } from './hooks/useSpotifyAuth';
@@ -35,6 +36,7 @@ function App() {
   const [selectedPlaylist, setSelectedPlaylist] = useState<SpotifyPlaylist | null>(null);
   const [showTestPage, setShowTestPage] = useState(false);
   const [showSSETest, setShowSSETest] = useState(false);
+  const [showScopeDebug, setShowScopeDebug] = useState(false);
 
   const handlePlaylistSelect = (playlist: SpotifyPlaylist) => {
     setSelectedPlaylist(playlist);
@@ -49,10 +51,13 @@ function App() {
           <div className="header-buttons">
             {isAuthenticated && (
               <>
-                <button onClick={() => { setShowSSETest(!showSSETest); setShowTestPage(false); }} className="test-button">
+                <button onClick={() => { setShowScopeDebug(!showScopeDebug); setShowSSETest(false); setShowTestPage(false); }} className="test-button">
+                  {showScopeDebug ? '🎵 Back to Chat' : '🔍 Scope Debug'}
+                </button>
+                <button onClick={() => { setShowSSETest(!showSSETest); setShowTestPage(false); setShowScopeDebug(false); }} className="test-button">
                   {showSSETest ? '🎵 Back to Chat' : '🔧 SSE Debug'}
                 </button>
-                <button onClick={() => { setShowTestPage(!showTestPage); setShowSSETest(false); }} className="test-button">
+                <button onClick={() => { setShowTestPage(!showTestPage); setShowSSETest(false); setShowScopeDebug(false); }} className="test-button">
                   {showTestPage ? '🎵 Back to Chat' : '🧪 Test Mode'}
                 </button>
                 <button onClick={logout} className="logout-button">
@@ -64,7 +69,11 @@ function App() {
         </header>
 
         <main className="app-main">
-          {showSSETest && isAuthenticated ? (
+          {showScopeDebug && isAuthenticated ? (
+            <Suspense fallback={<div className="loading">Loading scope debugger...</div>}>
+              <ScopeDebugger />
+            </Suspense>
+          ) : showSSETest && isAuthenticated ? (
             <Suspense fallback={<div className="loading">Loading SSE test page...</div>}>
               <SSETestPage />
             </Suspense>
