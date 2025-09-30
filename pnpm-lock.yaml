@@ -116,8 +116,8 @@ importers:
         specifier: ^0.6.0
         version: 0.6.0(@langchain/core@0.3.77(openai@5.12.2(ws@8.18.0)(zod@3.25.76)))
       hono:
-        specifier: ^4.9.8
-        version: 4.9.8
+        specifier: ^4.9.9
+        version: 4.9.9
       langchain:
         specifier: ^0.3.34
         version: 0.3.34(@langchain/anthropic@0.3.30(@langchain/core@0.3.77(openai@5.12.2(ws@8.18.0)(zod@3.25.76)))(zod@3.25.76))(@langchain/core@0.3.77(openai@5.12.2(ws@8.18.0)(zod@3.25.76)))(openai@5.12.2(ws@8.18.0)(zod@3.25.76))(ws@8.18.0)
@@ -147,8 +147,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/shared-types
       hono:
-        specifier: ^4.9.8
-        version: 4.9.8
+        specifier: ^4.9.9
+        version: 4.9.9
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -2238,8 +2238,8 @@ packages:
     resolution: {integrity: sha512-0hJU9SCPvmMzIBdZFqNPXWa6dqh7WdH0cII9y+CyS8rG3nL48Bclra9HmKhVVUHyPWNH5Y7xDwAB7bfgSjkUMQ==}
     engines: {node: '>= 0.4'}
 
-  hono@4.9.8:
-    resolution: {integrity: sha512-JW8Bb4RFWD9iOKxg5PbUarBYGM99IcxFl2FPBo2gSJO11jjUDqlP1Bmfyqt8Z/dGhIQ63PMA9LdcLefXyIasyg==}
+  hono@4.9.9:
+    resolution: {integrity: sha512-Hxw4wT6zjJGZJdkJzAx9PyBdf7ZpxaTSA0NfxqjLghwMrLBX8p33hJBzoETRakF3UJu6OdNQBZAlNSkGqKFukw==}
     engines: {node: '>=16.9.0'}
 
   http-errors@2.0.0:
@@ -5918,7 +5918,7 @@ snapshots:
     dependencies:
       function-bind: 1.1.2
 
-  hono@4.9.8: {}
+  hono@4.9.9: {}
 
   http-errors@2.0.0:
     dependencies:
