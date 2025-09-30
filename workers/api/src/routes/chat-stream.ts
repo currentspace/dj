@@ -159,7 +159,7 @@ async function executeSpotifyToolWithProgress(
       const validFeatures = audioFeatures.filter((f: any) => f !== null);
 
       // Return summary with track IDs only - Claude can request details iteratively
-      const trackIds = tracks.map((t: any) => t.id).filter(Boolean);
+      // trackIds already declared above at line 131
 
       const analysis = {
         playlist_name: playlist.name,
