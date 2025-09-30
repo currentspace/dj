@@ -210,48 +210,79 @@ async function executeSpotifyToolWithProgress(
       const oldestYear = releaseYears.length > 0 ? Math.min(...releaseYears) : null;
       const newestYear = releaseYears.length > 0 ? Math.max(...releaseYears) : null;
 
-      // Step 6: Optional BPM enrichment (free Deezer + MusicBrainz APIs)
+      // Step 6: Sequential BPM enrichment (process one track at a time to stay within limits)
       let bpmData = null;
       if (env?.AUDIO_FEATURES_CACHE) {
         try {
-          await sseWriter.write({ type: 'thinking', data: '🎵 Enriching with BPM data from Deezer...' });
-
           const enrichmentService = new AudioEnrichmentService(env.AUDIO_FEATURES_CACHE);
 
-          // Get BPM for first 30 tracks (free APIs, but rate limited)
-          const tracksToEnrich = validTracks.slice(0, 30).map((t: any) => ({
-            id: t.id,
-            name: t.name,
-            duration_ms: t.duration_ms,
-            artists: t.artists || [],
-            external_ids: t.external_ids
-          }));
+          // Process tracks sequentially with rate limiting (40 subrequests total / ~25ms per track)
+          const tracksToEnrich = validTracks.slice(0, 30);
+          const bpmResults: number[] = [];
+          let enrichedCount = 0;
+          let subrequestCount = 0;
+          const MAX_SUBREQUESTS = 40; // Stay well under 50 limit
 
-          const bpmMap = await enrichmentService.batchEnrichTracks(tracksToEnrich);
+          await sseWriter.write({ type: 'thinking', data: `🎵 Enriching ${tracksToEnrich.length} tracks with BPM data (paced to avoid limits)...` });
 
-          if (bpmMap.size > 0) {
-            // Calculate average BPM from enriched tracks
-            const validBPMs = Array.from(bpmMap.values())
-              .filter(e => e.bpm !== null && AudioEnrichmentService.isValidBPM(e.bpm))
-              .map(e => e.bpm as number);
+          for (let i = 0; i < tracksToEnrich.length; i++) {
+            // Stop if we're approaching the subrequest limit
+            if (subrequestCount >= MAX_SUBREQUESTS) {
+              await sseWriter.write({ type: 'thinking', data: `⚠️ Reached subrequest limit, enriched ${enrichedCount} tracks` });
+              break;
+            }
 
-            if (validBPMs.length > 0) {
-              const avgBPM = validBPMs.reduce((sum, bpm) => sum + bpm, 0) / validBPMs.length;
-              const minBPM = Math.min(...validBPMs);
-              const maxBPM = Math.max(...validBPMs);
+            const track = tracksToEnrich[i];
 
-              bpmData = {
-                avg_bpm: Math.round(avgBPM),
-                bpm_range: { min: minBPM, max: maxBPM },
-                sample_size: validBPMs.length,
-                total_checked: tracksToEnrich.length,
-                source: 'deezer'
+            try {
+              const spotifyTrack = {
+                id: track.id,
+                name: track.name,
+                duration_ms: track.duration_ms,
+                artists: track.artists || [],
+                external_ids: track.external_ids
               };
 
-              await sseWriter.write({ type: 'thinking', data: `✅ Found BPM for ${validBPMs.length}/${tracksToEnrich.length} tracks!` });
-            } else {
-              await sseWriter.write({ type: 'thinking', data: '⚠️ No BPM data available for these tracks' });
+              const bpmResult = await enrichmentService.enrichTrack(spotifyTrack);
+              subrequestCount += 3; // Estimate 3 subrequests per track (ISRC lookup + search + detail)
+
+              if (bpmResult.bpm && AudioEnrichmentService.isValidBPM(bpmResult.bpm)) {
+                bpmResults.push(bpmResult.bpm);
+                enrichedCount++;
+
+                // Stream progress updates every 5 tracks
+                if ((i + 1) % 5 === 0) {
+                  await sseWriter.write({ type: 'thinking', data: `🎵 Enriched ${enrichedCount}/${tracksToEnrich.length} tracks...` });
+                }
+              }
+
+              // Rate limiting: 25ms delay between tracks (40 tracks/second max)
+              if (i < tracksToEnrich.length - 1) {
+                await new Promise(resolve => setTimeout(resolve, 25));
+              }
+            } catch (error) {
+              console.error(`[BPMEnrichment] Failed for track ${track.name}:`, error);
+              subrequestCount += 3; // Count failed attempts too
+              // Continue with next track
             }
+          }
+
+          if (bpmResults.length > 0) {
+            const avgBPM = bpmResults.reduce((sum, bpm) => sum + bpm, 0) / bpmResults.length;
+            const minBPM = Math.min(...bpmResults);
+            const maxBPM = Math.max(...bpmResults);
+
+            bpmData = {
+              avg_bpm: Math.round(avgBPM),
+              bpm_range: { min: minBPM, max: maxBPM },
+              sample_size: bpmResults.length,
+              total_checked: tracksToEnrich.length,
+              source: 'deezer'
+            };
+
+            await sseWriter.write({ type: 'thinking', data: `✅ BPM enrichment complete! Found BPM for ${bpmResults.length}/${tracksToEnrich.length} tracks` });
+          } else {
+            await sseWriter.write({ type: 'thinking', data: '⚠️ No BPM data available for these tracks' });
           }
         } catch (error) {
           console.error('[BPMEnrichment] Failed:', error);
@@ -259,22 +290,57 @@ async function executeSpotifyToolWithProgress(
         }
       }
 
-      // Step 7: Optional Last.fm enrichment (tags, popularity, similarity)
+      // Step 7: Sequential Last.fm enrichment (tags, popularity, similarity)
       let lastfmData = null;
       if (env?.LASTFM_API_KEY && env?.AUDIO_FEATURES_CACHE) {
         try {
-          await sseWriter.write({ type: 'thinking', data: '🎧 Enriching with Last.fm tags and popularity...' });
-
           const lastfmService = new LastFmService(env.LASTFM_API_KEY, env.AUDIO_FEATURES_CACHE);
 
-          // Get Last.fm signals for first 20 tracks
-          const tracksForLastFm = validTracks.slice(0, 20).map((t: any) => ({
-            name: t.name,
-            artist: t.artists?.[0]?.name || 'Unknown',
-            duration_ms: t.duration_ms
-          }));
+          // Process tracks sequentially with same rate limiting
+          const tracksForLastFm = validTracks.slice(0, 8); // Fewer tracks since Last.fm uses 4 calls per track
+          const signalsMap = new Map();
+          let lastfmSubrequests = 0;
+          const MAX_LASTFM_SUBREQUESTS = 32; // Reserve subrequests for Last.fm
 
-          const signalsMap = await lastfmService.batchGetSignals(tracksForLastFm);
+          await sseWriter.write({ type: 'thinking', data: `🎧 Enriching ${tracksForLastFm.length} tracks with Last.fm tags (paced)...` });
+
+          for (let i = 0; i < tracksForLastFm.length; i++) {
+            if (lastfmSubrequests >= MAX_LASTFM_SUBREQUESTS) {
+              await sseWriter.write({ type: 'thinking', data: `⚠️ Reached Last.fm subrequest limit, enriched ${signalsMap.size} tracks` });
+              break;
+            }
+
+            const track = tracksForLastFm[i];
+
+            try {
+              const lastfmTrack = {
+                name: track.name,
+                artist: track.artists?.[0]?.name || 'Unknown',
+                duration_ms: track.duration_ms
+              };
+
+              const signals = await lastfmService.getTrackSignals(lastfmTrack);
+              lastfmSubrequests += 4; // 4 API calls per track
+
+              if (signals) {
+                const key = `${track.id}`;
+                signalsMap.set(key, signals);
+
+                // Stream progress every 2 tracks
+                if ((i + 1) % 2 === 0) {
+                  await sseWriter.write({ type: 'thinking', data: `🎧 Enriched ${signalsMap.size}/${tracksForLastFm.length} tracks...` });
+                }
+              }
+
+              // Rate limiting: 25ms delay between tracks
+              if (i < tracksForLastFm.length - 1) {
+                await new Promise(resolve => setTimeout(resolve, 25));
+              }
+            } catch (error) {
+              console.error(`[LastFm] Failed for track ${track.name}:`, error);
+              lastfmSubrequests += 4;
+            }
+          }
 
           if (signalsMap.size > 0) {
             // Aggregate tags across all tracks
