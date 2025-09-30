@@ -574,7 +574,7 @@ spotifyRouter.get('/debug/scopes', async (c) => {
           note: audioFeaturesResponse.ok
             ? 'Audio features working!'
             : audioFeaturesResponse.status === 403
-            ? 'Forbidden - token missing required scopes'
+            ? 'DEPRECATED: Spotify removed this API for apps created after Nov 27, 2024. Not a scope issue.'
             : `Failed with status ${audioFeaturesResponse.status}`
         }
       },
@@ -590,9 +590,8 @@ spotifyRouter.get('/debug/scopes', async (c) => {
         'user-top-read'
       ],
       instructions: {
-        if_audio_features_forbidden: 'Log out and log in again to request updated scopes',
-        logout_method: 'Click "Logout from Spotify" button in top-right',
-        login_method: 'Click "Login with Spotify" to get fresh token with all scopes'
+        if_audio_features_forbidden: 'Spotify deprecated this API on Nov 27, 2024 for new apps. Audio analysis (tempo, energy, etc.) is no longer available. The app will analyze playlists using track metadata instead.',
+        note: 'This is a Spotify platform limitation, not an authentication issue. Re-logging in will not fix this.'
       }
     })
   } catch (error) {

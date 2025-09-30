@@ -154,12 +154,12 @@ async function executeSpotifyToolWithProgress(
           if (featuresResponse.status === 403) {
             await sseWriter.write({
               type: 'thinking',
-              data: `⚠️ Audio features require re-authentication. Click the "🔍 Scope Debug" button to diagnose the issue, then log out and log in again to enable full audio analysis.`
+              data: `⚠️ Spotify has deprecated the audio features API (tempo, energy, danceability) for apps created after Nov 27, 2024. Analyzing based on track metadata instead.`
             });
           } else {
             await sseWriter.write({
               type: 'thinking',
-              data: `⚠️ Audio features unavailable (${featuresResponse.status}) - continuing with basic analysis`
+              data: `⚠️ Audio features unavailable (${featuresResponse.status}) - continuing with metadata-based analysis`
             });
           }
         }
