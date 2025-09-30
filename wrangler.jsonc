@@ -6,12 +6,17 @@
   "compatibility_date": "2025-09-23",
   "compatibility_flags": ["nodejs_compat"],
 
-  // KV Namespace for session storage
+  // KV Namespaces
   "kv_namespaces": [
     {
       "binding": "SESSIONS",
       "id": "c81455430c6d4aa2a5da4bf2c1fcd3a2",
       "preview_id": "859d29ec06564975a30d67be3a960b89"
+    },
+    {
+      "binding": "AUDIO_FEATURES_CACHE",
+      "id": "PLACEHOLDER_CREATE_WITH_WRANGLER",
+      "preview_id": "PLACEHOLDER_CREATE_WITH_WRANGLER"
     }
   ],
 

@@ -6,6 +6,7 @@ import { DynamicStructuredTool } from '@langchain/core/tools';
 import { HumanMessage, SystemMessage, AIMessage, ToolMessage } from '@langchain/core/messages';
 import { executeSpotifyTool } from '../lib/spotify-tools';
 import type { StreamToolData, StreamToolResult, StreamDebugData, StreamLogData } from '@dj/shared-types';
+import { AudioEnrichmentService } from '../services/AudioEnrichmentService';
 
 const chatStreamRouter = new Hono<{ Bindings: Env }>();
 
@@ -91,7 +92,8 @@ async function executeSpotifyToolWithProgress(
   toolName: string,
   args: Record<string, unknown>,
   token: string,
-  sseWriter: SSEWriter
+  sseWriter: SSEWriter,
+  env?: Env
 ): Promise<unknown> {
   console.log(`[Tool] Executing ${toolName} with args:`, JSON.stringify(args).substring(0, 200));
 
@@ -207,6 +209,61 @@ async function executeSpotifyToolWithProgress(
       const oldestYear = releaseYears.length > 0 ? Math.min(...releaseYears) : null;
       const newestYear = releaseYears.length > 0 ? Math.max(...releaseYears) : null;
 
+      // Step 6: Optional audio enrichment (if RapidAPI key available)
+      let audioFeaturesData = null;
+      if (env?.RAPIDAPI_KEY && env?.AUDIO_FEATURES_CACHE) {
+        try {
+          await sseWriter.write({ type: 'thinking', data: '🎚️ Enriching with audio features (tempo, energy, key)...' });
+
+          const enrichmentService = new AudioEnrichmentService(
+            env.RAPIDAPI_KEY,
+            env.AUDIO_FEATURES_CACHE
+          );
+
+          // Get audio features for first 20 tracks (to stay within rate limits)
+          const tracksToEnrich = validTracks.slice(0, 20).map((t: any) => ({
+            name: t.name,
+            artists: t.artists?.map((a: any) => a.name).join(', ') || 'Unknown',
+            id: t.id
+          }));
+
+          const featuresMap = await enrichmentService.batchGetAudioFeatures(tracksToEnrich);
+
+          if (featuresMap.size > 0) {
+            // Calculate averages from enriched features
+            const features = Array.from(featuresMap.values());
+            const avgTempo = features.reduce((sum, f) => sum + f.tempo, 0) / features.length;
+            const avgEnergy = features.reduce((sum, f) => sum + f.energy, 0) / features.length;
+            const avgDanceability = features.reduce((sum, f) => sum + f.danceability, 0) / features.length;
+            const avgValence = features.reduce((sum, f) => sum + f.valence, 0) / features.length;
+
+            // Get most common key
+            const keyCount = new Map<string, number>();
+            features.forEach(f => {
+              const key = f.camelot || `${f.key} ${f.mode}`;
+              keyCount.set(key, (keyCount.get(key) || 0) + 1);
+            });
+            const dominantKey = Array.from(keyCount.entries())
+              .sort((a, b) => b[1] - a[1])[0]?.[0] || 'Unknown';
+
+            audioFeaturesData = {
+              avg_tempo: Math.round(avgTempo),
+              avg_energy: Math.round(avgEnergy * 100),
+              avg_danceability: Math.round(avgDanceability * 100),
+              avg_valence: Math.round(avgValence * 100),
+              dominant_key: dominantKey,
+              sample_size: features.length,
+              source: 'soundnet'
+            };
+
+            await sseWriter.write({ type: 'thinking', data: `✅ Enriched ${features.length} tracks with audio features!` });
+          }
+        } catch (error) {
+          console.error('[AudioEnrichment] Failed:', error);
+          await sseWriter.write({ type: 'thinking', data: '⚠️ Audio enrichment unavailable - continuing with metadata only' });
+        }
+      }
+
       await sseWriter.write({ type: 'thinking', data: '🧮 Computing playlist insights...' });
 
       const analysis = {
@@ -227,8 +284,11 @@ async function executeSpotifyToolWithProgress(
           } : null,
           total_artists: artistIdsArray.length
         },
+        audio_features: audioFeaturesData, // Enriched data from SoundNet if available
         track_ids: trackIds,
-        message: 'Use get_playlist_tracks to fetch track details in batches, or get_track_details for specific tracks. Audio features (tempo, energy) deprecated by Spotify.'
+        message: audioFeaturesData
+          ? 'Audio features restored via SoundNet API! Use get_playlist_tracks for track details, or get_track_details for specific tracks.'
+          : 'Use get_playlist_tracks to fetch track details in batches, or get_track_details for specific tracks. Audio features can be enabled with RapidAPI key.'
       };
 
       await sseWriter.write({ type: 'thinking', data: `🎉 Analysis complete for "${analysis.playlist_name}"!` });
@@ -258,7 +318,8 @@ function createStreamingSpotifyTools(
   sseWriter: SSEWriter,
   contextPlaylistId?: string,
   mode?: string,
-  abortSignal?: AbortSignal
+  abortSignal?: AbortSignal,
+  env?: Env
 ): DynamicStructuredTool[] {
 
   const tools: DynamicStructuredTool[] = [
@@ -313,7 +374,7 @@ function createStreamingSpotifyTools(
         });
 
         // Use enhanced executeSpotifyTool with progress streaming
-        const result = await executeSpotifyToolWithProgress('analyze_playlist', finalArgs, spotifyToken, sseWriter);
+        const result = await executeSpotifyToolWithProgress('analyze_playlist', finalArgs, spotifyToken, sseWriter, env);
 
         await sseWriter.write({
           type: 'tool_end',
@@ -791,7 +852,7 @@ chatStreamRouter.post('/message', async (c) => {
       await sseWriter.write({ type: 'thinking', data: 'Processing your request...' });
 
       // Create tools with streaming callbacks
-      const tools = createStreamingSpotifyTools(spotifyToken, sseWriter, playlistId || undefined, request.mode, abortController.signal);
+      const tools = createStreamingSpotifyTools(spotifyToken, sseWriter, playlistId || undefined, request.mode, abortController.signal, env);
 
       // Initialize Claude with streaming
       if (!env.ANTHROPIC_API_KEY) {
@@ -815,16 +876,26 @@ chatStreamRouter.post('/message', async (c) => {
       // Build system prompt
       const systemPrompt = `You are an AI DJ assistant with access to Spotify.
 
-IMPORTANT: Spotify deprecated audio features (tempo, energy, danceability) on Nov 27, 2024.
-analyze_playlist now returns METADATA-BASED analysis instead:
-- Popularity (0-100 score based on play counts)
-- Genres (from artist data)
-- Release year range (oldest to newest)
-- Average track duration
-- Explicit content percentage
+IMPORTANT: Spotify deprecated audio features on Nov 27, 2024, BUT we've restored them via SoundNet API!
+
+analyze_playlist now returns TWO types of data:
+1. metadata_analysis (always available):
+   - Popularity (0-100 score based on play counts)
+   - Genres (from artist data)
+   - Release year range (oldest to newest)
+   - Average track duration
+   - Explicit content percentage
+
+2. audio_features (if RAPIDAPI_KEY configured):
+   - avg_tempo: BPM (beats per minute)
+   - avg_energy: 0-100 scale
+   - avg_danceability: 0-100 scale
+   - avg_valence: 0-100 scale (happiness)
+   - dominant_key: Camelot key for harmonic mixing
+   - source: 'soundnet'
 
 ITERATIVE DATA FETCHING WORKFLOW:
-1. analyze_playlist returns SUMMARY with metadata analysis + track_ids
+1. analyze_playlist returns SUMMARY with metadata + audio features (if available) + track_ids
 2. get_playlist_tracks gets compact track info in batches (20 at a time)
 3. get_track_details gets full metadata when needed (album art, release dates, etc.)
 
@@ -834,8 +905,9 @@ ${playlistId ? `CONTEXT: User has selected playlist ID: ${playlistId}
 
 WORKFLOW FOR THIS PLAYLIST:
 1. If user asks about the playlist, start with: analyze_playlist({"playlist_id": "${playlistId}"})
-2. analyze_playlist returns metadata_analysis with:
-   - avg_popularity: How mainstream/popular the tracks are (0-100)
+2. analyze_playlist returns:
+   - metadata_analysis with avg_popularity, top_genres, release_year_range, etc.
+   - audio_features (if available) with avg_tempo, avg_energy, dominant_key, etc.
    - top_genres: Most common genres across artists
    - release_year_range: Time span of music (e.g., 1980-2024)
    - avg_duration_minutes: Average track length
