@@ -1054,7 +1054,7 @@ chatStreamRouter.post('/message', async (c) => {
         maxTokens: 2000,
         streaming: true,
         maxRetries: 0,
-        topP: 0.95, // Must be between 0 and 1 for Sonnet 4.5
+        // Note: Cannot use both temperature and topP with Sonnet 4.5
       });
 
       const modelWithTools = llm.bindTools(tools);

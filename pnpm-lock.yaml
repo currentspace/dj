@@ -107,8 +107,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/shared-types
       '@langchain/anthropic':
-        specifier: ^0.3.28
-        version: 0.3.28(@langchain/core@0.3.77(openai@5.12.2(ws@8.18.0)(zod@3.25.76)))
+        specifier: ^0.3.30
+        version: 0.3.30(@langchain/core@0.3.77(openai@5.12.2(ws@8.18.0)(zod@3.25.76)))(zod@3.25.76)
       '@langchain/core':
         specifier: ^0.3.77
         version: 0.3.77(openai@5.12.2(ws@8.18.0)(zod@3.25.76))
@@ -120,7 +120,7 @@ importers:
         version: 4.9.8
       langchain:
         specifier: ^0.3.34
-        version: 0.3.34(@langchain/anthropic@0.3.28(@langchain/core@0.3.77(openai@5.12.2(ws@8.18.0)(zod@3.25.76))))(@langchain/core@0.3.77(openai@5.12.2(ws@8.18.0)(zod@3.25.76)))(openai@5.12.2(ws@8.18.0)(zod@3.25.76))(ws@8.18.0)
+        version: 0.3.34(@langchain/anthropic@0.3.30(@langchain/core@0.3.77(openai@5.12.2(ws@8.18.0)(zod@3.25.76)))(zod@3.25.76))(@langchain/core@0.3.77(openai@5.12.2(ws@8.18.0)(zod@3.25.76)))(openai@5.12.2(ws@8.18.0)(zod@3.25.76))(ws@8.18.0)
       nanoid:
         specifier: ^5.1.6
         version: 5.1.6
@@ -167,10 +167,6 @@ importers:
         version: 3.114.14(@cloudflare/workers-types@4.20250923.0)
 
 packages:
-
-  '@anthropic-ai/sdk@0.56.0':
-    resolution: {integrity: sha512-SLCB8M8+VMg1cpCucnA1XWHGWqVSZtIWzmOdDOEu3eTFZMB+A0sGZ1ESO5MHDnqrNTXz3safMrWx9x4rMZSOqA==}
-    hasBin: true
 
   '@anthropic-ai/sdk@0.65.0':
     resolution: {integrity: sha512-zIdPOcrCVEI8t3Di40nH4z9EoeyGZfXbYSvWdDLsB/KkaSYMnEgC7gmcgWu83g2NTn1ZTpbMvpdttWDGGIk6zw==}
@@ -1022,8 +1018,8 @@ packages:
   '@jridgewell/trace-mapping@0.3.9':
     resolution: {integrity: sha512-3Belt6tdc8bPgAtbcmdtNJlirVoTmEb5e2gC94PnkwEW9jI6CAHUeoG85tjWP5WquqfavoMtMwiG4P926ZKKuQ==}
 
-  '@langchain/anthropic@0.3.28':
-    resolution: {integrity: sha512-07rH3MB99XHSBENF2d+RZsaD0ZBJqtTEQZAIePrUu4a8YsMzGhiYIMN0ufNvR0xSLOAccN20dkrrIbdvBWwd5w==}
+  '@langchain/anthropic@0.3.30':
+    resolution: {integrity: sha512-ZO6b8G+6OxI/4drCSWIzMC67o7ZhWGlX6OXhO30X0BgtMYHwpYlU7ATPT/9+IvOcFSytC7GZsWb5zKknLku0vw==}
     engines: {node: '>=18'}
     peerDependencies:
       '@langchain/core': '>=0.3.58 <0.4.0'
@@ -3510,8 +3506,6 @@ packages:
 
 snapshots:
 
-  '@anthropic-ai/sdk@0.56.0': {}
-
   '@anthropic-ai/sdk@0.65.0(zod@3.25.76)':
     dependencies:
       json-schema-to-ts: 3.1.1
@@ -4173,11 +4167,13 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  '@langchain/anthropic@0.3.28(@langchain/core@0.3.77(openai@5.12.2(ws@8.18.0)(zod@3.25.76)))':
+  '@langchain/anthropic@0.3.30(@langchain/core@0.3.77(openai@5.12.2(ws@8.18.0)(zod@3.25.76)))(zod@3.25.76)':
     dependencies:
-      '@anthropic-ai/sdk': 0.56.0
+      '@anthropic-ai/sdk': 0.65.0(zod@3.25.76)
       '@langchain/core': 0.3.77(openai@5.12.2(ws@8.18.0)(zod@3.25.76))
       fast-xml-parser: 4.5.3
+    transitivePeerDependencies:
+      - zod
 
   '@langchain/core@0.3.77(openai@5.12.2(ws@8.18.0)(zod@3.25.76))':
     dependencies:
@@ -6137,7 +6133,7 @@ snapshots:
 
   kleur@4.1.5: {}
 
-  langchain@0.3.34(@langchain/anthropic@0.3.28(@langchain/core@0.3.77(openai@5.12.2(ws@8.18.0)(zod@3.25.76))))(@langchain/core@0.3.77(openai@5.12.2(ws@8.18.0)(zod@3.25.76)))(openai@5.12.2(ws@8.18.0)(zod@3.25.76))(ws@8.18.0):
+  langchain@0.3.34(@langchain/anthropic@0.3.30(@langchain/core@0.3.77(openai@5.12.2(ws@8.18.0)(zod@3.25.76)))(zod@3.25.76))(@langchain/core@0.3.77(openai@5.12.2(ws@8.18.0)(zod@3.25.76)))(openai@5.12.2(ws@8.18.0)(zod@3.25.76))(ws@8.18.0):
     dependencies:
       '@langchain/core': 0.3.77(openai@5.12.2(ws@8.18.0)(zod@3.25.76))
       '@langchain/openai': 0.6.13(@langchain/core@0.3.77(openai@5.12.2(ws@8.18.0)(zod@3.25.76)))(ws@8.18.0)
@@ -6152,7 +6148,7 @@ snapshots:
       yaml: 2.8.1
       zod: 3.25.76
     optionalDependencies:
-      '@langchain/anthropic': 0.3.28(@langchain/core@0.3.77(openai@5.12.2(ws@8.18.0)(zod@3.25.76)))
+      '@langchain/anthropic': 0.3.30(@langchain/core@0.3.77(openai@5.12.2(ws@8.18.0)(zod@3.25.76)))(zod@3.25.76)
     transitivePeerDependencies:
       - '@opentelemetry/api'
       - '@opentelemetry/exporter-trace-otlp-proto'

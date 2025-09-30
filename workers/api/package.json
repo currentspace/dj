@@ -13,7 +13,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.65.0",
     "@dj/shared-types": "workspace:*",
-    "@langchain/anthropic": "^0.3.28",
+    "@langchain/anthropic": "^0.3.30",
     "@langchain/core": "^0.3.77",
     "@langchain/mcp-adapters": "^0.6.0",
     "hono": "^4.9.8",
