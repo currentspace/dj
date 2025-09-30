@@ -978,7 +978,7 @@ chatStreamRouter.post('/message', async (c) => {
 
       const llm = new ChatAnthropic({
         apiKey: env.ANTHROPIC_API_KEY,
-        model: 'claude-3-5-sonnet-20241022',
+        model: 'claude-sonnet-4-5-20250929',
         temperature: 0.2,
         maxTokens: 2000,
         streaming: true,
