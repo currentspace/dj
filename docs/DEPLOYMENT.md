@@ -73,4 +73,25 @@ If deployment fails:
 ## Environment Variables
 
 - **Production**: Secrets are injected by GitHub Actions
-- **Development**: Use `.dev.vars` file locally (never commit this)
+- **Development**: Use `.dev.vars` file in `workers/api/` directory (never commit this)
+
+### Development .dev.vars
+Create `workers/api/.dev.vars`:
+```
+ANTHROPIC_API_KEY=sk-ant-...
+SPOTIFY_CLIENT_ID=your_id
+SPOTIFY_CLIENT_SECRET=your_secret
+ENVIRONMENT=development
+```
+
+## Deployment Configuration
+
+The project uses the root `wrangler.jsonc` file for production deployment:
+- **Main entry**: `workers/api/dist/index.js`
+- **Static assets**: `apps/web/dist` (React build)
+- **KV namespace**: `SESSIONS` binding for session storage
+- **Build command**: `pnpm run build:worker`
+- **Worker-first routing**: API routes (`/api/*`) handled by worker before static assets
+
+### Important Routing Configuration
+The `run_worker_first: ["/api/*"]` setting is critical - it ensures API routes are handled by the worker before attempting to serve static files.

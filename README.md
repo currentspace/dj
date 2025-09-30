@@ -4,10 +4,11 @@ An AI-powered DJ app that creates Spotify playlists using Anthropic's Claude API
 
 ## Features
 
-- Generate playlist recommendations using AI
-- Search and match tracks on Spotify
-- Save generated playlists directly to your Spotify account
-- Deployed on Cloudflare Workers for global edge performance
+- **Conversational AI DJ**: Chat with Claude to create personalized playlists
+- **Real-time Streaming**: Server-Sent Events (SSE) for live responses
+- **Spotify Integration**: Direct playlist creation, search, and audio analysis
+- **MCP Protocol**: Advanced tool calling for iterative playlist curation
+- **Edge Deployment**: Cloudflare Workers for global low-latency performance
 
 ## Setup
 
@@ -26,19 +27,25 @@ An AI-powered DJ app that creates Spotify playlists using Anthropic's Claude API
 pnpm install
 ```
 
-2. Create `.dev.vars` file for local development:
+2. Create `.dev.vars` file in `workers/api/` directory:
 ```
-ANTHROPIC_API_KEY=your_anthropic_key
+ANTHROPIC_API_KEY=sk-ant-your_key_here
 SPOTIFY_CLIENT_ID=your_spotify_client_id
 SPOTIFY_CLIENT_SECRET=your_spotify_client_secret
+ENVIRONMENT=development
 ```
+
+**Important**: Never commit `.dev.vars` to git.
 
 3. Run development servers:
 ```bash
-# Terminal 1: Start Cloudflare Worker
-pnpm run worker:dev
+# Terminal 1: Start Cloudflare Worker API
+pnpm run dev:api
 
 # Terminal 2: Start React frontend
+pnpm run dev:web
+
+# Or run both in parallel
 pnpm run dev
 ```
 
@@ -97,7 +104,10 @@ pnpm run deploy
 
 ## Tech Stack
 
-- **Frontend**: React 19.1, Vite, TypeScript
-- **Backend**: Cloudflare Workers, Hono
-- **APIs**: Anthropic Claude, Spotify Web API
-- **Deployment**: Cloudflare Workers & Pages
+- **Frontend**: React 19.1, Vite, TypeScript, Ark UI
+- **Backend**: Cloudflare Workers, Hono, Langchain
+- **AI**: Anthropic Claude API with streaming
+- **APIs**: Spotify Web API, Model Context Protocol (MCP)
+- **Storage**: Cloudflare KV (session management)
+- **Build**: pnpm monorepo with workspace dependencies
+- **Deployment**: Cloudflare Workers with static assets

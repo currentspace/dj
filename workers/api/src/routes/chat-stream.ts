@@ -158,6 +158,9 @@ async function executeSpotifyToolWithProgress(
       await sseWriter.write({ type: 'thinking', data: '🧮 Computing musical insights...' });
       const validFeatures = audioFeatures.filter((f: any) => f !== null);
 
+      // Return summary with track IDs only - Claude can request details iteratively
+      const trackIds = tracks.map((t: any) => t.id).filter(Boolean);
+
       const analysis = {
         playlist_name: playlist.name,
         playlist_description: playlist.description,
@@ -170,12 +173,18 @@ async function executeSpotifyToolWithProgress(
           avg_acousticness: validFeatures.reduce((sum: number, f: any) => sum + f.acousticness, 0) / validFeatures.length,
           avg_instrumentalness: validFeatures.reduce((sum: number, f: any) => sum + f.instrumentalness, 0) / validFeatures.length,
         } : null,
-        tracks: tracks.slice(0, 20),
-        audio_features: audioFeatures.slice(0, 20)
+        track_ids: trackIds,
+        message: 'Use get_playlist_tracks to fetch track details in batches, or get_track_details for specific tracks'
       };
 
       await sseWriter.write({ type: 'thinking', data: `🎉 Analysis complete for "${analysis.playlist_name}"!` });
+
+      // Log data size for debugging
+      const analysisJson = JSON.stringify(analysis);
       console.log(`[Tool] analyze_playlist completed successfully`);
+      console.log(`[Tool] Analysis JSON size: ${analysisJson.length} bytes (${(analysisJson.length / 1024).toFixed(1)}KB)`);
+      console.log(`[Tool] Returning ${analysis.tracks.length} compact tracks and ${analysis.audio_features?.length || 0} audio features`);
+
       return analysis;
 
     } catch (error) {
@@ -261,6 +270,161 @@ function createStreamingSpotifyTools(
         });
 
         return result;
+      }
+    }),
+
+    new DynamicStructuredTool({
+      name: 'get_playlist_tracks',
+      description: 'Get tracks from a playlist with pagination. Returns compact track info (name, artists, duration, popularity). Use this after analyze_playlist to get actual track details.',
+      schema: z.object({
+        playlist_id: z.string().optional(),
+        offset: z.number().min(0).default(0),
+        limit: z.number().min(1).max(50).default(20)
+      }),
+      func: async (args) => {
+        if (abortSignal?.aborted) throw new Error('Request aborted');
+
+        // Auto-inject playlist ID if missing
+        let finalArgs = { ...args };
+        if (!args.playlist_id && contextPlaylistId) {
+          console.log(`[get_playlist_tracks] Auto-injecting playlist_id: ${contextPlaylistId}`);
+          finalArgs.playlist_id = contextPlaylistId;
+        }
+
+        if (!finalArgs.playlist_id) {
+          throw new Error('playlist_id is required');
+        }
+
+        await sseWriter.write({
+          type: 'tool_start',
+          data: { tool: 'get_playlist_tracks', args: finalArgs }
+        });
+
+        await sseWriter.write({
+          type: 'thinking',
+          data: `📥 Fetching tracks ${finalArgs.offset}-${finalArgs.offset + finalArgs.limit}...`
+        });
+
+        // Fetch tracks from Spotify
+        const response = await fetch(
+          `https://api.spotify.com/v1/playlists/${finalArgs.playlist_id}/tracks?offset=${finalArgs.offset}&limit=${finalArgs.limit}`,
+          { headers: { 'Authorization': `Bearer ${spotifyToken}` } }
+        );
+
+        if (!response.ok) {
+          throw new Error(`Failed to get playlist tracks: ${response.status}`);
+        }
+
+        const data = await response.json() as any;
+        const tracks = data.items.map((item: any) => item.track).filter(Boolean);
+
+        // Return compact track info
+        const compactTracks = tracks.map((track: any) => ({
+          id: track.id,
+          name: track.name,
+          artists: track.artists?.map((a: any) => a.name).join(', ') || 'Unknown',
+          duration_ms: track.duration_ms,
+          popularity: track.popularity,
+          uri: track.uri,
+          album: track.album?.name
+        }));
+
+        await sseWriter.write({
+          type: 'thinking',
+          data: `✅ Loaded ${compactTracks.length} tracks`
+        });
+
+        await sseWriter.write({
+          type: 'tool_end',
+          data: {
+            tool: 'get_playlist_tracks',
+            result: `Fetched ${compactTracks.length} tracks`
+          }
+        });
+
+        return {
+          tracks: compactTracks,
+          offset: finalArgs.offset,
+          limit: finalArgs.limit,
+          total: data.total,
+          has_more: (finalArgs.offset + compactTracks.length) < data.total
+        };
+      }
+    }),
+
+    new DynamicStructuredTool({
+      name: 'get_track_details',
+      description: 'Get detailed information about specific tracks. Use when you need full metadata like album details, release dates, external URLs, etc.',
+      schema: z.object({
+        track_ids: z.array(z.string()).min(1).max(50)
+      }),
+      func: async (args) => {
+        if (abortSignal?.aborted) throw new Error('Request aborted');
+
+        await sseWriter.write({
+          type: 'tool_start',
+          data: { tool: 'get_track_details', args }
+        });
+
+        await sseWriter.write({
+          type: 'thinking',
+          data: `🔍 Fetching details for ${args.track_ids.length} tracks...`
+        });
+
+        // Fetch tracks from Spotify (supports up to 50 tracks)
+        const response = await fetch(
+          `https://api.spotify.com/v1/tracks?ids=${args.track_ids.join(',')}`,
+          { headers: { 'Authorization': `Bearer ${spotifyToken}` } }
+        );
+
+        if (!response.ok) {
+          throw new Error(`Failed to get track details: ${response.status}`);
+        }
+
+        const data = await response.json() as any;
+        const tracks = data.tracks.filter(Boolean);
+
+        // Return detailed track info
+        const detailedTracks = tracks.map((track: any) => ({
+          id: track.id,
+          name: track.name,
+          artists: track.artists?.map((a: any) => ({
+            id: a.id,
+            name: a.name
+          })),
+          album: {
+            id: track.album?.id,
+            name: track.album?.name,
+            release_date: track.album?.release_date,
+            total_tracks: track.album?.total_tracks,
+            images: track.album?.images?.map((img: any) => ({
+              url: img.url,
+              height: img.height,
+              width: img.width
+            }))
+          },
+          duration_ms: track.duration_ms,
+          popularity: track.popularity,
+          explicit: track.explicit,
+          uri: track.uri,
+          external_urls: track.external_urls,
+          preview_url: track.preview_url
+        }));
+
+        await sseWriter.write({
+          type: 'thinking',
+          data: `✅ Loaded details for ${detailedTracks.length} tracks`
+        });
+
+        await sseWriter.write({
+          type: 'tool_end',
+          data: {
+            tool: 'get_track_details',
+            result: `Fetched details for ${detailedTracks.length} tracks`
+          }
+        });
+
+        return { tracks: detailedTracks };
       }
     }),
 
@@ -596,21 +760,36 @@ chatStreamRouter.post('/message', async (c) => {
 
       // Build system prompt
       const systemPrompt = `You are an AI DJ assistant with access to Spotify.
-${playlistId ? `IMPORTANT: The user has selected a playlist. Playlist ID: ${playlistId}
 
-CRITICAL INSTRUCTIONS:
-- When the user asks ANYTHING about this playlist, IMMEDIATELY call analyze_playlist with: {"playlist_id": "${playlistId}"}
-- NEVER call any tool with empty arguments {}
-- ALL tools require specific parameters - do not guess or call with {}
+ITERATIVE DATA FETCHING WORKFLOW:
+1. analyze_playlist returns SUMMARY only (avg tempo, energy, etc. + track_ids)
+2. get_playlist_tracks gets compact track info in batches (20 at a time)
+3. get_track_details gets full metadata when needed (album art, release dates, etc.)
 
-TOOL USAGE EXAMPLES:
-- analyze_playlist: ALWAYS use {"playlist_id": "${playlistId}"}
-- search_spotify_tracks: ALWAYS use {"query": "search term", "limit": 10}
-- get_audio_features: ALWAYS use {"track_ids": ["track_id_1", "track_id_2"]}
+This allows you to fetch as much or as little detail as needed for the user's question.
 
-If you don't have the required parameters for a tool, explain what you need from the user instead of calling the tool with empty args.` : ''}
+${playlistId ? `CONTEXT: User has selected playlist ID: ${playlistId}
 
-Be concise and helpful. Use tools to get real data.`;
+WORKFLOW FOR THIS PLAYLIST:
+1. If user asks about the playlist, start with: analyze_playlist({"playlist_id": "${playlistId}"})
+2. analyze_playlist returns summary + track_ids
+3. To see track names: get_playlist_tracks({"playlist_id": "${playlistId}", "offset": 0, "limit": 20})
+4. To get more tracks: use different offset (20, 40, 60, etc.)
+5. For specific track details: get_track_details({"track_ids": ["id1", "id2", ...]})
+
+EXAMPLE QUESTIONS:
+- "What's the tempo?" → analyze_playlist only (has avg_tempo)
+- "List the first 10 tracks" → analyze_playlist + get_playlist_tracks(limit: 10)
+- "What album is track 5 from?" → get_playlist_tracks + get_track_details for that track
+- "Show me album art for the first track" → get_playlist_tracks + get_track_details` : ''}
+
+TOOL RULES:
+- NEVER call tools with empty arguments {}
+- ALWAYS provide required parameters
+- Use pagination (offset/limit) for large playlists
+- Only fetch what you need to answer the user's question
+
+Be concise and helpful. Fetch data iteratively based on what the user actually asks for.`;
 
       await sseWriter.write({
         type: 'log',
@@ -728,16 +907,20 @@ Be concise and helpful. Use tools to get real data.`;
 
               const toolContent = JSON.stringify(result);
               console.log(`[Stream:${requestId}] Tool result JSON length: ${toolContent.length}`);
-              console.log(`[Stream:${requestId}] Tool result preview: ${toolContent.substring(0, 300)}...`);
+              console.log(`[Stream:${requestId}] Tool result preview: ${toolContent.substring(0, 500)}...`);
 
-              toolMessages.push(
-                new ToolMessage({
-                  content: toolContent,
-                  tool_call_id: toolCall.id
-                })
-              );
+              // Create the tool message
+              const toolMsg = new ToolMessage({
+                content: toolContent,
+                tool_call_id: toolCall.id
+              });
 
-              console.log(`[Stream:${requestId}] Created ToolMessage with call_id: ${toolCall.id}`);
+              toolMessages.push(toolMsg);
+
+              console.log(`[Stream:${requestId}] Created ToolMessage with:`);
+              console.log(`[Stream:${requestId}]   - call_id: ${toolCall.id}`);
+              console.log(`[Stream:${requestId}]   - content length: ${toolContent.length}`);
+              console.log(`[Stream:${requestId}]   - content has playlist_name: ${toolContent.includes('playlist_name')}`);
             } catch (error) {
               if (abortController.signal.aborted) {
                 throw new Error('Request aborted');
@@ -798,25 +981,30 @@ Be concise and helpful. Use tools to get real data.`;
 
         fullResponse = '';
         let finalChunkCount = 0;
-        console.log(`[Stream:${requestId}] Streaming final response...`);
+        console.log(`[Stream:${requestId}] Streaming final response from Claude with tool results...`);
+        let contentStarted = false;
         for await (const chunk of finalResponse) {
           if (abortController.signal.aborted) {
             throw new Error('Request aborted');
           }
 
           finalChunkCount++;
+          // Log ALL chunks to see what Claude is actually sending
           console.log(`[Stream:${requestId}] Final response chunk ${finalChunkCount}:`, {
             hasContent: !!chunk.content,
             contentLength: chunk.content?.length || 0,
             chunkKeys: Object.keys(chunk),
             chunkType: chunk.type || 'unknown',
-            fullChunk: finalChunkCount <= 5 ? chunk : 'truncated'
+            chunkContent: chunk.content ? chunk.content.substring(0, 100) : 'no content'
           });
 
           if (typeof chunk.content === 'string' && chunk.content) {
+            if (!contentStarted) {
+              console.log(`[Stream:${requestId}] CONTENT STARTED at chunk ${finalChunkCount}: ${chunk.content.substring(0, 100)}`);
+              contentStarted = true;
+            }
             fullResponse += chunk.content;
             await sseWriter.write({ type: 'content', data: chunk.content });
-            console.log(`[Stream:${requestId}] Final chunk ${finalChunkCount}: ${chunk.content.substring(0, 50)}...`);
           }
         }
         console.log(`[Stream:${requestId}] Final response complete. Chunks: ${finalChunkCount}, Total content: ${fullResponse.length} chars`);

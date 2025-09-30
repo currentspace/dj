@@ -15,11 +15,12 @@ dj/
 │       │   ├── components/ # Shared UI components
 │       │   ├── features/   # Feature-based modules
 │       │   │   ├── auth/   # Authentication features
-│       │   │   ├── chat/   # Chat interface features
+│       │   │   ├── chat/   # Chat interface with SSE streaming
 │       │   │   ├── playlist/ # Playlist management
 │       │   │   └── test/   # Test/debug features
 │       │   ├── hooks/      # Custom React hooks
 │       │   ├── lib/        # Utilities and API clients
+│       │   ├── pages/      # Page components
 │       │   ├── styles/     # Global styles and CSS modules
 │       │   └── types/      # TypeScript type definitions
 │       ├── package.json    # @dj/web package
@@ -99,20 +100,24 @@ features/
 # Install dependencies
 pnpm install
 
-# Development (all packages)
-pnpm dev
+# Development (all services in parallel)
+pnpm dev              # Both frontend and API worker
+pnpm dev:web          # Only frontend (port 3000)
+pnpm dev:api          # Only API worker (port 8787)
 
-# Development (specific app)
+# Development (specific package filter)
 pnpm --filter @dj/web dev
 
 # Build everything
-pnpm build
+pnpm build            # All packages
+pnpm build:worker     # Worker with dependencies in correct order
 
 # Type checking
-pnpm typecheck
+pnpm typecheck        # All packages
+pnpm --filter @dj/web typecheck  # Specific package
 
 # Deploy
-pnpm deploy
+pnpm deploy           # Build and deploy to Cloudflare
 ```
 
 ## Key Decisions
