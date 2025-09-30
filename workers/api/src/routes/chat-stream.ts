@@ -150,7 +150,18 @@ async function executeSpotifyToolWithProgress(
         } else {
           const errorText = await featuresResponse.text();
           console.error(`[analyze_playlist] Audio features failed: ${featuresResponse.status} - ${errorText}`);
-          await sseWriter.write({ type: 'thinking', data: `⚠️ Audio features unavailable (${featuresResponse.status}) - continuing with basic analysis` });
+
+          if (featuresResponse.status === 403) {
+            await sseWriter.write({
+              type: 'thinking',
+              data: `⚠️ Audio features require re-authentication. Please log out and log in again to enable full audio analysis.`
+            });
+          } else {
+            await sseWriter.write({
+              type: 'thinking',
+              data: `⚠️ Audio features unavailable (${featuresResponse.status}) - continuing with basic analysis`
+            });
+          }
         }
       }
 
