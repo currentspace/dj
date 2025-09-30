@@ -45,7 +45,7 @@ export function ScopeDebugger() {
         throw new Error('No Spotify token found');
       }
 
-      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/spotify/debug/scopes`, {
+      const response = await fetch('/api/spotify/debug/scopes', {
         headers: {
           Authorization: `Bearer ${token}`,
         },
