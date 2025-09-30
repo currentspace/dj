@@ -7,6 +7,7 @@ import { HumanMessage, SystemMessage, AIMessage, ToolMessage } from '@langchain/
 import { executeSpotifyTool } from '../lib/spotify-tools';
 import type { StreamToolData, StreamToolResult, StreamDebugData, StreamLogData } from '@dj/shared-types';
 import { AudioEnrichmentService } from '../services/AudioEnrichmentService';
+import { LastFmService } from '../services/LastFmService';
 
 const chatStreamRouter = new Hono<{ Bindings: Env }>();
 
@@ -258,6 +259,58 @@ async function executeSpotifyToolWithProgress(
         }
       }
 
+      // Step 7: Optional Last.fm enrichment (tags, popularity, similarity)
+      let lastfmData = null;
+      if (env?.LASTFM_API_KEY && env?.AUDIO_FEATURES_CACHE) {
+        try {
+          await sseWriter.write({ type: 'thinking', data: '🎧 Enriching with Last.fm tags and popularity...' });
+
+          const lastfmService = new LastFmService(env.LASTFM_API_KEY, env.AUDIO_FEATURES_CACHE);
+
+          // Get Last.fm signals for first 20 tracks
+          const tracksForLastFm = validTracks.slice(0, 20).map((t: any) => ({
+            name: t.name,
+            artist: t.artists?.[0]?.name || 'Unknown',
+            duration_ms: t.duration_ms
+          }));
+
+          const signalsMap = await lastfmService.batchGetSignals(tracksForLastFm);
+
+          if (signalsMap.size > 0) {
+            // Aggregate tags across all tracks
+            const aggregatedTags = LastFmService.aggregateTags(signalsMap);
+
+            // Calculate average popularity
+            const popularity = LastFmService.calculateAveragePopularity(signalsMap);
+
+            // Get some similar tracks from the first few tracks
+            const similarTracks = new Set<string>();
+            let count = 0;
+            for (const signals of signalsMap.values()) {
+              if (count >= 3) break; // Only get similar from first 3 tracks
+              signals.similar.slice(0, 3).forEach(s => {
+                similarTracks.add(`${s.artist} - ${s.name}`);
+              });
+              count++;
+            }
+
+            lastfmData = {
+              crowd_tags: aggregatedTags.slice(0, 10),
+              avg_listeners: popularity.avgListeners,
+              avg_playcount: popularity.avgPlaycount,
+              similar_tracks: Array.from(similarTracks).slice(0, 10),
+              sample_size: signalsMap.size,
+              source: 'lastfm'
+            };
+
+            await sseWriter.write({ type: 'thinking', data: `✅ Found Last.fm data for ${signalsMap.size} tracks!` });
+          }
+        } catch (error) {
+          console.error('[LastFm] Enrichment failed:', error);
+          await sseWriter.write({ type: 'thinking', data: '⚠️ Last.fm enrichment unavailable - continuing without tags' });
+        }
+      }
+
       await sseWriter.write({ type: 'thinking', data: '🧮 Computing playlist insights...' });
 
       const analysis = {
@@ -279,10 +332,11 @@ async function executeSpotifyToolWithProgress(
           total_artists: artistIdsArray.length
         },
         bpm_analysis: bpmData, // BPM data from Deezer if available
+        lastfm_analysis: lastfmData, // Last.fm tags and popularity if available
         track_ids: trackIds,
-        message: bpmData
-          ? 'BPM data enriched via free Deezer API! Use get_playlist_tracks for track details, or get_track_details for specific tracks.'
-          : 'Use get_playlist_tracks to fetch track details in batches, or get_track_details for specific tracks. BPM enrichment available when KV cache is configured.'
+        message: (bpmData || lastfmData)
+          ? `Enriched with ${bpmData ? 'BPM (Deezer)' : ''}${bpmData && lastfmData ? ' + ' : ''}${lastfmData ? 'tags/popularity (Last.fm)' : ''}! Use get_playlist_tracks for track details.`
+          : 'Use get_playlist_tracks to fetch track details in batches, or get_track_details for specific tracks.'
       };
 
       await sseWriter.write({ type: 'thinking', data: `🎉 Analysis complete for "${analysis.playlist_name}"!` });
@@ -870,9 +924,9 @@ chatStreamRouter.post('/message', async (c) => {
       // Build system prompt
       const systemPrompt = `You are an AI DJ assistant with access to Spotify.
 
-IMPORTANT: Spotify deprecated audio features on Nov 27, 2024, BUT we've restored BPM data via free Deezer API!
+IMPORTANT: Spotify deprecated audio features on Nov 27, 2024, BUT we've restored them via free APIs!
 
-analyze_playlist now returns TWO types of data:
+analyze_playlist now returns THREE types of data:
 1. metadata_analysis (always available):
    - Popularity (0-100 score based on play counts)
    - Genres (from artist data)
@@ -886,8 +940,15 @@ analyze_playlist now returns TWO types of data:
    - sample_size: Number of tracks with BPM data found
    - source: 'deezer'
 
+3. lastfm_analysis (if LASTFM_API_KEY configured):
+   - crowd_tags: Most common tags/genres/moods from Last.fm community (e.g., ["electronic", "chill", "dance"])
+   - avg_listeners: Average Last.fm listeners per track
+   - avg_playcount: Average Last.fm playcounts
+   - similar_tracks: Recommended similar tracks for transitions
+   - source: 'lastfm'
+
 ITERATIVE DATA FETCHING WORKFLOW:
-1. analyze_playlist returns SUMMARY with metadata + BPM analysis (if available) + track_ids
+1. analyze_playlist returns SUMMARY with metadata + BPM + Last.fm analysis (if available) + track_ids
 2. get_playlist_tracks gets compact track info in batches (20 at a time)
 3. get_track_details gets full metadata when needed (album art, release dates, etc.)
 
@@ -899,20 +960,18 @@ WORKFLOW FOR THIS PLAYLIST:
 1. If user asks about the playlist, start with: analyze_playlist({"playlist_id": "${playlistId}"})
 2. analyze_playlist returns:
    - metadata_analysis with avg_popularity, top_genres, release_year_range, etc.
-   - bpm_analysis (if available) with avg_bpm, bpm_range, sample_size, etc.
-   - top_genres: Most common genres across artists
-   - release_year_range: Time span of music (e.g., 1980-2024)
-   - avg_duration_minutes: Average track length
-   - explicit_percentage: % of tracks with explicit content
+   - bpm_analysis (if available) with avg_bpm, bpm_range
+   - lastfm_analysis (if available) with crowd_tags, similar_tracks, popularity metrics
 3. To see track names: get_playlist_tracks({"playlist_id": "${playlistId}", "offset": 0, "limit": 20})
 4. To get more tracks: use different offset (20, 40, 60, etc.)
 5. For specific track details: get_track_details({"track_ids": ["id1", "id2", ...]})
 
 EXAMPLE QUESTIONS & RESPONSES:
 - "What's the tempo?" → If bpm_analysis exists, use avg_bpm. Otherwise: "BPM data not available for these tracks. Based on the genres [list genres], this appears to be [describe music style and likely tempo range]."
-- "What's the vibe?" → Use popularity, genres, release years, BPM (if available), and description to describe the playlist's vibe
+- "What's the vibe?" → Use metadata, BPM, Last.fm crowd_tags, and similar_tracks to describe the playlist's vibe
+- "What genres?" → Combine top_genres from metadata_analysis with crowd_tags from lastfm_analysis for comprehensive genre picture
 - "Is this music old or new?" → Use release_year_range to answer
-- "What genres?" → Use top_genres from metadata_analysis
+- "Suggest similar tracks" → Use similar_tracks from lastfm_analysis
 - "List the first 10 tracks" → analyze_playlist + get_playlist_tracks(limit: 10)
 - "What album is track 5 from?" → get_playlist_tracks + get_track_details for that track` : ''}
 
