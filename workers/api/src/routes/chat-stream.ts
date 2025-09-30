@@ -132,60 +132,103 @@ async function executeSpotifyToolWithProgress(
 
       await sseWriter.write({ type: 'thinking', data: `✅ Loaded ${tracks.length} tracks successfully` });
 
-      // Step 3: Get audio features
-      let audioFeatures = [];
-      if (trackIds.length > 0) {
-        await sseWriter.write({ type: 'thinking', data: `🎚️ Analyzing audio characteristics of ${trackIds.length} tracks...` });
+      // Step 3: Analyze track metadata (audio features API deprecated)
+      await sseWriter.write({ type: 'thinking', data: '🎵 Analyzing track metadata...' });
 
-        const featuresResponse = await fetch(
-          `https://api.spotify.com/v1/audio-features?ids=${trackIds.slice(0, 100).join(',')}`,
+      // Calculate metadata-based statistics
+      const validTracks = tracks.filter((t: any) => t && t.popularity !== undefined);
+      const avgPopularity = validTracks.length > 0
+        ? validTracks.reduce((sum: number, t: any) => sum + t.popularity, 0) / validTracks.length
+        : 0;
+
+      const avgDuration = validTracks.length > 0
+        ? validTracks.reduce((sum: number, t: any) => sum + (t.duration_ms || 0), 0) / validTracks.length
+        : 0;
+
+      const explicitCount = validTracks.filter((t: any) => t.explicit).length;
+      const explicitPercentage = validTracks.length > 0 ? (explicitCount / validTracks.length) * 100 : 0;
+
+      // Extract unique artists for genre analysis
+      const artistIds = new Set<string>();
+      validTracks.forEach((t: any) => {
+        if (t.artists) {
+          t.artists.forEach((artist: any) => {
+            if (artist.id) artistIds.add(artist.id);
+          });
+        }
+      });
+
+      // Step 4: Fetch artist genres (batch request, limit to 50 artists)
+      await sseWriter.write({ type: 'thinking', data: '🎸 Fetching artist genres...' });
+      const artistIdsArray = Array.from(artistIds).slice(0, 50);
+      let genres: string[] = [];
+
+      if (artistIdsArray.length > 0) {
+        const artistsResponse = await fetch(
+          `https://api.spotify.com/v1/artists?ids=${artistIdsArray.join(',')}`,
           { headers: { 'Authorization': `Bearer ${token}` } }
         );
 
-        if (featuresResponse.ok) {
-          const featuresData = await featuresResponse.json() as any;
-          audioFeatures = featuresData.audio_features || [];
-          const validFeatures = audioFeatures.filter((f: any) => f !== null);
-          await sseWriter.write({ type: 'thinking', data: `🎯 Audio analysis complete! Got data for ${validFeatures.length} tracks` });
-        } else {
-          const errorText = await featuresResponse.text();
-          console.error(`[analyze_playlist] Audio features failed: ${featuresResponse.status} - ${errorText}`);
+        if (artistsResponse.ok) {
+          const artistsData = await artistsResponse.json() as any;
+          const genreMap = new Map<string, number>();
 
-          if (featuresResponse.status === 403) {
-            await sseWriter.write({
-              type: 'thinking',
-              data: `⚠️ Spotify has deprecated the audio features API (tempo, energy, danceability) for apps created after Nov 27, 2024. Analyzing based on track metadata instead.`
-            });
-          } else {
-            await sseWriter.write({
-              type: 'thinking',
-              data: `⚠️ Audio features unavailable (${featuresResponse.status}) - continuing with metadata-based analysis`
-            });
-          }
+          artistsData.artists.forEach((artist: any) => {
+            if (artist && artist.genres) {
+              artist.genres.forEach((genre: string) => {
+                genreMap.set(genre, (genreMap.get(genre) || 0) + 1);
+              });
+            }
+          });
+
+          // Get top genres sorted by frequency
+          genres = Array.from(genreMap.entries())
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 10)
+            .map(([genre]) => genre);
+
+          await sseWriter.write({ type: 'thinking', data: `🎯 Found ${genres.length} genres across ${artistsData.artists.length} artists` });
         }
       }
 
-      // Step 4: Calculate analysis
-      await sseWriter.write({ type: 'thinking', data: '🧮 Computing musical insights...' });
-      const validFeatures = audioFeatures.filter((f: any) => f !== null);
+      // Step 5: Analyze release dates
+      const releaseDates = validTracks
+        .map((t: any) => t.album?.release_date)
+        .filter(Boolean);
 
-      // Return summary with track IDs only - Claude can request details iteratively
-      // trackIds already declared above at line 131
+      const releaseYears = releaseDates
+        .map((date: string) => parseInt(date.split('-')[0]))
+        .filter((year: number) => !isNaN(year));
+
+      const avgReleaseYear = releaseYears.length > 0
+        ? Math.round(releaseYears.reduce((sum: number, year: number) => sum + year, 0) / releaseYears.length)
+        : null;
+
+      const oldestYear = releaseYears.length > 0 ? Math.min(...releaseYears) : null;
+      const newestYear = releaseYears.length > 0 ? Math.max(...releaseYears) : null;
+
+      await sseWriter.write({ type: 'thinking', data: '🧮 Computing playlist insights...' });
 
       const analysis = {
         playlist_name: playlist.name,
         playlist_description: playlist.description,
         total_tracks: tracks.length,
-        audio_analysis: validFeatures.length > 0 ? {
-          avg_energy: validFeatures.reduce((sum: number, f: any) => sum + f.energy, 0) / validFeatures.length,
-          avg_danceability: validFeatures.reduce((sum: number, f: any) => sum + f.danceability, 0) / validFeatures.length,
-          avg_valence: validFeatures.reduce((sum: number, f: any) => sum + f.valence, 0) / validFeatures.length,
-          avg_tempo: validFeatures.reduce((sum: number, f: any) => sum + f.tempo, 0) / validFeatures.length,
-          avg_acousticness: validFeatures.reduce((sum: number, f: any) => sum + f.acousticness, 0) / validFeatures.length,
-          avg_instrumentalness: validFeatures.reduce((sum: number, f: any) => sum + f.instrumentalness, 0) / validFeatures.length,
-        } : null,
+        metadata_analysis: {
+          avg_popularity: Math.round(avgPopularity),
+          avg_duration_ms: Math.round(avgDuration),
+          avg_duration_minutes: Math.round(avgDuration / 60000 * 10) / 10,
+          explicit_tracks: explicitCount,
+          explicit_percentage: Math.round(explicitPercentage),
+          top_genres: genres,
+          release_year_range: oldestYear && newestYear ? {
+            oldest: oldestYear,
+            newest: newestYear,
+            average: avgReleaseYear
+          } : null,
+          total_artists: artistIdsArray.length
+        },
         track_ids: trackIds,
-        message: 'Use get_playlist_tracks to fetch track details in batches, or get_track_details for specific tracks'
+        message: 'Use get_playlist_tracks to fetch track details in batches, or get_track_details for specific tracks. Audio features (tempo, energy) deprecated by Spotify.'
       };
 
       await sseWriter.write({ type: 'thinking', data: `🎉 Analysis complete for "${analysis.playlist_name}"!` });
@@ -194,7 +237,7 @@ async function executeSpotifyToolWithProgress(
       const analysisJson = JSON.stringify(analysis);
       console.log(`[Tool] analyze_playlist completed successfully`);
       console.log(`[Tool] Analysis JSON size: ${analysisJson.length} bytes (${(analysisJson.length / 1024).toFixed(1)}KB)`);
-      console.log(`[Tool] Returning summary with ${trackIds.length} track IDs and ${validFeatures.length > 0 ? 'audio analysis' : 'no audio analysis'}`);
+      console.log(`[Tool] Returning metadata analysis with ${trackIds.length} track IDs`);
 
       return analysis;
 
@@ -772,8 +815,16 @@ chatStreamRouter.post('/message', async (c) => {
       // Build system prompt
       const systemPrompt = `You are an AI DJ assistant with access to Spotify.
 
+IMPORTANT: Spotify deprecated audio features (tempo, energy, danceability) on Nov 27, 2024.
+analyze_playlist now returns METADATA-BASED analysis instead:
+- Popularity (0-100 score based on play counts)
+- Genres (from artist data)
+- Release year range (oldest to newest)
+- Average track duration
+- Explicit content percentage
+
 ITERATIVE DATA FETCHING WORKFLOW:
-1. analyze_playlist returns SUMMARY only (avg tempo, energy, etc. + track_ids)
+1. analyze_playlist returns SUMMARY with metadata analysis + track_ids
 2. get_playlist_tracks gets compact track info in batches (20 at a time)
 3. get_track_details gets full metadata when needed (album art, release dates, etc.)
 
@@ -783,20 +834,21 @@ ${playlistId ? `CONTEXT: User has selected playlist ID: ${playlistId}
 
 WORKFLOW FOR THIS PLAYLIST:
 1. If user asks about the playlist, start with: analyze_playlist({"playlist_id": "${playlistId}"})
-2. analyze_playlist returns:
-   - If audio_analysis is present: Use those values (avg_tempo, avg_energy, etc.) to describe the playlist
-   - If audio_analysis is null: Audio features unavailable, describe based on playlist name/description only
+2. analyze_playlist returns metadata_analysis with:
+   - avg_popularity: How mainstream/popular the tracks are (0-100)
+   - top_genres: Most common genres across artists
+   - release_year_range: Time span of music (e.g., 1980-2024)
+   - avg_duration_minutes: Average track length
+   - explicit_percentage: % of tracks with explicit content
 3. To see track names: get_playlist_tracks({"playlist_id": "${playlistId}", "offset": 0, "limit": 20})
 4. To get more tracks: use different offset (20, 40, 60, etc.)
 5. For specific track details: get_track_details({"track_ids": ["id1", "id2", ...]})
 
-CRITICAL: There is NO get_audio_features tool. Audio features are ONLY available through analyze_playlist.
-If analyze_playlist returns audio_analysis: null, you MUST describe the playlist based ONLY on its name and description.
-
-EXAMPLE QUESTIONS:
-- "What's the tempo?" → analyze_playlist only
-  - If has avg_tempo: Report it (e.g., "The playlist has an average tempo of 120 BPM")
-  - If audio_analysis is null: Say "Audio analysis is unavailable for this playlist. Based on the description '[description]', this appears to be [genre] music."
+EXAMPLE QUESTIONS & RESPONSES:
+- "What's the tempo?" → "Audio features (tempo, energy) were deprecated by Spotify. Based on the genres [list genres] and description, this appears to be [describe music style]."
+- "What's the vibe?" → Use popularity, genres, release years, and description to describe the playlist's vibe
+- "Is this music old or new?" → Use release_year_range to answer
+- "What genres?" → Use top_genres from metadata_analysis
 - "List the first 10 tracks" → analyze_playlist + get_playlist_tracks(limit: 10)
 - "What album is track 5 from?" → get_playlist_tracks + get_track_details for that track` : ''}
 
@@ -805,9 +857,9 @@ TOOL RULES:
 - ALWAYS provide required parameters
 - Use pagination (offset/limit) for large playlists
 - Only fetch what you need to answer the user's question
-- There is NO get_audio_features tool - audio data comes from analyze_playlist only
+- Use metadata_analysis (not audio_analysis) for playlist insights
 
-Be concise and helpful. Fetch data iteratively based on what the user actually asks for.`;
+Be concise and helpful. Describe playlists using genres, popularity, era, and descriptions.`;
 
       await sseWriter.write({
         type: 'log',
