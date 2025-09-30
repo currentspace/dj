@@ -8,6 +8,7 @@ import { executeSpotifyTool } from '../lib/spotify-tools';
 import type { StreamToolData, StreamToolResult, StreamDebugData, StreamLogData } from '@dj/shared-types';
 import { AudioEnrichmentService } from '../services/AudioEnrichmentService';
 import { LastFmService } from '../services/LastFmService';
+import { ProgressNarrator } from '../lib/progress-narrator';
 
 const chatStreamRouter = new Hono<{ Bindings: Env }>();
 
@@ -94,7 +95,10 @@ async function executeSpotifyToolWithProgress(
   args: Record<string, unknown>,
   token: string,
   sseWriter: SSEWriter,
-  env?: Env
+  env?: Env,
+  narrator?: ProgressNarrator,
+  userRequest?: string,
+  recentMessages?: string[]
 ): Promise<unknown> {
   console.log(`[Tool] Executing ${toolName} with args:`, JSON.stringify(args).substring(0, 200));
 
@@ -102,10 +106,29 @@ async function executeSpotifyToolWithProgress(
     const { playlist_id } = args;
 
     try {
-      await sseWriter.write({ type: 'thinking', data: '📊 Starting playlist analysis...' });
+      // Use narrator if available, otherwise fallback to static message
+      const startMessage = narrator
+        ? await narrator.generateMessage({
+            eventType: 'tool_call_start',
+            toolName: 'analyze_playlist',
+            parameters: args,
+            userRequest,
+            previousMessages: recentMessages,
+          })
+        : '📊 Starting playlist analysis...';
+
+      await sseWriter.write({ type: 'thinking', data: startMessage });
 
       // Step 1: Get playlist details
-      await sseWriter.write({ type: 'thinking', data: '🔍 Fetching playlist information...' });
+      const fetchMessage = narrator
+        ? await narrator.generateMessage({
+            eventType: 'analyzing_request',
+            userRequest,
+            previousMessages: recentMessages,
+          })
+        : '🔍 Fetching playlist information...';
+      await sseWriter.write({ type: 'thinking', data: fetchMessage });
+
       const playlistResponse = await fetch(
         `https://api.spotify.com/v1/playlists/${playlist_id}`,
         { headers: { 'Authorization': `Bearer ${token}` } }
@@ -116,10 +139,27 @@ async function executeSpotifyToolWithProgress(
       }
 
       const playlist = await playlistResponse.json() as any;
-      await sseWriter.write({ type: 'thinking', data: `🎼 Found "${playlist.name}" with ${playlist.tracks?.total || 0} tracks` });
+
+      const foundMessage = narrator
+        ? await narrator.generateMessage({
+            eventType: 'searching_tracks',
+            parameters: { name: playlist.name, trackCount: playlist.tracks?.total || 0 },
+            userRequest,
+            previousMessages: recentMessages,
+          })
+        : `🎼 Found "${playlist.name}" with ${playlist.tracks?.total || 0} tracks`;
+      await sseWriter.write({ type: 'thinking', data: foundMessage });
 
       // Step 2: Get tracks
-      await sseWriter.write({ type: 'thinking', data: '🎵 Fetching track details...' });
+      const tracksMessage = narrator
+        ? await narrator.generateMessage({
+            eventType: 'analyzing_audio',
+            metadata: { trackCount: playlist.tracks?.total || 0 },
+            userRequest,
+            previousMessages: recentMessages,
+          })
+        : '🎵 Fetching track details...';
+      await sseWriter.write({ type: 'thinking', data: tracksMessage });
       const tracksResponse = await fetch(
         `https://api.spotify.com/v1/playlists/${playlist_id}/tracks?limit=100`,
         { headers: { 'Authorization': `Bearer ${token}` } }
@@ -433,7 +473,10 @@ function createStreamingSpotifyTools(
   contextPlaylistId?: string,
   mode?: string,
   abortSignal?: AbortSignal,
-  env?: Env
+  env?: Env,
+  narrator?: ProgressNarrator,
+  userRequest?: string,
+  recentMessages?: string[]
 ): DynamicStructuredTool[] {
 
   const tools: DynamicStructuredTool[] = [
@@ -487,8 +530,17 @@ function createStreamingSpotifyTools(
           data: { tool: 'analyze_playlist', args: finalArgs }
         });
 
-        // Use enhanced executeSpotifyTool with progress streaming
-        const result = await executeSpotifyToolWithProgress('analyze_playlist', finalArgs, spotifyToken, sseWriter, env);
+        // Use enhanced executeSpotifyTool with progress streaming and narrator
+        const result = await executeSpotifyToolWithProgress(
+          'analyze_playlist',
+          finalArgs,
+          spotifyToken,
+          sseWriter,
+          env,
+          narrator,
+          userRequest,
+          recentMessages
+        );
 
         await sseWriter.write({
           type: 'tool_end',
@@ -962,11 +1014,30 @@ chatStreamRouter.post('/message', async (c) => {
         }
       });
 
-      // Send initial thinking message
-      await sseWriter.write({ type: 'thinking', data: 'Processing your request...' });
+      // Initialize progress narrator with Haiku
+      const narrator = new ProgressNarrator(env.ANTHROPIC_API_KEY);
+      const recentMessages: string[] = [];
+
+      // Send initial thinking message with dynamic narration
+      const initialMessage = await narrator.generateMessage({
+        eventType: 'started',
+        userRequest: request.message,
+      });
+      recentMessages.push(initialMessage);
+      await sseWriter.write({ type: 'thinking', data: initialMessage });
 
       // Create tools with streaming callbacks
-      const tools = createStreamingSpotifyTools(spotifyToken, sseWriter, playlistId || undefined, request.mode, abortController.signal, env);
+      const tools = createStreamingSpotifyTools(
+        spotifyToken,
+        sseWriter,
+        playlistId || undefined,
+        request.mode,
+        abortController.signal,
+        env,
+        narrator,
+        request.message,
+        recentMessages
+      );
 
       // Initialize Claude with streaming
       if (!env.ANTHROPIC_API_KEY) {
