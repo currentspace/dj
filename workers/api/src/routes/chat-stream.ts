@@ -885,11 +885,22 @@ Be concise and helpful. Fetch data iteratively based on what the user actually a
         }
 
         chunkCount++;
-        // Handle content chunks
+        // Handle content chunks (both string and array formats)
+        let textContent = '';
         if (typeof chunk.content === 'string' && chunk.content) {
-          fullResponse += chunk.content;
-          await sseWriter.write({ type: 'content', data: chunk.content });
-          console.log(`[Stream:${requestId}] Content chunk ${chunkCount}: ${chunk.content.substring(0, 50)}...`);
+          textContent = chunk.content;
+        } else if (Array.isArray(chunk.content)) {
+          for (const block of chunk.content) {
+            if (block.type === 'text' && block.text) {
+              textContent += block.text;
+            }
+          }
+        }
+
+        if (textContent) {
+          fullResponse += textContent;
+          await sseWriter.write({ type: 'content', data: textContent });
+          console.log(`[Stream:${requestId}] Content chunk ${chunkCount}: ${textContent.substring(0, 50)}...`);
         }
 
         // Handle tool calls
@@ -1024,13 +1035,26 @@ Be concise and helpful. Fetch data iteratively based on what the user actually a
             chunkContent: contentPreview
           });
 
+          // Handle both string content and array content blocks (Claude API format)
+          let textContent = '';
           if (typeof chunk.content === 'string' && chunk.content) {
+            textContent = chunk.content;
+          } else if (Array.isArray(chunk.content)) {
+            // Extract text from content blocks: [{"type":"text","text":"..."}]
+            for (const block of chunk.content) {
+              if (block.type === 'text' && block.text) {
+                textContent += block.text;
+              }
+            }
+          }
+
+          if (textContent) {
             if (!contentStarted) {
-              console.log(`[Stream:${requestId}] CONTENT STARTED at chunk ${finalChunkCount}: ${chunk.content.substring(0, 100)}`);
+              console.log(`[Stream:${requestId}] CONTENT STARTED at chunk ${finalChunkCount}: ${textContent.substring(0, 100)}`);
               contentStarted = true;
             }
-            fullResponse += chunk.content;
-            await sseWriter.write({ type: 'content', data: chunk.content });
+            fullResponse += textContent;
+            await sseWriter.write({ type: 'content', data: textContent });
           }
         }
         console.log(`[Stream:${requestId}] Final response complete. Chunks: ${finalChunkCount}, Total content: ${fullResponse.length} chars`);
