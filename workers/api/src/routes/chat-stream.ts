@@ -154,7 +154,7 @@ async function executeSpotifyToolWithProgress(
           if (featuresResponse.status === 403) {
             await sseWriter.write({
               type: 'thinking',
-              data: `⚠️ Audio features require re-authentication. Please log out and log in again to enable full audio analysis.`
+              data: `⚠️ Audio features require re-authentication. Click the "🔍 Scope Debug" button to diagnose the issue, then log out and log in again to enable full audio analysis.`
             });
           } else {
             await sseWriter.write({
