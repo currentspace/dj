@@ -61,18 +61,24 @@ export class RequestOrchestrator {
    * @param lane - Optional lane identifier for fairness (e.g., 'anthropic', 'spotify', 'lastfm')
    */
   async execute<T>(task: Task<T>, lane: LaneKey = 'default'): Promise<T | null> {
+    console.log(`[RequestOrchestrator] execute() called with lane: ${lane}, queue size: ${this.queue.size()}, running: ${this.queueRunning}`);
+
     return new Promise((resolve, reject) => {
       // Directly enqueue the wrapped task
       this.queue.enqueue(async () => {
+        console.log(`[RequestOrchestrator] Task starting for lane: ${lane}`);
         try {
           const result = await task();
+          console.log(`[RequestOrchestrator] Task completed for lane: ${lane}`);
           resolve(result);
           return result;
         } catch (error) {
+          console.error(`[RequestOrchestrator] Task failed for lane: ${lane}`, error);
           reject(error);
           return null;
         }
       });
+      console.log(`[RequestOrchestrator] Task enqueued for lane: ${lane}, new queue size: ${this.queue.size()}`);
     });
   }
 
@@ -139,7 +145,12 @@ export class RequestOrchestrator {
    * Uses RateLimitedQueue.processContinuously() which handles nested enqueueing automatically
    */
   private startQueueProcessor(): void {
-    if (this.queueRunning) return;
+    if (this.queueRunning) {
+      console.log('[RequestOrchestrator] Queue processor already running');
+      return;
+    }
+
+    console.log('[RequestOrchestrator] Starting continuous queue processor...');
     this.queueRunning = true;
 
     // Use the continuous processor - it will automatically pick up new tasks
@@ -148,6 +159,8 @@ export class RequestOrchestrator {
       console.error('[RequestOrchestrator] Fatal error in continuous processor:', err);
       this.queueRunning = false;
     });
+
+    console.log('[RequestOrchestrator] Continuous queue processor started');
   }
 }
 

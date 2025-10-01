@@ -245,8 +245,10 @@ export class RateLimitedQueue<T> {
   async processContinuously(
     onResult?: (result: T | null) => void | Promise<void>
   ): Promise<void> {
+    console.log('[RateLimitedQueue] processContinuously() called');
     if (this.processing) throw new Error("Already processing");
     this.processing = true;
+    console.log('[RateLimitedQueue] Continuous processing started');
 
     let globalIndex = 0;
 
@@ -308,6 +310,8 @@ export class RateLimitedQueue<T> {
 
       refill();
 
+      console.log(`[RateLimitedQueue] tick() - queue.length: ${this.queue.length}, running: ${this.running}, tokens: ${this.tokens.toFixed(2)}`);
+
       // Launch as many as tokens & concurrency allow
       // IMPORTANT: Check this.queue.length dynamically (not a fixed 'total')
       while (
@@ -317,11 +321,13 @@ export class RateLimitedQueue<T> {
       ) {
         this.tokens -= 1;
         const task = this.queue.shift()!; // Take from front
+        console.log(`[RateLimitedQueue] Launching task - remaining queue: ${this.queue.length}, running: ${this.running + 1}`);
         runOne(task);
       }
 
       // If there are still tasks, schedule next wakeup
       if (this.queue.length > 0) {
+        console.log(`[RateLimitedQueue] Scheduling next tick for ${this.queue.length} remaining tasks`);
         scheduleNext();
       }
     };
