@@ -386,7 +386,8 @@ async function executeSpotifyToolWithProgress(
                 await new Promise(resolve => setTimeout(resolve, 25));
               }
             } catch (error) {
-              console.error(`[BPMEnrichment] Failed for track "${track.name}":`, error);
+              const enrichLogger = new ServiceLogger('BPMEnrichment', sseWriter);
+              enrichLogger.error(`Failed for track "${track.name}"`, error);
               // Continue with next track
             }
           }
@@ -446,7 +447,8 @@ async function executeSpotifyToolWithProgress(
             await sseWriter.write({ type: 'thinking', data: '⚠️ No Deezer data available for these tracks' });
           }
         } catch (error) {
-          console.error('[DeezerEnrichment] Failed:', error);
+          const enrichLogger = new ServiceLogger('DeezerEnrichment', sseWriter);
+          enrichLogger.error('Enrichment failed', error);
           await sseWriter.write({ type: 'thinking', data: '⚠️ Deezer enrichment unavailable - continuing with metadata only' });
         }
       }
@@ -529,7 +531,8 @@ async function executeSpotifyToolWithProgress(
                 await new Promise(resolve => setTimeout(resolve, 25));
               }
             } catch (error) {
-              console.error(`[LastFm] Failed for track ${track.name}:`, error);
+              const lastfmLogger = new ServiceLogger('LastFm', sseWriter);
+              lastfmLogger.error(`Failed for track ${track.name}`, error);
             }
           }
 
@@ -615,7 +618,8 @@ async function executeSpotifyToolWithProgress(
             await sseWriter.write({ type: 'thinking', data: `✅ Enriched ${signalsMap.size} tracks + ${artistInfoMap.size} artists!` });
           }
         } catch (error) {
-          console.error('[LastFm] Enrichment failed:', error);
+          const lastfmLogger = new ServiceLogger('LastFm', sseWriter);
+          lastfmLogger.error('Enrichment failed', error);
           await sseWriter.write({ type: 'thinking', data: '⚠️ Last.fm enrichment unavailable - continuing without tags' });
         }
       }
@@ -671,7 +675,11 @@ async function executeSpotifyToolWithProgress(
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
       await sseWriter.write({ type: 'thinking', data: `❌ Analysis failed: ${errorMsg}` });
-      console.error(`[Tool] analyze_playlist failed:`, error);
+      const toolLogger = new ServiceLogger('Tool:analyze_playlist', sseWriter);
+      toolLogger.error('Analysis failed', error, {
+        errorMessage: errorMsg,
+        errorType: error?.constructor?.name
+      });
       throw error;
     }
   }
@@ -1673,10 +1681,13 @@ chatStreamRouter.post('/message', async (c) => {
   console.log(`[Stream:${requestId}] Auth header present: ${!!authorization}`);
   console.log(`[Stream:${requestId}] Env keys:`, Object.keys(env));
 
+  // Initialize ServiceLogger for this stream
+  const streamLogger = new ServiceLogger(`Stream:${requestId}`, sseWriter);
+
   // Process the request and stream responses
   const processStream = async () => {
-    console.log(`[Stream:${requestId}] Starting async stream processing`);
-    console.log(`[Stream:${requestId}] SSEWriter created, starting heartbeat`);
+    streamLogger.info('Starting async stream processing');
+    streamLogger.info('SSEWriter created, starting heartbeat');
 
     // Heartbeat to keep connection alive
     const heartbeatInterval = setInterval(async () => {
@@ -2277,9 +2288,12 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
 
     } catch (error) {
       if (error instanceof Error && error.message === 'Request aborted') {
-        console.log(`[Stream:${requestId}] Request was aborted by client`);
+        streamLogger.info('Request was aborted by client');
       } else {
-        console.error(`[Stream:${requestId}] Error:`, error);
+        streamLogger.error('Stream processing error', error, {
+          errorType: error?.constructor?.name,
+          errorMessage: error instanceof Error ? error.message : String(error)
+        });
         await sseWriter.write({
           type: 'error',
           data: error instanceof Error ? error.message : 'An error occurred'
@@ -2288,15 +2302,15 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
     } finally {
       clearInterval(heartbeatInterval);
       c.req.raw.signal.removeEventListener('abort', onAbort);
-      console.log(`[Stream:${requestId}] Closing writer...`);
+      streamLogger.info('Closing writer...');
       await sseWriter.close();
-      console.log(`[Stream:${requestId}] Stream cleanup complete, heartbeat cleared`);
+      streamLogger.info('Stream cleanup complete, heartbeat cleared');
     }
   };
 
   // Start processing without blocking the response
   processStream().catch(error => {
-    console.error(`[Stream:${requestId}] Unhandled error in processStream:`, error);
+    streamLogger.error('Unhandled error in processStream', error);
   });
 
   // Return the SSE response immediately
