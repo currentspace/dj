@@ -1002,6 +1002,323 @@ function createStreamingSpotifyTools(
 
         return result;
       }
+    }),
+
+    new DynamicStructuredTool({
+      name: 'recommend_from_similar',
+      description: 'Get Spotify track IDs from Last.fm similar tracks. Provide artist-track strings (e.g., "Daft Punk - One More Time") and get back Spotify IDs ready to use.',
+      schema: z.object({
+        similar_tracks: z.array(z.string()).min(1).max(20).describe('Array of "Artist - Track" strings from Last.fm similar_tracks'),
+        limit_per_track: z.number().min(1).max(5).default(1).describe('How many search results to return per track (default 1 = best match)')
+      }),
+      func: async (args) => {
+        if (abortSignal?.aborted) throw new Error('Request aborted');
+
+        await sseWriter.write({
+          type: 'tool_start',
+          data: { tool: 'recommend_from_similar', args }
+        });
+
+        await sseWriter.write({
+          type: 'thinking',
+          data: `🔍 Searching Spotify for ${args.similar_tracks.length} Last.fm recommendations...`
+        });
+
+        const recommendations: any[] = [];
+        let successCount = 0;
+
+        for (const trackString of args.similar_tracks) {
+          if (abortSignal?.aborted) break;
+
+          try {
+            // Parse "Artist - Track" format
+            const parts = trackString.split(' - ');
+            if (parts.length < 2) {
+              console.warn(`[recommend_from_similar] Invalid format: "${trackString}"`);
+              continue;
+            }
+
+            const artist = parts[0].trim();
+            const track = parts.slice(1).join(' - ').trim();
+            const query = `artist:"${artist}" track:"${track}"`;
+
+            // Search Spotify
+            const response = await fetch(
+              `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=track&limit=${args.limit_per_track}`,
+              { headers: { 'Authorization': `Bearer ${spotifyToken}` } }
+            );
+
+            if (response.ok) {
+              const data = await response.json() as any;
+              const tracks = data.tracks?.items || [];
+
+              for (const spotifyTrack of tracks) {
+                recommendations.push({
+                  id: spotifyTrack.id,
+                  name: spotifyTrack.name,
+                  artists: spotifyTrack.artists?.map((a: any) => a.name).join(', '),
+                  uri: spotifyTrack.uri,
+                  popularity: spotifyTrack.popularity,
+                  source: 'lastfm_similar',
+                  original_query: trackString
+                });
+              }
+
+              if (tracks.length > 0) successCount++;
+            }
+
+            // Rate limiting: 25ms between requests
+            await new Promise(resolve => setTimeout(resolve, 25));
+          } catch (error) {
+            console.error(`[recommend_from_similar] Error searching "${trackString}":`, error);
+          }
+        }
+
+        await sseWriter.write({
+          type: 'thinking',
+          data: `✅ Found ${recommendations.length} tracks (${successCount}/${args.similar_tracks.length} successful)`
+        });
+
+        await sseWriter.write({
+          type: 'tool_end',
+          data: {
+            tool: 'recommend_from_similar',
+            result: `Found ${recommendations.length} Spotify tracks from ${successCount} Last.fm recommendations`
+          }
+        });
+
+        return {
+          tracks: recommendations,
+          total_found: recommendations.length,
+          queries_successful: successCount,
+          queries_total: args.similar_tracks.length
+        };
+      }
+    }),
+
+    new DynamicStructuredTool({
+      name: 'recommend_from_tags',
+      description: 'Discover tracks based on Last.fm crowd tags/genres. Searches Spotify using tag combinations.',
+      schema: z.object({
+        tags: z.array(z.string()).min(1).max(5).describe('Genre/mood tags from Last.fm crowd_tags (e.g., ["italo-disco", "80s", "synth-pop"])'),
+        limit: z.number().min(1).max(50).default(20).describe('Total number of tracks to return')
+      }),
+      func: async (args) => {
+        if (abortSignal?.aborted) throw new Error('Request aborted');
+
+        await sseWriter.write({
+          type: 'tool_start',
+          data: { tool: 'recommend_from_tags', args }
+        });
+
+        await sseWriter.write({
+          type: 'thinking',
+          data: `🏷️ Searching Spotify for tracks matching tags: ${args.tags.join(', ')}`
+        });
+
+        // Build Spotify search query from tags
+        // Try genre: prefix for recognized genres, otherwise just use as keywords
+        const genreKeywords = ['rock', 'pop', 'jazz', 'classical', 'electronic', 'hip-hop', 'indie', 'disco', 'funk', 'soul'];
+        const genreTags = args.tags.filter(tag =>
+          genreKeywords.some(genre => tag.toLowerCase().includes(genre.toLowerCase()))
+        );
+        const otherTags = args.tags.filter(tag => !genreTags.includes(tag));
+
+        let query = '';
+        if (genreTags.length > 0) {
+          query += genreTags.map(tag => `genre:"${tag}"`).join(' OR ');
+        }
+        if (otherTags.length > 0) {
+          if (query) query += ' ';
+          query += otherTags.join(' ');
+        }
+
+        console.log(`[recommend_from_tags] Search query: ${query}`);
+
+        const response = await fetch(
+          `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=track&limit=${args.limit}`,
+          { headers: { 'Authorization': `Bearer ${spotifyToken}` } }
+        );
+
+        if (!response.ok) {
+          throw new Error(`Spotify search failed: ${response.status}`);
+        }
+
+        const data = await response.json() as any;
+        const tracks = data.tracks?.items || [];
+
+        const recommendations = tracks.map((track: any) => ({
+          id: track.id,
+          name: track.name,
+          artists: track.artists?.map((a: any) => a.name).join(', '),
+          uri: track.uri,
+          popularity: track.popularity,
+          album: track.album?.name,
+          source: 'tag_based',
+          matched_tags: args.tags
+        }));
+
+        await sseWriter.write({
+          type: 'thinking',
+          data: `✅ Found ${recommendations.length} tracks matching ${args.tags.length} tags`
+        });
+
+        await sseWriter.write({
+          type: 'tool_end',
+          data: {
+            tool: 'recommend_from_tags',
+            result: `Found ${recommendations.length} tracks for tags: ${args.tags.join(', ')}`
+          }
+        });
+
+        return {
+          tracks: recommendations,
+          total_found: recommendations.length,
+          tags_used: args.tags,
+          search_query: query
+        };
+      }
+    }),
+
+    new DynamicStructuredTool({
+      name: 'curate_recommendations',
+      description: 'Use AI to intelligently rank and filter track recommendations based on user criteria and playlist characteristics. Provide tracks and context, get back curated top picks with reasoning.',
+      schema: z.object({
+        candidate_tracks: z.array(z.object({
+          id: z.string(),
+          name: z.string(),
+          artists: z.string(),
+          popularity: z.number().optional(),
+          source: z.string().optional()
+        })).min(1).max(100).describe('Tracks to curate (from various sources like tag search, similar tracks, Spotify recommendations)'),
+        playlist_context: z.object({
+          bpm_range: z.object({ min: z.number(), max: z.number() }).optional(),
+          dominant_tags: z.array(z.string()).optional(),
+          avg_popularity: z.number().optional(),
+          era: z.string().optional()
+        }).describe('Context from analyze_playlist to guide curation'),
+        user_request: z.string().describe('User\'s original request to understand intent'),
+        top_n: z.number().min(1).max(50).default(10).describe('How many curated recommendations to return')
+      }),
+      func: async (args) => {
+        if (abortSignal?.aborted) throw new Error('Request aborted');
+
+        await sseWriter.write({
+          type: 'tool_start',
+          data: { tool: 'curate_recommendations', args: { track_count: args.candidate_tracks.length, top_n: args.top_n } }
+        });
+
+        await sseWriter.write({
+          type: 'thinking',
+          data: `🤖 Using AI to curate ${args.top_n} best picks from ${args.candidate_tracks.length} candidates...`
+        });
+
+        // Use Claude Haiku for fast, cost-effective curation
+        const anthropic = new AnthropicBedrock({
+          model: 'claude-haiku-4-5-20250514',
+          anthropicApiKey: env.ANTHROPIC_API_KEY
+        });
+
+        const curationPrompt = `You are a music curator helping select the best track recommendations.
+
+USER REQUEST: "${args.user_request}"
+
+PLAYLIST CONTEXT:
+${args.playlist_context.bpm_range ? `BPM Range: ${args.playlist_context.bpm_range.min}-${args.playlist_context.bpm_range.max}` : ''}
+${args.playlist_context.dominant_tags?.length ? `Dominant Tags: ${args.playlist_context.dominant_tags.join(', ')}` : ''}
+${args.playlist_context.avg_popularity ? `Average Popularity: ${args.playlist_context.avg_popularity}/100` : ''}
+${args.playlist_context.era ? `Era: ${args.playlist_context.era}` : ''}
+
+CANDIDATE TRACKS (${args.candidate_tracks.length} total):
+${args.candidate_tracks.slice(0, 50).map((t, i) =>
+  `${i + 1}. "${t.name}" by ${t.artists} (popularity: ${t.popularity || 'unknown'}, source: ${t.source || 'unknown'})`
+).join('\n')}
+${args.candidate_tracks.length > 50 ? `\n... and ${args.candidate_tracks.length - 50} more` : ''}
+
+Select the top ${args.top_n} tracks that best match the user's request and playlist context.
+Consider: genre fit, era match, popularity balance, diversity, and relevance to user intent.
+
+Return ONLY a JSON object with this structure:
+{
+  "selected_track_ids": ["id1", "id2", ...],
+  "reasoning": "Brief explanation of selection criteria in 1-2 sentences"
+}`;
+
+        try {
+          const response = await anthropic.invoke([
+            new SystemMessage('You are a music curator. Return only valid JSON.'),
+            new HumanMessage(curationPrompt)
+          ]);
+
+          console.log(`[curate_recommendations] Claude response:`, response.content);
+
+          // Parse JSON from response
+          const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
+          const jsonMatch = content.match(/\{[\s\S]*\}/);
+          if (!jsonMatch) {
+            throw new Error('No JSON found in response');
+          }
+
+          const curation = JSON.parse(jsonMatch[0]);
+          const selectedIds = curation.selected_track_ids || [];
+          const reasoning = curation.reasoning || 'AI curation complete';
+
+          // Filter candidate tracks to only selected ones
+          const curatedTracks = args.candidate_tracks.filter(t => selectedIds.includes(t.id));
+
+          // Preserve order from AI selection
+          const orderedTracks = selectedIds
+            .map(id => curatedTracks.find(t => t.id === id))
+            .filter(Boolean);
+
+          await sseWriter.write({
+            type: 'thinking',
+            data: `✅ Curated ${orderedTracks.length} top picks: ${reasoning}`
+          });
+
+          await sseWriter.write({
+            type: 'tool_end',
+            data: {
+              tool: 'curate_recommendations',
+              result: `Curated ${orderedTracks.length} tracks using AI`
+            }
+          });
+
+          return {
+            curated_tracks: orderedTracks,
+            total_curated: orderedTracks.length,
+            original_count: args.candidate_tracks.length,
+            reasoning: reasoning
+          };
+        } catch (error) {
+          console.error('[curate_recommendations] AI curation failed:', error);
+
+          // Fallback: Sort by popularity and return top N
+          const fallbackTracks = args.candidate_tracks
+            .sort((a, b) => (b.popularity || 0) - (a.popularity || 0))
+            .slice(0, args.top_n);
+
+          await sseWriter.write({
+            type: 'thinking',
+            data: `⚠️ AI curation unavailable, using popularity-based ranking`
+          });
+
+          await sseWriter.write({
+            type: 'tool_end',
+            data: {
+              tool: 'curate_recommendations',
+              result: `Fallback: Sorted ${fallbackTracks.length} tracks by popularity`
+            }
+          });
+
+          return {
+            curated_tracks: fallbackTracks,
+            total_curated: fallbackTracks.length,
+            original_count: args.candidate_tracks.length,
+            reasoning: 'Ranked by popularity (AI curation unavailable)'
+          };
+        }
+      }
     })
   ];
 
@@ -1266,6 +1583,42 @@ TOOL RULES:
 - Use pagination (offset/limit) for large playlists
 - Only fetch what you need to answer the user's question
 - Use metadata_analysis (not audio_analysis) for playlist insights
+
+RECOMMENDATION WORKFLOW:
+When user asks for track recommendations or similar music, use these specialized tools:
+
+1. START: analyze_playlist to get enrichment data (BPM, tags, popularity)
+
+2. DISCOVER via multiple sources (pick 2-3 relevant ones):
+   a) recommend_from_similar - Converts Last.fm similar_tracks to Spotify IDs
+      - Takes: ["Daft Punk - One More Time", "Stardust - Music Sounds Better"]
+      - Returns: Spotify track objects with IDs ready to use
+
+   b) recommend_from_tags - Genre/tag-based discovery via Spotify search
+      - Takes: tags from lastfm_analysis.crowd_tags (e.g., ["italo-disco", "80s", "synth-pop"])
+      - Returns: Up to 50 matching tracks with IDs
+
+   c) get_recommendations - Spotify's algorithmic recommendations
+      - Takes: seed_tracks from analyzed playlist + audio parameters
+      - Returns: Up to 20 algorithmically similar tracks
+
+3. COMBINE all results into a single candidate list
+
+4. CURATE: curate_recommendations - AI-powered intelligent ranking
+   - Takes: Combined candidate tracks + playlist context + user request
+   - Returns: Top N curated picks with reasoning
+   - Uses Claude Haiku to select best matches based on:
+     * Genre/tag fit, BPM range, era match, popularity balance, diversity
+
+5. PRESENT top recommendations with reasoning from curator
+
+EXAMPLE: "Find tracks like this playlist"
+1. analyze_playlist → BPM 120-130, tags ["italo-disco", "80s", "synth-pop"], similar_tracks [20 strings]
+2. recommend_from_similar(similar_tracks=[first 10]) → 8 Spotify tracks with IDs
+3. recommend_from_tags(tags=["italo-disco", "80s"], limit=20) → 20 tracks
+4. get_recommendations(seed_tracks=[top 3 IDs], target_energy=0.7) → 20 tracks
+5. curate_recommendations(candidates=[all 48 tracks], context={BPM 120-130, tags, etc}, top_n=10)
+6. Present curated top 10 with AI reasoning
 
 Be concise and helpful. Describe playlists using genres, popularity, era, and descriptions.`;
 
