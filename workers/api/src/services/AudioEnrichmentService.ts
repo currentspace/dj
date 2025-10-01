@@ -20,6 +20,7 @@ export interface EnrichmentCache {
   enrichment: BPMEnrichment;
   fetched_at: string;
   ttl: number;
+  is_miss?: boolean; // Track if this was a cache miss (null result)
 }
 
 interface SpotifyTrack {
@@ -42,7 +43,8 @@ interface DeezerTrack {
 
 export class AudioEnrichmentService {
   private cache: KVNamespace | null;
-  private cacheTTL: number = 90 * 24 * 60 * 60; // 90 days
+  private cacheTTL: number = 90 * 24 * 60 * 60; // 90 days for hits
+  private missCacheTTL: number = 1 * 24 * 60 * 60; // 1 day for misses (retry sooner)
   private rateLimitDelay: number = 200; // 200ms between calls (5 QPS)
 
   constructor(cache?: KVNamespace) {
@@ -63,16 +65,31 @@ export class AudioEnrichmentService {
     });
 
     // Try cache first
+    let existingEnrichment: BPMEnrichment | null = null;
     if (this.cache) {
       const cached = await this.getCached(cacheKey);
       if (cached) {
-        console.log(`[DeezerEnrichment] ✅ Cache hit for ${track.id}:`, {
-          bpm: cached.enrichment.bpm,
-          gain: cached.enrichment.gain,
-          rank: cached.enrichment.rank,
-          release_date: cached.enrichment.release_date
-        });
-        return cached.enrichment;
+        // If this is a complete hit (has BPM), return it
+        if (cached.enrichment.bpm !== null) {
+          console.log(`[DeezerEnrichment] ✅ Cache hit for ${track.id}:`, {
+            bpm: cached.enrichment.bpm,
+            gain: cached.enrichment.gain,
+            rank: cached.enrichment.rank,
+            release_date: cached.enrichment.release_date
+          });
+          return cached.enrichment;
+        }
+
+        // If this is a recent miss (less than 1 day old), return the miss
+        const age = Date.now() - new Date(cached.fetched_at).getTime();
+        if (cached.is_miss && age < this.missCacheTTL * 1000) {
+          console.log(`[DeezerEnrichment] 🔄 Recent miss cached for ${track.id}, age: ${Math.round(age / 1000 / 60 / 60)}h`);
+          return cached.enrichment;
+        }
+
+        // Store existing partial data for merging
+        existingEnrichment = cached.enrichment;
+        console.log(`[DeezerEnrichment] 🔄 Retrying old miss for ${track.id}`);
       }
     }
 
@@ -109,9 +126,23 @@ export class AudioEnrichmentService {
       }
     }
 
-    // Cache the result (even if null, to avoid repeat lookups)
+    // Merge with existing enrichment data (additive)
+    if (existingEnrichment) {
+      enrichment = {
+        bpm: enrichment.bpm ?? existingEnrichment.bpm,
+        gain: enrichment.gain ?? existingEnrichment.gain,
+        rank: enrichment.rank ?? existingEnrichment.rank,
+        release_date: enrichment.release_date ?? existingEnrichment.release_date,
+        source: enrichment.source ?? existingEnrichment.source
+      };
+      console.log(`[DeezerEnrichment] 🔗 Merged with existing data for ${track.id}`);
+    }
+
+    // Cache the result with appropriate TTL
     if (this.cache) {
-      await this.setCached(cacheKey, enrichment);
+      const isMiss = enrichment.bpm === null;
+      await this.setCached(cacheKey, enrichment, isMiss);
+      console.log(`[DeezerEnrichment] Cached ${isMiss ? 'miss' : 'hit'} for ${track.id}`);
     }
 
     return enrichment;
@@ -376,23 +407,25 @@ export class AudioEnrichmentService {
   /**
    * Cache enrichment data
    */
-  private async setCached(trackId: string, enrichment: BPMEnrichment): Promise<void> {
+  private async setCached(trackId: string, enrichment: BPMEnrichment, isMiss: boolean = false): Promise<void> {
     if (!this.cache) return;
 
     try {
+      const ttl = isMiss ? this.missCacheTTL : this.cacheTTL;
       const cacheData: EnrichmentCache = {
         enrichment,
         fetched_at: new Date().toISOString(),
-        ttl: this.cacheTTL
+        ttl,
+        is_miss: isMiss
       };
 
       await this.cache.put(
         `bpm:${trackId}`,
         JSON.stringify(cacheData),
-        { expirationTtl: this.cacheTTL }
+        { expirationTtl: ttl }
       );
 
-      console.log(`[BPMEnrichment] Cached for ${trackId}`);
+      console.log(`[BPMEnrichment] Cached ${isMiss ? 'miss' : 'hit'} for ${trackId} (TTL: ${Math.round(ttl / 86400)} days)`);
     } catch (error) {
       console.error('[BPMEnrichment] Cache write error:', error);
     }

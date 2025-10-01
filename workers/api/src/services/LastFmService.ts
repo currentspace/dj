@@ -68,6 +68,7 @@ export interface LastFmCache {
   signals: LastFmSignals;
   fetched_at: string;
   ttl: number;
+  is_miss?: boolean; // Track if this was a cache miss (no data found)
 }
 
 interface LastFmTrack {
@@ -79,7 +80,8 @@ interface LastFmTrack {
 export class LastFmService {
   private apiKey: string;
   private cache: KVNamespace | null;
-  private cacheTTL: number = 7 * 24 * 60 * 60; // 7 days (refresh weekly)
+  private cacheTTL: number = 7 * 24 * 60 * 60; // 7 days for hits (refresh weekly)
+  private missCacheTTL: number = 1 * 24 * 60 * 60; // 1 day for misses (retry sooner)
   private apiBaseUrl = 'https://ws.audioscrobbler.com/2.0/';
 
   constructor(apiKey: string, cache?: KVNamespace) {
@@ -95,11 +97,27 @@ export class LastFmService {
     const cacheKey = this.generateCacheKey(track.artist, track.name);
 
     // Try cache first
+    let existingSignals: LastFmSignals | null = null;
     if (this.cache) {
       const cached = await this.getCached(cacheKey);
       if (cached) {
-        console.log(`[LastFm] Cache hit for ${track.artist} - ${track.name}`);
-        return cached.signals;
+        // If this has meaningful data (tags or popularity), return it
+        const hasData = cached.signals.topTags.length > 0 || cached.signals.listeners > 0;
+        if (hasData) {
+          console.log(`[LastFm] ✅ Cache hit for ${track.artist} - ${track.name}`);
+          return cached.signals;
+        }
+
+        // If this is a recent miss (less than 1 day old), return the miss
+        const age = Date.now() - new Date(cached.fetched_at).getTime();
+        if (cached.is_miss && age < this.missCacheTTL * 1000) {
+          console.log(`[LastFm] 🔄 Recent miss cached for ${track.artist} - ${track.name}, age: ${Math.round(age / 1000 / 60 / 60)}h`);
+          return cached.signals;
+        }
+
+        // Store existing partial data for merging
+        existingSignals = cached.signals;
+        console.log(`[LastFm] 🔄 Retrying old miss for ${track.artist} - ${track.name}`);
       }
     }
 
@@ -124,7 +142,7 @@ export class LastFmService {
         artistInfo = await this.getArtistInfo(canonicalArtist);
       }
 
-      const signals: LastFmSignals = {
+      let signals: LastFmSignals = {
         // Track identifiers
         canonicalArtist,
         canonicalTrack,
@@ -153,9 +171,31 @@ export class LastFmService {
         artistInfo
       };
 
-      // Cache the result
+      // Merge with existing signals (additive)
+      if (existingSignals) {
+        signals = {
+          canonicalArtist: signals.canonicalArtist || existingSignals.canonicalArtist,
+          canonicalTrack: signals.canonicalTrack || existingSignals.canonicalTrack,
+          mbid: signals.mbid ?? existingSignals.mbid,
+          url: signals.url ?? existingSignals.url,
+          duration: signals.duration ?? existingSignals.duration,
+          listeners: Math.max(signals.listeners, existingSignals.listeners),
+          playcount: Math.max(signals.playcount, existingSignals.playcount),
+          userplaycount: signals.userplaycount ?? existingSignals.userplaycount,
+          topTags: signals.topTags.length > 0 ? signals.topTags : existingSignals.topTags,
+          album: signals.album ?? existingSignals.album,
+          wiki: signals.wiki ?? existingSignals.wiki,
+          similar: signals.similar.length > 0 ? signals.similar : existingSignals.similar,
+          artistInfo: signals.artistInfo ?? existingSignals.artistInfo
+        };
+        console.log(`[LastFm] 🔗 Merged with existing data for ${track.artist} - ${track.name}`);
+      }
+
+      // Cache the result with appropriate TTL
       if (this.cache) {
-        await this.setCached(cacheKey, signals);
+        const isMiss = signals.topTags.length === 0 && signals.listeners === 0;
+        await this.setCached(cacheKey, signals, isMiss);
+        console.log(`[LastFm] Cached ${isMiss ? 'miss' : 'hit'} for ${track.artist} - ${track.name}`);
       }
 
       return signals;
@@ -525,23 +565,25 @@ export class LastFmService {
   /**
    * Cache signals
    */
-  private async setCached(key: string, signals: LastFmSignals): Promise<void> {
+  private async setCached(key: string, signals: LastFmSignals, isMiss: boolean = false): Promise<void> {
     if (!this.cache) return;
 
     try {
+      const ttl = isMiss ? this.missCacheTTL : this.cacheTTL;
       const cacheData: LastFmCache = {
         signals,
         fetched_at: new Date().toISOString(),
-        ttl: this.cacheTTL
+        ttl,
+        is_miss: isMiss
       };
 
       await this.cache.put(
         `lastfm:${key}`,
         JSON.stringify(cacheData),
-        { expirationTtl: this.cacheTTL }
+        { expirationTtl: ttl }
       );
 
-      console.log(`[LastFm] Cached signals for ${key}`);
+      console.log(`[LastFm] Cached ${isMiss ? 'miss' : 'hit'} for ${key} (TTL: ${Math.round(ttl / 86400)} days)`);
     } catch (error) {
       console.error('[LastFm] Cache write error:', error);
     }
