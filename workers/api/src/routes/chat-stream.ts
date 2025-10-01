@@ -11,6 +11,7 @@ import { LastFmService } from '../services/LastFmService';
 import { ProgressNarrator } from '../lib/progress-narrator';
 import { ServiceLogger } from '../utils/ServiceLogger';
 import { runWithLogger, getLogger, getChildLogger } from '../utils/LoggerContext';
+import { rateLimitedSpotifyCall, rateLimitedAnthropicCall } from '../utils/RateLimitedAPIClients';
 
 const chatStreamRouter = new Hono<{ Bindings: Env }>();
 
@@ -150,7 +151,7 @@ async function executeSpotifyToolWithProgress(
           })
         : '📊 Starting playlist analysis...';
 
-      await sseWriter.write({ type: 'thinking', data: startMessage });
+      sseWriter.writeAsync({ type: 'thinking', data: startMessage });
 
       // Step 1: Get playlist details
       const fetchMessage = narrator
@@ -160,7 +161,7 @@ async function executeSpotifyToolWithProgress(
             previousMessages: recentMessages,
           })
         : '🔍 Fetching playlist information...';
-      await sseWriter.write({ type: 'thinking', data: fetchMessage });
+      sseWriter.writeAsync({ type: 'thinking', data: fetchMessage });
 
       console.log(`[SpotifyAPI] Fetching playlist details: ${playlist_id}`);
       const playlistResponse = await fetch(
@@ -184,7 +185,7 @@ async function executeSpotifyToolWithProgress(
             previousMessages: recentMessages,
           })
         : `🎼 Found "${playlist.name}" with ${playlist.tracks?.total || 0} tracks`;
-      await sseWriter.write({ type: 'thinking', data: foundMessage });
+      sseWriter.writeAsync({ type: 'thinking', data: foundMessage });
 
       // Step 2: Get tracks
       const tracksMessage = narrator
@@ -195,7 +196,7 @@ async function executeSpotifyToolWithProgress(
             previousMessages: recentMessages,
           })
         : '🎵 Fetching track details...';
-      await sseWriter.write({ type: 'thinking', data: tracksMessage });
+      sseWriter.writeAsync({ type: 'thinking', data: tracksMessage });
 
       console.log(`[SpotifyAPI] Fetching tracks from playlist: ${playlist_id}`);
       const tracksResponse = await fetch(
@@ -230,10 +231,10 @@ async function executeSpotifyToolWithProgress(
         console.log(`[SpotifyAPI] ========== END TRACK STRUCTURE DEBUG ==========`);
       }
 
-      await sseWriter.write({ type: 'thinking', data: `✅ Loaded ${tracks.length} tracks successfully` });
+      sseWriter.writeAsync({ type: 'thinking', data: `✅ Loaded ${tracks.length} tracks successfully` });
 
       // Step 3: Analyze track metadata (audio features API deprecated)
-      await sseWriter.write({ type: 'thinking', data: '🎵 Analyzing track metadata...' });
+      sseWriter.writeAsync({ type: 'thinking', data: '🎵 Analyzing track metadata...' });
 
       // Calculate metadata-based statistics
       const validTracks = tracks.filter((t: any) => t && t.popularity !== undefined);
@@ -259,7 +260,7 @@ async function executeSpotifyToolWithProgress(
       });
 
       // Step 4: Fetch artist genres (batch request, limit to 50 artists)
-      await sseWriter.write({ type: 'thinking', data: '🎸 Fetching artist genres...' });
+      sseWriter.writeAsync({ type: 'thinking', data: '🎸 Fetching artist genres...' });
       const artistIdsArray = Array.from(artistIds).slice(0, 50);
       let genres: string[] = [];
 
@@ -287,9 +288,12 @@ async function executeSpotifyToolWithProgress(
             .slice(0, 10)
             .map(([genre]) => genre);
 
-          await sseWriter.write({ type: 'thinking', data: `🎯 Found ${genres.length} genres across ${artistsData.artists.length} artists` });
+          sseWriter.writeAsync({ type: 'thinking', data: `🎯 Found ${genres.length} genres across ${artistsData.artists.length} artists` });
         }
       }
+
+      // Flush after metadata + genre analysis
+      await sseWriter.flush();
 
       // Step 5: Analyze release dates
       const releaseDates = validTracks
@@ -323,7 +327,7 @@ async function executeSpotifyToolWithProgress(
           let enrichedCount = 0;
 
           console.log(`[DeezerEnrichment] Will attempt to enrich ${tracksToEnrich.length} tracks`);
-          await sseWriter.write({ type: 'thinking', data: `🎵 Enriching ${tracksToEnrich.length} tracks with Deezer data (BPM, rank, gain)...` });
+          sseWriter.writeAsync({ type: 'thinking', data: `🎵 Enriching ${tracksToEnrich.length} tracks with Deezer data (BPM, rank, gain)...` });
 
           // Debug: Check if tracks have external_ids
           const tracksWithISRC = tracksToEnrich.filter(t => t.external_ids?.isrc).length;
@@ -348,7 +352,7 @@ async function executeSpotifyToolWithProgress(
           if (tracksWithISRC === 0) {
             console.warn(`[BPMEnrichment] ⚠️ CRITICAL: No tracks have ISRC in external_ids`);
             console.warn(`[BPMEnrichment] Will need to fetch full track details from Spotify /tracks API`);
-            await sseWriter.write({ type: 'thinking', data: '⚠️ Tracks missing ISRC data - fetching from Spotify API...' });
+            sseWriter.writeAsync({ type: 'thinking', data: '⚠️ Tracks missing ISRC data - fetching from Spotify API...' });
           } else {
             console.log(`[BPMEnrichment] ✅ Found ${tracksWithISRC} tracks with ISRC, proceeding with enrichment`);
           }
@@ -409,7 +413,7 @@ async function executeSpotifyToolWithProgress(
 
                 // Stream progress updates every 5 tracks
                 if ((i + 1) % 5 === 0) {
-                  await sseWriter.write({ type: 'thinking', data: `🎵 Enriched ${enrichedCount}/${tracksToEnrich.length} tracks...` });
+                  sseWriter.writeAsync({ type: 'thinking', data: `🎵 Enriched ${enrichedCount}/${tracksToEnrich.length} tracks...` });
                 }
               }
 
@@ -473,15 +477,18 @@ async function executeSpotifyToolWithProgress(
               gainResults.length > 0 ? 'gain' : null
             ].filter(Boolean).join(', ');
 
-            await sseWriter.write({ type: 'thinking', data: `✅ Deezer enrichment complete! Found ${dataTypes} for ${enrichedCount}/${tracksToEnrich.length} tracks` });
+            sseWriter.writeAsync({ type: 'thinking', data: `✅ Deezer enrichment complete! Found ${dataTypes} for ${enrichedCount}/${tracksToEnrich.length} tracks` });
           } else {
-            await sseWriter.write({ type: 'thinking', data: '⚠️ No Deezer data available for these tracks' });
+            sseWriter.writeAsync({ type: 'thinking', data: '⚠️ No Deezer data available for these tracks' });
           }
         } catch (error) {
           getChildLogger('DeezerEnrichment').error('Enrichment failed', error);
-          await sseWriter.write({ type: 'thinking', data: '⚠️ Deezer enrichment unavailable - continuing with metadata only' });
+          sseWriter.writeAsync({ type: 'thinking', data: '⚠️ Deezer enrichment unavailable - continuing with metadata only' });
         }
       }
+
+      // Flush after Deezer enrichment
+      await sseWriter.flush();
 
       // Step 7: Optimized Last.fm enrichment (tracks + unique artists separately)
       let lastfmData = null;
@@ -493,7 +500,7 @@ async function executeSpotifyToolWithProgress(
           const signalsMap = new Map();
 
           // Step 7a: Get track signals (4 API calls per track = 200 total)
-          await sseWriter.write({ type: 'thinking', data: `🎧 Enriching ${tracksForLastFm.length} tracks with Last.fm data (40 TPS)...` });
+          sseWriter.writeAsync({ type: 'thinking', data: `🎧 Enriching ${tracksForLastFm.length} tracks with Last.fm data (40 TPS)...` });
 
           for (let i = 0; i < tracksForLastFm.length; i++) {
             const track = tracksForLastFm[i];
@@ -569,7 +576,7 @@ async function executeSpotifyToolWithProgress(
 
           // Step 7b: Get unique artists and fetch artist info separately (cached + rate-limited queue)
           const uniqueArtists = [...new Set(tracksForLastFm.map(t => t.artists?.[0]?.name).filter(Boolean))];
-          await sseWriter.write({ type: 'thinking', data: `🎤 Fetching artist info for ${uniqueArtists.length} unique artists...` });
+          sseWriter.writeAsync({ type: 'thinking', data: `🎤 Fetching artist info for ${uniqueArtists.length} unique artists...` });
 
           const artistInfoMap = await lastfmService.batchGetArtistInfo(uniqueArtists, async (current, total) => {
             // Report progress every 10 artists with narrator
@@ -648,18 +655,18 @@ async function executeSpotifyToolWithProgress(
               source: 'lastfm'
             };
 
-            await sseWriter.write({ type: 'thinking', data: `✅ Enriched ${signalsMap.size} tracks + ${artistInfoMap.size} artists!` });
+            sseWriter.writeAsync({ type: 'thinking', data: `✅ Enriched ${signalsMap.size} tracks + ${artistInfoMap.size} artists!` });
           }
         } catch (error) {
           getChildLogger('LastFm').error('Enrichment failed', error);
-          await sseWriter.write({ type: 'thinking', data: '⚠️ Last.fm enrichment unavailable - continuing without tags' });
+          sseWriter.writeAsync({ type: 'thinking', data: '⚠️ Last.fm enrichment unavailable - continuing without tags' });
         }
       }
 
       // Flush any pending narrator messages before final analysis
       await sseWriter.flush();
 
-      await sseWriter.write({ type: 'thinking', data: '🧮 Computing playlist insights...' });
+      sseWriter.writeAsync({ type: 'thinking', data: '🧮 Computing playlist insights...' });
 
       const analysis = {
         playlist_name: playlist.name,
@@ -697,7 +704,7 @@ async function executeSpotifyToolWithProgress(
         })()
       };
 
-      await sseWriter.write({ type: 'thinking', data: `🎉 Analysis complete for "${analysis.playlist_name}"!` });
+      sseWriter.writeAsync({ type: 'thinking', data: `🎉 Analysis complete for "${analysis.playlist_name}"!` });
 
       // Log data size for debugging
       const analysisJson = JSON.stringify(analysis);
@@ -709,7 +716,7 @@ async function executeSpotifyToolWithProgress(
 
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-      await sseWriter.write({ type: 'thinking', data: `❌ Analysis failed: ${errorMsg}` });
+      sseWriter.writeAsync({ type: 'thinking', data: `❌ Analysis failed: ${errorMsg}` });
       getChildLogger('Tool:analyze_playlist').error('Analysis failed', error, {
         errorMessage: errorMsg,
         errorType: error?.constructor?.name
@@ -1831,7 +1838,7 @@ chatStreamRouter.post('/message', async (c) => {
         userRequest: request.message,
       });
       recentMessages.push(initialMessage);
-      await sseWriter.write({ type: 'thinking', data: initialMessage });
+      sseWriter.writeAsync({ type: 'thinking', data: initialMessage });
 
       // Create tools with streaming callbacks
       const tools = createStreamingSpotifyTools(
@@ -2022,7 +2029,7 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
       let toolCalls: any[] = [];
 
       console.log(`[Stream:${requestId}] Starting Claude streaming...`);
-      await sseWriter.write({ type: 'thinking', data: 'Analyzing your request...' });
+      sseWriter.writeAsync({ type: 'thinking', data: 'Analyzing your request...' });
 
       // Check for abort before API call
       if (abortController.signal.aborted) {
@@ -2108,13 +2115,13 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
           if (lastThree[0] === lastThree[1] && lastThree[1] === lastThree[2]) {
             console.warn(`[Stream:${requestId}] ⚠️ Loop detected: identical tool calls 3 times in a row. Breaking.`);
             console.warn(`[Stream:${requestId}] Tool signature: ${lastThree[0]}`);
-            await sseWriter.write({ type: 'thinking', data: 'Detected repetitive tool calls, wrapping up...' });
+            sseWriter.writeAsync({ type: 'thinking', data: 'Detected repetitive tool calls, wrapping up...' });
             break;
           }
         }
 
         console.log(`[Stream:${requestId}] 🔄 Agentic loop turn ${turnCount}: Executing ${currentToolCalls.length} tool calls...`);
-        await sseWriter.write({ type: 'thinking', data: 'Using Spotify tools...' });
+        sseWriter.writeAsync({ type: 'thinking', data: 'Using Spotify tools...' });
 
         // Execute tools and build ToolMessages properly
         const toolMessages = [];
@@ -2175,7 +2182,7 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
 
         // Get next response with tool results
         console.log(`[Stream:${requestId}] Getting next response from Claude (turn ${turnCount})...`);
-        await sseWriter.write({ type: 'thinking', data: 'Preparing response...' });
+        sseWriter.writeAsync({ type: 'thinking', data: 'Preparing response...' });
 
         console.log(`[Stream:${requestId}] Sending tool results back to Claude...`);
         console.log(`[Stream:${requestId}] Full response so far: "${fullResponse.substring(0, 100)}"`);
@@ -2329,7 +2336,7 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
         );
         conversationMessages.push(finalPrompt);
 
-        await sseWriter.write({ type: 'thinking', data: 'Preparing final response...' });
+        sseWriter.writeAsync({ type: 'thinking', data: 'Preparing final response...' });
 
         let finalResponse;
         try {

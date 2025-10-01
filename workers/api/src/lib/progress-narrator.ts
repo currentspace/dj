@@ -13,6 +13,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { ServiceLogger } from '../utils/ServiceLogger';
+import { rateLimitedAnthropicCall } from '../utils/RateLimitedAPIClients';
 
 interface MessageContext {
   eventType: string;
@@ -71,35 +72,43 @@ export class ProgressNarrator {
         maxTokens: 100
       });
 
-      this.logger.info('About to call Anthropic API', {
+      this.logger.info('About to call Anthropic API (rate-limited)', {
         hasApiKey: !!this.anthropic,
         model: 'claude-3-5-haiku-20241022'
       });
 
-      // Create abort controller with 5 second timeout
+      // Use rate-limited API wrapper with 5 second timeout
       const abortController = new AbortController();
       const timeout = setTimeout(() => abortController.abort(), 5000);
 
       try {
-        const response = await this.anthropic.messages.create({
-          model: 'claude-3-5-haiku-20241022',
-          max_tokens: 100,
-          temperature: skipCache ? 1.0 : 0.7, // Max temperature for variety when uncached
-          top_p: skipCache ? 0.95 : undefined, // Add nucleus sampling for more randomness
-          messages: [{
-            role: 'user',
-            content: prompt,
-          }],
-          system: [{
-            type: 'text',
-            text: this.systemPrompt,
-            cache_control: { type: 'ephemeral' },
-          }],
-        }, {
-          signal: abortController.signal,
-        });
+        const response = await rateLimitedAnthropicCall(
+          () => this.anthropic.messages.create({
+            model: 'claude-3-5-haiku-20241022',
+            max_tokens: 100,
+            temperature: skipCache ? 1.0 : 0.7,
+            top_p: skipCache ? 0.95 : undefined,
+            messages: [{
+              role: 'user',
+              content: prompt,
+            }],
+            system: [{
+              type: 'text',
+              text: this.systemPrompt,
+              cache_control: { type: 'ephemeral' },
+            }],
+          }, {
+            signal: abortController.signal,
+          }),
+          this.logger,
+          `narrator:${context.eventType}`
+        );
 
         clearTimeout(timeout);
+
+        if (!response) {
+          throw new Error('Rate-limited call returned null');
+        }
 
         this.logger.info('Anthropic API call succeeded', {
           responseId: response.id,

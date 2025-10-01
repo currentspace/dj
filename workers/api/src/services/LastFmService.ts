@@ -9,7 +9,7 @@
  * - Track/artist name normalization
  */
 
-import { RateLimitedQueue } from '../utils/RateLimitedQueue';
+import { getGlobalOrchestrator, rateLimitedLastFmCall } from '../utils/RateLimitedAPIClients';
 
 export interface LastFmSignals {
   // Track identifiers
@@ -245,60 +245,77 @@ export class LastFmService {
     const results = new Map();
     const uniqueArtists = [...new Set(artists)]; // Deduplicate
 
-    console.log(`[LastFm] Fetching artist info for ${uniqueArtists.length} unique artists...`);
+    console.log(`[LastFm] Fetching artist info for ${uniqueArtists.length} unique artists (orchestrated)...`);
 
-    // Create rate-limited queue at 40 TPS with concurrency=5 for parallel requests
-    const queue = new RateLimitedQueue<{ artist: string; info: any }>({
-      rate: 40,
-      concurrency: 5,
-      jitterMs: 5
-    });
+    const orchestrator = getGlobalOrchestrator();
+    const batchId = `lastfm-artists-${Date.now()}`;
 
-    // Enqueue all artist fetch tasks
-    for (const artist of uniqueArtists) {
+    // Create tasks for all artists
+    const tasks = uniqueArtists.map(artist => async () => {
       const cacheKey = `artist_${this.hashString(artist.toLowerCase())}`;
 
-      queue.enqueue(async () => {
-        try {
-          // Check cache first
-          let artistInfo = null;
-          if (this.cache) {
-            const cached = await this.cache.get(cacheKey, 'json');
-            if (cached) {
-              artistInfo = cached as any;
-              console.log(`[LastFm] Artist cache hit: ${artist}`);
-            }
+      try {
+        // Check cache first
+        let artistInfo = null;
+        if (this.cache) {
+          const cached = await this.cache.get(cacheKey, 'json');
+          if (cached) {
+            artistInfo = cached as any;
+            console.log(`[LastFm] Artist cache hit: ${artist}`);
+            return { artist, info: artistInfo };
           }
-
-          // Fetch if not cached
-          if (!artistInfo) {
-            artistInfo = await this.getArtistInfo(artist);
-
-            // Cache the result
-            if (artistInfo && this.cache) {
-              await this.cache.put(cacheKey, JSON.stringify(artistInfo), {
-                expirationTtl: this.cacheTTL
-              });
-            }
-          }
-
-          return { artist, info: artistInfo };
-        } catch (error) {
-          console.error(`[LastFm] Failed to get artist info for ${artist}:`, error);
-          return { artist, info: null };
         }
-      });
+
+        // Fetch via rate-limited orchestrator (not cached)
+        artistInfo = await rateLimitedLastFmCall(
+          () => this.getArtistInfo(artist),
+          undefined,
+          `artist:${artist}`
+        );
+
+        // Cache the result
+        if (artistInfo && this.cache) {
+          await this.cache.put(cacheKey, JSON.stringify(artistInfo), {
+            expirationTtl: this.cacheTTL
+          });
+        }
+
+        return { artist, info: artistInfo };
+      } catch (error) {
+        console.error(`[LastFm] Failed to get artist info for ${artist}:`, error);
+        return { artist, info: null };
+      }
+    });
+
+    // Enqueue batch
+    orchestrator.enqueueBatch(batchId, tasks);
+
+    // Optional: Poll for progress while batch runs
+    let lastProgress = 0;
+    const progressInterval = onProgress ? setInterval(() => {
+      const pending = orchestrator.getPendingCount();
+      const completed = uniqueArtists.length - Math.max(0, pending);
+      if (completed > lastProgress) {
+        lastProgress = completed;
+        onProgress(completed, uniqueArtists.length);
+      }
+    }, 200) : null;
+
+    // Await batch completion
+    const batchResults = await orchestrator.awaitBatch(batchId);
+
+    if (progressInterval) {
+      clearInterval(progressInterval);
+      // Final progress update
+      onProgress?.(uniqueArtists.length, uniqueArtists.length);
     }
 
-    // Process queue with progress reporting
-    const queueResults = await queue.processAllWithCallback((result, index, total) => {
+    // Build results map
+    for (const result of batchResults) {
       if (result && result.info) {
         results.set(result.artist.toLowerCase(), result.info);
       }
-      if (onProgress) {
-        onProgress(index + 1, total);
-      }
-    });
+    }
 
     return results;
   }
