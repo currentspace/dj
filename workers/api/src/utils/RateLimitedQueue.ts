@@ -35,6 +35,7 @@ export class RateLimitedQueue<T> {
   // scheduling
   private timer: number | null = null;
   private running = 0;
+  private kickFn: (() => void) | null = null; // For continuous processing
 
   constructor(opts: QueueOptions = {}) {
     this.rate = opts.rate ?? 40;
@@ -53,6 +54,10 @@ export class RateLimitedQueue<T> {
    */
   enqueue(task: Task<T>): void {
     this.queue.push(task);
+    // If continuous processing is active, kick it to wake up
+    if (this.kickFn) {
+      this.kickFn();
+    }
   }
 
   size(): number {
@@ -340,6 +345,9 @@ export class RateLimitedQueue<T> {
         }
       }
     };
+
+    // Store kick function so enqueue() can trigger it
+    this.kickFn = kick;
 
     // Start the scheduler
     scheduleNext();
