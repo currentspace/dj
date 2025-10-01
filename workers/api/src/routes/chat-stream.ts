@@ -1382,13 +1382,18 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
       while (currentToolCalls.length > 0 && turnCount < MAX_TURNS) {
         turnCount++;
 
-        // Detect loops: if same tool called 3+ times in a row, break
-        const toolSignature = currentToolCalls.map(tc => tc.name).join(',');
+        // Detect loops: if same tool with same args called 3+ times in a row, break
+        // Include args in signature to allow multiple calls with different parameters
+        const toolSignature = currentToolCalls.map(tc => {
+          const argsStr = JSON.stringify(tc.args || {});
+          return `${tc.name}(${argsStr})`;
+        }).join(',');
         recentToolCalls.push(toolSignature);
         if (recentToolCalls.length >= 3) {
           const lastThree = recentToolCalls.slice(-3);
           if (lastThree[0] === lastThree[1] && lastThree[1] === lastThree[2]) {
-            console.warn(`[Stream:${requestId}] ⚠️ Loop detected: ${toolSignature} called 3 times in a row. Breaking.`);
+            console.warn(`[Stream:${requestId}] ⚠️ Loop detected: identical tool calls 3 times in a row. Breaking.`);
+            console.warn(`[Stream:${requestId}] Tool signature: ${lastThree[0]}`);
             await sseWriter.write({ type: 'thinking', data: 'Detected repetitive tool calls, wrapping up...' });
             break;
           }
