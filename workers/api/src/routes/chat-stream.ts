@@ -528,47 +528,17 @@ async function executeSpotifyToolWithProgress(
                 const key = `${track.id}`;
                 signalsMap.set(key, signals);
 
-                // Stream progress every 10 tracks with narrator (fire-and-forget)
-                if ((i + 1) % 10 === 0 || i === tracksForLastFm.length - 1) {
-                  if (narrator) {
-                    // Don't await - let narrator run in parallel
-                    (async () => {
-                      try {
-                        // Collect recent track names for context (last 3 tracks)
-                        const recentTrackNames = tracksForLastFm
-                          .slice(Math.max(0, i - 2), i + 1)
-                          .map(t => t.name)
-                          .join(', ');
+                // Stream simple progress every 2 tracks
+                // Note: Narrator calls disabled here - concurrent ChatAnthropic instance creation fails
+                if ((i + 1) % 2 === 0 || i === tracksForLastFm.length - 1) {
+                  sseWriter.writeAsync({
+                    type: 'thinking',
+                    data: `🎧 Enriched ${i + 1}/${tracksForLastFm.length} tracks...`
+                  });
+                }
 
-                        // Get tags if available
-                        const recentTags = signals.top_tags?.slice(0, 3).map(t => t.name).join(', ') || '';
-
-                        const message = await narrator.generateMessage({
-                          eventType: 'enriching_tracks',
-                          userRequest,
-                          metadata: {
-                            enrichedCount: i + 1,
-                            totalTracks: tracksForLastFm.length,
-                            recentTags,
-                            recentTrackName: track.name,
-                            recentTrackNames
-                          }
-                        }, true); // Skip cache for variety
-
-                        sseWriter.writeAsync({ type: 'thinking', data: `🎧 ${message}` });
-                      } catch (narratorError) {
-                        // Log detailed narrator failure
-                        getChildLogger('Narrator').error('Track enrichment message failed', narratorError, {
-                          trackIndex: i + 1,
-                          totalTracks: tracksForLastFm.length,
-                          errorType: narratorError?.constructor?.name,
-                          errorMessage: narratorError instanceof Error ? narratorError.message : String(narratorError)
-                        });
-                        // Use fallback
-                        sseWriter.writeAsync({ type: 'thinking', data: `🎧 Track enrichment: ${signalsMap.size}/${tracksForLastFm.length}...` });
-                      }
-                    })();
-                  } else {
+                // Keep fallback branch
+                if (false) {
                     sseWriter.writeAsync({ type: 'thinking', data: `🎧 Track enrichment: ${signalsMap.size}/${tracksForLastFm.length}...` });
                   }
                 }
