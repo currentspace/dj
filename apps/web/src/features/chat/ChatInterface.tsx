@@ -25,6 +25,12 @@ function StreamingStatusDisplay({ status }: { status: StreamingStatus }) {
 
   return (
     <div className="streaming-status">
+      {status.isStreaming && (
+        <div className="streaming-pulse">
+          <div className="pulse-ring"></div>
+          <div className="pulse-dot"></div>
+        </div>
+      )}
       {status.currentAction && (
         <div className="status-action">
           <span className="status-icon">💭</span>

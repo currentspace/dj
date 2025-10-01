@@ -46,6 +46,7 @@ export class ProgressNarrator {
 
     try {
       const prompt = this.buildPrompt(context);
+      console.log(`[ProgressNarrator] Generating message for event: ${context.eventType}`);
 
       const response = await this.anthropic.messages.create({
         model: 'claude-haiku-4-20250514',
@@ -66,6 +67,8 @@ export class ProgressNarrator {
         ? response.content[0].text.trim()
         : this.getFallbackMessage(context);
 
+      console.log(`[ProgressNarrator] Success! Generated: "${message}"`);
+
       // Cache the result
       this.messageCache.set(cacheKey, message);
 
@@ -78,6 +81,8 @@ export class ProgressNarrator {
       return message;
     } catch (error) {
       console.error('[ProgressNarrator] Failed to generate message:', error);
+      console.error('[ProgressNarrator] Error details:', error instanceof Error ? error.message : JSON.stringify(error));
+      console.log(`[ProgressNarrator] Using fallback for: ${context.eventType}`);
       return this.getFallbackMessage(context);
     }
   }

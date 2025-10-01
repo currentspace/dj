@@ -483,6 +483,13 @@ async function executeSpotifyToolWithProgress(
                 if ((i + 1) % 10 === 0 || i === tracksForLastFm.length - 1) {
                   if (narrator) {
                     const recentTags = signals.top_tags?.slice(0, 3).map(t => t.name).join(', ') || '';
+                    await sseWriter.write({
+                      type: 'log',
+                      data: {
+                        level: 'info',
+                        message: `[Narrator] Generating message for ${i + 1}/${tracksForLastFm.length} tracks, tags: ${recentTags}`
+                      }
+                    });
                     const message = await narrator.generateMessage({
                       eventType: 'enriching_tracks',
                       userRequest,
@@ -491,6 +498,13 @@ async function executeSpotifyToolWithProgress(
                         totalTracks: tracksForLastFm.length,
                         recentTags,
                         recentTrackName: track.name
+                      }
+                    });
+                    await sseWriter.write({
+                      type: 'log',
+                      data: {
+                        level: 'info',
+                        message: `[Narrator] Generated: "${message}"`
                       }
                     });
                     await sseWriter.write({ type: 'thinking', data: `🎧 ${message}` });
@@ -518,6 +532,13 @@ async function executeSpotifyToolWithProgress(
             if (current % 10 === 0 || current === total) {
               if (narrator) {
                 const recentArtist = uniqueArtists[current - 1];
+                await sseWriter.write({
+                  type: 'log',
+                  data: {
+                    level: 'info',
+                    message: `[Narrator] Generating message for ${current}/${total} artists, recent: ${recentArtist}`
+                  }
+                });
                 const message = await narrator.generateMessage({
                   eventType: 'enriching_artists',
                   userRequest,
@@ -525,6 +546,13 @@ async function executeSpotifyToolWithProgress(
                     enrichedCount: current,
                     totalArtists: total,
                     recentArtistName: recentArtist
+                  }
+                });
+                await sseWriter.write({
+                  type: 'log',
+                  data: {
+                    level: 'info',
+                    message: `[Narrator] Generated: "${message}"`
                   }
                 });
                 await sseWriter.write({ type: 'thinking', data: `🎤 ${message}` });
