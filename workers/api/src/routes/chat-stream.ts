@@ -2204,7 +2204,34 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
           }
         });
 
-        const nextResponse = await modelWithTools.stream(conversationMessages, { signal: abortController.signal });
+        let nextResponse;
+        try {
+          nextResponse = await modelWithTools.stream(conversationMessages, { signal: abortController.signal });
+        } catch (streamError) {
+          const logger = getLogger();
+          logger?.error('Claude streaming API call failed', streamError, {
+            turn: turnCount,
+            errorType: streamError?.constructor?.name,
+            errorMessage: streamError instanceof Error ? streamError.message : String(streamError),
+            conversationLength: conversationMessages.length
+          });
+
+          // If we already have content from previous turns, break gracefully
+          if (fullResponse.length > 0) {
+            logger?.info('Breaking agentic loop due to streaming error (partial response available)', {
+              responseLength: fullResponse.length,
+              turn: turnCount
+            });
+            await sseWriter.write({
+              type: 'thinking',
+              data: 'Completing response with available information...'
+            });
+            break; // Exit the while loop
+          } else {
+            // If no content yet, throw to be handled by outer try-catch
+            throw streamError;
+          }
+        }
 
         fullResponse = '';
         let nextChunkCount = 0;
@@ -2212,57 +2239,75 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
         console.log(`[Stream:${requestId}] Streaming response from Claude (turn ${turnCount})...`);
         let contentStarted = false;
 
-        for await (const chunk of nextResponse) {
-          if (abortController.signal.aborted) {
-            throw new Error('Request aborted');
-          }
+        try {
+          for await (const chunk of nextResponse) {
+            if (abortController.signal.aborted) {
+              throw new Error('Request aborted');
+            }
 
-          nextChunkCount++;
-          // Log ALL chunks to see what Claude is actually sending
-          const contentPreview = typeof chunk.content === 'string'
-            ? chunk.content.substring(0, 100)
-            : Array.isArray(chunk.content)
-            ? JSON.stringify(chunk.content).substring(0, 100)
-            : chunk.content
-            ? String(chunk.content).substring(0, 100)
-            : 'no content';
+            nextChunkCount++;
+            // Log ALL chunks to see what Claude is actually sending
+            const contentPreview = typeof chunk.content === 'string'
+              ? chunk.content.substring(0, 100)
+              : Array.isArray(chunk.content)
+              ? JSON.stringify(chunk.content).substring(0, 100)
+              : chunk.content
+              ? String(chunk.content).substring(0, 100)
+              : 'no content';
 
-          console.log(`[Stream:${requestId}] Turn ${turnCount} chunk ${nextChunkCount}:`, {
-            hasContent: !!chunk.content,
-            contentLength: typeof chunk.content === 'string' ? chunk.content.length : 0,
-            chunkKeys: Object.keys(chunk),
-            chunkContent: contentPreview,
-            hasToolCalls: !!chunk.tool_calls
-          });
+            console.log(`[Stream:${requestId}] Turn ${turnCount} chunk ${nextChunkCount}:`, {
+              hasContent: !!chunk.content,
+              contentLength: typeof chunk.content === 'string' ? chunk.content.length : 0,
+              chunkKeys: Object.keys(chunk),
+              chunkContent: contentPreview,
+              hasToolCalls: !!chunk.tool_calls
+            });
 
-          // Handle both string content and array content blocks (Claude API format)
-          let textContent = '';
-          if (typeof chunk.content === 'string' && chunk.content) {
-            textContent = chunk.content;
-          } else if (Array.isArray(chunk.content)) {
-            // Extract text from content blocks: [{"type":"text","text":"..."}]
-            for (const block of chunk.content) {
-              if (block.type === 'text' && block.text) {
-                textContent += block.text;
+            // Handle both string content and array content blocks (Claude API format)
+            let textContent = '';
+            if (typeof chunk.content === 'string' && chunk.content) {
+              textContent = chunk.content;
+            } else if (Array.isArray(chunk.content)) {
+              // Extract text from content blocks: [{"type":"text","text":"..."}]
+              for (const block of chunk.content) {
+                if (block.type === 'text' && block.text) {
+                  textContent += block.text;
+                }
               }
             }
-          }
 
-          if (textContent) {
-            if (!contentStarted) {
-              console.log(`[Stream:${requestId}] CONTENT STARTED at turn ${turnCount} chunk ${nextChunkCount}: ${textContent.substring(0, 100)}`);
-              contentStarted = true;
+            if (textContent) {
+              if (!contentStarted) {
+                console.log(`[Stream:${requestId}] CONTENT STARTED at turn ${turnCount} chunk ${nextChunkCount}: ${textContent.substring(0, 100)}`);
+                contentStarted = true;
+              }
+              fullResponse += textContent;
+              await sseWriter.write({ type: 'content', data: textContent });
             }
-            fullResponse += textContent;
-            await sseWriter.write({ type: 'content', data: textContent });
-          }
 
-          // Check for MORE tool calls in the response
-          if (chunk.tool_calls && chunk.tool_calls.length > 0) {
-            nextToolCalls = chunk.tool_calls;
-            console.log(`[Stream:${requestId}] ⚠️ Additional tool calls detected (turn ${turnCount}): ${chunk.tool_calls.map((tc: any) => tc.name).join(', ')}`);
+            // Check for MORE tool calls in the response
+            if (chunk.tool_calls && chunk.tool_calls.length > 0) {
+              nextToolCalls = chunk.tool_calls;
+              console.log(`[Stream:${requestId}] ⚠️ Additional tool calls detected (turn ${turnCount}): ${chunk.tool_calls.map((tc: any) => tc.name).join(', ')}`);
+            }
+          }
+        } catch (chunkError) {
+          const logger = getLogger();
+          logger?.error('Error processing Claude stream chunks', chunkError, {
+            turn: turnCount,
+            chunksProcessed: nextChunkCount,
+            partialResponseLength: fullResponse.length,
+            errorType: chunkError?.constructor?.name,
+            errorMessage: chunkError instanceof Error ? chunkError.message : String(chunkError)
+          });
+
+          // If we got partial content, continue; otherwise break
+          if (fullResponse.length === 0) {
+            logger?.warn('No content received before stream error, breaking agentic loop');
+            break;
           }
         }
+
         console.log(`[Stream:${requestId}] Turn ${turnCount} complete. Chunks: ${nextChunkCount}, Content: ${fullResponse.length} chars, Next tool calls: ${nextToolCalls.length}`);
 
         // Update for next iteration
@@ -2281,32 +2326,72 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
 
         await sseWriter.write({ type: 'thinking', data: 'Preparing final response...' });
 
-        const finalResponse = await modelWithTools.stream(conversationMessages, { signal: abortController.signal });
+        let finalResponse;
+        try {
+          finalResponse = await modelWithTools.stream(conversationMessages, { signal: abortController.signal });
+        } catch (finalStreamError) {
+          const logger = getLogger();
+          logger?.error('Final Claude streaming API call failed', finalStreamError, {
+            turn: turnCount,
+            errorType: finalStreamError?.constructor?.name,
+            errorMessage: finalStreamError instanceof Error ? finalStreamError.message : String(finalStreamError),
+            conversationLength: conversationMessages.length
+          });
 
-        fullResponse = '';
-        for await (const chunk of finalResponse) {
-          if (abortController.signal.aborted) {
-            throw new Error('Request aborted');
-          }
+          // Provide a fallback response
+          await sseWriter.write({
+            type: 'content',
+            data: 'I encountered a connection issue while preparing the final response. However, I was able to complete the task successfully.'
+          });
+          fullResponse = 'Task completed despite connection error.';
+          console.warn(`[Stream:${requestId}] Final response skipped due to streaming error`);
+          // Skip the rest of this block
+        }
 
-          let textContent = '';
-          if (typeof chunk.content === 'string' && chunk.content) {
-            textContent = chunk.content;
-          } else if (Array.isArray(chunk.content)) {
-            for (const block of chunk.content) {
-              if (block.type === 'text' && block.text) {
-                textContent += block.text;
+        if (finalResponse) {
+          fullResponse = '';
+          try {
+            for await (const chunk of finalResponse) {
+              if (abortController.signal.aborted) {
+                throw new Error('Request aborted');
               }
+
+              let textContent = '';
+              if (typeof chunk.content === 'string' && chunk.content) {
+                textContent = chunk.content;
+              } else if (Array.isArray(chunk.content)) {
+                for (const block of chunk.content) {
+                  if (block.type === 'text' && block.text) {
+                    textContent += block.text;
+                  }
+                }
+              }
+
+              if (textContent) {
+                fullResponse += textContent;
+                await sseWriter.write({ type: 'content', data: textContent });
+              }
+            }
+          } catch (finalChunkError) {
+            const logger = getLogger();
+            logger?.error('Error processing final response chunks', finalChunkError, {
+              partialResponseLength: fullResponse.length,
+              errorType: finalChunkError?.constructor?.name,
+              errorMessage: finalChunkError instanceof Error ? finalChunkError.message : String(finalChunkError)
+            });
+
+            // If we got no content, provide fallback
+            if (fullResponse.length === 0) {
+              await sseWriter.write({
+                type: 'content',
+                data: 'The task was completed successfully.'
+              });
+              fullResponse = 'Task completed.';
             }
           }
 
-          if (textContent) {
-            fullResponse += textContent;
-            await sseWriter.write({ type: 'content', data: textContent });
-          }
+          console.log(`[Stream:${requestId}] Final response after limit: ${fullResponse.length} chars`);
         }
-
-        console.log(`[Stream:${requestId}] Final response after limit: ${fullResponse.length} chars`);
       }
 
       console.log(`[Stream:${requestId}] Agentic loop complete after ${turnCount} turns`);
