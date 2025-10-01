@@ -47,7 +47,6 @@ export class AudioEnrichmentService {
   private cache: KVNamespace | null;
   private cacheTTL: number = 90 * 24 * 60 * 60; // 90 days for hits
   private missCacheTTL: number = 5 * 60; // 5 minutes for misses (retry very soon)
-  private rateLimitDelay: number = 200; // 200ms between calls (5 QPS)
 
   constructor(cache?: KVNamespace) {
     this.cache = cache || null;
@@ -151,28 +150,19 @@ export class AudioEnrichmentService {
   }
 
   /**
-   * Batch enrich multiple tracks with rate limiting
+   * Batch enrich multiple tracks
+   * Rate limiting is handled by the orchestrator via continuous queue processing
    */
   async batchEnrichTracks(tracks: SpotifyTrack[]): Promise<Map<string, BPMEnrichment>> {
     const results = new Map<string, BPMEnrichment>();
 
-    // Process in parallel with rate limiting (max 5 concurrent)
-    const batchSize = 5;
-    for (let i = 0; i < tracks.length; i += batchSize) {
-      const batch = tracks.slice(i, i + batchSize);
+    // Process all tracks in parallel - orchestrator controls concurrency and rate
+    const promises = tracks.map(async (track) => {
+      const enrichment = await this.enrichTrack(track);
+      results.set(track.id, enrichment);
+    });
 
-      const batchPromises = batch.map(async (track) => {
-        const enrichment = await this.enrichTrack(track);
-        results.set(track.id, enrichment);
-      });
-
-      await Promise.all(batchPromises);
-
-      // Rate limiting delay between batches
-      if (i + batchSize < tracks.length) {
-        await this.sleep(this.rateLimitDelay);
-      }
-    }
+    await Promise.all(promises);
 
     return results;
   }
@@ -456,13 +446,6 @@ export class AudioEnrichmentService {
     } catch (error) {
       console.error('[BPMEnrichment] Cache write error:', error);
     }
-  }
-
-  /**
-   * Sleep utility for rate limiting
-   */
-  private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
   }
 
   /**

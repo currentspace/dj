@@ -429,10 +429,7 @@ async function executeSpotifyToolWithProgress(
                 }
               }
 
-              // Rate limiting: 25ms delay between tracks (40 tracks/second max)
-              if (i < tracksToEnrich.length - 1) {
-                await new Promise(resolve => setTimeout(resolve, 25));
-              }
+              // No manual rate limiting needed - orchestrator handles it via continuous queue
             } catch (error) {
               getChildLogger('BPMEnrichment').error(`Failed for track "${track.name}"`, error);
               // Continue with next track
@@ -577,10 +574,7 @@ async function executeSpotifyToolWithProgress(
                 }
               }
 
-              // Rate limiting: 25ms delay = 40 TPS
-              if (i < tracksForLastFm.length - 1) {
-                await new Promise(resolve => setTimeout(resolve, 25));
-              }
+              // No manual rate limiting needed - orchestrator handles it via continuous queue
             } catch (error) {
               getChildLogger('LastFm').error(`Failed for track ${track.name}`, error);
             }
