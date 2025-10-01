@@ -66,18 +66,18 @@ export class ProgressNarrator {
         promptPreview: prompt.substring(0, 200),
         promptLength: prompt.length,
         systemPromptLength: this.systemPrompt.length,
-        model: 'claude-haiku-4-20250514',
+        model: 'claude-3-5-haiku-20241022',
         temperature: skipCache ? 1.0 : 0.7,
         maxTokens: 100
       });
 
       this.logger.info('About to call Anthropic API', {
         hasApiKey: !!this.anthropic,
-        model: 'claude-haiku-4-20250514'
+        model: 'claude-3-5-haiku-20241022'
       });
 
       const response = await this.anthropic.messages.create({
-        model: 'claude-haiku-4-20250514',
+        model: 'claude-3-5-haiku-20241022',
         max_tokens: 100,
         temperature: skipCache ? 1.0 : 0.7, // Max temperature for variety when uncached
         top_p: skipCache ? 0.95 : undefined, // Add nucleus sampling for more randomness
