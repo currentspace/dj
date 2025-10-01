@@ -34,9 +34,7 @@ interface Batch<T> {
 export class RequestOrchestrator {
   private queue: RateLimitedQueue<any>;
   private batches = new Map<string, Batch<any>>();
-  private pendingByLane = new Map<LaneKey, PendingEntry<any>[]>();
-  private processingTimer: number | null = null;
-  private isProcessing = false;
+  private queueRunning = false;
 
   constructor(options?: {
     rate?: number;        // Requests per second (default: 40)
@@ -50,6 +48,9 @@ export class RequestOrchestrator {
       jitterMs: options?.jitterMs ?? 5,
       minTickMs: options?.minTickMs ?? 2,
     });
+
+    // Start the continuous queue processor
+    this.startQueueProcessor();
   }
 
   /**
@@ -61,10 +62,17 @@ export class RequestOrchestrator {
    */
   async execute<T>(task: Task<T>, lane: LaneKey = 'default'): Promise<T | null> {
     return new Promise((resolve, reject) => {
-      const arr = this.pendingByLane.get(lane) ?? [];
-      arr.push({ task, resolve, reject, lane });
-      this.pendingByLane.set(lane, arr);
-      this.scheduleProcessing();
+      // Directly enqueue the wrapped task
+      this.queue.enqueue(async () => {
+        try {
+          const result = await task();
+          resolve(result);
+          return result;
+        } catch (error) {
+          reject(error);
+          return null;
+        }
+      });
     });
   }
 
@@ -116,13 +124,10 @@ export class RequestOrchestrator {
   }
 
   /**
-   * Get the number of pending tasks across all lanes and batches
+   * Get the number of pending tasks in queue and batches
    */
   getPendingCount(): number {
-    let count = 0;
-    for (const arr of this.pendingByLane.values()) {
-      count += arr.length;
-    }
+    let count = this.queue.size();
     for (const batch of this.batches.values()) {
       count += batch.tasks.length;
     }
@@ -130,114 +135,19 @@ export class RequestOrchestrator {
   }
 
   /**
-   * Schedule processing of pending tasks
-   * Uses micro-batching to collect multiple enqueues before processing
+   * Start the continuous queue processor
+   * Uses RateLimitedQueue.processContinuously() which handles nested enqueueing automatically
    */
-  private scheduleProcessing(): void {
-    if (this.processingTimer !== null) return;
+  private startQueueProcessor(): void {
+    if (this.queueRunning) return;
+    this.queueRunning = true;
 
-    // Use a small delay to allow multiple enqueues to accumulate
-    // This creates natural micro-batches for better efficiency
-    this.processingTimer = setTimeout(() => {
-      this.processingTimer = null;
-      this.processPendingTasks().catch(err => {
-        console.error('[RequestOrchestrator] Processing error:', err);
-      });
-    }, 0) as unknown as number;
-  }
-
-  /**
-   * Take tasks using round-robin fairness across lanes
-   * This prevents any single source (e.g., Spotify) from monopolizing the queue
-   */
-  private takeRoundRobin(): PendingEntry<any>[] {
-    const lanes = Array.from(this.pendingByLane.keys());
-    if (lanes.length === 0) return [];
-
-    const out: PendingEntry<any>[] = [];
-    let remaining = lanes.reduce((sum, key) => sum + (this.pendingByLane.get(key)?.length ?? 0), 0);
-    let i = 0;
-
-    while (remaining > 0) {
-      const lane = lanes[i % lanes.length];
-      const queue = this.pendingByLane.get(lane);
-
-      if (queue && queue.length > 0) {
-        out.push(queue.shift()!);
-        remaining--;
-      }
-
-      i++;
-    }
-
-    // Drop empty lanes
-    for (const lane of lanes) {
-      if (this.pendingByLane.get(lane)?.length === 0) {
-        this.pendingByLane.delete(lane);
-      }
-    }
-
-    return out;
-  }
-
-  /**
-   * Process all pending tasks through the rate-limited queue
-   * Uses round-robin fairness to prevent lane starvation
-   *
-   * IMPORTANT: This doesn't block - it feeds the queue and returns immediately
-   * to allow new tasks to be enqueued while processing continues
-   */
-  private async processPendingTasks(): Promise<void> {
-    // Prevent concurrent draining
-    if (this.isProcessing) return;
-    this.isProcessing = true;
-
-    try {
-      // Collect all pending tasks from lanes (round-robin)
-      const allTasks: PendingEntry<any>[] = this.takeRoundRobin();
-
-      // Add batch tasks
-      for (const batch of this.batches.values()) {
-        allTasks.push(...batch.tasks);
-        batch.tasks = []; // Clear processed tasks
-      }
-
-      if (allTasks.length === 0) {
-        this.isProcessing = false;
-        return;
-      }
-
-      // Clear queue from any previous use
-      this.queue.clear();
-
-      // Enqueue all tasks into the rate-limited queue
-      for (const { task, resolve, reject } of allTasks) {
-        this.queue.enqueue(async () => {
-          try {
-            const result = await task();
-            resolve(result);
-            return result;
-          } catch (error) {
-            // Reject the promise but return null to queue
-            reject(error);
-            return null;
-          }
-        });
-      }
-
-      // Start processing in background (don't await!)
-      // This allows new tasks to be enqueued while processing continues
-      this.queue.processAll().finally(() => {
-        this.isProcessing = false;
-        // Check if more tasks were added while we were processing
-        if (this.getPendingCount() > 0) {
-          this.scheduleProcessing();
-        }
-      });
-    } catch (error) {
-      this.isProcessing = false;
-      throw error;
-    }
+    // Use the continuous processor - it will automatically pick up new tasks
+    // even if they're enqueued while processing is happening
+    this.queue.processContinuously().catch(err => {
+      console.error('[RequestOrchestrator] Fatal error in continuous processor:', err);
+      this.queueRunning = false;
+    });
   }
 }
 

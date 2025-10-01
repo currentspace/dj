@@ -235,6 +235,115 @@ export class RateLimitedQueue<T> {
     return this.processAll(onResult);
   }
 
+  /**
+   * Process tasks continuously - when new tasks are enqueued during processing,
+   * they will be picked up automatically without waiting for the current batch to complete.
+   *
+   * IMPORTANT: This method never resolves - it runs until stopped.
+   * Use for orchestrators that need to handle nested/recursive task enqueueing.
+   */
+  async processContinuously(
+    onResult?: (result: T | null) => void | Promise<void>
+  ): Promise<void> {
+    if (this.processing) throw new Error("Already processing");
+    this.processing = true;
+
+    let globalIndex = 0;
+
+    // Internal: refill tokens from elapsed time
+    const refill = () => {
+      const now = performance.now();
+      const elapsed = now - this.lastRefill;
+      if (elapsed > 0) {
+        this.tokens = Math.min(this.burst, this.tokens + (elapsed * this.rate) / 1000);
+        this.lastRefill = now;
+      }
+    };
+
+    const runOne = async (task: Task<T>) => {
+      this.running++;
+      try {
+        const value = await task();
+        if (onResult) {
+          try { await onResult(value); } catch { /* swallow */ }
+        }
+      } catch (err) {
+        if (onResult) {
+          try { await onResult(null); } catch { /* swallow */ }
+        }
+        console.error("[RateLimitedQueue] task failed:", err);
+      } finally {
+        this.running--;
+        kick();
+      }
+    };
+
+    const scheduleNext = () => {
+      if (this.timer !== null) return;
+
+      refill();
+
+      const nextWakeMs = (): number => {
+        if (this.tokens >= 1) return this.minTickMs;
+        const deficit = 1 - this.tokens;
+        const wait = (deficit * 1000) / this.rate;
+        const jitter = this.jitterMs ? Math.random() * this.jitterMs : 0;
+        return Math.max(this.minTickMs, wait + jitter);
+      };
+
+      this.timer = setTimeout(tick, nextWakeMs()) as unknown as number;
+    };
+
+    const clearIfSet = () => {
+      if (this.timer !== null) {
+        clearTimeout(this.timer as unknown as number);
+        this.timer = null;
+      }
+    };
+    this.clearTimer = clearIfSet;
+
+    const tick = () => {
+      this.timer = null;
+      if (!this.processing) return;
+
+      refill();
+
+      // Launch as many as tokens & concurrency allow
+      // IMPORTANT: Check this.queue.length dynamically (not a fixed 'total')
+      while (
+        this.running < this.concurrency &&
+        this.tokens >= 1 &&
+        this.queue.length > 0
+      ) {
+        this.tokens -= 1;
+        const task = this.queue.shift()!; // Take from front
+        runOne(task);
+      }
+
+      // If there are still tasks, schedule next wakeup
+      if (this.queue.length > 0) {
+        scheduleNext();
+      }
+    };
+
+    const kick = () => {
+      // If there are tasks and we have capacity, tick immediately
+      if (this.running < this.concurrency && this.queue.length > 0) {
+        if (this.timer === null) {
+          this.timer = setTimeout(tick, this.minTickMs) as unknown as number;
+        }
+      }
+    };
+
+    // Start the scheduler
+    scheduleNext();
+
+    // This promise never resolves - runs until processing is stopped externally
+    return new Promise(() => {
+      // Never resolves
+    });
+  }
+
   // replaced at runtime by constructor; defined to satisfy TS
   // eslint-disable-next-line @typescript-eslint/no-empty-function
   private clearTimer(): void {}
