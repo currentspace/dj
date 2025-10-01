@@ -1404,18 +1404,52 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
         currentToolCalls = nextToolCalls;
       }
 
-      // Check if we hit the max turns limit
-      if (turnCount >= MAX_TURNS) {
-        console.warn(`[Stream:${requestId}] ⚠️ Hit max turn limit (${MAX_TURNS}). Ending conversation.`);
-        await sseWriter.write({ type: 'thinking', data: 'Conversation limit reached, wrapping up...' });
+      // Check if we hit the max turns limit or loop detection
+      if (turnCount >= MAX_TURNS || fullResponse.length === 0) {
+        console.warn(`[Stream:${requestId}] ⚠️ Hit limit (${turnCount} turns). Requesting final response from Claude...`);
+
+        // Ask Claude to provide a response based on what it has learned
+        const finalPrompt = new HumanMessage(
+          "Please provide your response based on the information you've gathered from the tools you've used."
+        );
+        conversationMessages.push(finalPrompt);
+
+        await sseWriter.write({ type: 'thinking', data: 'Preparing final response...' });
+
+        const finalResponse = await modelWithTools.stream(conversationMessages, { signal: abortController.signal });
+
+        fullResponse = '';
+        for await (const chunk of finalResponse) {
+          if (abortController.signal.aborted) {
+            throw new Error('Request aborted');
+          }
+
+          let textContent = '';
+          if (typeof chunk.content === 'string' && chunk.content) {
+            textContent = chunk.content;
+          } else if (Array.isArray(chunk.content)) {
+            for (const block of chunk.content) {
+              if (block.type === 'text' && block.text) {
+                textContent += block.text;
+              }
+            }
+          }
+
+          if (textContent) {
+            fullResponse += textContent;
+            await sseWriter.write({ type: 'content', data: textContent });
+          }
+        }
+
+        console.log(`[Stream:${requestId}] Final response after limit: ${fullResponse.length} chars`);
       }
 
       console.log(`[Stream:${requestId}] Agentic loop complete after ${turnCount} turns`);
 
-      // If still no response after all turns, provide fallback
+      // If still no response after everything, provide fallback
       if (fullResponse.length === 0) {
-        console.error(`[Stream:${requestId}] WARNING: No content received from Claude after ${turnCount} turns!`);
-        await sseWriter.write({ type: 'content', data: 'I completed the analysis successfully!' });
+        console.error(`[Stream:${requestId}] WARNING: No content received from Claude!`);
+        await sseWriter.write({ type: 'content', data: 'I apologize, but I encountered an issue generating a response. Please try again.' });
       }
 
       // Send completion
