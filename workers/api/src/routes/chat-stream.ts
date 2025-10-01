@@ -1823,17 +1823,21 @@ chatStreamRouter.post('/message', async (c) => {
 
       console.log(`[Stream:${requestId}] Initializing Claude with API key`);
 
-      const llm = new ChatAnthropic({
-        apiKey: env.ANTHROPIC_API_KEY,
-        model: 'claude-sonnet-4-5-20250929',
-        temperature: 0.2,
-        maxTokens: 2000,
-        streaming: true,
-        maxRetries: 0,
-        // Note: Cannot use both temperature and topP with Sonnet 4.5
-      });
-
-      const modelWithTools = llm.bindTools(tools);
+      // Helper function to create fresh ChatAnthropic instance
+      // CRITICAL: Must create new instance for each .stream() call in Workers
+      // Reusing instances causes "Connection error" on subsequent calls
+      const createModelWithTools = () => {
+        const llm = new ChatAnthropic({
+          apiKey: env.ANTHROPIC_API_KEY,
+          model: 'claude-sonnet-4-5-20250929',
+          temperature: 0.2,
+          maxTokens: 2000,
+          streaming: true,
+          maxRetries: 0,
+          // Note: Cannot use both temperature and topP with Sonnet 4.5
+        });
+        return llm.bindTools(tools);
+      };
 
       // Build system prompt
       const systemPrompt = `You are an AI DJ assistant with access to Spotify.
@@ -2000,8 +2004,8 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
 
       let response;
       try {
-        console.log(`[Stream:${requestId}] Calling modelWithTools.stream() with ${messages.length} messages`);
-        response = await modelWithTools.stream(messages, { signal: abortController.signal });
+        console.log(`[Stream:${requestId}] Calling createModelWithTools().stream() with ${messages.length} messages`);
+        response = await createModelWithTools().stream(messages, { signal: abortController.signal });
         console.log(`[Stream:${requestId}] Claude stream initialized`);
       } catch (apiError) {
         if (abortController.signal.aborted) {
@@ -2176,7 +2180,7 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
 
         let nextResponse;
         try {
-          nextResponse = await modelWithTools.stream(conversationMessages, { signal: abortController.signal });
+          nextResponse = await createModelWithTools().stream(conversationMessages, { signal: abortController.signal });
         } catch (streamError) {
           const logger = getLogger();
           logger?.error('Claude streaming API call failed', streamError, {
@@ -2302,7 +2306,7 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
 
         let finalResponse;
         try {
-          finalResponse = await modelWithTools.stream(conversationMessages, { signal: abortController.signal });
+          finalResponse = await createModelWithTools().stream(conversationMessages, { signal: abortController.signal });
         } catch (finalStreamError) {
           const logger = getLogger();
           logger?.error('Final Claude streaming API call failed', finalStreamError, {
