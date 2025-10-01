@@ -61,8 +61,19 @@ export class ProgressNarrator {
         const randomStyle = variationStyles[Math.floor(Math.random() * variationStyles.length)];
         prompt += `\n\n${randomStyle} Variation #${Math.floor(Math.random() * 10000)}`;
       }
+
       this.logger.debug(`Generating message for event: ${context.eventType}${skipCache ? ' (uncached)' : ''}`, {
-        promptPreview: prompt.substring(0, 200)
+        promptPreview: prompt.substring(0, 200),
+        promptLength: prompt.length,
+        systemPromptLength: this.systemPrompt.length,
+        model: 'claude-haiku-4-20250514',
+        temperature: skipCache ? 1.0 : 0.7,
+        maxTokens: 100
+      });
+
+      this.logger.info('About to call Anthropic API', {
+        hasApiKey: !!this.anthropic,
+        model: 'claude-haiku-4-20250514'
       });
 
       const response = await this.anthropic.messages.create({
@@ -79,6 +90,13 @@ export class ProgressNarrator {
           text: this.systemPrompt,
           cache_control: { type: 'ephemeral' },
         }],
+      });
+
+      this.logger.info('Anthropic API call succeeded', {
+        responseId: response.id,
+        model: response.model,
+        stopReason: response.stop_reason,
+        contentType: response.content[0]?.type
       });
 
       const message = response.content[0].type === 'text'
@@ -106,9 +124,30 @@ export class ProgressNarrator {
 
       return message;
     } catch (error) {
-      this.logger.error('Failed to generate message, using fallback', error, {
-        event: context.eventType
-      });
+      // Detailed error logging
+      const errorDetails: Record<string, any> = {
+        event: context.eventType,
+        errorType: error?.constructor?.name,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      };
+
+      // Extract specific error details from Anthropic SDK errors
+      if (error && typeof error === 'object') {
+        if ('status' in error) errorDetails.httpStatus = error.status;
+        if ('statusCode' in error) errorDetails.statusCode = error.statusCode;
+        if ('code' in error) errorDetails.errorCode = error.code;
+        if ('type' in error) errorDetails.errorType = error.type;
+        if ('headers' in error) errorDetails.headers = error.headers;
+        if ('error' in error) errorDetails.apiError = error.error;
+      }
+
+      // Log the full error stack
+      if (error instanceof Error && error.stack) {
+        errorDetails.stack = error.stack.split('\n').slice(0, 5).join('\n');
+      }
+
+      this.logger.error('Failed to generate message, using fallback', error, errorDetails);
+
       return this.getFallbackMessage(context);
     }
   }
