@@ -44,7 +44,7 @@ interface DeezerTrack {
 export class AudioEnrichmentService {
   private cache: KVNamespace | null;
   private cacheTTL: number = 90 * 24 * 60 * 60; // 90 days for hits
-  private missCacheTTL: number = 1 * 24 * 60 * 60; // 1 day for misses (retry sooner)
+  private missCacheTTL: number = 5 * 60; // 5 minutes for misses (retry very soon)
   private rateLimitDelay: number = 200; // 200ms between calls (5 QPS)
 
   constructor(cache?: KVNamespace) {
@@ -80,10 +80,10 @@ export class AudioEnrichmentService {
           return cached.enrichment;
         }
 
-        // If this is a recent miss (less than 1 day old), return the miss
+        // If this is a recent miss (less than 5 minutes old), return the miss
         const age = Date.now() - new Date(cached.fetched_at).getTime();
         if (cached.is_miss && age < this.missCacheTTL * 1000) {
-          console.log(`[DeezerEnrichment] 🔄 Recent miss cached for ${track.id}, age: ${Math.round(age / 1000 / 60 / 60)}h`);
+          console.log(`[DeezerEnrichment] 🔄 Recent miss cached for ${track.id}, age: ${Math.round(age / 1000 / 60)}m`);
           return cached.enrichment;
         }
 
@@ -425,7 +425,8 @@ export class AudioEnrichmentService {
         { expirationTtl: ttl }
       );
 
-      console.log(`[BPMEnrichment] Cached ${isMiss ? 'miss' : 'hit'} for ${trackId} (TTL: ${Math.round(ttl / 86400)} days)`);
+      const ttlDisplay = isMiss ? `${Math.round(ttl / 60)}m` : `${Math.round(ttl / 86400)}d`;
+      console.log(`[BPMEnrichment] Cached ${isMiss ? 'miss' : 'hit'} for ${trackId} (TTL: ${ttlDisplay})`);
     } catch (error) {
       console.error('[BPMEnrichment] Cache write error:', error);
     }

@@ -81,7 +81,7 @@ export class LastFmService {
   private apiKey: string;
   private cache: KVNamespace | null;
   private cacheTTL: number = 7 * 24 * 60 * 60; // 7 days for hits (refresh weekly)
-  private missCacheTTL: number = 1 * 24 * 60 * 60; // 1 day for misses (retry sooner)
+  private missCacheTTL: number = 5 * 60; // 5 minutes for misses (retry very soon)
   private apiBaseUrl = 'https://ws.audioscrobbler.com/2.0/';
 
   constructor(apiKey: string, cache?: KVNamespace) {
@@ -108,10 +108,10 @@ export class LastFmService {
           return cached.signals;
         }
 
-        // If this is a recent miss (less than 1 day old), return the miss
+        // If this is a recent miss (less than 5 minutes old), return the miss
         const age = Date.now() - new Date(cached.fetched_at).getTime();
         if (cached.is_miss && age < this.missCacheTTL * 1000) {
-          console.log(`[LastFm] 🔄 Recent miss cached for ${track.artist} - ${track.name}, age: ${Math.round(age / 1000 / 60 / 60)}h`);
+          console.log(`[LastFm] 🔄 Recent miss cached for ${track.artist} - ${track.name}, age: ${Math.round(age / 1000 / 60)}m`);
           return cached.signals;
         }
 
@@ -583,7 +583,8 @@ export class LastFmService {
         { expirationTtl: ttl }
       );
 
-      console.log(`[LastFm] Cached ${isMiss ? 'miss' : 'hit'} for ${key} (TTL: ${Math.round(ttl / 86400)} days)`);
+      const ttlDisplay = isMiss ? `${Math.round(ttl / 60)}m` : `${Math.round(ttl / 86400)}d`;
+      console.log(`[LastFm] Cached ${isMiss ? 'miss' : 'hit'} for ${key} (TTL: ${ttlDisplay})`);
     } catch (error) {
       console.error('[LastFm] Cache write error:', error);
     }
