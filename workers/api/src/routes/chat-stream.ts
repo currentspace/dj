@@ -9,6 +9,7 @@ import type { StreamToolData, StreamToolResult, StreamDebugData, StreamLogData }
 import { AudioEnrichmentService } from '../services/AudioEnrichmentService';
 import { LastFmService } from '../services/LastFmService';
 import { ProgressNarrator } from '../lib/progress-narrator';
+import { ServiceLogger } from '../utils/ServiceLogger';
 
 const chatStreamRouter = new Hono<{ Bindings: Env }>();
 
@@ -1773,7 +1774,8 @@ chatStreamRouter.post('/message', async (c) => {
       });
 
       // Initialize progress narrator with Haiku
-      const narrator = new ProgressNarrator(env.ANTHROPIC_API_KEY);
+      const narratorLogger = new ServiceLogger('ProgressNarrator', sseWriter);
+      const narrator = new ProgressNarrator(env.ANTHROPIC_API_KEY, narratorLogger);
       const recentMessages: string[] = [];
 
       // Send initial thinking message with dynamic narration

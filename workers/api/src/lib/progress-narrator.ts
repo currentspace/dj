@@ -12,6 +12,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
+import { ServiceLogger } from '../utils/ServiceLogger';
 
 interface MessageContext {
   eventType: string;
@@ -26,10 +27,12 @@ export class ProgressNarrator {
   private anthropic: Anthropic;
   private messageCache: Map<string, string> = new Map();
   private systemPrompt: string;
+  private logger: ServiceLogger;
 
-  constructor(apiKey: string) {
+  constructor(apiKey: string, logger?: ServiceLogger) {
     this.anthropic = new Anthropic({ apiKey });
     this.systemPrompt = this.buildSystemPrompt();
+    this.logger = logger || new ServiceLogger('ProgressNarrator');
   }
 
   /**
@@ -58,8 +61,9 @@ export class ProgressNarrator {
         const randomStyle = variationStyles[Math.floor(Math.random() * variationStyles.length)];
         prompt += `\n\n${randomStyle} Variation #${Math.floor(Math.random() * 10000)}`;
       }
-      console.log(`[ProgressNarrator] Generating message for event: ${context.eventType}${skipCache ? ' (uncached)' : ''}`);
-      console.log(`[ProgressNarrator] Prompt preview: ${prompt.substring(0, 200)}...`);
+      this.logger.debug(`Generating message for event: ${context.eventType}${skipCache ? ' (uncached)' : ''}`, {
+        promptPreview: prompt.substring(0, 200)
+      });
 
       const response = await this.anthropic.messages.create({
         model: 'claude-haiku-4-20250514',
@@ -77,19 +81,17 @@ export class ProgressNarrator {
         }],
       });
 
-      // Log the full response for debugging
-      console.log(`[ProgressNarrator] API Response:`, JSON.stringify({
-        content_type: response.content[0]?.type,
-        content_length: response.content[0]?.type === 'text' ? response.content[0].text.length : 0,
-        stop_reason: response.stop_reason,
-        model: response.model
-      }));
-
       const message = response.content[0].type === 'text'
         ? response.content[0].text.trim()
         : this.getFallbackMessage(context);
 
-      console.log(`[ProgressNarrator] Success! Generated: "${message}"`);
+      this.logger.info(`Generated message`, {
+        event: context.eventType,
+        message,
+        responseType: response.content[0]?.type,
+        contentLength: response.content[0]?.type === 'text' ? response.content[0].text.length : 0,
+        stopReason: response.stop_reason
+      });
 
       // Cache the result only if caching is enabled
       if (!skipCache) {
@@ -104,9 +106,9 @@ export class ProgressNarrator {
 
       return message;
     } catch (error) {
-      console.error('[ProgressNarrator] Failed to generate message:', error);
-      console.error('[ProgressNarrator] Error details:', error instanceof Error ? error.message : JSON.stringify(error));
-      console.log(`[ProgressNarrator] Using fallback for: ${context.eventType}`);
+      this.logger.error('Failed to generate message, using fallback', error, {
+        event: context.eventType
+      });
       return this.getFallbackMessage(context);
     }
   }
