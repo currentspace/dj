@@ -64,6 +64,32 @@ class SSEWriter {
     return this.writeQueue;
   }
 
+  /**
+   * Queue a write without awaiting (fire-and-forget)
+   * Use this for non-critical messages to avoid blocking
+   */
+  writeAsync(event: StreamEvent): void {
+    if (this.closed) return;
+
+    this.writeQueue = this.writeQueue.then(async () => {
+      if (this.closed) return;
+      try {
+        const message = `data: ${JSON.stringify(event)}\n\n`;
+        await this.writer.write(this.encoder.encode(message));
+      } catch (error) {
+        console.error('SSE write error:', error);
+        this.closed = true;
+      }
+    });
+  }
+
+  /**
+   * Wait for all queued writes to complete
+   */
+  async flush(): Promise<void> {
+    await this.writeQueue;
+  }
+
   async writeHeartbeat(): Promise<void> {
     if (this.closed) return;
 
@@ -486,51 +512,48 @@ async function executeSpotifyToolWithProgress(
                 const key = `${track.id}`;
                 signalsMap.set(key, signals);
 
-                // Stream progress every 10 tracks with narrator
+                // Stream progress every 10 tracks with narrator (fire-and-forget)
                 if ((i + 1) % 10 === 0 || i === tracksForLastFm.length - 1) {
                   if (narrator) {
-                    try {
-                      // Collect recent track names for context (last 3 tracks)
-                      const recentTrackNames = tracksForLastFm
-                        .slice(Math.max(0, i - 2), i + 1)
-                        .map(t => t.name)
-                        .join(', ');
+                    // Don't await - let narrator run in parallel
+                    (async () => {
+                      try {
+                        // Collect recent track names for context (last 3 tracks)
+                        const recentTrackNames = tracksForLastFm
+                          .slice(Math.max(0, i - 2), i + 1)
+                          .map(t => t.name)
+                          .join(', ');
 
-                      // Get tags if available
-                      const recentTags = signals.top_tags?.slice(0, 3).map(t => t.name).join(', ') || '';
+                        // Get tags if available
+                        const recentTags = signals.top_tags?.slice(0, 3).map(t => t.name).join(', ') || '';
 
-                      await sseWriter.write({
-                        type: 'log',
-                        data: {
-                          level: 'info',
-                          message: `[Narrator] Generating message for ${i + 1}/${tracksForLastFm.length} tracks, recent: ${track.name}`
-                        }
-                      });
-                      const message = await narrator.generateMessage({
-                        eventType: 'enriching_tracks',
-                        userRequest,
-                        metadata: {
-                          enrichedCount: i + 1,
+                        const message = await narrator.generateMessage({
+                          eventType: 'enriching_tracks',
+                          userRequest,
+                          metadata: {
+                            enrichedCount: i + 1,
+                            totalTracks: tracksForLastFm.length,
+                            recentTags,
+                            recentTrackName: track.name,
+                            recentTrackNames
+                          }
+                        }, true); // Skip cache for variety
+
+                        sseWriter.writeAsync({ type: 'thinking', data: `🎧 ${message}` });
+                      } catch (narratorError) {
+                        // Log detailed narrator failure
+                        getChildLogger('Narrator').error('Track enrichment message failed', narratorError, {
+                          trackIndex: i + 1,
                           totalTracks: tracksForLastFm.length,
-                          recentTags,
-                          recentTrackName: track.name,
-                          recentTrackNames
-                        }
-                      }, true); // Skip cache for variety
-                      await sseWriter.write({
-                        type: 'log',
-                        data: {
-                          level: 'info',
-                          message: `[Narrator] Generated: "${message}"`
-                        }
-                      });
-                      await sseWriter.write({ type: 'thinking', data: `🎧 ${message}` });
-                    } catch (narratorError) {
-                      // Narrator failed, use fallback
-                      await sseWriter.write({ type: 'thinking', data: `🎧 Track enrichment: ${signalsMap.size}/${tracksForLastFm.length}...` });
-                    }
+                          errorType: narratorError?.constructor?.name,
+                          errorMessage: narratorError instanceof Error ? narratorError.message : String(narratorError)
+                        });
+                        // Use fallback
+                        sseWriter.writeAsync({ type: 'thinking', data: `🎧 Track enrichment: ${signalsMap.size}/${tracksForLastFm.length}...` });
+                      }
+                    })();
                   } else {
-                    await sseWriter.write({ type: 'thinking', data: `🎧 Track enrichment: ${signalsMap.size}/${tracksForLastFm.length}...` });
+                    sseWriter.writeAsync({ type: 'thinking', data: `🎧 Track enrichment: ${signalsMap.size}/${tracksForLastFm.length}...` });
                   }
                 }
               }
@@ -552,38 +575,35 @@ async function executeSpotifyToolWithProgress(
             // Report progress every 10 artists with narrator
             if (current % 10 === 0 || current === total) {
               if (narrator) {
-                try {
-                  const recentArtist = uniqueArtists[current - 1];
-                  await sseWriter.write({
-                    type: 'log',
-                    data: {
-                      level: 'info',
-                      message: `[Narrator] Generating message for ${current}/${total} artists, recent: ${recentArtist}`
-                    }
-                  });
-                  const message = await narrator.generateMessage({
-                    eventType: 'enriching_artists',
-                    userRequest,
-                    metadata: {
-                      enrichedCount: current,
+                // Don't await - let narrator run in parallel
+                (async () => {
+                  try {
+                    const recentArtist = uniqueArtists[current - 1];
+                    const message = await narrator.generateMessage({
+                      eventType: 'enriching_artists',
+                      userRequest,
+                      metadata: {
+                        enrichedCount: current,
+                        totalArtists: total,
+                        recentArtistName: recentArtist
+                      }
+                    }, true); // Skip cache for variety
+
+                    sseWriter.writeAsync({ type: 'thinking', data: `🎤 ${message}` });
+                  } catch (narratorError) {
+                    // Log detailed narrator failure
+                    getChildLogger('Narrator').error('Artist enrichment message failed', narratorError, {
+                      artistIndex: current,
                       totalArtists: total,
-                      recentArtistName: recentArtist
-                    }
-                  }, true); // Skip cache for variety
-                  await sseWriter.write({
-                    type: 'log',
-                    data: {
-                      level: 'info',
-                      message: `[Narrator] Generated: "${message}"`
-                    }
-                  });
-                  await sseWriter.write({ type: 'thinking', data: `🎤 ${message}` });
-                } catch (narratorError) {
-                  // Narrator failed, use fallback
-                  await sseWriter.write({ type: 'thinking', data: `🎤 Artist enrichment: ${current}/${total}...` });
-                }
+                      errorType: narratorError?.constructor?.name,
+                      errorMessage: narratorError instanceof Error ? narratorError.message : String(narratorError)
+                    });
+                    // Use fallback
+                    sseWriter.writeAsync({ type: 'thinking', data: `🎤 Artist enrichment: ${current}/${total}...` });
+                  }
+                })();
               } else {
-                await sseWriter.write({ type: 'thinking', data: `🎤 Artist enrichment: ${current}/${total}...` });
+                sseWriter.writeAsync({ type: 'thinking', data: `🎤 Artist enrichment: ${current}/${total}...` });
               }
             }
           });
@@ -635,6 +655,9 @@ async function executeSpotifyToolWithProgress(
           await sseWriter.write({ type: 'thinking', data: '⚠️ Last.fm enrichment unavailable - continuing without tags' });
         }
       }
+
+      // Flush any pending narrator messages before final analysis
+      await sseWriter.flush();
 
       await sseWriter.write({ type: 'thinking', data: '🧮 Computing playlist insights...' });
 
