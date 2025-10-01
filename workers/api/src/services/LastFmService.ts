@@ -239,7 +239,6 @@ export class LastFmService {
     console.log(`[LastFm] Fetching artist info for ${uniqueArtists.length} unique artists (orchestrated)...`);
 
     const orchestrator = getGlobalOrchestrator();
-    const batchId = `lastfm-artists-${Date.now()}`;
 
     // Create tasks for all artists
     const tasks = uniqueArtists.map(artist => async () => {
@@ -278,27 +277,23 @@ export class LastFmService {
       }
     });
 
-    // Enqueue batch
-    orchestrator.enqueueBatch(batchId, tasks);
-
-    // Optional: Poll for progress while batch runs
-    let lastProgress = 0;
-    const progressInterval = onProgress ? setInterval(() => {
-      const pending = orchestrator.getPendingCount();
-      const completed = uniqueArtists.length - Math.max(0, pending);
-      if (completed > lastProgress) {
-        lastProgress = completed;
+    // Execute batch using new orchestrator API (executeBatch)
+    // All tasks execute in parallel respecting lane concurrency (10 for lastfm)
+    let completed = 0;
+    const wrappedTasks = tasks.map((task) => async () => {
+      const result = await task();
+      completed++;
+      if (onProgress && completed % 10 === 0) {
         onProgress(completed, uniqueArtists.length);
       }
-    }, 200) : null;
+      return result;
+    });
 
-    // Await batch completion
-    const batchResults = await orchestrator.awaitBatch(batchId);
+    const batchResults = await orchestrator.executeBatch(wrappedTasks, 'lastfm');
 
-    if (progressInterval) {
-      clearInterval(progressInterval);
-      // Final progress update
-      onProgress?.(uniqueArtists.length, uniqueArtists.length);
+    // Final progress update
+    if (onProgress) {
+      onProgress(uniqueArtists.length, uniqueArtists.length);
     }
 
     // Build results map
