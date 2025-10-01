@@ -711,9 +711,14 @@ function createStreamingSpotifyTools(
       func: async (args) => {
         if (abortSignal?.aborted) throw new Error('Request aborted');
 
-        // Auto-inject playlist ID if missing
-        let finalArgs = { ...args };
-        if (!args.playlist_id && contextPlaylistId) {
+        // Auto-inject playlist ID and apply defaults
+        let finalArgs = {
+          offset: args.offset ?? 0,
+          limit: args.limit ?? 20,
+          playlist_id: args.playlist_id
+        };
+
+        if (!finalArgs.playlist_id && contextPlaylistId) {
           console.log(`[get_playlist_tracks] Auto-injecting playlist_id: ${contextPlaylistId}`);
           finalArgs.playlist_id = contextPlaylistId;
         }
