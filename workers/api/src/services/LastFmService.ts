@@ -86,9 +86,10 @@ export class LastFmService {
   }
 
   /**
-   * Get comprehensive Last.fm signals for a track
+   * Get comprehensive Last.fm signals for a track (WITHOUT artist info to avoid rate limiting)
+   * Use getArtistInfo() separately for unique artists to minimize API calls
    */
-  async getTrackSignals(track: LastFmTrack): Promise<LastFmSignals | null> {
+  async getTrackSignals(track: LastFmTrack, skipArtistInfo: boolean = true): Promise<LastFmSignals | null> {
     const cacheKey = this.generateCacheKey(track.artist, track.name);
 
     // Try cache first
@@ -115,8 +116,11 @@ export class LastFmService {
       // Step 4: Get similar tracks
       const similar = await this.getSimilarTracks(canonicalArtist, canonicalTrack);
 
-      // Step 5: Get artist info (bio, tags, similar artists)
-      const artistInfo = await this.getArtistInfo(canonicalArtist);
+      // Step 5: Get artist info (bio, tags, similar artists) - ONLY if requested
+      let artistInfo = null;
+      if (!skipArtistInfo) {
+        artistInfo = await this.getArtistInfo(canonicalArtist);
+      }
 
       const signals: LastFmSignals = {
         // Track identifiers
@@ -143,7 +147,7 @@ export class LastFmService {
         // Similar tracks
         similar: similar || [],
 
-        // Artist info
+        // Artist info (null if skipArtistInfo=true)
         artistInfo
       };
 
@@ -160,9 +164,9 @@ export class LastFmService {
   }
 
   /**
-   * Batch get signals for multiple tracks
+   * Batch get signals for multiple tracks (skips artist info by default for performance)
    */
-  async batchGetSignals(tracks: LastFmTrack[]): Promise<Map<string, LastFmSignals>> {
+  async batchGetSignals(tracks: LastFmTrack[], skipArtistInfo: boolean = true): Promise<Map<string, LastFmSignals>> {
     const results = new Map<string, LastFmSignals>();
 
     // Process in batches with delay to respect rate limits
@@ -171,7 +175,7 @@ export class LastFmService {
       const batch = tracks.slice(i, i + batchSize);
 
       const batchPromises = batch.map(async (track) => {
-        const signals = await this.getTrackSignals(track);
+        const signals = await this.getTrackSignals(track, skipArtistInfo);
         if (signals) {
           const key = this.generateCacheKey(track.artist, track.name);
           results.set(key, signals);
@@ -183,6 +187,36 @@ export class LastFmService {
       // Delay between batches (Last.fm rate limit)
       if (i + batchSize < tracks.length) {
         await this.sleep(200);
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Batch get artist info for unique artists (call this separately to avoid duplicate API calls)
+   */
+  async batchGetArtistInfo(artists: string[]): Promise<Map<string, any>> {
+    const results = new Map();
+    const uniqueArtists = [...new Set(artists)]; // Deduplicate
+
+    console.log(`[LastFm] Fetching artist info for ${uniqueArtists.length} unique artists...`);
+
+    for (let i = 0; i < uniqueArtists.length; i++) {
+      const artist = uniqueArtists[i];
+
+      try {
+        const artistInfo = await this.getArtistInfo(artist);
+        if (artistInfo) {
+          results.set(artist.toLowerCase(), artistInfo);
+        }
+
+        // Rate limiting delay
+        if (i < uniqueArtists.length - 1) {
+          await this.sleep(25); // 40 TPS
+        }
+      } catch (error) {
+        console.error(`[LastFm] Failed to get artist info for ${artist}:`, error);
       }
     }
 
