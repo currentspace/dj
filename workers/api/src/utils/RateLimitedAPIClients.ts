@@ -41,7 +41,15 @@ export async function rateLimitedAnthropicCall<T>(
       return result;
     } catch (error) {
       const duration = performance.now() - start;
-      logger?.error(`Anthropic API call failed after ${duration.toFixed(0)}ms`, error, { context });
+      // Extract more details from the error
+      const errorDetails: any = { context };
+      if (error instanceof Error) {
+        errorDetails.message = error.message;
+        errorDetails.name = error.name;
+        if ('status' in error) errorDetails.status = (error as any).status;
+        if ('code' in error) errorDetails.code = (error as any).code;
+      }
+      logger?.error(`Anthropic API call failed after ${duration.toFixed(0)}ms`, error, errorDetails);
       throw error;
     }
   }, 'anthropic'); // Use 'anthropic' lane for fairness

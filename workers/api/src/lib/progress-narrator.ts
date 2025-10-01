@@ -11,7 +11,7 @@
  * Dynamic: "Digging through Spotify's crates for workout bangers..."
  */
 
-import Anthropic from '@anthropic-ai/sdk';
+import { AnthropicBedrock } from '@anthropic-ai/bedrock-sdk';
 import { ServiceLogger } from '../utils/ServiceLogger';
 import { rateLimitedAnthropicCall } from '../utils/RateLimitedAPIClients';
 
@@ -25,13 +25,15 @@ interface MessageContext {
 }
 
 export class ProgressNarrator {
-  private anthropic: Anthropic;
+  private anthropic: AnthropicBedrock;
   private messageCache: Map<string, string> = new Map();
   private systemPrompt: string;
   private logger: ServiceLogger;
 
   constructor(apiKey: string, logger?: ServiceLogger) {
-    this.anthropic = new Anthropic({ apiKey });
+    this.anthropic = new AnthropicBedrock({
+      anthropicApiKey: apiKey
+    });
     this.systemPrompt = this.buildSystemPrompt();
     this.logger = logger || new ServiceLogger('ProgressNarrator');
   }
