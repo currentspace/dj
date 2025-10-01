@@ -45,15 +45,26 @@ export class ProgressNarrator {
     }
 
     try {
-      // Add random salt to prompt for variety when skipCache is true
-      const salt = skipCache ? `\n\n(Variation ${Math.floor(Math.random() * 1000)})` : '';
-      const prompt = this.buildPrompt(context) + salt;
+      // Add random salt and explicit variation instruction when skipCache is true
+      let prompt = this.buildPrompt(context);
+      if (skipCache) {
+        const variationStyles = [
+          'Be creative and spontaneous.',
+          'Use a fresh perspective.',
+          'Try a completely different angle.',
+          'Mix up your vocabulary.',
+          'Surprise me with your wording.',
+        ];
+        const randomStyle = variationStyles[Math.floor(Math.random() * variationStyles.length)];
+        prompt += `\n\n${randomStyle} Variation #${Math.floor(Math.random() * 10000)}`;
+      }
       console.log(`[ProgressNarrator] Generating message for event: ${context.eventType}${skipCache ? ' (uncached)' : ''}`);
 
       const response = await this.anthropic.messages.create({
         model: 'claude-haiku-4-20250514',
         max_tokens: 100,
-        temperature: skipCache ? 0.9 : 0.7, // Higher temperature for more variety when uncached
+        temperature: skipCache ? 1.0 : 0.7, // Max temperature for variety when uncached
+        top_p: skipCache ? 0.95 : undefined, // Add nucleus sampling for more randomness
         messages: [{
           role: 'user',
           content: prompt,
