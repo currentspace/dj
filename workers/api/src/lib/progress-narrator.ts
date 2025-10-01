@@ -35,23 +35,25 @@ export class ProgressNarrator {
   /**
    * Generate a dynamic progress message using Haiku
    */
-  async generateMessage(context: MessageContext): Promise<string> {
+  async generateMessage(context: MessageContext, skipCache = false): Promise<string> {
     // Create cache key for similar contexts
     const cacheKey = this.getCacheKey(context);
 
-    // Return cached message if available (for common scenarios)
-    if (this.messageCache.has(cacheKey)) {
+    // Return cached message if available (for common scenarios) and caching is enabled
+    if (!skipCache && this.messageCache.has(cacheKey)) {
       return this.messageCache.get(cacheKey)!;
     }
 
     try {
-      const prompt = this.buildPrompt(context);
-      console.log(`[ProgressNarrator] Generating message for event: ${context.eventType}`);
+      // Add random salt to prompt for variety when skipCache is true
+      const salt = skipCache ? `\n\n(Variation ${Math.floor(Math.random() * 1000)})` : '';
+      const prompt = this.buildPrompt(context) + salt;
+      console.log(`[ProgressNarrator] Generating message for event: ${context.eventType}${skipCache ? ' (uncached)' : ''}`);
 
       const response = await this.anthropic.messages.create({
         model: 'claude-haiku-4-20250514',
         max_tokens: 100,
-        temperature: 0.7,
+        temperature: skipCache ? 0.9 : 0.7, // Higher temperature for more variety when uncached
         messages: [{
           role: 'user',
           content: prompt,
@@ -69,13 +71,15 @@ export class ProgressNarrator {
 
       console.log(`[ProgressNarrator] Success! Generated: "${message}"`);
 
-      // Cache the result
-      this.messageCache.set(cacheKey, message);
+      // Cache the result only if caching is enabled
+      if (!skipCache) {
+        this.messageCache.set(cacheKey, message);
 
-      // Limit cache size to prevent memory issues
-      if (this.messageCache.size > 100) {
-        const firstKey = this.messageCache.keys().next().value;
-        this.messageCache.delete(firstKey);
+        // Limit cache size to prevent memory issues
+        if (this.messageCache.size > 100) {
+          const firstKey = this.messageCache.keys().next().value;
+          this.messageCache.delete(firstKey);
+        }
       }
 
       return message;

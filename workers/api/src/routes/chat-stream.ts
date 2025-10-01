@@ -508,7 +508,7 @@ async function executeSpotifyToolWithProgress(
                         recentTrackName: track.name,
                         recentTrackNames
                       }
-                    });
+                    }, true); // Skip cache for variety
                     await sseWriter.write({
                       type: 'log',
                       data: {
@@ -556,7 +556,7 @@ async function executeSpotifyToolWithProgress(
                     totalArtists: total,
                     recentArtistName: recentArtist
                   }
-                });
+                }, true); // Skip cache for variety
                 await sseWriter.write({
                   type: 'log',
                   data: {
