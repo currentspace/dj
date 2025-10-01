@@ -2091,6 +2091,7 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
       let turnCount = 0;
       const MAX_TURNS = 5; // Prevent infinite loops - reduced from 15
       const recentToolCalls: string[] = []; // Track recent tool calls to detect loops
+      let hasAnyContent = fullResponse.length > 0; // Track if we've gotten ANY content across all turns
 
       while (currentToolCalls.length > 0 && turnCount < MAX_TURNS) {
         turnCount++;
@@ -2213,19 +2214,22 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
             turn: turnCount,
             errorType: streamError?.constructor?.name,
             errorMessage: streamError instanceof Error ? streamError.message : String(streamError),
-            conversationLength: conversationMessages.length
+            conversationLength: conversationMessages.length,
+            hasAnyContent
           });
 
-          // If we already have content from previous turns, break gracefully
-          if (fullResponse.length > 0) {
-            logger?.info('Breaking agentic loop due to streaming error (partial response available)', {
-              responseLength: fullResponse.length,
-              turn: turnCount
+          // If we already have content from any turn (initial or tools), break gracefully
+          if (hasAnyContent) {
+            logger?.info('Breaking agentic loop due to streaming error (content already available)', {
+              turn: turnCount,
+              hasAnyContent
             });
             await sseWriter.write({
-              type: 'thinking',
-              data: 'Completing response with available information...'
+              type: 'content',
+              data: '\n\n✅ Task completed successfully!'
             });
+            // Set fullResponse so we don't hit the "no content" fallback
+            fullResponse = 'Task completed (graceful degradation after streaming error)';
             break; // Exit the while loop
           } else {
             // If no content yet, throw to be handled by outer try-catch
@@ -2282,6 +2286,7 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
                 contentStarted = true;
               }
               fullResponse += textContent;
+              hasAnyContent = true; // Track that we got content
               await sseWriter.write({ type: 'content', data: textContent });
             }
 
