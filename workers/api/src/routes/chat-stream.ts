@@ -450,17 +450,17 @@ async function executeSpotifyToolWithProgress(
         }
       }
 
-      // Step 7: Sequential Last.fm enrichment (tags, popularity, similarity)
+      // Step 7: Optimized Last.fm enrichment (tracks + unique artists separately)
       let lastfmData = null;
       if (env?.LASTFM_API_KEY && env?.AUDIO_FEATURES_CACHE) {
         try {
           const lastfmService = new LastFmService(env.LASTFM_API_KEY, env.AUDIO_FEATURES_CACHE);
 
-          // Process tracks sequentially with same rate limiting at 40 TPS
           const tracksForLastFm = validTracks.slice(0, 50); // Process up to 50 tracks
           const signalsMap = new Map();
 
-          await sseWriter.write({ type: 'thinking', data: `🎧 Enriching ${tracksForLastFm.length} tracks with Last.fm tags at 40 TPS...` });
+          // Step 7a: Get track signals (4 API calls per track = 200 total)
+          await sseWriter.write({ type: 'thinking', data: `🎧 Enriching ${tracksForLastFm.length} tracks with Last.fm data (40 TPS)...` });
 
           for (let i = 0; i < tracksForLastFm.length; i++) {
             const track = tracksForLastFm[i];
@@ -472,7 +472,8 @@ async function executeSpotifyToolWithProgress(
                 duration_ms: track.duration_ms
               };
 
-              const signals = await lastfmService.getTrackSignals(lastfmTrack);
+              // Get track signals WITHOUT artist info (skipArtistInfo=true)
+              const signals = await lastfmService.getTrackSignals(lastfmTrack, true);
 
               if (signals) {
                 const key = `${track.id}`;
@@ -480,16 +481,30 @@ async function executeSpotifyToolWithProgress(
 
                 // Stream progress every 2 tracks
                 if ((i + 1) % 2 === 0) {
-                  await sseWriter.write({ type: 'thinking', data: `🎧 Enriched ${signalsMap.size}/${tracksForLastFm.length} tracks...` });
+                  await sseWriter.write({ type: 'thinking', data: `🎧 Track enrichment: ${signalsMap.size}/${tracksForLastFm.length}...` });
                 }
               }
 
-              // Rate limiting: 25ms delay between tracks
+              // Rate limiting: 25ms delay = 40 TPS
               if (i < tracksForLastFm.length - 1) {
                 await new Promise(resolve => setTimeout(resolve, 25));
               }
             } catch (error) {
               console.error(`[LastFm] Failed for track ${track.name}:`, error);
+            }
+          }
+
+          // Step 7b: Get unique artists and fetch artist info separately (cached)
+          const uniqueArtists = [...new Set(tracksForLastFm.map(t => t.artists?.[0]?.name).filter(Boolean))];
+          await sseWriter.write({ type: 'thinking', data: `🎤 Fetching artist info for ${uniqueArtists.length} unique artists...` });
+
+          const artistInfoMap = await lastfmService.batchGetArtistInfo(uniqueArtists);
+
+          // Step 7c: Attach artist info to track signals
+          for (const [trackId, signals] of signalsMap.entries()) {
+            const artistKey = signals.canonicalArtist.toLowerCase();
+            if (artistInfoMap.has(artistKey)) {
+              signals.artistInfo = artistInfoMap.get(artistKey);
             }
           }
 
@@ -517,10 +532,11 @@ async function executeSpotifyToolWithProgress(
               avg_playcount: popularity.avgPlaycount,
               similar_tracks: Array.from(similarTracks).slice(0, 10),
               sample_size: signalsMap.size,
+              artists_enriched: artistInfoMap.size,
               source: 'lastfm'
             };
 
-            await sseWriter.write({ type: 'thinking', data: `✅ Found Last.fm data for ${signalsMap.size} tracks!` });
+            await sseWriter.write({ type: 'thinking', data: `✅ Enriched ${signalsMap.size} tracks + ${artistInfoMap.size} artists!` });
           }
         } catch (error) {
           console.error('[LastFm] Enrichment failed:', error);

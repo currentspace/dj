@@ -194,7 +194,7 @@ export class LastFmService {
   }
 
   /**
-   * Batch get artist info for unique artists (call this separately to avoid duplicate API calls)
+   * Batch get artist info for unique artists with KV caching
    */
   async batchGetArtistInfo(artists: string[]): Promise<Map<string, any>> {
     const results = new Map();
@@ -204,16 +204,38 @@ export class LastFmService {
 
     for (let i = 0; i < uniqueArtists.length; i++) {
       const artist = uniqueArtists[i];
+      const cacheKey = `artist_${this.hashString(artist.toLowerCase())}`;
 
       try {
-        const artistInfo = await this.getArtistInfo(artist);
+        // Check cache first
+        let artistInfo = null;
+        if (this.cache) {
+          const cached = await this.cache.get(cacheKey, 'json');
+          if (cached) {
+            artistInfo = cached as any;
+            console.log(`[LastFm] Artist cache hit: ${artist}`);
+          }
+        }
+
+        // Fetch if not cached
+        if (!artistInfo) {
+          artistInfo = await this.getArtistInfo(artist);
+
+          // Cache the result
+          if (artistInfo && this.cache) {
+            await this.cache.put(cacheKey, JSON.stringify(artistInfo), {
+              expirationTtl: this.cacheTTL
+            });
+          }
+        }
+
         if (artistInfo) {
           results.set(artist.toLowerCase(), artistInfo);
         }
 
-        // Rate limiting delay
+        // Rate limiting: 25ms delay = 40 TPS
         if (i < uniqueArtists.length - 1) {
-          await this.sleep(25); // 40 TPS
+          await this.sleep(25);
         }
       } catch (error) {
         console.error(`[LastFm] Failed to get artist info for ${artist}:`, error);
