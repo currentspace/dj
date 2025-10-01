@@ -505,11 +505,15 @@ async function executeSpotifyToolWithProgress(
             }
           });
 
-          // Step 7c: Attach artist info to track signals
+          // Step 7c: Attach artist info to track signals and update cache
           for (const [trackId, signals] of signalsMap.entries()) {
             const artistKey = signals.canonicalArtist.toLowerCase();
             if (artistInfoMap.has(artistKey)) {
               signals.artistInfo = artistInfoMap.get(artistKey);
+
+              // Update cache with complete signals including artist info
+              const cacheKey = lastfmService.generateCacheKey(signals.canonicalArtist, signals.canonicalTrack);
+              await lastfmService.updateCachedSignals(cacheKey, signals);
             }
           }
 

@@ -548,14 +548,39 @@ export class LastFmService {
   }
 
   /**
-   * Generate cache key
+   * Generate cache key (public for external cache updates)
    */
-  private generateCacheKey(artist: string, track: string): string {
+  generateCacheKey(artist: string, track: string): string {
     const normalized = `${artist}_${track}`
       .toLowerCase()
       .replace(/[^a-z0-9]/g, '_');
 
     return this.hashString(normalized);
+  }
+
+  /**
+   * Update cached signals (used to add artist info after initial cache)
+   */
+  async updateCachedSignals(cacheKey: string, signals: LastFmSignals): Promise<void> {
+    if (!this.cache) return;
+
+    try {
+      const cacheData = {
+        signals,
+        fetched_at: new Date().toISOString(),
+        ttl: this.cacheTTL
+      };
+
+      await this.cache.put(
+        `lastfm:${cacheKey}`,
+        JSON.stringify(cacheData),
+        { expirationTtl: this.cacheTTL }
+      );
+
+      console.log(`[LastFm] Updated cache for ${cacheKey} with artist info`);
+    } catch (error) {
+      console.error('[LastFm] Cache update error:', error);
+    }
   }
 
   /**
