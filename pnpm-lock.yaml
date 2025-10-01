@@ -100,9 +100,6 @@ importers:
 
   workers/api:
     dependencies:
-      '@anthropic-ai/sdk':
-        specifier: ^0.65.0
-        version: 0.65.0(zod@3.25.76)
       '@dj/shared-types':
         specifier: workspace:*
         version: link:../../packages/shared-types
