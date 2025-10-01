@@ -106,7 +106,7 @@ pnpm test                  # Run tests
 
 ### Spotify Tools (via Claude)
 
-**Iterative Data Fetching:**
+**Core Tools:**
 1. **analyze_playlist** - Comprehensive playlist analysis with Deezer + Last.fm enrichment
    - Parameters: `playlist_id` (optional, auto-injected from conversation context)
    - Returns: metadata_analysis, deezer_analysis, lastfm_analysis, track_ids
@@ -127,8 +127,28 @@ pnpm test                  # Run tests
 
 4. **get_audio_features** - Audio characteristics (tempo, energy, danceability)
 5. **search_spotify_tracks** - Search Spotify catalog
-6. **get_recommendations** - AI-powered recommendations
+6. **get_recommendations** - Spotify's algorithmic recommendations
 7. **create_playlist** - Create new playlist
+
+**Recommendation Tools** (AI-powered multi-source discovery):
+8. **recommend_from_similar** - Convert Last.fm similar tracks to Spotify IDs
+   - Parameters: `similar_tracks` (array of "Artist - Track" strings), `limit_per_track` (1-5, default 1)
+   - Takes similar_tracks from analyze_playlist lastfm_analysis
+   - Searches Spotify for each track and returns IDs
+   - Use to discover tracks recommended by Last.fm community
+
+9. **recommend_from_tags** - Genre/tag-based discovery
+   - Parameters: `tags` (array of 1-5 tags from crowd_tags), `limit` (1-50, default 20)
+   - Searches Spotify using tag combinations
+   - Smart query building (genre: prefix for recognized genres)
+   - Use to find tracks matching playlist's vibe/genre
+
+10. **curate_recommendations** - AI-powered intelligent curation
+    - Parameters: `candidate_tracks`, `playlist_context`, `user_request`, `top_n` (default 10)
+    - Uses Claude Haiku to rank tracks from multiple sources
+    - Considers BPM range, tags, era, popularity, user intent
+    - Returns top N curated picks with reasoning
+    - Use as final step to intelligently filter combined results
 
 This iterative approach allows Claude to fetch only what's needed, avoiding payload bloat.
 
