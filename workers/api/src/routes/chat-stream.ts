@@ -274,22 +274,23 @@ async function executeSpotifyToolWithProgress(
       const oldestYear = releaseYears.length > 0 ? Math.min(...releaseYears) : null;
       const newestYear = releaseYears.length > 0 ? Math.max(...releaseYears) : null;
 
-      // Step 6: BPM enrichment DISABLED (Deezer API no longer provides BPM data as of 2025)
-      // Keeping infrastructure in place for future data sources
-      let bpmData = null;
-      if (false && env?.AUDIO_FEATURES_CACHE) {
+      // Step 6: Deezer enrichment (BPM often null, but rank/gain/release_date are valuable)
+      let deezerData = null;
+      if (env?.AUDIO_FEATURES_CACHE) {
         try {
-          console.log(`[BPMEnrichment] ========== STARTING BPM ENRICHMENT ==========`);
-          console.log(`[BPMEnrichment] KV Cache available: YES`);
+          console.log(`[DeezerEnrichment] ========== STARTING DEEZER ENRICHMENT ==========`);
+          console.log(`[DeezerEnrichment] KV Cache available: YES`);
           const enrichmentService = new AudioEnrichmentService(env.AUDIO_FEATURES_CACHE);
 
           // Process tracks sequentially with rate limiting at 40 TPS
           const tracksToEnrich = validTracks.slice(0, 100); // Process up to 100 tracks
           const bpmResults: number[] = [];
+          const rankResults: number[] = [];
+          const gainResults: number[] = [];
           let enrichedCount = 0;
 
-          console.log(`[BPMEnrichment] Will attempt to enrich ${tracksToEnrich.length} tracks`);
-          await sseWriter.write({ type: 'thinking', data: `🎵 Enriching ${tracksToEnrich.length} tracks with BPM data at 40 TPS...` });
+          console.log(`[DeezerEnrichment] Will attempt to enrich ${tracksToEnrich.length} tracks`);
+          await sseWriter.write({ type: 'thinking', data: `🎵 Enriching ${tracksToEnrich.length} tracks with Deezer data (BPM, rank, gain)...` });
 
           // Debug: Check if tracks have external_ids
           const tracksWithISRC = tracksToEnrich.filter(t => t.external_ids?.isrc).length;
@@ -346,20 +347,31 @@ async function executeSpotifyToolWithProgress(
                 });
               }
 
-              const bpmResult = await enrichmentService.enrichTrack(spotifyTrack);
+              const deezerResult = await enrichmentService.enrichTrack(spotifyTrack);
 
               // Log the result for first few tracks
               if (i < 3) {
-                console.log(`[BPMEnrichment] Result for "${track.name}":`, {
-                  bpm: bpmResult.bpm,
-                  gain: bpmResult.gain,
-                  source: bpmResult.source,
-                  isValid: AudioEnrichmentService.isValidBPM(bpmResult.bpm)
+                console.log(`[DeezerEnrichment] Result for "${track.name}":`, {
+                  bpm: deezerResult.bpm,
+                  gain: deezerResult.gain,
+                  rank: deezerResult.rank,
+                  release_date: deezerResult.release_date,
+                  source: deezerResult.source
                 });
               }
 
-              if (bpmResult.bpm && AudioEnrichmentService.isValidBPM(bpmResult.bpm)) {
-                bpmResults.push(bpmResult.bpm);
+              // Collect all available Deezer data
+              if (deezerResult.bpm && AudioEnrichmentService.isValidBPM(deezerResult.bpm)) {
+                bpmResults.push(deezerResult.bpm);
+              }
+              if (deezerResult.rank !== null && deezerResult.rank > 0) {
+                rankResults.push(deezerResult.rank);
+              }
+              if (deezerResult.gain !== null) {
+                gainResults.push(deezerResult.gain);
+              }
+
+              if (deezerResult.source) {
                 enrichedCount++;
 
                 // Stream progress updates every 5 tracks
@@ -378,31 +390,63 @@ async function executeSpotifyToolWithProgress(
             }
           }
 
-          console.log(`[BPMEnrichment] ========== ENRICHMENT COMPLETE ==========`);
-          console.log(`[BPMEnrichment] Total tracks processed: ${tracksToEnrich.length}`);
-          console.log(`[BPMEnrichment] Successful BPM results: ${bpmResults.length}`);
-          console.log(`[BPMEnrichment] Success rate: ${((bpmResults.length / tracksToEnrich.length) * 100).toFixed(1)}%`);
+          console.log(`[DeezerEnrichment] ========== ENRICHMENT COMPLETE ==========`);
+          console.log(`[DeezerEnrichment] Total tracks processed: ${tracksToEnrich.length}`);
+          console.log(`[DeezerEnrichment] Tracks with Deezer match: ${enrichedCount}`);
+          console.log(`[DeezerEnrichment] BPM results: ${bpmResults.length}`);
+          console.log(`[DeezerEnrichment] Rank results: ${rankResults.length}`);
+          console.log(`[DeezerEnrichment] Gain results: ${gainResults.length}`);
 
-          if (bpmResults.length > 0) {
-            const avgBPM = bpmResults.reduce((sum, bpm) => sum + bpm, 0) / bpmResults.length;
-            const minBPM = Math.min(...bpmResults);
-            const maxBPM = Math.max(...bpmResults);
-
-            bpmData = {
-              avg_bpm: Math.round(avgBPM),
-              bpm_range: { min: minBPM, max: maxBPM },
-              sample_size: bpmResults.length,
+          if (enrichedCount > 0) {
+            deezerData = {
               total_checked: tracksToEnrich.length,
+              tracks_found: enrichedCount,
               source: 'deezer'
-            };
+            } as any;
 
-            await sseWriter.write({ type: 'thinking', data: `✅ BPM enrichment complete! Found BPM for ${bpmResults.length}/${tracksToEnrich.length} tracks` });
+            // Add BPM stats if available
+            if (bpmResults.length > 0) {
+              const avgBPM = bpmResults.reduce((sum, bpm) => sum + bpm, 0) / bpmResults.length;
+              deezerData.bpm = {
+                avg: Math.round(avgBPM),
+                range: { min: Math.min(...bpmResults), max: Math.max(...bpmResults) },
+                sample_size: bpmResults.length
+              };
+            }
+
+            // Add rank stats if available
+            if (rankResults.length > 0) {
+              const avgRank = rankResults.reduce((sum, rank) => sum + rank, 0) / rankResults.length;
+              deezerData.rank = {
+                avg: Math.round(avgRank),
+                range: { min: Math.min(...rankResults), max: Math.max(...rankResults) },
+                sample_size: rankResults.length
+              };
+            }
+
+            // Add gain stats if available
+            if (gainResults.length > 0) {
+              const avgGain = gainResults.reduce((sum, gain) => sum + gain, 0) / gainResults.length;
+              deezerData.gain = {
+                avg: parseFloat(avgGain.toFixed(1)),
+                range: { min: Math.min(...gainResults), max: Math.max(...gainResults) },
+                sample_size: gainResults.length
+              };
+            }
+
+            const dataTypes = [
+              bpmResults.length > 0 ? 'BPM' : null,
+              rankResults.length > 0 ? 'rank' : null,
+              gainResults.length > 0 ? 'gain' : null
+            ].filter(Boolean).join(', ');
+
+            await sseWriter.write({ type: 'thinking', data: `✅ Deezer enrichment complete! Found ${dataTypes} for ${enrichedCount}/${tracksToEnrich.length} tracks` });
           } else {
-            await sseWriter.write({ type: 'thinking', data: '⚠️ No BPM data available for these tracks' });
+            await sseWriter.write({ type: 'thinking', data: '⚠️ No Deezer data available for these tracks' });
           }
         } catch (error) {
-          console.error('[BPMEnrichment] Failed:', error);
-          await sseWriter.write({ type: 'thinking', data: '⚠️ BPM enrichment unavailable - continuing with metadata only' });
+          console.error('[DeezerEnrichment] Failed:', error);
+          await sseWriter.write({ type: 'thinking', data: '⚠️ Deezer enrichment unavailable - continuing with metadata only' });
         }
       }
 
@@ -504,11 +548,22 @@ async function executeSpotifyToolWithProgress(
           } : null,
           total_artists: artistIdsArray.length
         },
+        deezer_analysis: deezerData, // Deezer BPM, rank, gain if available
         lastfm_analysis: lastfmData, // Last.fm tags and popularity if available
         track_ids: trackIds,
-        message: lastfmData
-          ? `Enriched with tags/popularity (Last.fm)! Use get_playlist_tracks for track details.`
-          : 'Use get_playlist_tracks to fetch track details in batches, or get_track_details for specific tracks.'
+        message: (() => {
+          const sources = [
+            deezerData ? `Deezer (${[
+              deezerData.bpm ? 'BPM' : null,
+              deezerData.rank ? 'rank' : null,
+              deezerData.gain ? 'gain' : null
+            ].filter(Boolean).join(', ')})` : null,
+            lastfmData ? 'Last.fm (tags, popularity)' : null
+          ].filter(Boolean);
+          return sources.length > 0
+            ? `Enriched with ${sources.join(' + ')}! Use get_playlist_tracks for track details.`
+            : 'Use get_playlist_tracks to fetch track details in batches, or get_track_details for specific tracks.';
+        })()
       };
 
       await sseWriter.write({ type: 'thinking', data: `🎉 Analysis complete for "${analysis.playlist_name}"!` });
@@ -1130,7 +1185,7 @@ chatStreamRouter.post('/message', async (c) => {
 
 IMPORTANT: Spotify deprecated audio features on Nov 27, 2024, BUT we've restored them via free APIs!
 
-analyze_playlist now returns THREE types of data:
+analyze_playlist now returns FOUR types of data:
 1. metadata_analysis (always available):
    - Popularity (0-100 score based on play counts)
    - Genres (from artist data)
@@ -1138,7 +1193,14 @@ analyze_playlist now returns THREE types of data:
    - Average track duration
    - Explicit content percentage
 
-2. lastfm_analysis (if LASTFM_API_KEY configured):
+2. deezer_analysis (if KV cache configured):
+   - bpm: { avg, range, sample_size } - Beats per minute when available (often null)
+   - rank: { avg, range, sample_size } - Deezer popularity rank (higher = more popular)
+   - gain: { avg, range, sample_size } - Audio normalization level in dB
+   - tracks_found: Number of tracks matched in Deezer
+   - source: 'deezer'
+
+3. lastfm_analysis (if LASTFM_API_KEY configured):
    - crowd_tags: Most common tags/genres/moods from Last.fm community (e.g., ["electronic", "chill", "dance"])
    - avg_listeners: Average Last.fm listeners per track
    - avg_playcount: Average Last.fm playcounts
@@ -1146,7 +1208,7 @@ analyze_playlist now returns THREE types of data:
    - source: 'lastfm'
 
 ITERATIVE DATA FETCHING WORKFLOW:
-1. analyze_playlist returns SUMMARY with metadata + Last.fm analysis (if available) + track_ids
+1. analyze_playlist returns SUMMARY with metadata + Deezer + Last.fm analysis (if available) + track_ids
 2. get_playlist_tracks gets compact track info in batches (20 at a time)
 3. get_track_details gets full metadata when needed (album art, release dates, etc.)
 
@@ -1158,14 +1220,15 @@ WORKFLOW FOR THIS PLAYLIST:
 1. If user asks about the playlist, start with: analyze_playlist({"playlist_id": "${playlistId}"})
 2. analyze_playlist returns:
    - metadata_analysis with avg_popularity, top_genres, release_year_range, etc.
+   - deezer_analysis (if available) with BPM, rank (popularity), gain (loudness)
    - lastfm_analysis (if available) with crowd_tags, similar_tracks, popularity metrics
 3. To see track names: get_playlist_tracks({"playlist_id": "${playlistId}", "offset": 0, "limit": 20})
 4. To get more tracks: use different offset (20, 40, 60, etc.)
 5. For specific track details: get_track_details({"track_ids": ["id1", "id2", ...]})
 
 EXAMPLE QUESTIONS & RESPONSES:
-- "What's the tempo?" → "I don't have BPM data available. Based on the genres [list genres], this appears to be [describe music style and likely tempo range]."
-- "What's the vibe?" → Use metadata and Last.fm crowd_tags and similar_tracks to describe the playlist's vibe
+- "What's the tempo?" → If deezer_analysis.bpm exists, use that. Otherwise: "BPM data not available for most tracks. Based on genres [list genres], this appears to be [describe style and likely tempo]."
+- "What's the vibe?" → Use metadata, Deezer rank/BPM, and Last.fm crowd_tags to describe the vibe
 - "What genres?" → Combine top_genres from metadata_analysis with crowd_tags from lastfm_analysis for comprehensive genre picture
 - "Is this music old or new?" → Use release_year_range to answer
 - "Suggest similar tracks" → Use similar_tracks from lastfm_analysis

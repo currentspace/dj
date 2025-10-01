@@ -11,6 +11,8 @@
 export interface BPMEnrichment {
   bpm: number | null;
   gain: number | null;
+  rank: number | null; // Deezer popularity rank (higher = more popular)
+  release_date: string | null; // Full release date from Deezer
   source: 'deezer' | 'deezer-via-musicbrainz' | null;
 }
 
@@ -34,6 +36,8 @@ interface DeezerTrack {
   duration: number;
   bpm?: number;
   gain?: number;
+  rank?: number;
+  release_date?: string;
 }
 
 export class AudioEnrichmentService {
@@ -62,18 +66,13 @@ export class AudioEnrichmentService {
     if (this.cache) {
       const cached = await this.getCached(cacheKey);
       if (cached) {
-        // Only log cache hits for non-null BPM values
-        if (cached.enrichment.bpm !== null) {
-          console.log(`[BPMEnrichment] ✅ Cache hit for ${track.id}: BPM=${cached.enrichment.bpm}`);
-        } else {
-          console.log(`[BPMEnrichment] ⚠️ Cache hit but BPM is null for ${track.id} - skipping cache, will retry`);
-          // Don't return null cache hits - let it retry
-          // return cached.enrichment;
-        }
-        // Return the cached result (including null)
-        if (cached.enrichment.bpm !== null) {
-          return cached.enrichment;
-        }
+        console.log(`[DeezerEnrichment] ✅ Cache hit for ${track.id}:`, {
+          bpm: cached.enrichment.bpm,
+          gain: cached.enrichment.gain,
+          rank: cached.enrichment.rank,
+          release_date: cached.enrichment.release_date
+        });
+        return cached.enrichment;
       }
     }
 
@@ -105,8 +104,8 @@ export class AudioEnrichmentService {
         }
         console.log(`[BPMEnrichment] Deezer result via MusicBrainz: BPM=${enrichment.bpm}`);
       } else {
-        console.log(`[BPMEnrichment] MusicBrainz found no ISRC for "${track.name}"`);
-        enrichment = { bpm: null, gain: null, source: null };
+        console.log(`[DeezerEnrichment] MusicBrainz found no ISRC for "${track.name}"`);
+        enrichment = { bpm: null, gain: null, rank: null, release_date: null, source: null };
       }
     }
 
@@ -156,15 +155,22 @@ export class AudioEnrichmentService {
       console.log(`[BPMEnrichment] Attempting direct Deezer ISRC lookup...`);
       const directTrack = await this.deezerSingleByISRC(isrc);
 
-      if (directTrack?.bpm) {
-        console.log(`[BPMEnrichment] ✅ Direct ISRC lookup succeeded: BPM=${directTrack.bpm}`);
-        return {
+      if (directTrack) {
+        console.log(`[DeezerEnrichment] ✅ Direct ISRC lookup succeeded:`, {
           bpm: directTrack.bpm,
+          gain: directTrack.gain,
+          rank: directTrack.rank,
+          release_date: directTrack.release_date
+        });
+        return {
+          bpm: directTrack.bpm || null,
           gain: directTrack.gain ?? null,
+          rank: directTrack.rank ?? null,
+          release_date: directTrack.release_date ?? null,
           source: 'deezer'
         };
       } else {
-        console.log(`[BPMEnrichment] Direct ISRC lookup returned no BPM, trying search...`);
+        console.log(`[DeezerEnrichment] Direct ISRC lookup failed, trying search...`);
       }
 
       // Fallback to search endpoint with duration matching
@@ -192,25 +198,32 @@ export class AudioEnrichmentService {
         console.log(`[BPMEnrichment] Fetching full track details for Deezer ID ${bestMatch.id}...`);
         const fullTrack = await this.deezerTrackById(bestMatch.id);
 
-        if (fullTrack?.bpm) {
-          console.log(`[BPMEnrichment] ✅ Successfully got BPM from full track details: ${fullTrack.bpm}`);
-          return {
+        if (fullTrack) {
+          console.log(`[DeezerEnrichment] ✅ Successfully got full track details:`, {
             bpm: fullTrack.bpm,
+            gain: fullTrack.gain,
+            rank: fullTrack.rank,
+            release_date: fullTrack.release_date
+          });
+          return {
+            bpm: fullTrack.bpm || null,
             gain: fullTrack.gain ?? null,
+            rank: fullTrack.rank ?? null,
+            release_date: fullTrack.release_date ?? null,
             source: 'deezer'
           };
         } else {
-          console.log(`[BPMEnrichment] ❌ Full track details returned but no BPM available`);
+          console.log(`[DeezerEnrichment] ❌ Full track details lookup failed`);
         }
       } else {
         console.log(`[BPMEnrichment] ❌ No best match found in search results`);
       }
 
-      console.log(`[BPMEnrichment] ❌ Returning null - no BPM found via any method`);
-      return { bpm: null, gain: null, source: null };
+      console.log(`[DeezerEnrichment] ❌ Returning null - no data found via any method`);
+      return { bpm: null, gain: null, rank: null, release_date: null, source: null };
     } catch (error) {
-      console.error('[BPMEnrichment] ❌ Deezer fetch EXCEPTION:', error);
-      return { bpm: null, gain: null, source: null };
+      console.error('[DeezerEnrichment] ❌ Deezer fetch EXCEPTION:', error);
+      return { bpm: null, gain: null, rank: null, release_date: null, source: null };
     }
   }
 
