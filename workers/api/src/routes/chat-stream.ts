@@ -256,22 +256,14 @@ async function executeSpotifyToolWithProgress(
         try {
           const enrichmentService = new AudioEnrichmentService(env.AUDIO_FEATURES_CACHE);
 
-          // Process tracks sequentially with rate limiting (40 subrequests total / ~25ms per track)
-          const tracksToEnrich = validTracks.slice(0, 30);
+          // Process tracks sequentially with rate limiting at 40 TPS
+          const tracksToEnrich = validTracks.slice(0, 100); // Process up to 100 tracks
           const bpmResults: number[] = [];
           let enrichedCount = 0;
-          let subrequestCount = 0;
-          const MAX_SUBREQUESTS = 40; // Stay well under 50 limit
 
-          await sseWriter.write({ type: 'thinking', data: `🎵 Enriching ${tracksToEnrich.length} tracks with BPM data (paced to avoid limits)...` });
+          await sseWriter.write({ type: 'thinking', data: `🎵 Enriching ${tracksToEnrich.length} tracks with BPM data at 40 TPS...` });
 
           for (let i = 0; i < tracksToEnrich.length; i++) {
-            // Stop if we're approaching the subrequest limit
-            if (subrequestCount >= MAX_SUBREQUESTS) {
-              await sseWriter.write({ type: 'thinking', data: `⚠️ Reached subrequest limit, enriched ${enrichedCount} tracks` });
-              break;
-            }
-
             const track = tracksToEnrich[i];
 
             try {
@@ -284,7 +276,6 @@ async function executeSpotifyToolWithProgress(
               };
 
               const bpmResult = await enrichmentService.enrichTrack(spotifyTrack);
-              subrequestCount += 3; // Estimate 3 subrequests per track (ISRC lookup + search + detail)
 
               if (bpmResult.bpm && AudioEnrichmentService.isValidBPM(bpmResult.bpm)) {
                 bpmResults.push(bpmResult.bpm);
@@ -302,7 +293,6 @@ async function executeSpotifyToolWithProgress(
               }
             } catch (error) {
               console.error(`[BPMEnrichment] Failed for track ${track.name}:`, error);
-              subrequestCount += 3; // Count failed attempts too
               // Continue with next track
             }
           }
@@ -336,20 +326,13 @@ async function executeSpotifyToolWithProgress(
         try {
           const lastfmService = new LastFmService(env.LASTFM_API_KEY, env.AUDIO_FEATURES_CACHE);
 
-          // Process tracks sequentially with same rate limiting
-          const tracksForLastFm = validTracks.slice(0, 8); // Fewer tracks since Last.fm uses 4 calls per track
+          // Process tracks sequentially with same rate limiting at 40 TPS
+          const tracksForLastFm = validTracks.slice(0, 50); // Process up to 50 tracks
           const signalsMap = new Map();
-          let lastfmSubrequests = 0;
-          const MAX_LASTFM_SUBREQUESTS = 32; // Reserve subrequests for Last.fm
 
-          await sseWriter.write({ type: 'thinking', data: `🎧 Enriching ${tracksForLastFm.length} tracks with Last.fm tags (paced)...` });
+          await sseWriter.write({ type: 'thinking', data: `🎧 Enriching ${tracksForLastFm.length} tracks with Last.fm tags at 40 TPS...` });
 
           for (let i = 0; i < tracksForLastFm.length; i++) {
-            if (lastfmSubrequests >= MAX_LASTFM_SUBREQUESTS) {
-              await sseWriter.write({ type: 'thinking', data: `⚠️ Reached Last.fm subrequest limit, enriched ${signalsMap.size} tracks` });
-              break;
-            }
-
             const track = tracksForLastFm[i];
 
             try {
@@ -360,7 +343,6 @@ async function executeSpotifyToolWithProgress(
               };
 
               const signals = await lastfmService.getTrackSignals(lastfmTrack);
-              lastfmSubrequests += 4; // 4 API calls per track
 
               if (signals) {
                 const key = `${track.id}`;
@@ -378,7 +360,6 @@ async function executeSpotifyToolWithProgress(
               }
             } catch (error) {
               console.error(`[LastFm] Failed for track ${track.name}:`, error);
-              lastfmSubrequests += 4;
             }
           }
 
