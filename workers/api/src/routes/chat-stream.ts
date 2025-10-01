@@ -855,62 +855,8 @@ function createStreamingSpotifyTools(
       }
     }),
 
-    new DynamicStructuredTool({
-      name: 'get_audio_features',
-      description: 'Get audio features for tracks',
-      schema: z.object({
-        track_ids: z.array(z.string()).max(100).optional()
-      }),
-      func: async (args) => {
-        let finalArgs = { ...args };
-
-        // Smart context inference: if no track_ids but we have playlist context
-        if ((!args.track_ids || args.track_ids.length === 0) && contextPlaylistId && mode === 'analyze') {
-          console.log(`[get_audio_features] Auto-fetching tracks from playlist: ${contextPlaylistId}`);
-
-          try {
-            // Fetch playlist tracks
-            const playlistResponse = await fetch(
-              `https://api.spotify.com/v1/playlists/${contextPlaylistId}/tracks?limit=100`,
-              { headers: { 'Authorization': `Bearer ${spotifyToken}` } }
-            );
-
-            if (playlistResponse.ok) {
-              const playlistData = await playlistResponse.json() as any;
-              const trackIds = playlistData.items
-                ?.map((item: any) => item.track?.id)
-                .filter((id: string) => id) || [];
-
-              if (trackIds.length > 0) {
-                finalArgs.track_ids = trackIds.slice(0, 100); // Limit to 100 tracks
-                console.log(`[get_audio_features] Auto-injected ${finalArgs.track_ids.length} track IDs from playlist`);
-              }
-            }
-          } catch (error) {
-            console.error(`[get_audio_features] Failed to auto-fetch playlist tracks:`, error);
-          }
-        }
-
-        if (abortSignal?.aborted) throw new Error('Request aborted');
-
-        await sseWriter.write({
-          type: 'tool_start',
-          data: { tool: 'get_audio_features', args: finalArgs }
-        });
-
-        const result = await executeSpotifyTool('get_audio_features', finalArgs, spotifyToken);
-
-        await sseWriter.write({
-          type: 'tool_end',
-          data: {
-            tool: 'get_audio_features',
-            result: finalArgs.track_ids ? `Analyzed ${finalArgs.track_ids.length} tracks` : 'Analysis complete'
-          }
-        });
-
-        return result;
-      }
-    }),
+    // Note: get_audio_features tool removed - Spotify deprecated this API for apps created after Nov 27, 2024
+    // We now use Deezer + Last.fm enrichment instead via analyze_playlist
 
     new DynamicStructuredTool({
       name: 'get_recommendations',
@@ -1803,7 +1749,7 @@ chatStreamRouter.post('/message', async (c) => {
       // Build system prompt
       const systemPrompt = `You are an AI DJ assistant with access to Spotify.
 
-IMPORTANT: Spotify deprecated audio features on Nov 27, 2024, BUT we've restored them via free APIs!
+IMPORTANT: Spotify deprecated their audio features API on Nov 27, 2024. We now use Deezer + Last.fm APIs for enrichment!
 
 analyze_playlist now returns FOUR types of data:
 1. metadata_analysis (always available):
