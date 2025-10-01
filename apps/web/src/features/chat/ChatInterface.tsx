@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useTransition, useEffect } from 'react'
+import { useState, useRef, useCallback, useTransition } from 'react'
 import { chatStreamClient } from '../../lib/streaming-client'
 import { flushSync } from 'react-dom'
 import type { ChatMessage, SpotifyPlaylist } from '@dj/shared-types'
@@ -211,14 +211,6 @@ export function ChatInterface({ selectedPlaylist }: ChatInterfaceProps) {
       }
     )
   }, [input, streamingStatus.isStreaming, mode, selectedPlaylist?.id, messages, scrollToBottom])
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      // Cancel any ongoing stream when component unmounts
-      streamHandleRef.current?.close()
-    }
-  }, [])
 
   // If no playlist is selected, show selection prompt
   if (!selectedPlaylist) {
