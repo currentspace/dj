@@ -247,8 +247,12 @@ export class LastFmService {
 
     console.log(`[LastFm] Fetching artist info for ${uniqueArtists.length} unique artists...`);
 
-    // Create rate-limited queue at 40 TPS
-    const queue = new RateLimitedQueue<{ artist: string; info: any }>(40);
+    // Create rate-limited queue at 40 TPS with concurrency=5 for parallel requests
+    const queue = new RateLimitedQueue<{ artist: string; info: any }>({
+      rate: 40,
+      concurrency: 5,
+      jitterMs: 5
+    });
 
     // Enqueue all artist fetch tasks
     for (const artist of uniqueArtists) {
