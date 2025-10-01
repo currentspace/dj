@@ -10,6 +10,7 @@ import { AudioEnrichmentService } from '../services/AudioEnrichmentService';
 import { LastFmService } from '../services/LastFmService';
 import { ProgressNarrator } from '../lib/progress-narrator';
 import { ServiceLogger } from '../utils/ServiceLogger';
+import { runWithLogger, getLogger, getChildLogger } from '../utils/LoggerContext';
 
 const chatStreamRouter = new Hono<{ Bindings: Env }>();
 
@@ -96,12 +97,16 @@ async function executeSpotifyToolWithProgress(
   args: Record<string, unknown>,
   token: string,
   sseWriter: SSEWriter,
-  logger: ServiceLogger,
   env?: Env,
   narrator?: ProgressNarrator,
   userRequest?: string,
   recentMessages?: string[]
 ): Promise<unknown> {
+  // Get logger from AsyncLocalStorage context
+  const logger = getLogger();
+  if (!logger) {
+    throw new Error('executeSpotifyToolWithProgress called outside logger context');
+  }
   console.log(`[Tool] Executing ${toolName} with args:`, JSON.stringify(args).substring(0, 200));
 
   if (toolName === 'analyze_playlist') {
@@ -387,7 +392,7 @@ async function executeSpotifyToolWithProgress(
                 await new Promise(resolve => setTimeout(resolve, 25));
               }
             } catch (error) {
-              logger.child('BPMEnrichment').error(`Failed for track "${track.name}"`, error);
+              getChildLogger('BPMEnrichment').error(`Failed for track "${track.name}"`, error);
               // Continue with next track
             }
           }
@@ -447,7 +452,7 @@ async function executeSpotifyToolWithProgress(
             await sseWriter.write({ type: 'thinking', data: '⚠️ No Deezer data available for these tracks' });
           }
         } catch (error) {
-          logger.child('DeezerEnrichment').error('Enrichment failed', error);
+          getChildLogger('DeezerEnrichment').error('Enrichment failed', error);
           await sseWriter.write({ type: 'thinking', data: '⚠️ Deezer enrichment unavailable - continuing with metadata only' });
         }
       }
@@ -530,7 +535,7 @@ async function executeSpotifyToolWithProgress(
                 await new Promise(resolve => setTimeout(resolve, 25));
               }
             } catch (error) {
-              logger.child('LastFm').error(`Failed for track ${track.name}`, error);
+              getChildLogger('LastFm').error(`Failed for track ${track.name}`, error);
             }
           }
 
@@ -616,7 +621,7 @@ async function executeSpotifyToolWithProgress(
             await sseWriter.write({ type: 'thinking', data: `✅ Enriched ${signalsMap.size} tracks + ${artistInfoMap.size} artists!` });
           }
         } catch (error) {
-          logger.child('LastFm').error('Enrichment failed', error);
+          getChildLogger('LastFm').error('Enrichment failed', error);
           await sseWriter.write({ type: 'thinking', data: '⚠️ Last.fm enrichment unavailable - continuing without tags' });
         }
       }
@@ -672,7 +677,7 @@ async function executeSpotifyToolWithProgress(
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
       await sseWriter.write({ type: 'thinking', data: `❌ Analysis failed: ${errorMsg}` });
-      logger.child('Tool:analyze_playlist').error('Analysis failed', error, {
+      getChildLogger('Tool:analyze_playlist').error('Analysis failed', error, {
         errorMessage: errorMsg,
         errorType: error?.constructor?.name
       });
@@ -753,7 +758,6 @@ function createStreamingSpotifyTools(
           finalArgs,
           spotifyToken,
           sseWriter,
-          streamLogger,
           env,
           narrator,
           userRequest,
@@ -1681,10 +1685,12 @@ chatStreamRouter.post('/message', async (c) => {
   // Initialize logger for this request
   const streamLogger = new ServiceLogger(`Stream:${requestId}`, sseWriter);
 
-  // Process the request and stream responses
+  // Process the request and stream responses (wrapped in AsyncLocalStorage context)
   const processStream = async () => {
-    streamLogger.info('Starting async stream processing');
-    streamLogger.info('SSEWriter created, starting heartbeat');
+    await runWithLogger(streamLogger, async () => {
+      const logger = getLogger()!;
+      logger.info('Starting async stream processing');
+      logger.info('SSEWriter created, starting heartbeat');
 
     // Heartbeat to keep connection alive
     const heartbeatInterval = setInterval(async () => {
@@ -2283,30 +2289,34 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
       await sseWriter.write({ type: 'done', data: null });
       console.log(`[Stream:${requestId}] Stream complete - all events sent`);
 
-    } catch (error) {
-      if (error instanceof Error && error.message === 'Request aborted') {
-        streamLogger.info('Request was aborted by client');
-      } else {
-        streamLogger.error('Stream processing error', error, {
-          errorType: error?.constructor?.name,
-          errorMessage: error instanceof Error ? error.message : String(error)
-        });
-        await sseWriter.write({
-          type: 'error',
-          data: error instanceof Error ? error.message : 'An error occurred'
-        });
+      } catch (error) {
+        const logger = getLogger()!;
+        if (error instanceof Error && error.message === 'Request aborted') {
+          logger.info('Request was aborted by client');
+        } else {
+          logger.error('Stream processing error', error, {
+            errorType: error?.constructor?.name,
+            errorMessage: error instanceof Error ? error.message : String(error)
+          });
+          await sseWriter.write({
+            type: 'error',
+            data: error instanceof Error ? error.message : 'An error occurred'
+          });
+        }
+      } finally {
+        const logger = getLogger()!;
+        clearInterval(heartbeatInterval);
+        c.req.raw.signal.removeEventListener('abort', onAbort);
+        logger.info('Closing writer...');
+        await sseWriter.close();
+        logger.info('Stream cleanup complete, heartbeat cleared');
       }
-    } finally {
-      clearInterval(heartbeatInterval);
-      c.req.raw.signal.removeEventListener('abort', onAbort);
-      streamLogger.info('Closing writer...');
-      await sseWriter.close();
-      streamLogger.info('Stream cleanup complete, heartbeat cleared');
-    }
+    }); // End runWithLogger
   };
 
   // Start processing without blocking the response
   processStream().catch(error => {
+    // Logger context may not be available here, use direct streamLogger
     streamLogger.error('Unhandled error in processStream', error);
   });
 
