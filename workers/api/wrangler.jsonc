@@ -12,12 +12,17 @@
     }
   },
 
-  // KV Namespace for session storage
+  // KV Namespaces
   "kv_namespaces": [
     {
       "binding": "SESSIONS",
       "id": "c81455430c6d4aa2a5da4bf2c1fcd3a2",
       "preview_id": "859d29ec06564975a30d67be3a960b89"
+    },
+    {
+      "binding": "AUDIO_FEATURES_CACHE",
+      "id": "eb3657a3d4f045edb31efba6567eca0f",
+      "preview_id": "96833dd43ab34769be127f648d29e116"
     }
   ],
 
