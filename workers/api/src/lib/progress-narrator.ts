@@ -11,7 +11,7 @@
  * Dynamic: "Digging through Spotify's crates for workout bangers..."
  */
 
-import { AnthropicBedrock } from '@anthropic-ai/bedrock-sdk';
+import { ChatAnthropic } from '@langchain/anthropic';
 import { ServiceLogger } from '../utils/ServiceLogger';
 import { rateLimitedAnthropicCall } from '../utils/RateLimitedAPIClients';
 
@@ -25,14 +25,16 @@ interface MessageContext {
 }
 
 export class ProgressNarrator {
-  private anthropic: AnthropicBedrock;
+  private anthropic: ChatAnthropic;
   private messageCache: Map<string, string> = new Map();
   private systemPrompt: string;
   private logger: ServiceLogger;
 
   constructor(apiKey: string, logger?: ServiceLogger) {
-    this.anthropic = new AnthropicBedrock({
-      anthropicApiKey: apiKey
+    this.anthropic = new ChatAnthropic({
+      apiKey,
+      model: 'claude-3-5-haiku-20241022',
+      maxRetries: 0, // Orchestrator handles retries
     });
     this.systemPrompt = this.buildSystemPrompt();
     this.logger = logger || new ServiceLogger('ProgressNarrator');
@@ -79,23 +81,22 @@ export class ProgressNarrator {
         model: 'claude-3-5-haiku-20241022'
       });
 
+      // Create Langchain messages
+      const messages = [
+        { role: 'system' as const, content: this.systemPrompt },
+        { role: 'user' as const, content: prompt }
+      ];
+
       // Use rate-limited API wrapper (no timeout - orchestrator handles queuing)
       const response = await rateLimitedAnthropicCall(
-        () => this.anthropic.messages.create({
-          model: 'claude-3-5-haiku-20241022',
-          max_tokens: 100,
-          temperature: skipCache ? 1.0 : 0.7,
-          top_p: skipCache ? 0.95 : undefined,
-          messages: [{
-            role: 'user',
-            content: prompt,
-          }],
-          system: [{
-            type: 'text',
-            text: this.systemPrompt,
-            cache_control: { type: 'ephemeral' },
-          }],
-        }),
+        async () => {
+          const llm = this.anthropic.bind({
+            maxTokens: 100,
+            temperature: skipCache ? 1.0 : 0.7,
+            ...(skipCache ? { topP: 0.95 } : {}),
+          });
+          return await llm.invoke(messages);
+        },
         this.logger,
         `narrator:${context.eventType}`
       );
@@ -105,22 +106,18 @@ export class ProgressNarrator {
       }
 
       this.logger.info('Anthropic API call succeeded', {
-        responseId: response.id,
-        model: response.model,
-        stopReason: response.stop_reason,
-        contentType: response.content[0]?.type
+        responseType: response.constructor.name,
+        hasContent: !!response.content
       });
 
-      const message = response.content[0].type === 'text'
-        ? response.content[0].text.trim()
+      const message = typeof response.content === 'string'
+        ? response.content.trim()
         : this.getFallbackMessage(context);
 
       this.logger.info(`Generated message`, {
         event: context.eventType,
         message,
-        responseType: response.content[0]?.type,
-        contentLength: response.content[0]?.type === 'text' ? response.content[0].text.length : 0,
-        stopReason: response.stop_reason
+        contentLength: message.length
       });
 
       // Cache the result only if caching is enabled

@@ -1118,9 +1118,10 @@ function createStreamingSpotifyTools(
           data: `🎨 Analyzing playlist vibe using AI...`
         });
 
-        const anthropic = new AnthropicBedrock({
+        const anthropic = new ChatAnthropic({
           model: 'claude-sonnet-4-5-20250929',
-          anthropicApiKey: env.ANTHROPIC_API_KEY
+          apiKey: env.ANTHROPIC_API_KEY,
+          maxRetries: 0
         });
 
         const vibePrompt = `You are a music critic analyzing a playlist's vibe. Extract SUBTLE signals that algorithms miss.
@@ -1256,9 +1257,10 @@ Return ONLY valid JSON:
           data: `🎯 Planning discovery strategy using AI...`
         });
 
-        const anthropic = new AnthropicBedrock({
+        const anthropic = new ChatAnthropic({
           model: 'claude-sonnet-4-5-20250929',
-          anthropicApiKey: env.ANTHROPIC_API_KEY
+          apiKey: env.ANTHROPIC_API_KEY,
+          maxRetries: 0
         });
 
         const strategyPrompt = `You are a music discovery strategist. Create a smart plan to find interesting tracks.
@@ -1585,9 +1587,10 @@ Return ONLY valid JSON:
         });
 
         // Use Claude Sonnet 4.5 for high-quality intelligent curation
-        const anthropic = new AnthropicBedrock({
+        const anthropic = new ChatAnthropic({
           model: 'claude-sonnet-4-5-20250929',
-          anthropicApiKey: env.ANTHROPIC_API_KEY
+          apiKey: env.ANTHROPIC_API_KEY,
+          maxRetries: 0
         });
 
         const curationPrompt = `You are a music curator helping select the best track recommendations.
