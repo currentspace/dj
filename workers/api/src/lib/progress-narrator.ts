@@ -59,6 +59,7 @@ export class ProgressNarrator {
         prompt += `\n\n${randomStyle} Variation #${Math.floor(Math.random() * 10000)}`;
       }
       console.log(`[ProgressNarrator] Generating message for event: ${context.eventType}${skipCache ? ' (uncached)' : ''}`);
+      console.log(`[ProgressNarrator] Prompt preview: ${prompt.substring(0, 200)}...`);
 
       const response = await this.anthropic.messages.create({
         model: 'claude-haiku-4-20250514',
@@ -75,6 +76,14 @@ export class ProgressNarrator {
           cache_control: { type: 'ephemeral' },
         }],
       });
+
+      // Log the full response for debugging
+      console.log(`[ProgressNarrator] API Response:`, JSON.stringify({
+        content_type: response.content[0]?.type,
+        content_length: response.content[0]?.type === 'text' ? response.content[0].text.length : 0,
+        stop_reason: response.stop_reason,
+        model: response.model
+      }));
 
       const message = response.content[0].type === 'text'
         ? response.content[0].text.trim()
