@@ -8,6 +8,8 @@
  * 3. If no ISRC, fallback to MusicBrainz to find ISRC, then retry Deezer
  */
 
+import { getGlobalOrchestrator } from '../utils/RateLimitedAPIClients';
+
 export interface BPMEnrichment {
   bpm: number | null;
   gain: number | null;
@@ -270,14 +272,17 @@ export class AudioEnrichmentService {
       const query = `recording:"${trackName}" AND artist:"${artistName}"`;
       const url = `https://musicbrainz.org/ws/2/recording/?query=${encodeURIComponent(query)}&fmt=json&limit=5`;
 
-      const response = await fetch(url, {
-        headers: {
-          'User-Agent': 'DJApp/1.0 (https://dj.current.space)'
-        }
-      });
+      const orchestrator = getGlobalOrchestrator();
+      const response = await orchestrator.execute(() =>
+        fetch(url, {
+          headers: {
+            'User-Agent': 'DJApp/1.0 (https://dj.current.space)'
+          }
+        })
+      );
 
-      if (!response.ok) {
-        console.error(`[BPMEnrichment] MusicBrainz error: ${response.status}`);
+      if (!response || !response.ok) {
+        console.error(`[BPMEnrichment] MusicBrainz error: ${response?.status || 'null'}`);
         return null;
       }
 
@@ -320,8 +325,15 @@ export class AudioEnrichmentService {
     try {
       const url = `https://api.deezer.com/search?q=${encodeURIComponent(`isrc:${isrc}`)}`;
       console.log(`[BPMEnrichment] Deezer search URL: ${url}`);
-      const response = await fetch(url);
-      console.log(`[BPMEnrichment] Deezer search response status: ${response.status}`);
+
+      const orchestrator = getGlobalOrchestrator();
+      const response = await orchestrator.execute(() => fetch(url));
+
+      console.log(`[BPMEnrichment] Deezer search response status: ${response?.status || 'null'}`);
+      if (!response || !response.ok) {
+        return [];
+      }
+
       const data = await response.json() as any;
       const results = data?.data ?? [];
       console.log(`[BPMEnrichment] Deezer search results: ${results.length} tracks found`);
@@ -339,8 +351,15 @@ export class AudioEnrichmentService {
     try {
       const url = `https://api.deezer.com/track/isrc:${encodeURIComponent(isrc)}`;
       console.log(`[BPMEnrichment] Deezer direct ISRC URL: ${url}`);
-      const response = await fetch(url);
-      console.log(`[BPMEnrichment] Deezer direct ISRC response status: ${response.status}`);
+
+      const orchestrator = getGlobalOrchestrator();
+      const response = await orchestrator.execute(() => fetch(url));
+
+      console.log(`[BPMEnrichment] Deezer direct ISRC response status: ${response?.status || 'null'}`);
+      if (!response || !response.ok) {
+        return null;
+      }
+
       const data = await response.json() as any;
       const hasTrack = !!data?.id;
       const hasBPM = !!data?.bpm;
@@ -359,8 +378,15 @@ export class AudioEnrichmentService {
     try {
       const url = `https://api.deezer.com/track/${id}`;
       console.log(`[BPMEnrichment] Fetching Deezer track by ID: ${url}`);
-      const response = await fetch(url);
-      console.log(`[BPMEnrichment] Deezer track by ID response status: ${response.status}`);
+
+      const orchestrator = getGlobalOrchestrator();
+      const response = await orchestrator.execute(() => fetch(url));
+
+      console.log(`[BPMEnrichment] Deezer track by ID response status: ${response?.status || 'null'}`);
+      if (!response || !response.ok) {
+        return null;
+      }
+
       const data = await response.json() as any;
       const hasTrack = !!data?.id;
       const hasBPM = !!data?.bpm;
