@@ -13,11 +13,13 @@ An AI-powered DJ app that creates Spotify playlists using Anthropic's Claude API
   - Artist biographies and similar artists
   - Smart caching with 90-day TTL (Deezer) and 7-day TTL (Last.fm)
   - Rate-limited at 40 requests/second
-- **AI-Powered Recommendations**:
-  - Multi-source discovery (Last.fm community, tag-based search, Spotify algorithm)
-  - Claude Sonnet 4.5-powered intelligent curation
-  - Combines recommendations from multiple APIs
-  - Context-aware ranking (BPM, genre, era, popularity)
+- **Vibe-Driven Intelligent Recommendations**:
+  - Deep vibe analysis extracts subtle signals (emotional arc, production aesthetic, vocal style)
+  - AI creates strategic discovery plan before searching
+  - Multi-source discovery (Last.fm community, creative queries, tag blends, Spotify algorithm)
+  - Claude Sonnet 4.5-powered intelligent curation with vibe awareness
+  - Avoids generic algorithm trap through strategic planning
+  - Context-aware ranking (vibe alignment, diversity, user intent)
 - **MCP Protocol**: Advanced tool calling for iterative playlist curation
 - **Playlist-Scoped Conversations**: Maintains separate conversation history per playlist
 - **Edge Deployment**: Cloudflare Workers for global low-latency performance

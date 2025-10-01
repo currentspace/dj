@@ -130,25 +130,37 @@ pnpm test                  # Run tests
 6. **get_recommendations** - Spotify's algorithmic recommendations
 7. **create_playlist** - Create new playlist
 
-**Recommendation Tools** (AI-powered multi-source discovery):
-8. **recommend_from_similar** - Convert Last.fm similar tracks to Spotify IDs
-   - Parameters: `similar_tracks` (array of "Artist - Track" strings), `limit_per_track` (1-5, default 1)
-   - Takes similar_tracks from analyze_playlist lastfm_analysis
-   - Searches Spotify for each track and returns IDs
-   - Use to discover tracks recommended by Last.fm community
+**Vibe-Driven Discovery Tools** (Intelligent recommendation system):
 
-9. **recommend_from_tags** - Genre/tag-based discovery
-   - Parameters: `tags` (array of 1-5 tags from crowd_tags), `limit` (1-50, default 20)
-   - Searches Spotify using tag combinations
-   - Smart query building (genre: prefix for recognized genres)
-   - Use to find tracks matching playlist's vibe/genre
+8. **extract_playlist_vibe** - Deep AI vibe analysis
+   - Parameters: `analysis_data` (from analyze_playlist), `sample_tracks` (optional 10-20 track names)
+   - Uses Sonnet 4.5 to extract subtle signals beyond genre tags
+   - Analyzes: emotional arc, production aesthetic, vocal style, instrumentation, era feel, mixing philosophy
+   - Returns: Natural language vibe profile + discovery hints (genre blends, Spotify params, what to avoid)
+   - Use FIRST to understand playlist essence before discovery
 
-10. **curate_recommendations** - AI-powered intelligent curation
+9. **plan_discovery_strategy** - AI-powered discovery planning
+   - Parameters: `vibe_profile` (from extract_playlist_vibe), `user_request`, `similar_tracks_available` (optional)
+   - Uses Sonnet 4.5 to create strategic multi-pronged discovery plan
+   - Returns: Prioritized Last.fm tracks, creative Spotify queries, tag combinations, tuned recommendation parameters, avoid list
+   - Use SECOND to get intelligent search strategy based on vibe
+
+10. **recommend_from_similar** - Convert Last.fm similar tracks to Spotify IDs
+    - Parameters: `similar_tracks` (array of "Artist - Track" strings), `limit_per_track` (1-5, default 1)
+    - Use with strategy.lastfm_similar_priority from plan_discovery_strategy
+    - Returns Spotify track objects with IDs
+
+11. **recommend_from_tags** - Genre/tag-based discovery
+    - Parameters: `tags` (array of 1-5 tags), `limit` (1-50, default 20)
+    - Use with strategy.tag_searches from plan_discovery_strategy
+    - Smart query building (genre: prefix for recognized genres)
+
+12. **curate_recommendations** - AI-powered intelligent curation
     - Parameters: `candidate_tracks`, `playlist_context`, `user_request`, `top_n` (default 10)
-    - Uses Claude Sonnet 4.5 to rank tracks from multiple sources
-    - Considers BPM range, tags, era, popularity, user intent
-    - Returns top N curated picks with reasoning
-    - Use as final step to intelligently filter combined results
+    - Uses Claude Sonnet 4.5 to rank tracks with vibe awareness
+    - Considers vibe alignment, strategic fit, diversity, user intent
+    - Returns top N curated picks with detailed reasoning
+    - Use LAST after executing discovery strategy
 
 This iterative approach allows Claude to fetch only what's needed, avoiding payload bloat.
 
