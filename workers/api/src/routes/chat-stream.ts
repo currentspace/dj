@@ -2005,7 +2005,12 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
       let response;
       try {
         console.log(`[Stream:${requestId}] Calling createModelWithTools().stream() with ${messages.length} messages`);
-        response = await createModelWithTools().stream(messages, { signal: abortController.signal });
+        // Wrap stream call in orchestrator to respect anthropic lane limits (max 2 concurrent)
+        response = await rateLimitedAnthropicCall(
+          () => createModelWithTools().stream(messages, { signal: abortController.signal }),
+          getLogger(),
+          `main chat stream (initial, ${messages.length} messages)`
+        );
         console.log(`[Stream:${requestId}] Claude stream initialized`);
       } catch (apiError) {
         if (abortController.signal.aborted) {
@@ -2180,7 +2185,12 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
 
         let nextResponse;
         try {
-          nextResponse = await createModelWithTools().stream(conversationMessages, { signal: abortController.signal });
+          // Wrap stream call in orchestrator to respect anthropic lane limits (max 2 concurrent)
+          nextResponse = await rateLimitedAnthropicCall(
+            () => createModelWithTools().stream(conversationMessages, { signal: abortController.signal }),
+            getLogger(),
+            `main chat stream (turn ${turnCount}, ${conversationMessages.length} messages)`
+          );
         } catch (streamError) {
           const logger = getLogger();
           logger?.error('Claude streaming API call failed', streamError, {
@@ -2306,7 +2316,12 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
 
         let finalResponse;
         try {
-          finalResponse = await createModelWithTools().stream(conversationMessages, { signal: abortController.signal });
+          // Wrap stream call in orchestrator to respect anthropic lane limits (max 2 concurrent)
+          finalResponse = await rateLimitedAnthropicCall(
+            () => createModelWithTools().stream(conversationMessages, { signal: abortController.signal }),
+            getLogger(),
+            `main chat stream (final, ${conversationMessages.length} messages)`
+          );
         } catch (finalStreamError) {
           const logger = getLogger();
           logger?.error('Final Claude streaming API call failed', finalStreamError, {
