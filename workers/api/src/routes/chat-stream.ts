@@ -1005,6 +1005,284 @@ function createStreamingSpotifyTools(
     }),
 
     new DynamicStructuredTool({
+      name: 'extract_playlist_vibe',
+      description: 'Use AI to deeply analyze playlist enrichment data and extract subtle vibe signals that go beyond genre tags. Returns natural language vibe profile with discovery hints.',
+      schema: z.object({
+        analysis_data: z.object({
+          metadata_analysis: z.any().optional(),
+          deezer_analysis: z.any().optional(),
+          lastfm_analysis: z.any().optional()
+        }).describe('Full analysis from analyze_playlist'),
+        sample_tracks: z.array(z.object({
+          name: z.string(),
+          artists: z.string(),
+          duration_ms: z.number().optional(),
+          popularity: z.number().optional()
+        })).max(20).optional().describe('Sample track names for additional context')
+      }),
+      func: async (args) => {
+        if (abortSignal?.aborted) throw new Error('Request aborted');
+
+        await sseWriter.write({
+          type: 'tool_start',
+          data: { tool: 'extract_playlist_vibe', args: { has_metadata: !!args.analysis_data } }
+        });
+
+        await sseWriter.write({
+          type: 'thinking',
+          data: `🎨 Analyzing playlist vibe using AI...`
+        });
+
+        const anthropic = new AnthropicBedrock({
+          model: 'claude-sonnet-4-5-20250929',
+          anthropicApiKey: env.ANTHROPIC_API_KEY
+        });
+
+        const vibePrompt = `You are a music critic analyzing a playlist's vibe. Extract SUBTLE signals that algorithms miss.
+
+METADATA ANALYSIS:
+${JSON.stringify(args.analysis_data.metadata_analysis || {}, null, 2)}
+
+DEEZER ANALYSIS (BPM, rank, gain):
+${JSON.stringify(args.analysis_data.deezer_analysis || {}, null, 2)}
+
+LAST.FM ANALYSIS (crowd tags, similar tracks):
+${JSON.stringify(args.analysis_data.lastfm_analysis || {}, null, 2)}
+
+${args.sample_tracks?.length ? `SAMPLE TRACKS:\n${args.sample_tracks.map(t => `- "${t.name}" by ${t.artists}`).join('\n')}` : ''}
+
+Analyze the VIBE beyond genre tags. Consider:
+- Emotional arc: Does energy build or stay constant?
+- Production aesthetic: Lo-fi/polished? Analog/digital? Spacious/dense?
+- Vocal characteristics: Breathy/powerful? Sparse/prominent? Language?
+- Instrumentation: What's dominant? What's missing?
+- Era feel: Vintage/modern? Nostalgic/futuristic?
+- Mixing philosophy: Bright/warm? Compressed/dynamic?
+- Mood progression: Introspective/energetic? Dark/light?
+- Song structure: Experimental/traditional? Long/short?
+- Cultural context: What scene/movement does this evoke?
+
+Return ONLY valid JSON:
+{
+  "vibe_profile": "Natural language description of the vibe (2-3 sentences capturing essence)",
+  "emotional_characteristics": ["adjective1", "adjective2", ...],
+  "production_style": "Description of production aesthetic",
+  "vocal_style": "Description of vocal characteristics",
+  "instrumentation_notes": "Key instrumentation patterns",
+  "era_feel": "Description of temporal feel",
+  "discovery_hints": {
+    "genre_combinations": ["genre blend 1", "genre blend 2"],
+    "avoid_these": ["what NOT to search for"],
+    "era_ranges": ["time period to explore"],
+    "artist_archetypes": ["types of artists to seek"],
+    "spotify_params": {
+      "target_energy": 0.7,
+      "target_valence": 0.5,
+      "target_danceability": 0.6
+    }
+  }
+}`;
+
+        try {
+          const response = await anthropic.invoke([
+            new SystemMessage('You are a music critic. Return only valid JSON with deep vibe analysis.'),
+            new HumanMessage(vibePrompt)
+          ]);
+
+          const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
+          const jsonMatch = content.match(/\{[\s\S]*\}/);
+          if (!jsonMatch) {
+            throw new Error('No JSON found in vibe analysis response');
+          }
+
+          const vibeAnalysis = JSON.parse(jsonMatch[0]);
+
+          await sseWriter.write({
+            type: 'thinking',
+            data: `✅ Vibe extracted: ${vibeAnalysis.vibe_profile?.substring(0, 80)}...`
+          });
+
+          await sseWriter.write({
+            type: 'tool_end',
+            data: {
+              tool: 'extract_playlist_vibe',
+              result: `Analyzed vibe: ${vibeAnalysis.emotional_characteristics?.slice(0, 3).join(', ')}`
+            }
+          });
+
+          return vibeAnalysis;
+        } catch (error) {
+          console.error('[extract_playlist_vibe] AI analysis failed:', error);
+
+          // Fallback: Basic analysis from tags
+          const tags = args.analysis_data.lastfm_analysis?.crowd_tags?.slice(0, 5).map((t: any) => t.tag) || [];
+          const fallbackVibe = {
+            vibe_profile: `Playlist characterized by tags: ${tags.join(', ')}`,
+            emotional_characteristics: tags,
+            production_style: 'Unknown',
+            vocal_style: 'Unknown',
+            instrumentation_notes: 'Unknown',
+            era_feel: 'Unknown',
+            discovery_hints: {
+              genre_combinations: tags.slice(0, 2),
+              avoid_these: [],
+              era_ranges: [],
+              artist_archetypes: [],
+              spotify_params: { target_energy: 0.5, target_valence: 0.5, target_danceability: 0.5 }
+            }
+          };
+
+          await sseWriter.write({
+            type: 'thinking',
+            data: `⚠️ Using basic tag analysis (AI unavailable)`
+          });
+
+          await sseWriter.write({
+            type: 'tool_end',
+            data: {
+              tool: 'extract_playlist_vibe',
+              result: `Basic analysis: ${tags.join(', ')}`
+            }
+          });
+
+          return fallbackVibe;
+        }
+      }
+    }),
+
+    new DynamicStructuredTool({
+      name: 'plan_discovery_strategy',
+      description: 'Use AI to create a smart multi-pronged discovery strategy based on vibe analysis. Returns specific search queries and parameters to find interesting recommendations.',
+      schema: z.object({
+        vibe_profile: z.any().describe('Output from extract_playlist_vibe'),
+        user_request: z.string().describe('User\'s original request to understand intent'),
+        similar_tracks_available: z.array(z.string()).max(20).optional().describe('Last.fm similar tracks if available')
+      }),
+      func: async (args) => {
+        if (abortSignal?.aborted) throw new Error('Request aborted');
+
+        await sseWriter.write({
+          type: 'tool_start',
+          data: { tool: 'plan_discovery_strategy', args: { has_vibe: !!args.vibe_profile } }
+        });
+
+        await sseWriter.write({
+          type: 'thinking',
+          data: `🎯 Planning discovery strategy using AI...`
+        });
+
+        const anthropic = new AnthropicBedrock({
+          model: 'claude-sonnet-4-5-20250929',
+          anthropicApiKey: env.ANTHROPIC_API_KEY
+        });
+
+        const strategyPrompt = `You are a music discovery strategist. Create a smart plan to find interesting tracks.
+
+USER REQUEST: "${args.user_request}"
+
+VIBE PROFILE:
+${JSON.stringify(args.vibe_profile, null, 2)}
+
+${args.similar_tracks_available?.length ? `LAST.FM SIMILAR TRACKS AVAILABLE:\n${args.similar_tracks_available.slice(0, 10).join('\n')}` : ''}
+
+Create a multi-pronged discovery strategy. Be CREATIVE and STRATEGIC:
+
+1. Which Last.fm similar tracks to prioritize (pick 5-8 most interesting)?
+2. What Spotify search queries will find the vibe (NOT just genre tags)?
+3. What specific artists/songs to use as seeds for Spotify recommendations?
+4. What to AVOID to prevent generic results?
+
+Return ONLY valid JSON:
+{
+  "strategy_summary": "Brief description of the discovery approach",
+  "lastfm_similar_priority": ["Artist - Track", ...],
+  "tag_searches": [
+    {
+      "tags": ["tag1", "tag2"],
+      "rationale": "why this combination captures the vibe"
+    }
+  ],
+  "spotify_searches": [
+    {
+      "query": "search query",
+      "rationale": "why this will find interesting tracks"
+    }
+  ],
+  "recommendation_seeds": {
+    "approach": "Description of seed selection strategy",
+    "parameters": {
+      "target_energy": 0.7,
+      "target_valence": 0.5,
+      "target_danceability": 0.6,
+      "target_acousticness": 0.3
+    }
+  },
+  "avoid": ["what to avoid", "generic patterns to skip"]
+}`;
+
+        try {
+          const response = await anthropic.invoke([
+            new SystemMessage('You are a music discovery strategist. Return only valid JSON.'),
+            new HumanMessage(strategyPrompt)
+          ]);
+
+          const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
+          const jsonMatch = content.match(/\{[\s\S]*\}/);
+          if (!jsonMatch) {
+            throw new Error('No JSON found in strategy response');
+          }
+
+          const strategy = JSON.parse(jsonMatch[0]);
+
+          await sseWriter.write({
+            type: 'thinking',
+            data: `✅ Strategy: ${strategy.strategy_summary?.substring(0, 80)}...`
+          });
+
+          await sseWriter.write({
+            type: 'tool_end',
+            data: {
+              tool: 'plan_discovery_strategy',
+              result: `Created ${strategy.tag_searches?.length || 0} tag searches, ${strategy.spotify_searches?.length || 0} custom queries`
+            }
+          });
+
+          return strategy;
+        } catch (error) {
+          console.error('[plan_discovery_strategy] AI planning failed:', error);
+
+          // Fallback: Basic strategy
+          const fallbackStrategy = {
+            strategy_summary: 'Using basic tag-based discovery',
+            lastfm_similar_priority: args.similar_tracks_available?.slice(0, 5) || [],
+            tag_searches: [],
+            spotify_searches: [],
+            recommendation_seeds: {
+              approach: 'Use top tracks as seeds',
+              parameters: { target_energy: 0.5, target_valence: 0.5, target_danceability: 0.5 }
+            },
+            avoid: []
+          };
+
+          await sseWriter.write({
+            type: 'thinking',
+            data: `⚠️ Using basic strategy (AI unavailable)`
+          });
+
+          await sseWriter.write({
+            type: 'tool_end',
+            data: {
+              tool: 'plan_discovery_strategy',
+              result: 'Basic fallback strategy'
+            }
+          });
+
+          return fallbackStrategy;
+        }
+      }
+    }),
+
+    new DynamicStructuredTool({
       name: 'recommend_from_similar',
       description: 'Get Spotify track IDs from Last.fm similar tracks. Provide artist-track strings (e.g., "Daft Punk - One More Time") and get back Spotify IDs ready to use.',
       schema: z.object({
@@ -1584,41 +1862,57 @@ TOOL RULES:
 - Only fetch what you need to answer the user's question
 - Use metadata_analysis (not audio_analysis) for playlist insights
 
-RECOMMENDATION WORKFLOW:
-When user asks for track recommendations or similar music, use these specialized tools:
+RECOMMENDATION WORKFLOW (VIBE-DRIVEN DISCOVERY):
+When user asks for track recommendations, use this INTELLIGENT multi-step workflow:
 
-1. START: analyze_playlist to get enrichment data (BPM, tags, popularity)
+PHASE 1: DEEP ANALYSIS
+1. analyze_playlist → Get enrichment data (metadata, Deezer BPM/rank, Last.fm tags/similar tracks)
+2. get_playlist_tracks → Get sample track names (first 10-20 for context)
+3. extract_playlist_vibe → AI analyzes subtle vibe signals beyond genre
+   - Takes: Full analysis data + sample tracks
+   - Returns: Vibe profile with emotional characteristics, production style, era feel
+   - Provides discovery hints (genre combinations, Spotify parameters, what to avoid)
 
-2. DISCOVER via multiple sources (pick 2-3 relevant ones):
-   a) recommend_from_similar - Converts Last.fm similar_tracks to Spotify IDs
-      - Takes: ["Daft Punk - One More Time", "Stardust - Music Sounds Better"]
-      - Returns: Spotify track objects with IDs ready to use
+PHASE 2: STRATEGIC PLANNING
+4. plan_discovery_strategy → AI creates smart discovery plan
+   - Takes: Vibe profile + user request + available Last.fm similar tracks
+   - Returns: Multi-pronged strategy with:
+     * Prioritized Last.fm similar tracks (5-8 most interesting)
+     * Creative Spotify search queries (NOT just genre tags)
+     * Tag combinations with rationale
+     * Recommendation seed parameters tuned to vibe
+     * What to AVOID to prevent generic results
 
-   b) recommend_from_tags - Genre/tag-based discovery via Spotify search
-      - Takes: tags from lastfm_analysis.crowd_tags (e.g., ["italo-disco", "80s", "synth-pop"])
-      - Returns: Up to 50 matching tracks with IDs
+PHASE 3: EXECUTION
+Execute strategy from plan_discovery_strategy:
+5a. recommend_from_similar(strategy.lastfm_similar_priority) → Spotify IDs from curated Last.fm picks
+5b. For each spotify_searches: search_spotify_tracks(query) → Creative query results
+5c. For each tag_searches: recommend_from_tags(tags) → Genre blend discoveries
+5d. get_recommendations(seeds, strategy.recommendation_seeds.parameters) → Algorithm with tuned params
 
-   c) get_recommendations - Spotify's algorithmic recommendations
-      - Takes: seed_tracks from analyzed playlist + audio parameters
-      - Returns: Up to 20 algorithmically similar tracks
+PHASE 4: INTELLIGENT CURATION
+6. curate_recommendations → AI ranks ALL candidates
+   - Takes: Combined tracks + vibe profile + strategy + user request
+   - Uses Sonnet 4.5 to select based on:
+     * Vibe alignment (production style, emotional feel, era)
+     * Strategic fit (follows discovery plan rationale)
+     * Diversity vs cohesion balance
+     * User intent understanding
+   - Returns: Top N with detailed reasoning
 
-3. COMBINE all results into a single candidate list
-
-4. CURATE: curate_recommendations - AI-powered intelligent ranking
-   - Takes: Combined candidate tracks + playlist context + user request
-   - Returns: Top N curated picks with reasoning
-   - Uses Claude Sonnet 4.5 to select best matches based on:
-     * Genre/tag fit, BPM range, era match, popularity balance, diversity
-
-5. PRESENT top recommendations with reasoning from curator
+7. PRESENT curated picks with vibe-aware explanation
 
 EXAMPLE: "Find tracks like this playlist"
-1. analyze_playlist → BPM 120-130, tags ["italo-disco", "80s", "synth-pop"], similar_tracks [20 strings]
-2. recommend_from_similar(similar_tracks=[first 10]) → 8 Spotify tracks with IDs
-3. recommend_from_tags(tags=["italo-disco", "80s"], limit=20) → 20 tracks
-4. get_recommendations(seed_tracks=[top 3 IDs], target_energy=0.7) → 20 tracks
-5. curate_recommendations(candidates=[all 48 tracks], context={BPM 120-130, tags, etc}, top_n=10)
-6. Present curated top 10 with AI reasoning
+1. analyze_playlist → enrichment data
+2. get_playlist_tracks(limit=15) → sample track names
+3. extract_playlist_vibe → "Nostalgic 80s synth-pop with lo-fi production, breathy vocals, warm analog sound"
+4. plan_discovery_strategy → Strategy: "Focus on modern lo-fi producers with 80s influence, avoid overly polished tracks"
+5. Execute:
+   - Last.fm priority tracks (8) + Tag search "lo-fi synth-pop retro" (20) + Creative query "year:2018-2024 analog synth bedroom pop" (10) + Recommendations with target_acousticness=0.7
+6. curate_recommendations(58 candidates) → Top 10 that match lo-fi nostalgic vibe
+7. Present with reasoning about vibe fit
+
+KEY INSIGHT: Sonnet 4.5 UNDERSTANDS the vibe BEFORE searching, then PLANS strategic discovery, preventing generic algorithm trap.
 
 Be concise and helpful. Describe playlists using genres, popularity, era, and descriptions.`;
 
