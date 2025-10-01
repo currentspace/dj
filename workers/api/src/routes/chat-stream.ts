@@ -129,16 +129,19 @@ async function executeSpotifyToolWithProgress(
         : '🔍 Fetching playlist information...';
       await sseWriter.write({ type: 'thinking', data: fetchMessage });
 
+      console.log(`[SpotifyAPI] Fetching playlist details: ${playlist_id}`);
       const playlistResponse = await fetch(
         `https://api.spotify.com/v1/playlists/${playlist_id}`,
         { headers: { 'Authorization': `Bearer ${token}` } }
       );
 
+      console.log(`[SpotifyAPI] Playlist response status: ${playlistResponse.status}`);
       if (!playlistResponse.ok) {
         throw new Error(`Failed to get playlist: ${playlistResponse.status}`);
       }
 
       const playlist = await playlistResponse.json() as any;
+      console.log(`[SpotifyAPI] Playlist loaded: "${playlist.name}" with ${playlist.tracks?.total} tracks`);
 
       const foundMessage = narrator
         ? await narrator.generateMessage({
@@ -160,18 +163,39 @@ async function executeSpotifyToolWithProgress(
           })
         : '🎵 Fetching track details...';
       await sseWriter.write({ type: 'thinking', data: tracksMessage });
+
+      console.log(`[SpotifyAPI] Fetching tracks from playlist: ${playlist_id}`);
       const tracksResponse = await fetch(
         `https://api.spotify.com/v1/playlists/${playlist_id}/tracks?limit=100`,
         { headers: { 'Authorization': `Bearer ${token}` } }
       );
 
+      console.log(`[SpotifyAPI] Tracks response status: ${tracksResponse.status}`);
       if (!tracksResponse.ok) {
+        const errorBody = await tracksResponse.text();
+        console.error(`[SpotifyAPI] Tracks fetch failed: ${tracksResponse.status} - ${errorBody}`);
         throw new Error(`Failed to get tracks: ${tracksResponse.status}`);
       }
 
       const tracksData = await tracksResponse.json() as any;
       const tracks = tracksData.items.map((item: any) => item.track).filter(Boolean);
       const trackIds = tracks.map((t: any) => t.id).filter(Boolean);
+
+      console.log(`[SpotifyAPI] Loaded ${tracks.length} tracks from playlist`);
+
+      // Debug: Log first 3 tracks' structure to see what fields Spotify returns
+      if (tracks.length > 0) {
+        console.log(`[SpotifyAPI] ========== TRACK STRUCTURE DEBUG ==========`);
+        tracks.slice(0, 3).forEach((track: any, idx: number) => {
+          console.log(`[SpotifyAPI] Track ${idx + 1}: "${track.name}" by ${track.artists?.[0]?.name}`);
+          console.log(`[SpotifyAPI]   - ID: ${track.id}`);
+          console.log(`[SpotifyAPI]   - has external_ids: ${!!track.external_ids}`);
+          console.log(`[SpotifyAPI]   - external_ids value:`, track.external_ids);
+          console.log(`[SpotifyAPI]   - ISRC: ${track.external_ids?.isrc || 'NOT PRESENT'}`);
+          console.log(`[SpotifyAPI]   - Available fields:`, Object.keys(track).join(', '));
+        });
+        console.log(`[SpotifyAPI] ========== END TRACK STRUCTURE DEBUG ==========`);
+      }
 
       await sseWriter.write({ type: 'thinking', data: `✅ Loaded ${tracks.length} tracks successfully` });
 
@@ -254,6 +278,8 @@ async function executeSpotifyToolWithProgress(
       let bpmData = null;
       if (env?.AUDIO_FEATURES_CACHE) {
         try {
+          console.log(`[BPMEnrichment] ========== STARTING BPM ENRICHMENT ==========`);
+          console.log(`[BPMEnrichment] KV Cache available: YES`);
           const enrichmentService = new AudioEnrichmentService(env.AUDIO_FEATURES_CACHE);
 
           // Process tracks sequentially with rate limiting at 40 TPS
@@ -261,10 +287,44 @@ async function executeSpotifyToolWithProgress(
           const bpmResults: number[] = [];
           let enrichedCount = 0;
 
+          console.log(`[BPMEnrichment] Will attempt to enrich ${tracksToEnrich.length} tracks`);
           await sseWriter.write({ type: 'thinking', data: `🎵 Enriching ${tracksToEnrich.length} tracks with BPM data at 40 TPS...` });
+
+          // Debug: Check if tracks have external_ids
+          const tracksWithISRC = tracksToEnrich.filter(t => t.external_ids?.isrc).length;
+          console.log(`[BPMEnrichment] Pre-enrichment ISRC check: ${tracksWithISRC}/${tracksToEnrich.length} tracks have ISRC`);
+
+          // Debug: Log first 3 tracks to see their structure in detail
+          if (tracksToEnrich.length > 0) {
+            console.log(`[BPMEnrichment] ========== ENRICHMENT TRACK STRUCTURE DEBUG ==========`);
+            tracksToEnrich.slice(0, 3).forEach((track, idx) => {
+              console.log(`[BPMEnrichment] Track ${idx + 1}: "${track.name}" by ${track.artists?.[0]?.name}`);
+              console.log(`[BPMEnrichment]   - ID: ${track.id}`);
+              console.log(`[BPMEnrichment]   - Duration: ${track.duration_ms}ms`);
+              console.log(`[BPMEnrichment]   - has external_ids: ${!!track.external_ids}`);
+              console.log(`[BPMEnrichment]   - external_ids type: ${typeof track.external_ids}`);
+              console.log(`[BPMEnrichment]   - external_ids value:`, JSON.stringify(track.external_ids));
+              console.log(`[BPMEnrichment]   - ISRC: ${track.external_ids?.isrc || 'NOT PRESENT'}`);
+              console.log(`[BPMEnrichment]   - Track object keys:`, Object.keys(track).join(', '));
+            });
+            console.log(`[BPMEnrichment] ========== END ENRICHMENT TRACK STRUCTURE DEBUG ==========`);
+          }
+
+          if (tracksWithISRC === 0) {
+            console.warn(`[BPMEnrichment] ⚠️ CRITICAL: No tracks have ISRC in external_ids`);
+            console.warn(`[BPMEnrichment] Will need to fetch full track details from Spotify /tracks API`);
+            await sseWriter.write({ type: 'thinking', data: '⚠️ Tracks missing ISRC data - fetching from Spotify API...' });
+          } else {
+            console.log(`[BPMEnrichment] ✅ Found ${tracksWithISRC} tracks with ISRC, proceeding with enrichment`);
+          }
 
           for (let i = 0; i < tracksToEnrich.length; i++) {
             const track = tracksToEnrich[i];
+
+            // Log every track attempt for first 5 tracks, then every 10th
+            if (i < 5 || i % 10 === 0) {
+              console.log(`[BPMEnrichment] Processing track ${i + 1}/${tracksToEnrich.length}: "${track.name}"`);
+            }
 
             try {
               const spotifyTrack = {
@@ -275,7 +335,27 @@ async function executeSpotifyToolWithProgress(
                 external_ids: track.external_ids
               };
 
+              // Log the track being sent to enrichment service
+              if (i < 3) {
+                console.log(`[BPMEnrichment] Calling enrichTrack with:`, {
+                  id: spotifyTrack.id,
+                  name: spotifyTrack.name,
+                  has_external_ids: !!spotifyTrack.external_ids,
+                  isrc: spotifyTrack.external_ids?.isrc || 'NONE'
+                });
+              }
+
               const bpmResult = await enrichmentService.enrichTrack(spotifyTrack);
+
+              // Log the result for first few tracks
+              if (i < 3) {
+                console.log(`[BPMEnrichment] Result for "${track.name}":`, {
+                  bpm: bpmResult.bpm,
+                  gain: bpmResult.gain,
+                  source: bpmResult.source,
+                  isValid: AudioEnrichmentService.isValidBPM(bpmResult.bpm)
+                });
+              }
 
               if (bpmResult.bpm && AudioEnrichmentService.isValidBPM(bpmResult.bpm)) {
                 bpmResults.push(bpmResult.bpm);
@@ -292,10 +372,15 @@ async function executeSpotifyToolWithProgress(
                 await new Promise(resolve => setTimeout(resolve, 25));
               }
             } catch (error) {
-              console.error(`[BPMEnrichment] Failed for track ${track.name}:`, error);
+              console.error(`[BPMEnrichment] Failed for track "${track.name}":`, error);
               // Continue with next track
             }
           }
+
+          console.log(`[BPMEnrichment] ========== ENRICHMENT COMPLETE ==========`);
+          console.log(`[BPMEnrichment] Total tracks processed: ${tracksToEnrich.length}`);
+          console.log(`[BPMEnrichment] Successful BPM results: ${bpmResults.length}`);
+          console.log(`[BPMEnrichment] Success rate: ${((bpmResults.length / tracksToEnrich.length) * 100).toFixed(1)}%`);
 
           if (bpmResults.length > 0) {
             const avgBPM = bpmResults.reduce((sum, bpm) => sum + bpm, 0) / bpmResults.length;

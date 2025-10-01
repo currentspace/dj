@@ -51,11 +51,18 @@ export class AudioEnrichmentService {
   async enrichTrack(track: SpotifyTrack): Promise<BPMEnrichment> {
     const cacheKey = track.id;
 
+    // Debug: Log incoming track structure
+    console.log(`[BPMEnrichment] enrichTrack called for "${track.name}" by ${track.artists[0]?.name}`, {
+      has_external_ids: !!track.external_ids,
+      external_ids: track.external_ids,
+      track_keys: Object.keys(track)
+    });
+
     // Try cache first
     if (this.cache) {
       const cached = await this.getCached(cacheKey);
       if (cached) {
-        console.log(`[BPMEnrichment] Cache hit for ${track.id}`);
+        console.log(`[BPMEnrichment] Cache hit for ${track.id}: BPM=${cached.enrichment.bpm}`);
         return cached.enrichment;
       }
     }
@@ -63,13 +70,17 @@ export class AudioEnrichmentService {
     // Get ISRC from Spotify track
     const isrc = track.external_ids?.isrc;
 
+    console.log(`[BPMEnrichment] Track "${track.name}" ISRC: ${isrc || 'NOT FOUND'}`);
+
     let enrichment: BPMEnrichment;
 
     if (isrc) {
+      console.log(`[BPMEnrichment] Querying Deezer with ISRC: ${isrc}`);
       enrichment = await this.enrichByISRC(isrc, track.duration_ms);
+      console.log(`[BPMEnrichment] Deezer result for ${isrc}: BPM=${enrichment.bpm}`);
     } else {
       // Fallback: Try to get ISRC from MusicBrainz, then retry
-      console.log(`[BPMEnrichment] No ISRC for ${track.name}, trying MusicBrainz`);
+      console.log(`[BPMEnrichment] No ISRC for "${track.name}", trying MusicBrainz`);
       const mbIsrc = await this.findISRCViaMusicBrainz(
         track.name,
         track.artists[0]?.name || '',
@@ -77,11 +88,14 @@ export class AudioEnrichmentService {
       );
 
       if (mbIsrc) {
+        console.log(`[BPMEnrichment] MusicBrainz found ISRC: ${mbIsrc}, querying Deezer`);
         enrichment = await this.enrichByISRC(mbIsrc, track.duration_ms);
         if (enrichment.bpm) {
           enrichment.source = 'deezer-via-musicbrainz';
         }
+        console.log(`[BPMEnrichment] Deezer result via MusicBrainz: BPM=${enrichment.bpm}`);
       } else {
+        console.log(`[BPMEnrichment] MusicBrainz found no ISRC for "${track.name}"`);
         enrichment = { bpm: null, gain: null, source: null };
       }
     }
@@ -126,21 +140,30 @@ export class AudioEnrichmentService {
    */
   private async enrichByISRC(isrc: string, durationMs: number): Promise<BPMEnrichment> {
     try {
+      console.log(`[BPMEnrichment] enrichByISRC called with ISRC: ${isrc}, duration: ${durationMs}ms`);
+
       // Try direct ISRC endpoint first
+      console.log(`[BPMEnrichment] Attempting direct Deezer ISRC lookup...`);
       const directTrack = await this.deezerSingleByISRC(isrc);
 
       if (directTrack?.bpm) {
+        console.log(`[BPMEnrichment] ✅ Direct ISRC lookup succeeded: BPM=${directTrack.bpm}`);
         return {
           bpm: directTrack.bpm,
           gain: directTrack.gain ?? null,
           source: 'deezer'
         };
+      } else {
+        console.log(`[BPMEnrichment] Direct ISRC lookup returned no BPM, trying search...`);
       }
 
       // Fallback to search endpoint with duration matching
+      console.log(`[BPMEnrichment] Attempting Deezer search by ISRC...`);
       const searchResults = await this.deezerSearchByISRC(isrc);
 
+      console.log(`[BPMEnrichment] Deezer search returned ${searchResults.length} results`);
       if (searchResults.length === 0) {
+        console.log(`[BPMEnrichment] No search results for ISRC: ${isrc}`);
         return { bpm: null, gain: null, source: null };
       }
 
@@ -233,9 +256,13 @@ export class AudioEnrichmentService {
   private async deezerSearchByISRC(isrc: string): Promise<DeezerTrack[]> {
     try {
       const url = `https://api.deezer.com/search?q=${encodeURIComponent(`isrc:${isrc}`)}`;
+      console.log(`[BPMEnrichment] Deezer search URL: ${url}`);
       const response = await fetch(url);
+      console.log(`[BPMEnrichment] Deezer search response status: ${response.status}`);
       const data = await response.json() as any;
-      return data?.data ?? [];
+      const results = data?.data ?? [];
+      console.log(`[BPMEnrichment] Deezer search results: ${results.length} tracks found`);
+      return results;
     } catch (error) {
       console.error('[BPMEnrichment] Deezer search failed:', error);
       return [];
@@ -248,8 +275,13 @@ export class AudioEnrichmentService {
   private async deezerSingleByISRC(isrc: string): Promise<DeezerTrack | null> {
     try {
       const url = `https://api.deezer.com/track/isrc:${encodeURIComponent(isrc)}`;
+      console.log(`[BPMEnrichment] Deezer direct ISRC URL: ${url}`);
       const response = await fetch(url);
+      console.log(`[BPMEnrichment] Deezer direct ISRC response status: ${response.status}`);
       const data = await response.json() as any;
+      const hasTrack = !!data?.id;
+      const hasBPM = !!data?.bpm;
+      console.log(`[BPMEnrichment] Deezer direct result: hasTrack=${hasTrack}, hasBPM=${hasBPM}, BPM=${data?.bpm || 'N/A'}`);
       return data?.id ? data : null;
     } catch (error) {
       console.error('[BPMEnrichment] Deezer ISRC lookup failed:', error);
