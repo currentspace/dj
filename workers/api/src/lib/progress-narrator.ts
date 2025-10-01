@@ -77,74 +77,62 @@ export class ProgressNarrator {
         model: 'claude-3-5-haiku-20241022'
       });
 
-      // Use rate-limited API wrapper with 5 second timeout
-      const abortController = new AbortController();
-      const timeout = setTimeout(() => abortController.abort(), 5000);
+      // Use rate-limited API wrapper (no timeout - orchestrator handles queuing)
+      const response = await rateLimitedAnthropicCall(
+        () => this.anthropic.messages.create({
+          model: 'claude-3-5-haiku-20241022',
+          max_tokens: 100,
+          temperature: skipCache ? 1.0 : 0.7,
+          top_p: skipCache ? 0.95 : undefined,
+          messages: [{
+            role: 'user',
+            content: prompt,
+          }],
+          system: [{
+            type: 'text',
+            text: this.systemPrompt,
+            cache_control: { type: 'ephemeral' },
+          }],
+        }),
+        this.logger,
+        `narrator:${context.eventType}`
+      );
 
-      try {
-        const response = await rateLimitedAnthropicCall(
-          () => this.anthropic.messages.create({
-            model: 'claude-3-5-haiku-20241022',
-            max_tokens: 100,
-            temperature: skipCache ? 1.0 : 0.7,
-            top_p: skipCache ? 0.95 : undefined,
-            messages: [{
-              role: 'user',
-              content: prompt,
-            }],
-            system: [{
-              type: 'text',
-              text: this.systemPrompt,
-              cache_control: { type: 'ephemeral' },
-            }],
-          }, {
-            signal: abortController.signal,
-          }),
-          this.logger,
-          `narrator:${context.eventType}`
-        );
-
-        clearTimeout(timeout);
-
-        if (!response) {
-          throw new Error('Rate-limited call returned null');
-        }
-
-        this.logger.info('Anthropic API call succeeded', {
-          responseId: response.id,
-          model: response.model,
-          stopReason: response.stop_reason,
-          contentType: response.content[0]?.type
-        });
-
-        const message = response.content[0].type === 'text'
-          ? response.content[0].text.trim()
-          : this.getFallbackMessage(context);
-
-        this.logger.info(`Generated message`, {
-          event: context.eventType,
-          message,
-          responseType: response.content[0]?.type,
-          contentLength: response.content[0]?.type === 'text' ? response.content[0].text.length : 0,
-          stopReason: response.stop_reason
-        });
-
-        // Cache the result only if caching is enabled
-        if (!skipCache) {
-          this.messageCache.set(cacheKey, message);
-
-          // Limit cache size to prevent memory issues
-          if (this.messageCache.size > 100) {
-            const firstKey = this.messageCache.keys().next().value;
-            this.messageCache.delete(firstKey);
-          }
-        }
-
-        return message;
-      } catch (apiError) {
-        clearTimeout(timeout);
-        throw apiError; // Re-throw to outer catch
+      if (!response) {
+        throw new Error('Rate-limited call returned null');
       }
+
+      this.logger.info('Anthropic API call succeeded', {
+        responseId: response.id,
+        model: response.model,
+        stopReason: response.stop_reason,
+        contentType: response.content[0]?.type
+      });
+
+      const message = response.content[0].type === 'text'
+        ? response.content[0].text.trim()
+        : this.getFallbackMessage(context);
+
+      this.logger.info(`Generated message`, {
+        event: context.eventType,
+        message,
+        responseType: response.content[0]?.type,
+        contentLength: response.content[0]?.type === 'text' ? response.content[0].text.length : 0,
+        stopReason: response.stop_reason
+      });
+
+      // Cache the result only if caching is enabled
+      if (!skipCache) {
+        this.messageCache.set(cacheKey, message);
+
+        // Limit cache size to prevent memory issues
+        if (this.messageCache.size > 100) {
+          const firstKey = this.messageCache.keys().next().value;
+          this.messageCache.delete(firstKey);
+        }
+      }
+
+      return message;
     } catch (error) {
       // Detailed error logging
       const errorDetails: Record<string, any> = {

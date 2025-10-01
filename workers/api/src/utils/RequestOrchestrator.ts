@@ -17,45 +17,52 @@
 import { RateLimitedQueue } from './RateLimitedQueue';
 
 type Task<T> = () => Promise<T>;
+type LaneKey = string;
+
+interface PendingEntry<T> {
+  task: Task<T>;
+  resolve: (value: T | null) => void;
+  reject: (error: any) => void;
+  lane: LaneKey;
+}
 
 interface Batch<T> {
-  tasks: Array<{
-    task: Task<T>;
-    resolve: (value: T | null) => void;
-    reject: (error: any) => void;
-  }>;
+  tasks: Array<PendingEntry<T>>;
   promise: Promise<(T | null)[]>;
 }
 
 export class RequestOrchestrator {
   private queue: RateLimitedQueue<any>;
   private batches = new Map<string, Batch<any>>();
-  private singletonTasks: Array<{
-    task: Task<any>;
-    resolve: (value: any) => void;
-    reject: (error: any) => void;
-  }> = [];
+  private pendingByLane = new Map<LaneKey, PendingEntry<any>[]>();
   private processingTimer: number | null = null;
 
   constructor(options?: {
     rate?: number;        // Requests per second (default: 40)
     concurrency?: number; // Parallel requests (default: 10)
     jitterMs?: number;    // Jitter in ms (default: 5)
+    minTickMs?: number;   // Minimum tick delay (default: 1-2ms)
   }) {
     this.queue = new RateLimitedQueue({
       rate: options?.rate ?? 40,
       concurrency: options?.concurrency ?? 10,
       jitterMs: options?.jitterMs ?? 5,
+      minTickMs: options?.minTickMs ?? 2,
     });
   }
 
   /**
    * Execute a single task through the rate-limited queue
    * Returns a promise that resolves when the task completes
+   *
+   * @param task - The async task to execute
+   * @param lane - Optional lane identifier for fairness (e.g., 'anthropic', 'spotify', 'lastfm')
    */
-  async execute<T>(task: Task<T>): Promise<T | null> {
+  async execute<T>(task: Task<T>, lane: LaneKey = 'default'): Promise<T | null> {
     return new Promise((resolve, reject) => {
-      this.singletonTasks.push({ task, resolve, reject });
+      const arr = this.pendingByLane.get(lane) ?? [];
+      arr.push({ task, resolve, reject, lane });
+      this.pendingByLane.set(lane, arr);
       this.scheduleProcessing();
     });
   }
@@ -63,18 +70,22 @@ export class RequestOrchestrator {
   /**
    * Enqueue a batch of tasks with a batch ID
    * All tasks will be rate-limited but can be awaited as a group
+   *
+   * @param batchId - Unique identifier for this batch
+   * @param tasks - Array of tasks to execute
+   * @param lane - Optional lane identifier for fairness
    */
-  enqueueBatch<T>(batchId: string, tasks: Task<T>[]): void {
+  enqueueBatch<T>(batchId: string, tasks: Task<T>[], lane: LaneKey = 'default'): void {
     if (this.batches.has(batchId)) {
       throw new Error(`Batch ${batchId} already exists`);
     }
 
-    const batchTasks: Batch<T>['tasks'] = [];
+    const batchTasks: PendingEntry<T>[] = [];
     const promises: Promise<T | null>[] = [];
 
     for (const task of tasks) {
       const promise = new Promise<T | null>((resolve, reject) => {
-        batchTasks.push({ task, resolve, reject });
+        batchTasks.push({ task, resolve, reject, lane });
       });
       promises.push(promise);
     }
@@ -104,10 +115,13 @@ export class RequestOrchestrator {
   }
 
   /**
-   * Get the number of pending tasks across all batches and singletons
+   * Get the number of pending tasks across all lanes and batches
    */
   getPendingCount(): number {
-    let count = this.singletonTasks.length;
+    let count = 0;
+    for (const arr of this.pendingByLane.values()) {
+      count += arr.length;
+    }
     for (const batch of this.batches.values()) {
       count += batch.tasks.length;
     }
@@ -132,19 +146,46 @@ export class RequestOrchestrator {
   }
 
   /**
+   * Take tasks using round-robin fairness across lanes
+   * This prevents any single source (e.g., Spotify) from monopolizing the queue
+   */
+  private takeRoundRobin(): PendingEntry<any>[] {
+    const lanes = Array.from(this.pendingByLane.keys());
+    if (lanes.length === 0) return [];
+
+    const out: PendingEntry<any>[] = [];
+    let remaining = lanes.reduce((sum, key) => sum + (this.pendingByLane.get(key)?.length ?? 0), 0);
+    let i = 0;
+
+    while (remaining > 0) {
+      const lane = lanes[i % lanes.length];
+      const queue = this.pendingByLane.get(lane);
+
+      if (queue && queue.length > 0) {
+        out.push(queue.shift()!);
+        remaining--;
+      }
+
+      i++;
+    }
+
+    // Drop empty lanes
+    for (const lane of lanes) {
+      if (this.pendingByLane.get(lane)?.length === 0) {
+        this.pendingByLane.delete(lane);
+      }
+    }
+
+    return out;
+  }
+
+  /**
    * Process all pending tasks through the rate-limited queue
+   * Uses round-robin fairness to prevent lane starvation
    */
   private async processPendingTasks(): Promise<void> {
-    // Collect all pending tasks (singletons + batches)
-    const allTasks: Array<{
-      task: Task<any>;
-      resolve: (value: any) => void;
-      reject: (error: any) => void;
-    }> = [];
-
-    // Add singleton tasks
-    allTasks.push(...this.singletonTasks);
-    this.singletonTasks = [];
+    // Collect all pending tasks from lanes (round-robin)
+    const allTasks: PendingEntry<any>[] = this.takeRoundRobin();
 
     // Add batch tasks
     for (const batch of this.batches.values()) {

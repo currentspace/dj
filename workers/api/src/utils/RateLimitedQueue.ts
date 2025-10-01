@@ -15,6 +15,7 @@ export interface QueueOptions {
   burst?: number;       // max tokens, default = rate
   concurrency?: number; // parallel tasks, default 1
   jitterMs?: number;    // 0..jitterMs added to wakeups, default 0
+  minTickMs?: number;   // minimum tick delay (Workers timers coalesce at 0ms), default 1
 }
 
 export class RateLimitedQueue<T> {
@@ -25,6 +26,7 @@ export class RateLimitedQueue<T> {
   private readonly burst: number;
   private readonly concurrency: number;
   private readonly jitterMs: number;
+  private readonly minTickMs: number;
 
   // token bucket
   private tokens: number;
@@ -39,6 +41,7 @@ export class RateLimitedQueue<T> {
     this.burst = opts.burst ?? this.rate;
     this.concurrency = Math.max(1, opts.concurrency ?? 1);
     this.jitterMs = Math.max(0, opts.jitterMs ?? 0);
+    this.minTickMs = Math.max(0, opts.minTickMs ?? 1);
 
     this.tokens = this.burst;
     this.lastRefill = performance.now();
@@ -125,19 +128,19 @@ export class RateLimitedQueue<T> {
 
     const scheduleNext = () => {
       if (this.timer !== null) return;
-      const jitter = this.jitterMs ? Math.random() * this.jitterMs : 0;
 
       refill();
 
-      // If tokens are available or we still have capacity, wake quickly;
-      // otherwise wait until next whole token becomes available.
-      let waitMs = 0.5; // small poll to keep things moving
-      if (this.tokens < 1) {
-        const deficit = 1 - this.tokens;
-        waitMs = (deficit * 1000) / this.rate;
-      }
+      // Calculate precise next wake time based on token availability
+      const nextWakeMs = (): number => {
+        if (this.tokens >= 1) return this.minTickMs;
+        const deficit = 1 - this.tokens;              // tokens needed to reach a whole token
+        const wait = (deficit * 1000) / this.rate;    // ms until then at current fill
+        const jitter = this.jitterMs ? Math.random() * this.jitterMs : 0;
+        return Math.max(this.minTickMs, wait + jitter);
+      };
 
-      this.timer = setTimeout(tick, Math.max(0, waitMs + jitter)) as unknown as number;
+      this.timer = setTimeout(tick, nextWakeMs()) as unknown as number;
     };
 
     const clearIfSet = () => {
@@ -188,11 +191,10 @@ export class RateLimitedQueue<T> {
         resolveOuter?.(results);
         return;
       }
-      // If there are still tasks to issue and we have capacity/tokens, tick immediately
+      // If there are still tasks to issue and we have capacity/tokens, tick with minTickMs
       if (this.running < this.concurrency && issued < total) {
-        // try immediate micro-delay
         if (this.timer === null) {
-          this.timer = setTimeout(tick, 0) as unknown as number;
+          this.timer = setTimeout(tick, this.minTickMs) as unknown as number;
         }
       }
     };

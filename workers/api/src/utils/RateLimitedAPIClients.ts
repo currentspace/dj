@@ -44,7 +44,7 @@ export async function rateLimitedAnthropicCall<T>(
       logger?.error(`Anthropic API call failed after ${duration.toFixed(0)}ms`, error, { context });
       throw error;
     }
-  });
+  }, 'anthropic'); // Use 'anthropic' lane for fairness
 }
 
 /**
@@ -68,7 +68,7 @@ export async function rateLimitedSpotifyCall<T>(
       logger?.error(`Spotify API call failed after ${duration.toFixed(0)}ms`, error, { context });
       throw error;
     }
-  });
+  }, 'spotify'); // Use 'spotify' lane for fairness
 }
 
 /**
@@ -92,7 +92,7 @@ export async function rateLimitedLastFmCall<T>(
       logger?.error(`Last.fm API call failed after ${duration.toFixed(0)}ms`, error, { context });
       throw error;
     }
-  });
+  }, 'lastfm'); // Use 'lastfm' lane for fairness
 }
 
 /**
