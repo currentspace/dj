@@ -479,9 +479,24 @@ async function executeSpotifyToolWithProgress(
                 const key = `${track.id}`;
                 signalsMap.set(key, signals);
 
-                // Stream progress every 2 tracks
-                if ((i + 1) % 2 === 0) {
-                  await sseWriter.write({ type: 'thinking', data: `🎧 Track enrichment: ${signalsMap.size}/${tracksForLastFm.length}...` });
+                // Stream progress every 10 tracks with narrator
+                if ((i + 1) % 10 === 0 || i === tracksForLastFm.length - 1) {
+                  if (narrator) {
+                    const recentTags = signals.top_tags?.slice(0, 3).map(t => t.name).join(', ') || '';
+                    const message = await narrator.generateMessage({
+                      eventType: 'enriching_tracks',
+                      userRequest,
+                      metadata: {
+                        enrichedCount: i + 1,
+                        totalTracks: tracksForLastFm.length,
+                        recentTags,
+                        recentTrackName: track.name
+                      }
+                    });
+                    await sseWriter.write({ type: 'thinking', data: `🎧 ${message}` });
+                  } else {
+                    await sseWriter.write({ type: 'thinking', data: `🎧 Track enrichment: ${signalsMap.size}/${tracksForLastFm.length}...` });
+                  }
                 }
               }
 
@@ -498,10 +513,24 @@ async function executeSpotifyToolWithProgress(
           const uniqueArtists = [...new Set(tracksForLastFm.map(t => t.artists?.[0]?.name).filter(Boolean))];
           await sseWriter.write({ type: 'thinking', data: `🎤 Fetching artist info for ${uniqueArtists.length} unique artists...` });
 
-          const artistInfoMap = await lastfmService.batchGetArtistInfo(uniqueArtists, (current, total) => {
-            // Report progress every 5 artists
-            if (current % 5 === 0 || current === total) {
-              sseWriter.write({ type: 'thinking', data: `🎤 Artist enrichment: ${current}/${total}...` });
+          const artistInfoMap = await lastfmService.batchGetArtistInfo(uniqueArtists, async (current, total) => {
+            // Report progress every 10 artists with narrator
+            if (current % 10 === 0 || current === total) {
+              if (narrator) {
+                const recentArtist = uniqueArtists[current - 1];
+                const message = await narrator.generateMessage({
+                  eventType: 'enriching_artists',
+                  userRequest,
+                  metadata: {
+                    enrichedCount: current,
+                    totalArtists: total,
+                    recentArtistName: recentArtist
+                  }
+                });
+                await sseWriter.write({ type: 'thinking', data: `🎤 ${message}` });
+              } else {
+                await sseWriter.write({ type: 'thinking', data: `🎤 Artist enrichment: ${current}/${total}...` });
+              }
             }
           });
 

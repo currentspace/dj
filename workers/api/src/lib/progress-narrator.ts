@@ -86,12 +86,12 @@ export class ProgressNarrator {
    * System prompt that defines the narrator's personality and style
    */
   private buildSystemPrompt(): string {
-    return `You are a friendly AI DJ assistant narrating the playlist creation process to users.
+    return `You are a helpful music docent, guiding the user along a journey of musical discovery.
 
 Your role:
 - Generate SHORT, engaging progress messages (1-2 sentences max, under 80 characters)
-- Be enthusiastic but natural - like a real DJ talking to their audience
-- Make technical operations sound exciting and relatable
+- Be enthusiastic but natural - like a knowledgeable friend showing them around
+- Make technical operations sound like exciting discoveries
 - Use music-related language and metaphors
 - Keep it conversational and fun
 - Never use emojis (the UI adds those)
@@ -103,11 +103,14 @@ Tone examples:
 ❌ "Analyzing audio feature vectors for track selection"
 ✅ "Checking the vibe on these tracks - tempo, energy, the works!"
 
+❌ "Enriching 10/50 tracks with Last.fm data"
+✅ "Discovering hidden gems in your collection..."
+
+❌ "Fetching artist info for 45 unique artists"
+✅ "Learning the story behind these artists..."
+
 ❌ "Creating playlist via Spotify Web API"
 ✅ "Spinning up your new playlist right now..."
-
-❌ "Adding tracks to playlist container"
-✅ "Loading up your playlist with these bangers..."
 
 Keep messages:
 - Short (under 80 characters when possible)
@@ -145,6 +148,34 @@ Keep messages:
       case 'searching_tracks':
         if (context.parameters?.query) {
           parts.push(`\nSearching for: "${context.parameters.query}"`);
+        }
+        break;
+
+      case 'enriching_tracks':
+        const enriched = context.metadata?.enrichedCount || 0;
+        const enrichTotal = context.metadata?.totalTracks || 0;
+        const recentTags = context.metadata?.recentTags;
+        const recentTrack = context.metadata?.recentTrackName;
+        if (enriched && enrichTotal) {
+          parts.push(`\nEnriching ${enriched} of ${enrichTotal} tracks with Last.fm data`);
+        }
+        if (recentTags) {
+          parts.push(`\nRecent discovery: ${recentTags}`);
+        }
+        if (recentTrack) {
+          parts.push(`\nJust analyzed: "${recentTrack}"`);
+        }
+        break;
+
+      case 'enriching_artists':
+        const artistsEnriched = context.metadata?.enrichedCount || 0;
+        const artistsTotal = context.metadata?.totalArtists || 0;
+        const recentArtist = context.metadata?.recentArtistName;
+        if (artistsEnriched && artistsTotal) {
+          parts.push(`\nFetching info for ${artistsEnriched} of ${artistsTotal} artists`);
+        }
+        if (recentArtist) {
+          parts.push(`\nLearning about: ${recentArtist}`);
         }
         break;
 
@@ -210,6 +241,8 @@ Keep messages:
       'started': 'Getting started...',
       'analyzing_request': 'Understanding your request...',
       'searching_tracks': 'Searching for tracks...',
+      'enriching_tracks': 'Discovering hidden gems in your collection...',
+      'enriching_artists': 'Learning the story behind these artists...',
       'analyzing_audio': 'Analyzing the tracks...',
       'creating_playlist': 'Creating your playlist...',
       'adding_tracks': 'Adding tracks to the playlist...',
