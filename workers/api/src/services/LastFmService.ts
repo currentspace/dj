@@ -207,30 +207,21 @@ export class LastFmService {
 
   /**
    * Batch get signals for multiple tracks (skips artist info by default for performance)
+   * Rate limiting is handled by the orchestrator via continuous queue processing
    */
   async batchGetSignals(tracks: LastFmTrack[], skipArtistInfo: boolean = true): Promise<Map<string, LastFmSignals>> {
     const results = new Map<string, LastFmSignals>();
 
-    // Process in batches with delay to respect rate limits
-    const batchSize = 5;
-    for (let i = 0; i < tracks.length; i += batchSize) {
-      const batch = tracks.slice(i, i + batchSize);
-
-      const batchPromises = batch.map(async (track) => {
-        const signals = await this.getTrackSignals(track, skipArtistInfo);
-        if (signals) {
-          const key = this.generateCacheKey(track.artist, track.name);
-          results.set(key, signals);
-        }
-      });
-
-      await Promise.all(batchPromises);
-
-      // Delay between batches (Last.fm rate limit)
-      if (i + batchSize < tracks.length) {
-        await this.sleep(200);
+    // Process all tracks in parallel - orchestrator controls concurrency and rate
+    const promises = tracks.map(async (track) => {
+      const signals = await this.getTrackSignals(track, skipArtistInfo);
+      if (signals) {
+        const key = this.generateCacheKey(track.artist, track.name);
+        results.set(key, signals);
       }
-    }
+    });
+
+    await Promise.all(promises);
 
     return results;
   }
@@ -545,10 +536,16 @@ export class LastFmService {
     });
 
     const url = `${this.apiBaseUrl}?${queryParams}`;
-    const response = await fetch(url);
 
-    if (!response.ok) {
-      throw new Error(`Last.fm API error: ${response.status}`);
+    // Use orchestrator for rate limiting
+    const response = await rateLimitedLastFmCall(
+      () => fetch(url),
+      undefined,
+      method
+    );
+
+    if (!response || !response.ok) {
+      throw new Error(`Last.fm API error: ${response?.status || 'null'}`);
     }
 
     return response.json();
@@ -658,13 +655,6 @@ export class LastFmService {
       hash = hash & hash;
     }
     return Math.abs(hash).toString(16);
-  }
-
-  /**
-   * Sleep utility
-   */
-  private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
   }
 
   /**
