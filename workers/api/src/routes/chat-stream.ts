@@ -1229,10 +1229,24 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
       let conversationMessages = [...messages];
       let currentToolCalls = toolCalls;
       let turnCount = 0;
-      const MAX_TURNS = 15; // Prevent infinite loops
+      const MAX_TURNS = 5; // Prevent infinite loops - reduced from 15
+      const recentToolCalls: string[] = []; // Track recent tool calls to detect loops
 
       while (currentToolCalls.length > 0 && turnCount < MAX_TURNS) {
         turnCount++;
+
+        // Detect loops: if same tool called 3+ times in a row, break
+        const toolSignature = currentToolCalls.map(tc => tc.name).join(',');
+        recentToolCalls.push(toolSignature);
+        if (recentToolCalls.length >= 3) {
+          const lastThree = recentToolCalls.slice(-3);
+          if (lastThree[0] === lastThree[1] && lastThree[1] === lastThree[2]) {
+            console.warn(`[Stream:${requestId}] ⚠️ Loop detected: ${toolSignature} called 3 times in a row. Breaking.`);
+            await sseWriter.write({ type: 'thinking', data: 'Detected repetitive tool calls, wrapping up...' });
+            break;
+          }
+        }
+
         console.log(`[Stream:${requestId}] 🔄 Agentic loop turn ${turnCount}: Executing ${currentToolCalls.length} tool calls...`);
         await sseWriter.write({ type: 'thinking', data: 'Using Spotify tools...' });
 
