@@ -96,6 +96,7 @@ async function executeSpotifyToolWithProgress(
   args: Record<string, unknown>,
   token: string,
   sseWriter: SSEWriter,
+  logger: ServiceLogger,
   env?: Env,
   narrator?: ProgressNarrator,
   userRequest?: string,
@@ -386,8 +387,7 @@ async function executeSpotifyToolWithProgress(
                 await new Promise(resolve => setTimeout(resolve, 25));
               }
             } catch (error) {
-              const enrichLogger = new ServiceLogger('BPMEnrichment', sseWriter);
-              enrichLogger.error(`Failed for track "${track.name}"`, error);
+              logger.child('BPMEnrichment').error(`Failed for track "${track.name}"`, error);
               // Continue with next track
             }
           }
@@ -447,8 +447,7 @@ async function executeSpotifyToolWithProgress(
             await sseWriter.write({ type: 'thinking', data: '⚠️ No Deezer data available for these tracks' });
           }
         } catch (error) {
-          const enrichLogger = new ServiceLogger('DeezerEnrichment', sseWriter);
-          enrichLogger.error('Enrichment failed', error);
+          logger.child('DeezerEnrichment').error('Enrichment failed', error);
           await sseWriter.write({ type: 'thinking', data: '⚠️ Deezer enrichment unavailable - continuing with metadata only' });
         }
       }
@@ -531,8 +530,7 @@ async function executeSpotifyToolWithProgress(
                 await new Promise(resolve => setTimeout(resolve, 25));
               }
             } catch (error) {
-              const lastfmLogger = new ServiceLogger('LastFm', sseWriter);
-              lastfmLogger.error(`Failed for track ${track.name}`, error);
+              logger.child('LastFm').error(`Failed for track ${track.name}`, error);
             }
           }
 
@@ -618,8 +616,7 @@ async function executeSpotifyToolWithProgress(
             await sseWriter.write({ type: 'thinking', data: `✅ Enriched ${signalsMap.size} tracks + ${artistInfoMap.size} artists!` });
           }
         } catch (error) {
-          const lastfmLogger = new ServiceLogger('LastFm', sseWriter);
-          lastfmLogger.error('Enrichment failed', error);
+          logger.child('LastFm').error('Enrichment failed', error);
           await sseWriter.write({ type: 'thinking', data: '⚠️ Last.fm enrichment unavailable - continuing without tags' });
         }
       }
@@ -675,8 +672,7 @@ async function executeSpotifyToolWithProgress(
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
       await sseWriter.write({ type: 'thinking', data: `❌ Analysis failed: ${errorMsg}` });
-      const toolLogger = new ServiceLogger('Tool:analyze_playlist', sseWriter);
-      toolLogger.error('Analysis failed', error, {
+      logger.child('Tool:analyze_playlist').error('Analysis failed', error, {
         errorMessage: errorMsg,
         errorType: error?.constructor?.name
       });
@@ -757,6 +753,7 @@ function createStreamingSpotifyTools(
           finalArgs,
           spotifyToken,
           sseWriter,
+          streamLogger,
           env,
           narrator,
           userRequest,
@@ -1681,7 +1678,7 @@ chatStreamRouter.post('/message', async (c) => {
   console.log(`[Stream:${requestId}] Auth header present: ${!!authorization}`);
   console.log(`[Stream:${requestId}] Env keys:`, Object.keys(env));
 
-  // Initialize ServiceLogger for this stream
+  // Initialize logger for this request
   const streamLogger = new ServiceLogger(`Stream:${requestId}`, sseWriter);
 
   // Process the request and stream responses
