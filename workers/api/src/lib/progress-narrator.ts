@@ -161,11 +161,15 @@ Keep messages:
         const enrichTotal = context.metadata?.totalTracks || 0;
         const recentTags = context.metadata?.recentTags;
         const recentTrack = context.metadata?.recentTrackName;
+        const recentTrackNames = context.metadata?.recentTrackNames;
         if (enriched && enrichTotal) {
           parts.push(`\nEnriching ${enriched} of ${enrichTotal} tracks with Last.fm data`);
         }
+        if (recentTrackNames) {
+          parts.push(`\nRecent tracks: ${recentTrackNames}`);
+        }
         if (recentTags) {
-          parts.push(`\nRecent discovery: ${recentTags}`);
+          parts.push(`\nRecent tags discovered: ${recentTags}`);
         }
         if (recentTrack) {
           parts.push(`\nJust analyzed: "${recentTrack}"`);

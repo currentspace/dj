@@ -482,12 +482,20 @@ async function executeSpotifyToolWithProgress(
                 // Stream progress every 10 tracks with narrator
                 if ((i + 1) % 10 === 0 || i === tracksForLastFm.length - 1) {
                   if (narrator) {
+                    // Collect recent track names for context (last 3 tracks)
+                    const recentTrackNames = tracksForLastFm
+                      .slice(Math.max(0, i - 2), i + 1)
+                      .map(t => t.name)
+                      .join(', ');
+
+                    // Get tags if available
                     const recentTags = signals.top_tags?.slice(0, 3).map(t => t.name).join(', ') || '';
+
                     await sseWriter.write({
                       type: 'log',
                       data: {
                         level: 'info',
-                        message: `[Narrator] Generating message for ${i + 1}/${tracksForLastFm.length} tracks, tags: ${recentTags}`
+                        message: `[Narrator] Generating message for ${i + 1}/${tracksForLastFm.length} tracks, recent: ${track.name}`
                       }
                     });
                     const message = await narrator.generateMessage({
@@ -497,7 +505,8 @@ async function executeSpotifyToolWithProgress(
                         enrichedCount: i + 1,
                         totalTracks: tracksForLastFm.length,
                         recentTags,
-                        recentTrackName: track.name
+                        recentTrackName: track.name,
+                        recentTrackNames
                       }
                     });
                     await sseWriter.write({
