@@ -62,8 +62,18 @@ export class AudioEnrichmentService {
     if (this.cache) {
       const cached = await this.getCached(cacheKey);
       if (cached) {
-        console.log(`[BPMEnrichment] Cache hit for ${track.id}: BPM=${cached.enrichment.bpm}`);
-        return cached.enrichment;
+        // Only log cache hits for non-null BPM values
+        if (cached.enrichment.bpm !== null) {
+          console.log(`[BPMEnrichment] ✅ Cache hit for ${track.id}: BPM=${cached.enrichment.bpm}`);
+        } else {
+          console.log(`[BPMEnrichment] ⚠️ Cache hit but BPM is null for ${track.id} - skipping cache, will retry`);
+          // Don't return null cache hits - let it retry
+          // return cached.enrichment;
+        }
+        // Return the cached result (including null)
+        if (cached.enrichment.bpm !== null) {
+          return cached.enrichment;
+        }
       }
     }
 
@@ -169,6 +179,7 @@ export class AudioEnrichmentService {
 
       // Find best match by duration
       const targetSec = Math.round(durationMs / 1000);
+      console.log(`[BPMEnrichment] Searching for best duration match (target: ${targetSec}s)`);
       const sorted = searchResults
         .map(t => ({ track: t, diff: Math.abs((t.duration ?? 0) - targetSec) }))
         .sort((a, b) => a.diff - b.diff);
@@ -176,21 +187,29 @@ export class AudioEnrichmentService {
       const bestMatch = sorted[0]?.track;
 
       if (bestMatch) {
+        console.log(`[BPMEnrichment] Best match: Deezer ID ${bestMatch.id}, duration diff: ${sorted[0].diff}s`);
         // Fetch full track details to get BPM (may not be in search results)
+        console.log(`[BPMEnrichment] Fetching full track details for Deezer ID ${bestMatch.id}...`);
         const fullTrack = await this.deezerTrackById(bestMatch.id);
 
         if (fullTrack?.bpm) {
+          console.log(`[BPMEnrichment] ✅ Successfully got BPM from full track details: ${fullTrack.bpm}`);
           return {
             bpm: fullTrack.bpm,
             gain: fullTrack.gain ?? null,
             source: 'deezer'
           };
+        } else {
+          console.log(`[BPMEnrichment] ❌ Full track details returned but no BPM available`);
         }
+      } else {
+        console.log(`[BPMEnrichment] ❌ No best match found in search results`);
       }
 
+      console.log(`[BPMEnrichment] ❌ Returning null - no BPM found via any method`);
       return { bpm: null, gain: null, source: null };
     } catch (error) {
-      console.error('[BPMEnrichment] Deezer fetch failed:', error);
+      console.error('[BPMEnrichment] ❌ Deezer fetch EXCEPTION:', error);
       return { bpm: null, gain: null, source: null };
     }
   }
@@ -295,11 +314,19 @@ export class AudioEnrichmentService {
   private async deezerTrackById(id: number): Promise<DeezerTrack | null> {
     try {
       const url = `https://api.deezer.com/track/${id}`;
+      console.log(`[BPMEnrichment] Fetching Deezer track by ID: ${url}`);
       const response = await fetch(url);
+      console.log(`[BPMEnrichment] Deezer track by ID response status: ${response.status}`);
       const data = await response.json() as any;
+      const hasTrack = !!data?.id;
+      const hasBPM = !!data?.bpm;
+      console.log(`[BPMEnrichment] Deezer track by ID result: hasTrack=${hasTrack}, hasBPM=${hasBPM}, BPM=${data?.bpm || 'N/A'}`);
+      if (data?.error) {
+        console.error(`[BPMEnrichment] Deezer track by ID error:`, data.error);
+      }
       return data?.id ? data : null;
     } catch (error) {
-      console.error('[BPMEnrichment] Deezer track fetch failed:', error);
+      console.error('[BPMEnrichment] Deezer track fetch EXCEPTION:', error);
       return null;
     }
   }
