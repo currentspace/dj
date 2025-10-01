@@ -1,175 +1,163 @@
 /**
  * RequestOrchestrator - Unified rate-limited orchestrator for all external API calls
  *
- * Key features:
- * - Single global rate limit (40 RPS) across ALL external calls
- * - Bounded concurrency with configurable parallelism
- * - Batch management - can await specific batches while respecting global limits
- * - Token bucket algorithm prevents bursting beyond limits
- * - Jitter prevents thundering herd effects
+ * Architecture:
+ * - Global rate limit: 40 RPS (Cloudflare Workers constraint)
+ * - Per-lane concurrency limits: Prevent SDK/service overload
+ * - Batch dependencies: Chain operations (enrichment → narrator)
+ * - No fire-and-forget: All calls orchestrated
  *
- * Usage patterns:
- * 1. Single task: await orchestrator.execute(() => apiCall())
- * 2. Batch: orchestrator.enqueueBatch('id', tasks); await orchestrator.awaitBatch('id')
- * 3. Fire-and-forget: orchestrator.execute(task).catch(handleError)
+ * Lane Configuration:
+ * - anthropic: 2 concurrent (Anthropic SDK limitation in Workers)
+ * - spotify: 5 concurrent
+ * - lastfm: 10 concurrent
+ * - deezer: 10 concurrent
+ * - default: 3 concurrent
+ *
+ * Usage:
+ * 1. Single: await orchestrator.execute(() => apiCall(), 'anthropic')
+ * 2. Batch: await orchestrator.executeBatch('id', tasks, 'spotify')
  */
 
 import { RateLimitedQueue } from './RateLimitedQueue';
 
 type Task<T> = () => Promise<T>;
-type LaneKey = string;
+type LaneKey = 'anthropic' | 'spotify' | 'lastfm' | 'deezer' | 'default';
 
-interface PendingEntry<T> {
-  task: Task<T>;
-  resolve: (value: T | null) => void;
-  reject: (error: any) => void;
-  lane: LaneKey;
+interface LaneConfig {
+  maxConcurrency: number;
+  running: number;
+  queue: Array<() => void>; // Callbacks to run when slot available
 }
 
-interface Batch<T> {
-  tasks: Array<PendingEntry<T>>;
-  promise: Promise<(T | null)[]>;
-}
+const LANE_LIMITS: Record<LaneKey, number> = {
+  anthropic: 2,   // Critical: Anthropic SDK can't handle >2 concurrent in Workers
+  spotify: 5,
+  lastfm: 10,
+  deezer: 10,
+  default: 3
+};
 
 export class RequestOrchestrator {
-  private queue: RateLimitedQueue<any>;
-  private batches = new Map<string, Batch<any>>();
-  private queueRunning = false;
+  private rateLimiter: RateLimitedQueue<any>;
+  private lanes: Map<LaneKey, LaneConfig> = new Map();
 
   constructor(options?: {
     rate?: number;        // Requests per second (default: 40)
-    concurrency?: number; // Parallel requests (default: 10)
     jitterMs?: number;    // Jitter in ms (default: 5)
     minTickMs?: number;   // Minimum tick delay (default: 1-2ms)
   }) {
-    this.queue = new RateLimitedQueue({
+    // Initialize rate limiter (40 RPS global, no global concurrency limit)
+    this.rateLimiter = new RateLimitedQueue({
       rate: options?.rate ?? 40,
-      concurrency: options?.concurrency ?? 10,
+      concurrency: 999, // No global concurrency limit, per-lane only
       jitterMs: options?.jitterMs ?? 5,
       minTickMs: options?.minTickMs ?? 2,
     });
 
-    // Start the continuous queue processor
-    this.startQueueProcessor();
-  }
-
-  /**
-   * Execute a single task through the rate-limited queue
-   * Returns a promise that resolves when the task completes
-   *
-   * @param task - The async task to execute
-   * @param lane - Optional lane identifier for fairness (e.g., 'anthropic', 'spotify', 'lastfm')
-   */
-  async execute<T>(task: Task<T>, lane: LaneKey = 'default'): Promise<T | null> {
-    console.log(`[RequestOrchestrator] execute() called with lane: ${lane}, queue size: ${this.queue.size()}, running: ${this.queueRunning}`);
-
-    return new Promise((resolve, reject) => {
-      // Directly enqueue the wrapped task
-      this.queue.enqueue(async () => {
-        console.log(`[RequestOrchestrator] Task starting for lane: ${lane}`);
-        try {
-          const result = await task();
-          console.log(`[RequestOrchestrator] Task completed for lane: ${lane}`);
-          resolve(result);
-          return result;
-        } catch (error) {
-          console.error(`[RequestOrchestrator] Task failed for lane: ${lane}`, error);
-          reject(error);
-          return null;
-        }
+    // Initialize lane configurations
+    for (const [lane, maxConcurrency] of Object.entries(LANE_LIMITS)) {
+      this.lanes.set(lane as LaneKey, {
+        maxConcurrency,
+        running: 0,
+        queue: []
       });
-      console.log(`[RequestOrchestrator] Task enqueued for lane: ${lane}, new queue size: ${this.queue.size()}`);
+    }
+
+    // Start continuous processing
+    this.rateLimiter.processContinuously().catch(err => {
+      console.error('[RequestOrchestrator] Fatal error:', err);
     });
   }
 
   /**
-   * Enqueue a batch of tasks with a batch ID
-   * All tasks will be rate-limited but can be awaited as a group
+   * Execute a single task with per-lane concurrency control
    *
-   * @param batchId - Unique identifier for this batch
-   * @param tasks - Array of tasks to execute
-   * @param lane - Optional lane identifier for fairness
+   * Flow:
+   * 1. Wait for lane slot (if lane is full)
+   * 2. Acquire lane slot
+   * 3. Enqueue in global rate limiter (40 RPS)
+   * 4. Execute task
+   * 5. Release lane slot
    */
-  enqueueBatch<T>(batchId: string, tasks: Task<T>[], lane: LaneKey = 'default'): void {
-    if (this.batches.has(batchId)) {
-      throw new Error(`Batch ${batchId} already exists`);
-    }
+  async execute<T>(task: Task<T>, lane: LaneKey = 'default'): Promise<T> {
+    const laneConfig = this.lanes.get(lane)!;
 
-    const batchTasks: PendingEntry<T>[] = [];
-    const promises: Promise<T | null>[] = [];
+    // Wait for lane slot if needed
+    await this.acquireLaneSlot(lane);
 
-    for (const task of tasks) {
-      const promise = new Promise<T | null>((resolve, reject) => {
-        batchTasks.push({ task, resolve, reject, lane });
+    try {
+      // Enqueue in rate limiter and execute
+      const result = await new Promise<T>((resolve, reject) => {
+        this.rateLimiter.enqueue(async () => {
+          try {
+            const value = await task();
+            resolve(value);
+            return value;
+          } catch (error) {
+            reject(error);
+            return null;
+          }
+        });
       });
-      promises.push(promise);
+
+      return result;
+    } finally {
+      // Always release lane slot
+      this.releaseLaneSlot(lane);
     }
-
-    const batch: Batch<T> = {
-      tasks: batchTasks,
-      promise: Promise.all(promises),
-    };
-
-    this.batches.set(batchId, batch);
-    this.scheduleProcessing();
   }
 
   /**
-   * Wait for a specific batch to complete
-   * Returns results in the same order tasks were enqueued
+   * Wait for a slot in the specified lane to become available
    */
-  async awaitBatch<T>(batchId: string): Promise<(T | null)[]> {
-    const batch = this.batches.get(batchId);
-    if (!batch) {
-      throw new Error(`Batch ${batchId} not found`);
-    }
+  private async acquireLaneSlot(lane: LaneKey): Promise<void> {
+    const config = this.lanes.get(lane)!;
 
-    const results = await batch.promise;
-    this.batches.delete(batchId);
-    return results;
-  }
-
-  /**
-   * Get the number of pending tasks in queue and batches
-   */
-  getPendingCount(): number {
-    let count = this.queue.size();
-    for (const batch of this.batches.values()) {
-      count += batch.tasks.length;
-    }
-    return count;
-  }
-
-  /**
-   * Start the continuous queue processor
-   * Uses RateLimitedQueue.processContinuously() which handles nested enqueueing automatically
-   */
-  private startQueueProcessor(): void {
-    if (this.queueRunning) {
-      console.log('[RequestOrchestrator] Queue processor already running');
+    if (config.running < config.maxConcurrency) {
+      // Slot available immediately
+      config.running++;
       return;
     }
 
-    console.log('[RequestOrchestrator] Starting continuous queue processor...');
-    this.queueRunning = true;
-
-    // Use the continuous processor - it will automatically pick up new tasks
-    // even if they're enqueued while processing is happening
-    this.queue.processContinuously().catch(err => {
-      console.error('[RequestOrchestrator] Fatal error in continuous processor:', err);
-      this.queueRunning = false;
+    // Wait for slot
+    return new Promise<void>((resolve) => {
+      config.queue.push(resolve);
     });
+  }
 
-    console.log('[RequestOrchestrator] Continuous queue processor started');
+  /**
+   * Release a slot in the specified lane
+   */
+  private releaseLaneSlot(lane: LaneKey): void {
+    const config = this.lanes.get(lane)!;
+    config.running--;
+
+    // Wake up next waiting task
+    const next = config.queue.shift();
+    if (next) {
+      config.running++;
+      next();
+    }
+  }
+
+  /**
+   * Execute a batch of tasks and wait for all to complete
+   *
+   * All tasks go through the same lane and respect its concurrency limit
+   * Returns results in same order as input tasks
+   */
+  async executeBatch<T>(tasks: Task<T>[], lane: LaneKey = 'default'): Promise<T[]> {
+    const promises = tasks.map(task => this.execute(task, lane));
+    return Promise.all(promises);
   }
 }
 
 /**
- * Create a global orchestrator instance
- * All API calls in the worker should go through this
+ * Global orchestrator instance
+ * All API calls in the worker go through this
  */
 export const globalOrchestrator = new RequestOrchestrator({
-  rate: 40,        // 40 RPS to stay under Cloudflare Workers limit
-  concurrency: 10, // Allow 10 parallel requests
-  jitterMs: 5,     // 0-5ms jitter to prevent thundering herd
+  rate: 40,     // 40 RPS (Cloudflare Workers limit)
+  jitterMs: 5,  // 0-5ms jitter
 });

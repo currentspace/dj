@@ -1,5 +1,6 @@
 // Spotify Tools for Anthropic Function Calling
 import { z } from 'zod';
+import { rateLimitedSpotifyCall } from '../utils/RateLimitedAPIClients';
 
 // Spotify API response schemas
 const SpotifyTrackSchema = z.object({
@@ -321,11 +322,15 @@ export async function executeSpotifyTool(
 async function searchSpotifyTracks(args: z.infer<typeof SearchTracksSchema>, token: string): Promise<SpotifyTrack[]> {
   const { query, limit = 10, filters } = args;
 
-  const response = await fetch(
-    `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=track&limit=${limit}`,
-    {
-      headers: { 'Authorization': `Bearer ${token}` }
-    }
+  const response = await rateLimitedSpotifyCall(
+    () => fetch(
+      `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=track&limit=${limit}`,
+      {
+        headers: { 'Authorization': `Bearer ${token}` }
+      }
+    ),
+    undefined,
+    'search:tracks'
   );
 
   if (!response.ok) {
@@ -369,11 +374,15 @@ async function getAudioFeatures(args: any, token: string) {
   }
 
   console.log(`[getAudioFeatures] Fetching audio features for ${track_ids.length} tracks`);
-  const response = await fetch(
-    `https://api.spotify.com/v1/audio-features?ids=${track_ids.join(',')}`,
-    {
-      headers: { 'Authorization': `Bearer ${token}` }
-    }
+  const response = await rateLimitedSpotifyCall(
+    () => fetch(
+      `https://api.spotify.com/v1/audio-features?ids=${track_ids.join(',')}`,
+      {
+        headers: { 'Authorization': `Bearer ${token}` }
+      }
+    ),
+    undefined,
+    'audio-features:batch'
   );
 
   console.log(`[getAudioFeatures] API response status: ${response.status}`);
@@ -401,11 +410,15 @@ async function getRecommendations(args: any, token: string) {
   if (args.target_valence !== undefined) params.append('target_valence', args.target_valence.toString());
   params.append('limit', (args.limit || 20).toString());
 
-  const response = await fetch(
-    `https://api.spotify.com/v1/recommendations?${params}`,
-    {
-      headers: { 'Authorization': `Bearer ${token}` }
-    }
+  const response = await rateLimitedSpotifyCall(
+    () => fetch(
+      `https://api.spotify.com/v1/recommendations?${params}`,
+      {
+        headers: { 'Authorization': `Bearer ${token}` }
+      }
+    ),
+    undefined,
+    'recommendations'
   );
 
   if (!response.ok) {
@@ -420,9 +433,13 @@ async function createPlaylist(args: any, token: string) {
   console.log(`[Tool:createPlaylist] Creating playlist: ${args.name}`);
 
   // Get user ID first
-  const userResponse = await fetch('https://api.spotify.com/v1/me', {
-    headers: { 'Authorization': `Bearer ${token}` }
-  });
+  const userResponse = await rateLimitedSpotifyCall(
+    () => fetch('https://api.spotify.com/v1/me', {
+      headers: { 'Authorization': `Bearer ${token}` }
+    }),
+    undefined,
+    'user:profile'
+  );
 
   if (!userResponse.ok) {
     console.error(`[Tool:createPlaylist] Failed to get user profile: ${userResponse.status}`);
@@ -434,20 +451,24 @@ async function createPlaylist(args: any, token: string) {
   console.log(`[Tool:createPlaylist] User ID: ${userId}`);
 
   // Create playlist
-  const createResponse = await fetch(
-    `https://api.spotify.com/v1/users/${userId}/playlists`,
-    {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        name: args.name,
-        description: args.description || '',
-        public: args.public || false
-      })
-    }
+  const createResponse = await rateLimitedSpotifyCall(
+    () => fetch(
+      `https://api.spotify.com/v1/users/${userId}/playlists`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          name: args.name,
+          description: args.description || '',
+          public: args.public || false
+        })
+      }
+    ),
+    undefined,
+    'playlist:create'
   );
 
   if (!createResponse.ok) {
@@ -460,18 +481,22 @@ async function createPlaylist(args: any, token: string) {
 
   // Add tracks if provided
   if (args.track_uris && args.track_uris.length > 0) {
-    const addResponse = await fetch(
-      `https://api.spotify.com/v1/playlists/${playlist.id}/tracks`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          uris: args.track_uris
-        })
-      }
+    const addResponse = await rateLimitedSpotifyCall(
+      () => fetch(
+        `https://api.spotify.com/v1/playlists/${playlist.id}/tracks`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            uris: args.track_uris
+          })
+        }
+      ),
+      undefined,
+      'playlist:add-tracks'
     );
 
     if (!addResponse.ok) {
@@ -508,14 +533,18 @@ async function modifyPlaylist(args: any, token: string) {
       break;
   }
 
-  const response = await fetch(url, {
-    method,
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(body)
-  });
+  const response = await rateLimitedSpotifyCall(
+    () => fetch(url, {
+      method,
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body)
+    }),
+    undefined,
+    `playlist:${action}`
+  );
 
   if (!response.ok) {
     throw new Error(`Failed to ${action} tracks: ${response.status}`);
@@ -538,11 +567,15 @@ async function analyzePlaylist(args: any, token: string) {
 
   // Get playlist details
   console.log(`[analyzePlaylist] Fetching playlist details for ID: ${playlist_id}`);
-  const playlistResponse = await fetch(
-    `https://api.spotify.com/v1/playlists/${playlist_id}`,
-    {
-      headers: { 'Authorization': `Bearer ${token}` }
-    }
+  const playlistResponse = await rateLimitedSpotifyCall(
+    () => fetch(
+      `https://api.spotify.com/v1/playlists/${playlist_id}`,
+      {
+        headers: { 'Authorization': `Bearer ${token}` }
+      }
+    ),
+    undefined,
+    'playlist:details'
   );
 
   console.log(`[analyzePlaylist] Playlist API response status: ${playlistResponse.status}`);
@@ -558,11 +591,15 @@ async function analyzePlaylist(args: any, token: string) {
 
   // Get tracks
   console.log(`[analyzePlaylist] Fetching playlist tracks...`);
-  const tracksResponse = await fetch(
-    `https://api.spotify.com/v1/playlists/${playlist_id}/tracks?limit=100`,
-    {
-      headers: { 'Authorization': `Bearer ${token}` }
-    }
+  const tracksResponse = await rateLimitedSpotifyCall(
+    () => fetch(
+      `https://api.spotify.com/v1/playlists/${playlist_id}/tracks?limit=100`,
+      {
+        headers: { 'Authorization': `Bearer ${token}` }
+      }
+    ),
+    undefined,
+    'playlist:tracks'
   );
 
   console.log(`[analyzePlaylist] Tracks API response status: ${tracksResponse.status}`);
@@ -601,11 +638,15 @@ async function analyzePlaylist(args: any, token: string) {
   let audioFeatures = [];
   if (trackIds.length > 0) {
     console.log(`[analyzePlaylist] Fetching audio features for ${trackIds.length} tracks...`);
-    const featuresResponse = await fetch(
-      `https://api.spotify.com/v1/audio-features?ids=${trackIds.slice(0, 100).join(',')}`,
-      {
-        headers: { 'Authorization': `Bearer ${token}` }
-      }
+    const featuresResponse = await rateLimitedSpotifyCall(
+      () => fetch(
+        `https://api.spotify.com/v1/audio-features?ids=${trackIds.slice(0, 100).join(',')}`,
+        {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }
+      ),
+      undefined,
+      'audio-features:analyze'
     );
 
     console.log(`[analyzePlaylist] Audio features API response status: ${featuresResponse.status}`);
@@ -690,11 +731,15 @@ async function analyzePlaylist(args: any, token: string) {
 async function getTrackDetails(args: any, token: string) {
   const { track_id } = args;
 
-  const response = await fetch(
-    `https://api.spotify.com/v1/tracks/${track_id}`,
-    {
-      headers: { 'Authorization': `Bearer ${token}` }
-    }
+  const response = await rateLimitedSpotifyCall(
+    () => fetch(
+      `https://api.spotify.com/v1/tracks/${track_id}`,
+      {
+        headers: { 'Authorization': `Bearer ${token}` }
+      }
+    ),
+    undefined,
+    'track:details'
   );
 
   if (!response.ok) {
@@ -704,11 +749,15 @@ async function getTrackDetails(args: any, token: string) {
   const track = await response.json() as any;
 
   // Also get audio features for complete info
-  const featuresResponse = await fetch(
-    `https://api.spotify.com/v1/audio-features/${track_id}`,
-    {
-      headers: { 'Authorization': `Bearer ${token}` }
-    }
+  const featuresResponse = await rateLimitedSpotifyCall(
+    () => fetch(
+      `https://api.spotify.com/v1/audio-features/${track_id}`,
+      {
+        headers: { 'Authorization': `Bearer ${token}` }
+      }
+    ),
+    undefined,
+    'audio-features:single'
   );
 
   let audioFeatures = null;
@@ -738,11 +787,15 @@ async function getTrackDetails(args: any, token: string) {
 async function getArtistInfo(args: any, token: string) {
   const { artist_id } = args;
 
-  const response = await fetch(
-    `https://api.spotify.com/v1/artists/${artist_id}`,
-    {
-      headers: { 'Authorization': `Bearer ${token}` }
-    }
+  const response = await rateLimitedSpotifyCall(
+    () => fetch(
+      `https://api.spotify.com/v1/artists/${artist_id}`,
+      {
+        headers: { 'Authorization': `Bearer ${token}` }
+      }
+    ),
+    undefined,
+    'artist:info'
   );
 
   if (!response.ok) {
@@ -755,11 +808,15 @@ async function getArtistInfo(args: any, token: string) {
 async function getArtistTopTracks(args: any, token: string) {
   const { artist_id, market = 'US' } = args;
 
-  const response = await fetch(
-    `https://api.spotify.com/v1/artists/${artist_id}/top-tracks?market=${market}`,
-    {
-      headers: { 'Authorization': `Bearer ${token}` }
-    }
+  const response = await rateLimitedSpotifyCall(
+    () => fetch(
+      `https://api.spotify.com/v1/artists/${artist_id}/top-tracks?market=${market}`,
+      {
+        headers: { 'Authorization': `Bearer ${token}` }
+      }
+    ),
+    undefined,
+    'artist:top-tracks'
   );
 
   if (!response.ok) {
@@ -773,11 +830,15 @@ async function getArtistTopTracks(args: any, token: string) {
 async function searchArtists(args: any, token: string) {
   const { query, limit = 10 } = args;
 
-  const response = await fetch(
-    `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=artist&limit=${limit}`,
-    {
-      headers: { 'Authorization': `Bearer ${token}` }
-    }
+  const response = await rateLimitedSpotifyCall(
+    () => fetch(
+      `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=artist&limit=${limit}`,
+      {
+        headers: { 'Authorization': `Bearer ${token}` }
+      }
+    ),
+    undefined,
+    'search:artists'
   );
 
   if (!response.ok) {
@@ -791,11 +852,15 @@ async function searchArtists(args: any, token: string) {
 async function getRelatedArtists(args: any, token: string) {
   const { artist_id } = args;
 
-  const response = await fetch(
-    `https://api.spotify.com/v1/artists/${artist_id}/related-artists`,
-    {
-      headers: { 'Authorization': `Bearer ${token}` }
-    }
+  const response = await rateLimitedSpotifyCall(
+    () => fetch(
+      `https://api.spotify.com/v1/artists/${artist_id}/related-artists`,
+      {
+        headers: { 'Authorization': `Bearer ${token}` }
+      }
+    ),
+    undefined,
+    'artist:related'
   );
 
   if (!response.ok) {
@@ -809,11 +874,15 @@ async function getRelatedArtists(args: any, token: string) {
 async function getAlbumInfo(args: any, token: string) {
   const { album_id } = args;
 
-  const response = await fetch(
-    `https://api.spotify.com/v1/albums/${album_id}`,
-    {
-      headers: { 'Authorization': `Bearer ${token}` }
-    }
+  const response = await rateLimitedSpotifyCall(
+    () => fetch(
+      `https://api.spotify.com/v1/albums/${album_id}`,
+      {
+        headers: { 'Authorization': `Bearer ${token}` }
+      }
+    ),
+    undefined,
+    'album:info'
   );
 
   if (!response.ok) {
@@ -827,11 +896,15 @@ async function getAlbumInfo(args: any, token: string) {
 
   let audioFeatures = [];
   if (trackIds.length > 0) {
-    const featuresResponse = await fetch(
-      `https://api.spotify.com/v1/audio-features?ids=${trackIds.join(',')}`,
-      {
-        headers: { 'Authorization': `Bearer ${token}` }
-      }
+    const featuresResponse = await rateLimitedSpotifyCall(
+      () => fetch(
+        `https://api.spotify.com/v1/audio-features?ids=${trackIds.join(',')}`,
+        {
+          headers: { 'Authorization': `Bearer ${token}` }
+        }
+      ),
+      undefined,
+      'audio-features:album'
     );
 
     if (featuresResponse.ok) {
@@ -847,11 +920,15 @@ async function getAlbumInfo(args: any, token: string) {
 }
 
 async function getAvailableGenres(token: string) {
-  const response = await fetch(
-    'https://api.spotify.com/v1/recommendations/available-genre-seeds',
-    {
-      headers: { 'Authorization': `Bearer ${token}` }
-    }
+  const response = await rateLimitedSpotifyCall(
+    () => fetch(
+      'https://api.spotify.com/v1/recommendations/available-genre-seeds',
+      {
+        headers: { 'Authorization': `Bearer ${token}` }
+      }
+    ),
+    undefined,
+    'genres:available'
   );
 
   if (!response.ok) {

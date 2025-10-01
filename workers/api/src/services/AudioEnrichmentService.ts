@@ -8,7 +8,7 @@
  * 3. If no ISRC, fallback to MusicBrainz to find ISRC, then retry Deezer
  */
 
-import { getGlobalOrchestrator } from '../utils/RateLimitedAPIClients';
+import { rateLimitedDeezerCall, getGlobalOrchestrator } from '../utils/RateLimitedAPIClients';
 
 export interface BPMEnrichment {
   bpm: number | null;
@@ -316,8 +316,11 @@ export class AudioEnrichmentService {
       const url = `https://api.deezer.com/search?q=${encodeURIComponent(`isrc:${isrc}`)}`;
       console.log(`[BPMEnrichment] Deezer search URL: ${url}`);
 
-      const orchestrator = getGlobalOrchestrator();
-      const response = await orchestrator.execute(() => fetch(url));
+      const response = await rateLimitedDeezerCall(
+        () => fetch(url),
+        undefined,
+        `search:${isrc}`
+      );
 
       console.log(`[BPMEnrichment] Deezer search response status: ${response?.status || 'null'}`);
       if (!response || !response.ok) {
@@ -342,8 +345,11 @@ export class AudioEnrichmentService {
       const url = `https://api.deezer.com/track/isrc:${encodeURIComponent(isrc)}`;
       console.log(`[BPMEnrichment] Deezer direct ISRC URL: ${url}`);
 
-      const orchestrator = getGlobalOrchestrator();
-      const response = await orchestrator.execute(() => fetch(url));
+      const response = await rateLimitedDeezerCall(
+        () => fetch(url),
+        undefined,
+        `isrc:${isrc}`
+      );
 
       console.log(`[BPMEnrichment] Deezer direct ISRC response status: ${response?.status || 'null'}`);
       if (!response || !response.ok) {
@@ -369,8 +375,11 @@ export class AudioEnrichmentService {
       const url = `https://api.deezer.com/track/${id}`;
       console.log(`[BPMEnrichment] Fetching Deezer track by ID: ${url}`);
 
-      const orchestrator = getGlobalOrchestrator();
-      const response = await orchestrator.execute(() => fetch(url));
+      const response = await rateLimitedDeezerCall(
+        () => fetch(url),
+        undefined,
+        `track:${id}`
+      );
 
       console.log(`[BPMEnrichment] Deezer track by ID response status: ${response?.status || 'null'}`);
       if (!response || !response.ok) {

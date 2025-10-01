@@ -1,21 +1,24 @@
 /**
  * Rate-Limited API Client Wrappers
  *
- * All external API calls should go through these wrappers to ensure:
- * 1. Unified rate limiting (40 RPS across ALL calls)
- * 2. Proper error handling and logging
- * 3. Batching support for bulk operations
- * 4. Respect for Cloudflare Workers RPC limits
+ * Architecture:
+ * - Global rate limit: 40 RPS (Cloudflare Workers constraint)
+ * - Per-lane concurrency: Prevent SDK/service overload
+ * - anthropic: 2 concurrent (Anthropic SDK limitation in Workers)
+ * - spotify: 5 concurrent
+ * - lastfm: 10 concurrent
+ * - deezer: 10 concurrent
  *
  * Usage:
  * ```typescript
  * // Single call
- * const result = await rateLimitedAnthropicCall(() => anthropic.messages.create(...));
+ * const result = await rateLimitedAnthropicCall(() => anthropic.invoke(...));
  *
- * // Batch of calls
- * const orchestrator = getGlobalOrchestrator();
- * orchestrator.enqueueBatch('spotify-searches', searches.map(q => () => spotify.search(q)));
- * const results = await orchestrator.awaitBatch('spotify-searches');
+ * // Batch of calls (all await together, respecting lane limits)
+ * const results = await Promise.all([
+ *   rateLimitedSpotifyCall(() => spotify.getTrack(id1)),
+ *   rateLimitedSpotifyCall(() => spotify.getTrack(id2))
+ * ]);
  * ```
  */
 
@@ -23,14 +26,14 @@ import { globalOrchestrator } from './RequestOrchestrator';
 import type { ServiceLogger } from './ServiceLogger';
 
 /**
- * Wrap an Anthropic API call with rate limiting
- * Use for both main Claude calls and Haiku narrator calls
+ * Wrap an Anthropic API call with rate limiting and concurrency control
+ * Lane: anthropic (max 2 concurrent)
  */
 export async function rateLimitedAnthropicCall<T>(
   call: () => Promise<T>,
   logger?: ServiceLogger,
   context?: string
-): Promise<T | null> {
+): Promise<T> {
   return globalOrchestrator.execute(async () => {
     const start = performance.now();
     try {
@@ -41,7 +44,6 @@ export async function rateLimitedAnthropicCall<T>(
       return result;
     } catch (error) {
       const duration = performance.now() - start;
-      // Extract more details from the error
       const errorDetails: any = { context };
       if (error instanceof Error) {
         errorDetails.message = error.message;
@@ -52,17 +54,18 @@ export async function rateLimitedAnthropicCall<T>(
       logger?.error(`Anthropic API call failed after ${duration.toFixed(0)}ms`, error, errorDetails);
       throw error;
     }
-  }, 'anthropic'); // Use 'anthropic' lane for fairness
+  }, 'anthropic');
 }
 
 /**
- * Wrap a Spotify API call with rate limiting
+ * Wrap a Spotify API call with rate limiting and concurrency control
+ * Lane: spotify (max 5 concurrent)
  */
 export async function rateLimitedSpotifyCall<T>(
   call: () => Promise<T>,
   logger?: ServiceLogger,
   context?: string
-): Promise<T | null> {
+): Promise<T> {
   return globalOrchestrator.execute(async () => {
     const start = performance.now();
     try {
@@ -76,17 +79,18 @@ export async function rateLimitedSpotifyCall<T>(
       logger?.error(`Spotify API call failed after ${duration.toFixed(0)}ms`, error, { context });
       throw error;
     }
-  }, 'spotify'); // Use 'spotify' lane for fairness
+  }, 'spotify');
 }
 
 /**
- * Wrap a Last.fm API call with rate limiting
+ * Wrap a Last.fm API call with rate limiting and concurrency control
+ * Lane: lastfm (max 10 concurrent)
  */
 export async function rateLimitedLastFmCall<T>(
   call: () => Promise<T>,
   logger?: ServiceLogger,
   context?: string
-): Promise<T | null> {
+): Promise<T> {
   return globalOrchestrator.execute(async () => {
     const start = performance.now();
     try {
@@ -100,24 +104,37 @@ export async function rateLimitedLastFmCall<T>(
       logger?.error(`Last.fm API call failed after ${duration.toFixed(0)}ms`, error, { context });
       throw error;
     }
-  }, 'lastfm'); // Use 'lastfm' lane for fairness
+  }, 'lastfm');
 }
 
 /**
- * Get the global orchestrator for advanced batch management
+ * Wrap a Deezer API call with rate limiting and concurrency control
+ * Lane: deezer (max 10 concurrent)
+ */
+export async function rateLimitedDeezerCall<T>(
+  call: () => Promise<T>,
+  logger?: ServiceLogger,
+  context?: string
+): Promise<T> {
+  return globalOrchestrator.execute(async () => {
+    const start = performance.now();
+    try {
+      logger?.debug(`Deezer API call starting${context ? `: ${context}` : ''}`);
+      const result = await call();
+      const duration = performance.now() - start;
+      logger?.debug(`Deezer API call completed in ${duration.toFixed(0)}ms${context ? `: ${context}` : ''}`);
+      return result;
+    } catch (error) {
+      const duration = performance.now() - start;
+      logger?.error(`Deezer API call failed after ${duration.toFixed(0)}ms`, error, { context });
+      throw error;
+    }
+  }, 'deezer');
+}
+
+/**
+ * Get the global orchestrator instance
  */
 export function getGlobalOrchestrator() {
   return globalOrchestrator;
-}
-
-/**
- * Batch helper: Execute multiple tasks in parallel with rate limiting
- */
-export async function executeBatch<T>(
-  tasks: Array<() => Promise<T>>,
-  batchId?: string
-): Promise<(T | null)[]> {
-  const id = batchId || `batch-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  globalOrchestrator.enqueueBatch(id, tasks);
-  return globalOrchestrator.awaitBatch(id);
 }

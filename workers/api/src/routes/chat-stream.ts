@@ -536,15 +536,7 @@ async function executeSpotifyToolWithProgress(
                     data: `🎧 Enriched ${i + 1}/${tracksForLastFm.length} tracks...`
                   });
                 }
-
-                // Keep fallback branch
-                if (false) {
-                    sseWriter.writeAsync({ type: 'thinking', data: `🎧 Track enrichment: ${signalsMap.size}/${tracksForLastFm.length}...` });
-                  }
-                }
               }
-
-              // No manual rate limiting needed - orchestrator handles it via continuous queue
             } catch (error) {
               getChildLogger('LastFm').error(`Failed for track ${track.name}`, error);
             }
