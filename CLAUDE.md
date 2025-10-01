@@ -39,7 +39,9 @@ dj/
 │   ├── api/                # Main API worker (@dj/api-worker)
 │   │   ├── src/
 │   │   │   ├── routes/    # API endpoints
-│   │   │   └── lib/       # Utilities
+│   │   │   ├── services/  # Business logic (Last.fm, Deezer enrichment)
+│   │   │   ├── lib/       # Utilities (Spotify tools, progress narrator)
+│   │   │   └── utils/     # Shared utilities (RateLimitedQueue)
 │   │   └── wrangler.jsonc
 │   └── webhooks/           # Webhook handler (@dj/webhook-worker)
 │
@@ -85,7 +87,9 @@ pnpm test                  # Run tests
 - **Framework**: Hono 4.9
 - **AI**: Langchain + Anthropic Claude (via @langchain/anthropic)
 - **MCP**: @langchain/mcp-adapters for tool integration
-- **Storage**: Cloudflare KV (session management)
+- **Storage**: Cloudflare KV (session management + enrichment cache)
+- **Data Enrichment**: Deezer API (BPM, rank, gain), Last.fm API (tags, popularity), MusicBrainz (ISRC fallback)
+- **Rate Limiting**: Custom RateLimitedQueue (40 TPS)
 - **Build**: tsup
 
 ### APIs & Protocols
@@ -103,9 +107,24 @@ pnpm test                  # Run tests
 ### Spotify Tools (via Claude)
 
 **Iterative Data Fetching:**
-1. **analyze_playlist** - Returns summary only (avg metrics + track IDs)
+1. **analyze_playlist** - Comprehensive playlist analysis with Deezer + Last.fm enrichment
+   - Parameters: `playlist_id` (optional, auto-injected from conversation context)
+   - Returns: metadata_analysis, deezer_analysis, lastfm_analysis, track_ids
+   - Enriches up to 100 tracks with BPM/rank/gain from Deezer
+   - Enriches up to 50 tracks with tags/popularity from Last.fm
+   - Automatically fetches unique artist info separately
+   - Size: ~2-5KB depending on playlist size
+
 2. **get_playlist_tracks** - Paginated track fetching (20-50 at a time)
-3. **get_track_details** - Full metadata for specific tracks (album art, etc.)
+   - Parameters: `playlist_id` (optional, auto-injected), `offset` (default 0), `limit` (1-50, default 20)
+   - Returns: Compact track info (name, artists, duration, popularity, uri, album)
+   - Use after analyze_playlist to get actual track names/artists
+
+3. **get_track_details** - Full metadata for specific tracks
+   - Parameters: `track_ids` (array of 1-50 track IDs)
+   - Returns: Full track objects with album art, release dates, external URLs, preview URLs
+   - Use when user asks for specific track details
+
 4. **get_audio_features** - Audio characteristics (tempo, energy, danceability)
 5. **search_spotify_tracks** - Search Spotify catalog
 6. **get_recommendations** - AI-powered recommendations
@@ -136,6 +155,7 @@ Set via `wrangler secret put` or GitHub Actions:
 - `ANTHROPIC_API_KEY` - Claude API key (get from console.anthropic.com)
 - `SPOTIFY_CLIENT_ID` - Spotify app ID
 - `SPOTIFY_CLIENT_SECRET` - Spotify app secret
+- `LASTFM_API_KEY` - (Optional) Last.fm API key for crowd-sourced tags and popularity
 - `ENVIRONMENT` - Set to "production" (in wrangler.jsonc vars)
 - `FRONTEND_URL` - "https://dj.current.space" (in wrangler.jsonc vars)
 
@@ -146,6 +166,7 @@ Create `.dev.vars` in `workers/api/`:
 ANTHROPIC_API_KEY=sk-ant-...
 SPOTIFY_CLIENT_ID=your_client_id
 SPOTIFY_CLIENT_SECRET=your_client_secret
+LASTFM_API_KEY=your_lastfm_key_optional
 ENVIRONMENT=development
 ```
 
@@ -153,11 +174,20 @@ ENVIRONMENT=development
 
 ## Cloudflare Infrastructure
 
-### KV Namespaces (Session Storage)
+### KV Namespaces
+
+**1. SESSIONS** - OAuth session storage
 - **Production**: `c81455430c6d4aa2a5da4bf2c1fcd3a2`
 - **Preview**: `859d29ec06564975a30d67be3a960b89`
 - **TTL**: 4 hours for session tokens
 - **Purpose**: Store Spotify token → session token mappings for MCP security
+
+**2. AUDIO_FEATURES_CACHE** - Enrichment data cache
+- **Production**: `eb3657a3d4f045edb31efba6567eca0f`
+- **Preview**: `96833dd43ab34769be127f648d29e116`
+- **TTL**: 90 days (Deezer BPM/rank/gain), 7 days (Last.fm tags/popularity)
+- **Purpose**: Cache BPM data from Deezer, crowd-sourced tags from Last.fm, artist info
+- **Keys**: `bpm:{track_id}`, `lastfm:{hash}`, `artist_{hash}`
 
 ### Worker Configuration (wrangler.jsonc)
 - **Entry Point**: `workers/api/dist/index.js`
@@ -204,6 +234,152 @@ ENVIRONMENT=development
 
 This prevents the 55KB payload issue while giving Claude flexibility to fetch what's actually needed.
 
+## Data Enrichment Services
+
+### AudioEnrichmentService (Deezer + MusicBrainz)
+**File**: `workers/api/src/services/AudioEnrichmentService.ts`
+
+**Purpose**: Enrich tracks with BPM, rank, and gain data from Deezer's free API
+
+**Strategy**:
+1. Extract ISRC from Spotify track (`track.external_ids.isrc`)
+2. Query Deezer by ISRC: `GET https://api.deezer.com/track/isrc:{isrc}`
+3. Fallback: If no ISRC in Spotify, use MusicBrainz to find ISRC by artist+track+duration
+4. Cache results in KV with 90-day TTL (even null results to avoid repeat lookups)
+
+**Data Returned**:
+- `bpm`: Beats per minute (often null, Deezer data incomplete but available for some tracks)
+- `gain`: Audio normalization level in dB
+- `rank`: Deezer popularity rank (higher = more popular)
+- `release_date`: Full release date from Deezer catalog
+- `source`: 'deezer' or 'deezer-via-musicbrainz'
+
+**Rate Limiting**: 40 tracks/second (25ms delay between requests)
+
+**Validation**: BPM must be 45-220 to be considered valid
+
+### LastFmService (Crowd-sourced Data)
+**File**: `workers/api/src/services/LastFmService.ts`
+
+**Purpose**: Fetch crowd-sourced tags, popularity, and similarity data
+
+**Strategy**:
+1. Get canonical track/artist names via `track.getCorrection`
+2. Fetch track info: listeners, playcounts, MBID, album, wiki, duration
+3. Fetch top tags: genre/mood/era labels from community
+4. Fetch similar tracks: recommendations for transitions
+5. Separately batch-fetch unique artist info (bio, tags, similar artists, images)
+6. Cache all results with 7-day TTL
+
+**Data Returned per Track**:
+- `topTags`: Array of crowd-applied genre/mood tags
+- `listeners`: Last.fm listener count
+- `playcount`: Total play count
+- `similar`: Array of similar tracks with match scores
+- `album`: Album title, artist, MBID, URL, image
+- `wiki`: Track description, summary, published date
+- `artistInfo`: Bio, tags, similar artists, images (fetched separately)
+
+**Optimization**:
+- Uses RateLimitedQueue at 40 TPS
+- Fetches unique artists separately to avoid N+1 queries (e.g., 50 tracks with 20 unique artists = 20 API calls instead of 50)
+- Updates cache with complete artist info after attachment
+
+**Aggregation Methods**:
+- `aggregateTags()`: Combines tags from multiple tracks with counts
+- `calculateAveragePopularity()`: Averages listeners/playcounts across playlist
+
+### RateLimitedQueue
+**File**: `workers/api/src/utils/RateLimitedQueue.ts`
+
+**Purpose**: Process async tasks at controlled rate to respect API limits
+
+**Configuration**: 40 tasks per second (25ms interval between tasks)
+
+**Implementation**: In-memory queue with precise timing (not sleep-based)
+- Tracks exact time since last execution
+- Waits only the remaining interval needed
+- Supports progress callbacks for streaming updates
+
+**Usage**:
+```typescript
+const queue = new RateLimitedQueue<T>(40); // 40 TPS
+queue.enqueue(async () => { /* task */ });
+await queue.processAllWithCallback((result, index, total) => {
+  // Stream progress to user
+});
+```
+
+### analyze_playlist Enhanced Return Format
+
+```json
+{
+  "playlist_name": "string",
+  "playlist_description": "string",
+  "total_tracks": "number",
+
+  "metadata_analysis": {
+    "avg_popularity": "number (0-100)",
+    "avg_duration_ms": "number",
+    "avg_duration_minutes": "number",
+    "explicit_tracks": "number",
+    "explicit_percentage": "number",
+    "top_genres": ["string"],
+    "release_year_range": {
+      "oldest": "number",
+      "newest": "number",
+      "average": "number"
+    },
+    "total_artists": "number"
+  },
+
+  "deezer_analysis": {
+    "total_checked": "number",
+    "tracks_found": "number",
+    "bpm": {
+      "avg": "number",
+      "range": { "min": "number", "max": "number" },
+      "sample_size": "number"
+    },
+    "rank": { /* same structure */ },
+    "gain": { /* same structure */ },
+    "source": "deezer"
+  },
+
+  "lastfm_analysis": {
+    "crowd_tags": [{ "tag": "string", "count": "number" }],
+    "avg_listeners": "number",
+    "avg_playcount": "number",
+    "similar_tracks": ["Artist - Track"],
+    "sample_size": "number",
+    "artists_enriched": "number",
+    "source": "lastfm"
+  },
+
+  "track_ids": ["spotify:track:..."],
+  "message": "string"
+}
+```
+
+### Integration Flow in chat-stream.ts
+
+1. Fetch playlist metadata (name, description, track count)
+2. Fetch tracks from Spotify (up to 100)
+3. Calculate metadata analysis (popularity, genres, release years, duration, explicit %)
+4. **Deezer enrichment** (if `AUDIO_FEATURES_CACHE` KV available):
+   - Process up to 100 tracks at 40 TPS
+   - Collect BPM, rank, gain statistics
+   - Stream progress every 5 tracks
+5. **Last.fm enrichment** (if `LASTFM_API_KEY` configured):
+   - Fetch track signals for up to 50 tracks (4 API calls each, no artist info)
+   - Deduplicate artists and batch-fetch unique artist info (1 API call each)
+   - Attach artist info to track signals and update cache
+   - Aggregate tags and calculate average popularity
+   - Stream progress every 2 tracks
+6. Return comprehensive analysis object
+
+**Error Handling**: All enrichment is best-effort and non-blocking. If Deezer or Last.fm fail, analysis continues without that data.
+
 ## Conversation Flow
 
 ### Chat Streaming Flow (SSE)
@@ -218,10 +394,12 @@ This prevents the 55KB payload issue while giving Claude flexibility to fetch wh
 5. Frontend parses SSE events and updates UI in real-time
 
 ### SSE Event Types
-- `thinking` - Claude is processing
+- `thinking` - Claude is processing (includes progress updates during enrichment)
 - `content` - Text response chunks
 - `tool_start` - Tool execution started
 - `tool_end` - Tool execution completed
+- `log` - Development logging (debug mode)
+- `debug` - Debug information (debug mode)
 - `done` - Stream finished
 - Heartbeats: `: heartbeat\n\n`
 

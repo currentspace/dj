@@ -7,7 +7,14 @@ An AI-powered DJ app that creates Spotify playlists using Anthropic's Claude API
 - **Conversational AI DJ**: Chat with Claude to create personalized playlists
 - **Real-time Streaming**: Server-Sent Events (SSE) for live responses
 - **Spotify Integration**: Direct playlist creation, search, and audio analysis
+- **Advanced Playlist Analysis**:
+  - BPM detection via Deezer API
+  - Crowd-sourced genre tags and popularity via Last.fm
+  - Artist biographies and similar artists
+  - Smart caching with 90-day TTL (Deezer) and 7-day TTL (Last.fm)
+  - Rate-limited at 40 requests/second
 - **MCP Protocol**: Advanced tool calling for iterative playlist curation
+- **Playlist-Scoped Conversations**: Maintains separate conversation history per playlist
 - **Edge Deployment**: Cloudflare Workers for global low-latency performance
 
 ## Setup
@@ -32,10 +39,16 @@ pnpm install
 ANTHROPIC_API_KEY=sk-ant-your_key_here
 SPOTIFY_CLIENT_ID=your_spotify_client_id
 SPOTIFY_CLIENT_SECRET=your_spotify_client_secret
+LASTFM_API_KEY=your_lastfm_api_key_optional
 ENVIRONMENT=development
 ```
 
 **Important**: Never commit `.dev.vars` to git.
+
+**Optional**: To enable Last.fm enrichment (crowd-sourced tags, popularity, artist info):
+1. Get API key from [Last.fm API Account](https://www.last.fm/api/account/create)
+2. Add `LASTFM_API_KEY` to `.dev.vars`
+3. Note: Deezer and MusicBrainz require no API keys
 
 3. Run development servers:
 ```bash
@@ -108,6 +121,8 @@ pnpm run deploy
 - **Backend**: Cloudflare Workers, Hono, Langchain
 - **AI**: Anthropic Claude API with streaming
 - **APIs**: Spotify Web API, Model Context Protocol (MCP)
-- **Storage**: Cloudflare KV (session management)
+- **Data Enrichment**: Deezer API (BPM), Last.fm API (tags, popularity), MusicBrainz (ISRC fallback)
+- **Rate Limiting**: Custom RateLimitedQueue (40 TPS)
+- **Storage**: Cloudflare KV (session management + enrichment cache)
 - **Build**: pnpm monorepo with workspace dependencies
 - **Deployment**: Cloudflare Workers with static assets
