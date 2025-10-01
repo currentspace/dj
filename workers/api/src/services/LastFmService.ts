@@ -10,14 +10,56 @@
  */
 
 export interface LastFmSignals {
+  // Track identifiers
   canonicalArtist: string;
   canonicalTrack: string;
+  mbid: string | null;
+  url: string | null; // Last.fm track URL
+  duration: number | null; // Track duration in seconds
+
+  // Track popularity
   listeners: number;
   playcount: number;
-  mbid: string | null;
-  topTags: string[];
-  similar: Array<{ artist: string; name: string; match: number }>;
   userplaycount?: number;
+
+  // Tags/genres
+  topTags: string[];
+
+  // Album info
+  album: {
+    title: string;
+    artist: string;
+    mbid: string | null;
+    url: string | null;
+    image: string | null; // Album art URL (largest available)
+  } | null;
+
+  // Track description
+  wiki: {
+    summary: string;
+    content: string;
+    published: string;
+  } | null;
+
+  // Similar tracks (for transitions/recommendations)
+  similar: Array<{ artist: string; name: string; match: number }>;
+
+  // Artist info (enriched data)
+  artistInfo: {
+    listeners: number;
+    playcount: number;
+    bio: {
+      summary: string;
+      content: string;
+    } | null;
+    tags: string[];
+    similar: Array<{ name: string; url: string }>;
+    images: {
+      small: string | null;
+      medium: string | null;
+      large: string | null;
+    };
+  } | null;
 }
 
 export interface LastFmCache {
@@ -64,7 +106,7 @@ export class LastFmService {
       const canonicalArtist = corrected?.artist || track.artist;
       const canonicalTrack = corrected?.track || track.name;
 
-      // Step 2: Get track info (popularity, MBID)
+      // Step 2: Get track info (popularity, MBID, album, wiki, duration)
       const info = await this.getTrackInfo(canonicalArtist, canonicalTrack);
 
       // Step 3: Get top tags
@@ -73,15 +115,36 @@ export class LastFmService {
       // Step 4: Get similar tracks
       const similar = await this.getSimilarTracks(canonicalArtist, canonicalTrack);
 
+      // Step 5: Get artist info (bio, tags, similar artists)
+      const artistInfo = await this.getArtistInfo(canonicalArtist);
+
       const signals: LastFmSignals = {
+        // Track identifiers
         canonicalArtist,
         canonicalTrack,
+        mbid: info?.mbid || null,
+        url: info?.url || null,
+        duration: info?.duration || null,
+
+        // Track popularity
         listeners: info?.listeners || 0,
         playcount: info?.playcount || 0,
-        mbid: info?.mbid || null,
+        userplaycount: info?.userplaycount,
+
+        // Tags/genres
         topTags: tags || [],
+
+        // Album info
+        album: info?.album || null,
+
+        // Track description
+        wiki: info?.wiki || null,
+
+        // Similar tracks
         similar: similar || [],
-        userplaycount: info?.userplaycount
+
+        // Artist info
+        artistInfo
       };
 
       // Cache the result
@@ -152,13 +215,27 @@ export class LastFmService {
   }
 
   /**
-   * Get track info (listeners, playcount, MBID)
+   * Get track info (listeners, playcount, MBID, album, wiki, etc.)
    */
   private async getTrackInfo(artist: string, track: string): Promise<{
     listeners: number;
     playcount: number;
     mbid: string | null;
+    url: string | null;
+    duration: number | null;
     userplaycount?: number;
+    album: {
+      title: string;
+      artist: string;
+      mbid: string | null;
+      url: string | null;
+      image: string | null;
+    } | null;
+    wiki: {
+      summary: string;
+      content: string;
+      published: string;
+    } | null;
   } | null> {
     try {
       const data = await this.callApi('track.getInfo', {
@@ -170,11 +247,41 @@ export class LastFmService {
       const trackData = data?.track;
       if (!trackData) return null;
 
+      // Extract album info
+      let album = null;
+      if (trackData.album) {
+        // Get largest available album image
+        const images = trackData.album.image || [];
+        const largestImage = images.find((img: any) => img.size === 'extralarge' || img.size === 'large' || img.size === 'medium');
+
+        album = {
+          title: trackData.album.title || trackData.album['#text'] || '',
+          artist: trackData.album.artist || artist,
+          mbid: trackData.album.mbid || null,
+          url: trackData.album.url || null,
+          image: largestImage?.['#text'] || null
+        };
+      }
+
+      // Extract wiki info
+      let wiki = null;
+      if (trackData.wiki) {
+        wiki = {
+          summary: trackData.wiki.summary || '',
+          content: trackData.wiki.content || '',
+          published: trackData.wiki.published || ''
+        };
+      }
+
       return {
         listeners: parseInt(trackData.listeners || '0', 10),
         playcount: parseInt(trackData.playcount || '0', 10),
         mbid: trackData.mbid || null,
-        userplaycount: trackData.userplaycount ? parseInt(trackData.userplaycount, 10) : undefined
+        url: trackData.url || null,
+        duration: trackData.duration ? parseInt(trackData.duration, 10) : null,
+        userplaycount: trackData.userplaycount ? parseInt(trackData.userplaycount, 10) : undefined,
+        album,
+        wiki
       };
     } catch (error) {
       console.error('[LastFm] Track info failed:', error);
@@ -226,6 +333,68 @@ export class LastFmService {
     } catch (error) {
       console.error('[LastFm] Similar tracks failed:', error);
       return [];
+    }
+  }
+
+  /**
+   * Get artist info (bio, tags, similar artists, stats)
+   */
+  private async getArtistInfo(artist: string): Promise<{
+    listeners: number;
+    playcount: number;
+    bio: { summary: string; content: string } | null;
+    tags: string[];
+    similar: Array<{ name: string; url: string }>;
+    images: { small: string | null; medium: string | null; large: string | null };
+  } | null> {
+    try {
+      const data = await this.callApi('artist.getInfo', {
+        artist,
+        autocorrect: '1'
+      });
+
+      const artistData = data?.artist;
+      if (!artistData) return null;
+
+      // Extract bio
+      let bio = null;
+      if (artistData.bio) {
+        bio = {
+          summary: artistData.bio.summary || '',
+          content: artistData.bio.content || ''
+        };
+      }
+
+      // Extract tags
+      const tags = artistData.tags?.tag || [];
+      const tagNames = Array.isArray(tags) ? tags.slice(0, 10).map((t: any) => t.name) : [];
+
+      // Extract similar artists
+      const similar = artistData.similar?.artist || [];
+      const similarArtists = Array.isArray(similar) ? similar.slice(0, 10).map((a: any) => ({
+        name: a.name || '',
+        url: a.url || ''
+      })) : [];
+
+      // Extract images
+      const images = artistData.image || [];
+      const imageMap = {
+        small: images.find((img: any) => img.size === 'small')?.[' #text'] || null,
+        medium: images.find((img: any) => img.size === 'medium')?['#text'] || null,
+        large: images.find((img: any) => img.size === 'large' || img.size === 'extralarge')?['#text'] || null
+      };
+
+      return {
+        listeners: parseInt(artistData.stats?.listeners || '0', 10),
+        playcount: parseInt(artistData.stats?.playcount || '0', 10),
+        bio,
+        tags: tagNames,
+        similar: similarArtists,
+        images: imageMap
+      };
+    } catch (error) {
+      console.error('[LastFm] Artist info failed:', error);
+      return null;
     }
   }
 
