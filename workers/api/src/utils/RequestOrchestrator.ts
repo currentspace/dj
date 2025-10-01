@@ -36,6 +36,7 @@ export class RequestOrchestrator {
   private batches = new Map<string, Batch<any>>();
   private pendingByLane = new Map<LaneKey, PendingEntry<any>[]>();
   private processingTimer: number | null = null;
+  private isProcessing = false;
 
   constructor(options?: {
     rate?: number;        // Requests per second (default: 40)
@@ -182,39 +183,61 @@ export class RequestOrchestrator {
   /**
    * Process all pending tasks through the rate-limited queue
    * Uses round-robin fairness to prevent lane starvation
+   *
+   * IMPORTANT: This doesn't block - it feeds the queue and returns immediately
+   * to allow new tasks to be enqueued while processing continues
    */
   private async processPendingTasks(): Promise<void> {
-    // Collect all pending tasks from lanes (round-robin)
-    const allTasks: PendingEntry<any>[] = this.takeRoundRobin();
+    // Prevent concurrent draining
+    if (this.isProcessing) return;
+    this.isProcessing = true;
 
-    // Add batch tasks
-    for (const batch of this.batches.values()) {
-      allTasks.push(...batch.tasks);
-      batch.tasks = []; // Clear processed tasks
-    }
+    try {
+      // Collect all pending tasks from lanes (round-robin)
+      const allTasks: PendingEntry<any>[] = this.takeRoundRobin();
 
-    if (allTasks.length === 0) return;
+      // Add batch tasks
+      for (const batch of this.batches.values()) {
+        allTasks.push(...batch.tasks);
+        batch.tasks = []; // Clear processed tasks
+      }
 
-    // Clear queue from any previous use
-    this.queue.clear();
+      if (allTasks.length === 0) {
+        this.isProcessing = false;
+        return;
+      }
 
-    // Enqueue all tasks into the rate-limited queue
-    for (const { task, resolve, reject } of allTasks) {
-      this.queue.enqueue(async () => {
-        try {
-          const result = await task();
-          resolve(result);
-          return result;
-        } catch (error) {
-          // Reject the promise but return null to queue
-          reject(error);
-          return null;
+      // Clear queue from any previous use
+      this.queue.clear();
+
+      // Enqueue all tasks into the rate-limited queue
+      for (const { task, resolve, reject } of allTasks) {
+        this.queue.enqueue(async () => {
+          try {
+            const result = await task();
+            resolve(result);
+            return result;
+          } catch (error) {
+            // Reject the promise but return null to queue
+            reject(error);
+            return null;
+          }
+        });
+      }
+
+      // Start processing in background (don't await!)
+      // This allows new tasks to be enqueued while processing continues
+      this.queue.processAll().finally(() => {
+        this.isProcessing = false;
+        // Check if more tasks were added while we were processing
+        if (this.getPendingCount() > 0) {
+          this.scheduleProcessing();
         }
       });
+    } catch (error) {
+      this.isProcessing = false;
+      throw error;
     }
-
-    // Process all tasks through token bucket rate limiter
-    await this.queue.processAll();
   }
 }
 
