@@ -1213,9 +1213,9 @@ function createStreamingSpotifyTools(
           data: `🤖 Using AI to curate ${args.top_n} best picks from ${args.candidate_tracks.length} candidates...`
         });
 
-        // Use Claude Haiku for fast, cost-effective curation
+        // Use Claude Sonnet 4.5 for high-quality intelligent curation
         const anthropic = new AnthropicBedrock({
-          model: 'claude-haiku-4-5-20250514',
+          model: 'claude-sonnet-4-5-20250929',
           anthropicApiKey: env.ANTHROPIC_API_KEY
         });
 
@@ -1607,7 +1607,7 @@ When user asks for track recommendations or similar music, use these specialized
 4. CURATE: curate_recommendations - AI-powered intelligent ranking
    - Takes: Combined candidate tracks + playlist context + user request
    - Returns: Top N curated picks with reasoning
-   - Uses Claude Haiku to select best matches based on:
+   - Uses Claude Sonnet 4.5 to select best matches based on:
      * Genre/tag fit, BPM range, era match, popularity balance, diversity
 
 5. PRESENT top recommendations with reasoning from curator

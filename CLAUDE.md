@@ -145,7 +145,7 @@ pnpm test                  # Run tests
 
 10. **curate_recommendations** - AI-powered intelligent curation
     - Parameters: `candidate_tracks`, `playlist_context`, `user_request`, `top_n` (default 10)
-    - Uses Claude Haiku to rank tracks from multiple sources
+    - Uses Claude Sonnet 4.5 to rank tracks from multiple sources
     - Considers BPM range, tags, era, popularity, user intent
     - Returns top N curated picks with reasoning
     - Use as final step to intelligently filter combined results

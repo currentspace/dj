@@ -15,7 +15,7 @@ An AI-powered DJ app that creates Spotify playlists using Anthropic's Claude API
   - Rate-limited at 40 requests/second
 - **AI-Powered Recommendations**:
   - Multi-source discovery (Last.fm community, tag-based search, Spotify algorithm)
-  - Claude Haiku-powered intelligent curation
+  - Claude Sonnet 4.5-powered intelligent curation
   - Combines recommendations from multiple APIs
   - Context-aware ranking (BPM, genre, era, popularity)
 - **MCP Protocol**: Advanced tool calling for iterative playlist curation
