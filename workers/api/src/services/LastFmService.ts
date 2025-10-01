@@ -9,6 +9,8 @@
  * - Track/artist name normalization
  */
 
+import { RateLimitedQueue } from '../utils/RateLimitedQueue';
+
 export interface LastFmSignals {
   // Track identifiers
   canonicalArtist: string;
@@ -194,53 +196,65 @@ export class LastFmService {
   }
 
   /**
-   * Batch get artist info for unique artists with KV caching
+   * Batch get artist info for unique artists with KV caching and rate-limited queue
    */
-  async batchGetArtistInfo(artists: string[]): Promise<Map<string, any>> {
+  async batchGetArtistInfo(
+    artists: string[],
+    onProgress?: (current: number, total: number) => void
+  ): Promise<Map<string, any>> {
     const results = new Map();
     const uniqueArtists = [...new Set(artists)]; // Deduplicate
 
     console.log(`[LastFm] Fetching artist info for ${uniqueArtists.length} unique artists...`);
 
-    for (let i = 0; i < uniqueArtists.length; i++) {
-      const artist = uniqueArtists[i];
+    // Create rate-limited queue at 40 TPS
+    const queue = new RateLimitedQueue<{ artist: string; info: any }>(40);
+
+    // Enqueue all artist fetch tasks
+    for (const artist of uniqueArtists) {
       const cacheKey = `artist_${this.hashString(artist.toLowerCase())}`;
 
-      try {
-        // Check cache first
-        let artistInfo = null;
-        if (this.cache) {
-          const cached = await this.cache.get(cacheKey, 'json');
-          if (cached) {
-            artistInfo = cached as any;
-            console.log(`[LastFm] Artist cache hit: ${artist}`);
+      queue.enqueue(async () => {
+        try {
+          // Check cache first
+          let artistInfo = null;
+          if (this.cache) {
+            const cached = await this.cache.get(cacheKey, 'json');
+            if (cached) {
+              artistInfo = cached as any;
+              console.log(`[LastFm] Artist cache hit: ${artist}`);
+            }
           }
-        }
 
-        // Fetch if not cached
-        if (!artistInfo) {
-          artistInfo = await this.getArtistInfo(artist);
+          // Fetch if not cached
+          if (!artistInfo) {
+            artistInfo = await this.getArtistInfo(artist);
 
-          // Cache the result
-          if (artistInfo && this.cache) {
-            await this.cache.put(cacheKey, JSON.stringify(artistInfo), {
-              expirationTtl: this.cacheTTL
-            });
+            // Cache the result
+            if (artistInfo && this.cache) {
+              await this.cache.put(cacheKey, JSON.stringify(artistInfo), {
+                expirationTtl: this.cacheTTL
+              });
+            }
           }
-        }
 
-        if (artistInfo) {
-          results.set(artist.toLowerCase(), artistInfo);
+          return { artist, info: artistInfo };
+        } catch (error) {
+          console.error(`[LastFm] Failed to get artist info for ${artist}:`, error);
+          return { artist, info: null };
         }
-
-        // Rate limiting: 25ms delay = 40 TPS
-        if (i < uniqueArtists.length - 1) {
-          await this.sleep(25);
-        }
-      } catch (error) {
-        console.error(`[LastFm] Failed to get artist info for ${artist}:`, error);
-      }
+      });
     }
+
+    // Process queue with progress reporting
+    const queueResults = await queue.processAllWithCallback((result, index, total) => {
+      if (result && result.info) {
+        results.set(result.artist.toLowerCase(), result.info);
+      }
+      if (onProgress) {
+        onProgress(index + 1, total);
+      }
+    });
 
     return results;
   }

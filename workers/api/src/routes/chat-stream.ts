@@ -494,11 +494,16 @@ async function executeSpotifyToolWithProgress(
             }
           }
 
-          // Step 7b: Get unique artists and fetch artist info separately (cached)
+          // Step 7b: Get unique artists and fetch artist info separately (cached + rate-limited queue)
           const uniqueArtists = [...new Set(tracksForLastFm.map(t => t.artists?.[0]?.name).filter(Boolean))];
           await sseWriter.write({ type: 'thinking', data: `🎤 Fetching artist info for ${uniqueArtists.length} unique artists...` });
 
-          const artistInfoMap = await lastfmService.batchGetArtistInfo(uniqueArtists);
+          const artistInfoMap = await lastfmService.batchGetArtistInfo(uniqueArtists, (current, total) => {
+            // Report progress every 5 artists
+            if (current % 5 === 0 || current === total) {
+              sseWriter.write({ type: 'thinking', data: `🎤 Artist enrichment: ${current}/${total}...` });
+            }
+          });
 
           // Step 7c: Attach artist info to track signals
           for (const [trackId, signals] of signalsMap.entries()) {
