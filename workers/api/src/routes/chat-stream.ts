@@ -547,39 +547,10 @@ async function executeSpotifyToolWithProgress(
           sseWriter.writeAsync({ type: 'thinking', data: `🎤 Fetching artist info for ${uniqueArtists.length} unique artists...` });
 
           const artistInfoMap = await lastfmService.batchGetArtistInfo(uniqueArtists, async (current, total) => {
-            // Report progress every 10 artists with narrator
+            // Report progress every 10 artists with simple message
+            // Note: Narrator calls disabled here - concurrent ChatAnthropic instance creation fails
             if (current % 10 === 0 || current === total) {
-              if (narrator) {
-                // Don't await - let narrator run in parallel
-                (async () => {
-                  try {
-                    const recentArtist = uniqueArtists[current - 1];
-                    const message = await narrator.generateMessage({
-                      eventType: 'enriching_artists',
-                      userRequest,
-                      metadata: {
-                        enrichedCount: current,
-                        totalArtists: total,
-                        recentArtistName: recentArtist
-                      }
-                    }, true); // Skip cache for variety
-
-                    sseWriter.writeAsync({ type: 'thinking', data: `🎤 ${message}` });
-                  } catch (narratorError) {
-                    // Log detailed narrator failure
-                    getChildLogger('Narrator').error('Artist enrichment message failed', narratorError, {
-                      artistIndex: current,
-                      totalArtists: total,
-                      errorType: narratorError?.constructor?.name,
-                      errorMessage: narratorError instanceof Error ? narratorError.message : String(narratorError)
-                    });
-                    // Use fallback
-                    sseWriter.writeAsync({ type: 'thinking', data: `🎤 Artist enrichment: ${current}/${total}...` });
-                  }
-                })();
-              } else {
-                sseWriter.writeAsync({ type: 'thinking', data: `🎤 Artist enrichment: ${current}/${total}...` });
-              }
+              sseWriter.writeAsync({ type: 'thinking', data: `🎤 Enriched ${current}/${total} artists...` });
             }
           });
 
