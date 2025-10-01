@@ -448,10 +448,14 @@ export class LastFmService {
 
       // Extract images
       const images = artistData.image || [];
+      const smallImg = images.find((img: any) => img.size === 'small');
+      const mediumImg = images.find((img: any) => img.size === 'medium');
+      const largeImg = images.find((img: any) => img.size === 'large' || img.size === 'extralarge');
+
       const imageMap = {
-        small: images.find((img: any) => img.size === 'small')?['#text'] || null,
-        medium: images.find((img: any) => img.size === 'medium')?['#text'] || null,
-        large: images.find((img: any) => img.size === 'large' || img.size === 'extralarge')?['#text'] || null
+        small: smallImg ? smallImg['#text'] : null,
+        medium: mediumImg ? mediumImg['#text'] : null,
+        large: largeImg ? largeImg['#text'] : null
       };
 
       return {
