@@ -228,8 +228,6 @@ export function ChatInterface({ selectedPlaylist }: ChatInterfaceProps) {
         </div>
       </div>
 
-      <StreamingStatusDisplay status={streamingStatus} />
-
       <div className="chat-messages">
         {messages.length === 0 && (
           <div className="welcome-message">
@@ -268,6 +266,8 @@ export function ChatInterface({ selectedPlaylist }: ChatInterfaceProps) {
 
         <div ref={messagesEndRef} />
       </div>
+
+      <StreamingStatusDisplay status={streamingStatus} />
 
       <form onSubmit={handleSubmit} className="chat-input-form">
         <input
