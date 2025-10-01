@@ -414,7 +414,14 @@ await queue.processAllWithCallback((result, index, total) => {
 ## Deployment
 
 ### Automatic Deployment (GitHub Actions)
-Push to `main` branch triggers automatic deployment.
+
+**CRITICAL: This project uses automatic deployment. DO NOT run manual deployment commands.**
+
+Deployment process:
+1. Commit your changes: `git add -A && git commit -m "message"`
+2. Push to main: `git push`
+3. GitHub Actions automatically deploys to Cloudflare Workers
+4. Deployment completes in ~2-3 minutes
 
 **Required GitHub Secrets** (Settings → Secrets and variables → Actions):
 - `CLOUDFLARE_API_TOKEN` - From dash.cloudflare.com/profile/api-tokens
@@ -423,19 +430,16 @@ Push to `main` branch triggers automatic deployment.
 - `SPOTIFY_CLIENT_ID` - From developer.spotify.com
 - `SPOTIFY_CLIENT_SECRET` - From developer.spotify.com
 
-### Manual Deployment
-```bash
-# Set secrets (one-time)
-wrangler secret put ANTHROPIC_API_KEY
-wrangler secret put SPOTIFY_CLIENT_ID
-wrangler secret put SPOTIFY_CLIENT_SECRET
-
-# Deploy
-pnpm run deploy
-```
-
 ### Production URL
 https://dj.current.space
+
+### Setting Secrets (One-time Setup)
+For secrets not in GitHub Actions (like optional `LASTFM_API_KEY`):
+```bash
+wrangler secret put LASTFM_API_KEY
+```
+
+**Do not run `pnpm run deploy` - deployment is automatic via git push.**
 
 ## Monorepo Best Practices
 
@@ -474,16 +478,35 @@ The `build:worker` script handles this automatically.
    import { myRouter } from './routes/my-route'
    app.route('/api/my-route', myRouter)
    ```
+4. Commit and push to deploy
 
 ### Adding a New Spotify Tool
-1. Define tool in `workers/api/src/routes/mcp.ts`
-2. Add to MCP tools list
+1. Define tool in `workers/api/src/lib/spotify-tools.ts`
+2. Add to tools array in `chat-stream.ts`
 3. Implement handler with Spotify API call
 4. Return compact data (strip unnecessary fields)
+5. Commit and push to deploy
+
+### Making React Component Changes
+1. **Never use `useEffect`** - Use direct state checks in component body
+2. Example pattern:
+   ```typescript
+   // ✅ CORRECT - Direct state check
+   const playlistId = selectedPlaylist?.id || null
+   if (playlistId !== currentPlaylistId) {
+     setCurrentPlaylistId(playlistId)
+   }
+
+   // ❌ WRONG - Never use useEffect
+   useEffect(() => {
+     setCurrentPlaylistId(selectedPlaylist?.id)
+   }, [selectedPlaylist?.id])
+   ```
+3. Commit and push to deploy
 
 ### Debugging SSE Streams
 1. Check browser console for `[ChatStream]` logs
-2. Check worker logs for `[Stream:{id}]` logs
+2. Check worker logs via `pnpm wrangler tail` in workers/api directory
 3. Use test endpoints: `/api/sse-test/simple`
 4. See `SSE_DEBUGGING_GUIDE.md` for comprehensive guide
 
@@ -498,6 +521,18 @@ pnpm dev:web
 # Open http://localhost:3000
 ```
 
+### Deploying Changes
+```bash
+# Commit changes
+git add -A
+git commit -m "description"
+
+# Deploy (automatic via GitHub Actions)
+git push
+
+# DO NOT run: pnpm run deploy (deployment is automatic)
+```
+
 ## Important Notes
 
 ### DO
@@ -509,8 +544,12 @@ pnpm dev:web
 - Use `workspace:*` for internal dependencies
 - Test SSE endpoints independently
 - Keep conversation history in frontend state
+- Use direct state checks in React components (check props/state in component body)
+- Commit changes and push to deploy (automatic via GitHub Actions)
 
 ### DON'T
+- **NEVER use `useEffect` in React components** - Use direct state synchronization in component body instead
+- **NEVER run `pnpm run deploy` or manual deployment commands** - Deployment happens automatically via git push to main branch (Wrangler watches the repo)
 - Don't use npm or yarn
 - Don't commit `.dev.vars` files
 - Don't send full Spotify track objects to Claude
