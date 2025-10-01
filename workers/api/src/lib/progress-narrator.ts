@@ -25,17 +25,13 @@ interface MessageContext {
 }
 
 export class ProgressNarrator {
-  private anthropic: ChatAnthropic;
+  private apiKey: string;
   private messageCache: Map<string, string> = new Map();
   private systemPrompt: string;
   private logger: ServiceLogger;
 
   constructor(apiKey: string, logger?: ServiceLogger) {
-    this.anthropic = new ChatAnthropic({
-      apiKey,
-      model: 'claude-3-5-haiku-20241022',
-      maxRetries: 0, // Orchestrator handles retries
-    });
+    this.apiKey = apiKey;
     this.systemPrompt = this.buildSystemPrompt();
     this.logger = logger || new ServiceLogger('ProgressNarrator');
   }
@@ -77,7 +73,7 @@ export class ProgressNarrator {
       });
 
       this.logger.info('About to call Anthropic API (rate-limited)', {
-        hasApiKey: !!this.anthropic,
+        hasApiKey: !!this.apiKey,
         model: 'claude-3-5-haiku-20241022'
       });
 
@@ -88,14 +84,18 @@ export class ProgressNarrator {
       ];
 
       // Use rate-limited API wrapper (no timeout - orchestrator handles queuing)
+      // Create a fresh ChatAnthropic instance for each call to avoid state issues in Workers
       const response = await rateLimitedAnthropicCall(
         async () => {
-          const llm = this.anthropic.bind({
+          const anthropic = new ChatAnthropic({
+            apiKey: this.apiKey,
+            model: 'claude-3-5-haiku-20241022',
             maxTokens: 100,
             temperature: skipCache ? 1.0 : 0.7,
             ...(skipCache ? { topP: 0.95 } : {}),
+            maxRetries: 0,
           });
-          return await llm.invoke(messages);
+          return await anthropic.invoke(messages);
         },
         this.logger,
         `narrator:${context.eventType}`
