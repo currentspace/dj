@@ -164,14 +164,18 @@ async function executeSpotifyToolWithProgress(
       sseWriter.writeAsync({ type: 'thinking', data: fetchMessage });
 
       console.log(`[SpotifyAPI] Fetching playlist details: ${playlist_id}`);
-      const playlistResponse = await fetch(
-        `https://api.spotify.com/v1/playlists/${playlist_id}`,
-        { headers: { 'Authorization': `Bearer ${token}` } }
+      const playlistResponse = await rateLimitedSpotifyCall(
+        () => fetch(
+          `https://api.spotify.com/v1/playlists/${playlist_id}`,
+          { headers: { 'Authorization': `Bearer ${token}` } }
+        ),
+        getLogger(),
+        `get playlist ${playlist_id}`
       );
 
-      console.log(`[SpotifyAPI] Playlist response status: ${playlistResponse.status}`);
-      if (!playlistResponse.ok) {
-        throw new Error(`Failed to get playlist: ${playlistResponse.status}`);
+      console.log(`[SpotifyAPI] Playlist response status: ${playlistResponse?.status}`);
+      if (!playlistResponse || !playlistResponse.ok) {
+        throw new Error(`Failed to get playlist: ${playlistResponse?.status || 'null response'}`);
       }
 
       const playlist = await playlistResponse.json() as any;
@@ -199,16 +203,20 @@ async function executeSpotifyToolWithProgress(
       sseWriter.writeAsync({ type: 'thinking', data: tracksMessage });
 
       console.log(`[SpotifyAPI] Fetching tracks from playlist: ${playlist_id}`);
-      const tracksResponse = await fetch(
-        `https://api.spotify.com/v1/playlists/${playlist_id}/tracks?limit=100`,
-        { headers: { 'Authorization': `Bearer ${token}` } }
+      const tracksResponse = await rateLimitedSpotifyCall(
+        () => fetch(
+          `https://api.spotify.com/v1/playlists/${playlist_id}/tracks?limit=100`,
+          { headers: { 'Authorization': `Bearer ${token}` } }
+        ),
+        getLogger(),
+        `get tracks for playlist ${playlist_id}`
       );
 
-      console.log(`[SpotifyAPI] Tracks response status: ${tracksResponse.status}`);
-      if (!tracksResponse.ok) {
-        const errorBody = await tracksResponse.text();
-        console.error(`[SpotifyAPI] Tracks fetch failed: ${tracksResponse.status} - ${errorBody}`);
-        throw new Error(`Failed to get tracks: ${tracksResponse.status}`);
+      console.log(`[SpotifyAPI] Tracks response status: ${tracksResponse?.status}`);
+      if (!tracksResponse || !tracksResponse.ok) {
+        const errorBody = tracksResponse ? await tracksResponse.text() : 'null response';
+        console.error(`[SpotifyAPI] Tracks fetch failed: ${tracksResponse?.status || 'null'} - ${errorBody}`);
+        throw new Error(`Failed to get tracks: ${tracksResponse?.status || 'null response'}`);
       }
 
       const tracksData = await tracksResponse.json() as any;
@@ -265,12 +273,16 @@ async function executeSpotifyToolWithProgress(
       let genres: string[] = [];
 
       if (artistIdsArray.length > 0) {
-        const artistsResponse = await fetch(
-          `https://api.spotify.com/v1/artists?ids=${artistIdsArray.join(',')}`,
-          { headers: { 'Authorization': `Bearer ${token}` } }
+        const artistsResponse = await rateLimitedSpotifyCall(
+          () => fetch(
+            `https://api.spotify.com/v1/artists?ids=${artistIdsArray.join(',')}`,
+            { headers: { 'Authorization': `Bearer ${token}` } }
+          ),
+          getLogger(),
+          `get ${artistIdsArray.length} artists`
         );
 
-        if (artistsResponse.ok) {
+        if (artistsResponse && artistsResponse.ok) {
           const artistsData = await artistsResponse.json() as any;
           const genreMap = new Map<string, number>();
 
@@ -854,13 +866,17 @@ function createStreamingSpotifyTools(
         });
 
         // Fetch tracks from Spotify
-        const response = await fetch(
-          `https://api.spotify.com/v1/playlists/${finalArgs.playlist_id}/tracks?offset=${finalArgs.offset}&limit=${finalArgs.limit}`,
-          { headers: { 'Authorization': `Bearer ${spotifyToken}` } }
+        const response = await rateLimitedSpotifyCall(
+          () => fetch(
+            `https://api.spotify.com/v1/playlists/${finalArgs.playlist_id}/tracks?offset=${finalArgs.offset}&limit=${finalArgs.limit}`,
+            { headers: { 'Authorization': `Bearer ${spotifyToken}` } }
+          ),
+          getLogger(),
+          `get playlist tracks offset=${finalArgs.offset}`
         );
 
-        if (!response.ok) {
-          throw new Error(`Failed to get playlist tracks: ${response.status}`);
+        if (!response || !response.ok) {
+          throw new Error(`Failed to get playlist tracks: ${response?.status || 'null response'}`);
         }
 
         const data = await response.json() as any;
@@ -920,13 +936,17 @@ function createStreamingSpotifyTools(
         });
 
         // Fetch tracks from Spotify (supports up to 50 tracks)
-        const response = await fetch(
-          `https://api.spotify.com/v1/tracks?ids=${args.track_ids.join(',')}`,
-          { headers: { 'Authorization': `Bearer ${spotifyToken}` } }
+        const response = await rateLimitedSpotifyCall(
+          () => fetch(
+            `https://api.spotify.com/v1/tracks?ids=${args.track_ids.join(',')}`,
+            { headers: { 'Authorization': `Bearer ${spotifyToken}` } }
+          ),
+          getLogger(),
+          `get ${args.track_ids.length} track details`
         );
 
-        if (!response.ok) {
-          throw new Error(`Failed to get track details: ${response.status}`);
+        if (!response || !response.ok) {
+          throw new Error(`Failed to get track details: ${response?.status || 'null response'}`);
         }
 
         const data = await response.json() as any;
@@ -998,12 +1018,16 @@ function createStreamingSpotifyTools(
 
           try {
             // Fetch playlist tracks to use as seeds
-            const playlistResponse = await fetch(
-              `https://api.spotify.com/v1/playlists/${contextPlaylistId}/tracks?limit=50`,
-              { headers: { 'Authorization': `Bearer ${spotifyToken}` } }
+            const playlistResponse = await rateLimitedSpotifyCall(
+              () => fetch(
+                `https://api.spotify.com/v1/playlists/${contextPlaylistId}/tracks?limit=50`,
+                { headers: { 'Authorization': `Bearer ${spotifyToken}` } }
+              ),
+              getLogger(),
+              `get seed tracks for playlist ${contextPlaylistId}`
             );
 
-            if (playlistResponse.ok) {
+            if (playlistResponse && playlistResponse.ok) {
               const playlistData = await playlistResponse.json() as any;
               const trackIds = playlistData.items
                 ?.map((item: any) => item.track?.id)
@@ -1388,12 +1412,16 @@ Return ONLY valid JSON:
             const query = `artist:"${artist}" track:"${track}"`;
 
             // Search Spotify
-            const response = await fetch(
-              `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=track&limit=${args.limit_per_track}`,
-              { headers: { 'Authorization': `Bearer ${spotifyToken}` } }
+            const response = await rateLimitedSpotifyCall(
+              () => fetch(
+                `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=track&limit=${args.limit_per_track}`,
+                { headers: { 'Authorization': `Bearer ${spotifyToken}` } }
+              ),
+              getLogger(),
+              `search similar: ${artist} - ${track}`
             );
 
-            if (response.ok) {
+            if (response && response.ok) {
               const data = await response.json() as any;
               const tracks = data.tracks?.items || [];
 
@@ -1480,13 +1508,17 @@ Return ONLY valid JSON:
 
         console.log(`[recommend_from_tags] Search query: ${query}`);
 
-        const response = await fetch(
-          `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=track&limit=${args.limit}`,
-          { headers: { 'Authorization': `Bearer ${spotifyToken}` } }
+        const response = await rateLimitedSpotifyCall(
+          () => fetch(
+            `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=track&limit=${args.limit}`,
+            { headers: { 'Authorization': `Bearer ${spotifyToken}` } }
+          ),
+          getLogger(),
+          `search by tags: ${args.tags.join(', ')}`
         );
 
-        if (!response.ok) {
-          throw new Error(`Spotify search failed: ${response.status}`);
+        if (!response || !response.ok) {
+          throw new Error(`Spotify search failed: ${response?.status || 'null response'}`);
         }
 
         const data = await response.json() as any;
