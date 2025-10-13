@@ -15,7 +15,7 @@
     "@langchain/anthropic": "^0.3.30",
     "@langchain/core": "^0.3.77",
     "@langchain/mcp-adapters": "^0.6.0",
-    "hono": "^4.9.8",
+    "hono": "^4.9.12",
     "langchain": "^0.3.34",
     "nanoid": "^5.1.6",
     "zod": "^3.25.76"
