@@ -1,5 +1,7 @@
 import type { ChatMessage } from '@dj/shared-types'
+
 import { z } from 'zod'
+
 import { chatStreamClient } from './streaming-client'
 
 const API_BASE = import.meta.env.DEV ? 'http://localhost:8787/api' : '/api'
@@ -7,18 +9,18 @@ const API_BASE = import.meta.env.DEV ? 'http://localhost:8787/api' : '/api'
 // Zod schemas for runtime validation
 // The Spotify API can return nulls, but we transform them to defaults
 const SpotifyPlaylistSchema = z.object({
-  id: z.string(),
-  name: z.string(),
   description: z.string().nullable().transform(val => val || ''),
   external_urls: z.object({ spotify: z.string() }),
+  id: z.string(),
   images: z.array(z.object({
-    url: z.string(),
     height: z.number().nullable().transform(val => val || 0),
+    url: z.string(),
     width: z.number().nullable().transform(val => val || 0)
   })),
-  tracks: z.object({ total: z.number() }),
+  name: z.string(),
+  owner: z.object({ display_name: z.string() }),
   public: z.boolean().nullable().transform(val => val !== null ? val : true),
-  owner: z.object({ display_name: z.string() })
+  tracks: z.object({ total: z.number() })
 })
 
 const PlaylistsResponseSchema = z.object({
@@ -26,19 +28,6 @@ const PlaylistsResponseSchema = z.object({
 })
 
 type PlaylistsResponse = z.infer<typeof PlaylistsResponseSchema>
-
-// Custom error class with additional details
-export class ApiError extends Error {
-  constructor(
-    message: string,
-    public status?: number,
-    public url?: string,
-    public body?: unknown
-  ) {
-    super(message)
-    this.name = 'ApiError'
-  }
-}
 
 // Main API client class
 export class ApiClient {
@@ -49,12 +38,44 @@ export class ApiClient {
     this.baseUrl = baseUrl
   }
 
-  // SSR-safe token getter
-  private getToken(): string | null {
-    if (typeof window === 'undefined' || !('localStorage' in window)) {
-      return null
+  async getUserPlaylists(
+    options?: { signal?: AbortSignal; timeout?: number }
+  ): Promise<PlaylistsResponse> {
+    const token = this.getToken()
+    if (!token) {
+      throw new ApiError('Not authenticated with Spotify', 401)
     }
-    return localStorage.getItem('spotify_token')
+
+    const data = await this.request<PlaylistsResponse>('/spotify/playlists', options)
+
+    // Validate response shape
+    try {
+      return PlaylistsResponseSchema.parse(data)
+    } catch (error) {
+      throw new ApiError(
+        `Invalid playlist response: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        undefined,
+        undefined,
+        data
+      )
+    }
+  }
+
+  async sendChatMessage(
+    message: string,
+    history: ChatMessage[],
+    mode: 'analyze' | 'create' | 'edit',
+    options?: { signal?: AbortSignal; timeout?: number }
+  ) {
+    return this.request('/chat/message', {
+      body: JSON.stringify({
+        conversationHistory: history,  // Fixed: use correct field name
+        message,
+        mode
+      }),
+      method: 'POST',
+      ...options
+    })
   }
 
   // Clear token on auth failure
@@ -63,6 +84,16 @@ export class ApiClient {
       return
     }
     localStorage.removeItem('spotify_token')
+  }
+
+  // Public API methods
+
+  // SSR-safe token getter
+  private getToken(): null | string {
+    if (typeof window === 'undefined' || !('localStorage' in window)) {
+      return null
+    }
+    return localStorage.getItem('spotify_token')
   }
 
   // Core request method with all improvements
@@ -80,7 +111,7 @@ export class ApiClient {
     const hasBody = options.body !== undefined && options.body !== null
     if (hasBody && !headers.has('Content-Type') && typeof options.body === 'string') {
       try {
-        JSON.parse(options.body as string)
+        JSON.parse(options.body)
         headers.set('Content-Type', 'application/json')
       } catch {
         // Body is not JSON, don't set Content-Type
@@ -206,52 +237,27 @@ export class ApiClient {
       clearTimeout(timeoutId)
     }
   }
+}
 
-  // Public API methods
-
-  async sendChatMessage(
+// Custom error class with additional details
+export class ApiError extends Error {
+  constructor(
     message: string,
-    history: ChatMessage[],
-    mode: 'analyze' | 'create' | 'edit',
-    options?: { signal?: AbortSignal; timeout?: number }
+    public status?: number,
+    public url?: string,
+    public body?: unknown
   ) {
-    return this.request('/chat/message', {
-      method: 'POST',
-      body: JSON.stringify({
-        message,
-        mode,
-        conversationHistory: history  // Fixed: use correct field name
-      }),
-      ...options
-    })
-  }
-
-  async getUserPlaylists(
-    options?: { signal?: AbortSignal; timeout?: number }
-  ): Promise<PlaylistsResponse> {
-    const token = this.getToken()
-    if (!token) {
-      throw new ApiError('Not authenticated with Spotify', 401)
-    }
-
-    const data = await this.request<PlaylistsResponse>('/spotify/playlists', options)
-
-    // Validate response shape
-    try {
-      return PlaylistsResponseSchema.parse(data)
-    } catch (error) {
-      throw new ApiError(
-        `Invalid playlist response: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        undefined,
-        undefined,
-        data
-      )
-    }
+    super(message)
+    this.name = 'ApiError'
   }
 }
 
 // Create singleton instance
 export const apiClient = new ApiClient()
+
+export async function getUserPlaylists(): Promise<PlaylistsResponse> {
+  return apiClient.getUserPlaylists()
+}
 
 // Export convenience functions that use the singleton
 export async function sendChatMessage(
@@ -260,10 +266,6 @@ export async function sendChatMessage(
   mode: 'analyze' | 'create' | 'edit'
 ) {
   return apiClient.sendChatMessage(message, history, mode)
-}
-
-export async function getUserPlaylists(): Promise<PlaylistsResponse> {
-  return apiClient.getUserPlaylists()
 }
 
 // Re-export streaming function using the streaming client

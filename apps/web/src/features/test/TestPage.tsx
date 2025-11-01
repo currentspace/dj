@@ -1,9 +1,9 @@
 import { useState } from 'react';
 
 interface TestResult {
-  success: boolean;
   data: any;
   error?: string;
+  success: boolean;
 }
 
 export function TestPage() {
@@ -20,15 +20,15 @@ export function TestPage() {
       const data = await testFn();
       setResults(prev => ({
         ...prev,
-        [testName]: { success: true, data }
+        [testName]: { data, success: true }
       }));
     } catch (error) {
       setResults(prev => ({
         ...prev,
         [testName]: {
-          success: false,
           data: null,
-          error: error instanceof Error ? error.message : 'Unknown error'
+          error: error instanceof Error ? error.message : 'Unknown error',
+          success: false
         }
       }));
     } finally {
@@ -57,14 +57,14 @@ export function TestPage() {
     if (!chatMessage.trim()) throw new Error('Please enter a message');
 
     const response = await fetch(`${apiBase}/api/chat/message`, {
-      method: 'POST',
+      body: JSON.stringify({
+        conversationHistory: [],
+        message: chatMessage.trim()
+      }),
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        message: chatMessage.trim(),
-        conversationHistory: []
-      })
+      method: 'POST'
     });
 
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -109,7 +109,7 @@ export function TestPage() {
 
       <div className="test-section">
         <h2>Health Check</h2>
-        <button onClick={testHealth} disabled={loading.health}>
+        <button disabled={loading.health} onClick={testHealth}>
           Test Health Endpoint
         </button>
         {renderResult('health')}
@@ -117,7 +117,7 @@ export function TestPage() {
 
       <div className="test-section">
         <h2>Environment Variables</h2>
-        <button onClick={testEnv} disabled={loading.env}>
+        <button disabled={loading.env} onClick={testEnv}>
           Check Environment
         </button>
         {renderResult('env')}
@@ -125,7 +125,7 @@ export function TestPage() {
 
       <div className="test-section">
         <h2>Direct Anthropic API Test</h2>
-        <button onClick={testAnthropicDirect} disabled={loading.anthropic}>
+        <button disabled={loading.anthropic} onClick={testAnthropicDirect}>
           Test Anthropic API
         </button>
         {renderResult('anthropic')}
@@ -135,12 +135,12 @@ export function TestPage() {
         <h2>Chat with AI (Langchain + Anthropic)</h2>
         <div className="chat-test">
           <textarea
-            value={chatMessage}
             onChange={(e) => setChatMessage(e.target.value)}
             placeholder="Type a message to test the AI chat..."
             rows={3}
+            value={chatMessage}
           />
-          <button onClick={testChat} disabled={loading.chat || !chatMessage.trim()}>
+          <button disabled={loading.chat || !chatMessage.trim()} onClick={testChat}>
             Send Chat Message
           </button>
         </div>
@@ -149,7 +149,7 @@ export function TestPage() {
 
       <div className="test-section">
         <h2>Spotify Auth URL (No Auth Required)</h2>
-        <button onClick={testSpotifyAuthUrl} disabled={loading['spotify-auth']}>
+        <button disabled={loading['spotify-auth']} onClick={testSpotifyAuthUrl}>
           Get Spotify Auth URL
         </button>
         {renderResult('spotify-auth')}

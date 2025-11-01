@@ -1,5 +1,6 @@
-import { memo } from 'react';
 import type { Track } from '@dj/shared-types';
+
+import { memo } from 'react';
 
 interface TrackListProps {
   tracks: Track[];
@@ -9,18 +10,18 @@ export const TrackList = memo(function TrackList({ tracks }: TrackListProps) {
   return (
     <div className="track-list">
       {tracks.map((track, index) => (
-        <TrackItem key={track.id || index} track={track} number={index + 1} />
+        <TrackItem key={track.id || index} number={index + 1} track={track} />
       ))}
     </div>
   );
 });
 
 interface TrackItemProps {
-  track: Track;
   number: number;
+  track: Track;
 }
 
-const TrackItem = memo(function TrackItem({ track, number }: TrackItemProps) {
+const TrackItem = memo(function TrackItem({ number, track }: TrackItemProps) {
   return (
     <div className="track-item">
       <span className="track-number">{number}</span>
@@ -30,20 +31,20 @@ const TrackItem = memo(function TrackItem({ track, number }: TrackItemProps) {
       </div>
       {track.previewUrl && (
         <button
+          aria-label={`Play preview of ${track.name}`}
           className="preview-button"
           onClick={() => playPreview(track.previewUrl!)}
-          aria-label={`Play preview of ${track.name}`}
         >
           ▶️
         </button>
       )}
       {track.externalUrl && (
         <a
-          href={track.externalUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="spotify-link"
           aria-label={`Open ${track.name} in Spotify`}
+          className="spotify-link"
+          href={track.externalUrl}
+          rel="noopener noreferrer"
+          target="_blank"
         >
           🔗
         </a>

@@ -1,4 +1,4 @@
-import { Component, type ReactNode, type ErrorInfo } from 'react';
+import { Component, type ErrorInfo, type ReactNode } from 'react';
 
 interface Props {
   children: ReactNode;
@@ -7,9 +7,9 @@ interface Props {
 }
 
 interface State {
-  hasError: boolean;
   error?: Error;
   errorInfo?: ErrorInfo;
+  hasError: boolean;
 }
 
 export class ErrorBoundary extends Component<Props, State> {
@@ -20,8 +20,8 @@ export class ErrorBoundary extends Component<Props, State> {
 
   static getDerivedStateFromError(error: Error): State {
     return {
-      hasError: true,
-      error
+      error,
+      hasError: true
     };
   }
 
@@ -34,7 +34,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   handleReset = () => {
-    this.setState({ hasError: false, error: undefined, errorInfo: undefined });
+    this.setState({ error: undefined, errorInfo: undefined, hasError: false });
     this.props.onReset?.();
   };
 
@@ -56,14 +56,14 @@ export class ErrorBoundary extends Component<Props, State> {
 
             <div className="error-actions">
               <button
-                onClick={this.handleReset}
                 className="retry-button"
+                onClick={this.handleReset}
               >
                 Try Again
               </button>
               <button
-                onClick={() => window.location.reload()}
                 className="reload-button"
+                onClick={() => window.location.reload()}
               >
                 Reload Page
               </button>

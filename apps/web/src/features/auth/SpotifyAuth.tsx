@@ -1,5 +1,5 @@
-import { startTransition } from 'react';
 import { apiClient } from '@dj/api-client';
+import { startTransition } from 'react';
 
 interface SpotifyAuthProps {
   onLogin: () => void;
@@ -28,8 +28,8 @@ export function SpotifyAuth({ onLogin: _onLogin }: SpotifyAuthProps) {
         </p>
 
         <button
-          onClick={handleLogin}
           className="spotify-login-btn"
+          onClick={handleLogin}
           type="button"
         >
           <span className="spotify-logo">♪</span>

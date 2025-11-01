@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 
 // Default build info for development
 const defaultBuildInfo = {
-  commitHash: 'dev',
-  buildTime: new Date().toISOString(),
   branch: 'local',
+  buildTime: new Date().toISOString(),
+  commitHash: 'dev',
   commitMessage: 'Development build',
   version: 'dev-local'
 }
@@ -66,8 +66,8 @@ export function BuildInfo() {
             <div className="build-footer">
               <a
                 href={`https://github.com/currentspace/dj/commit/${buildInfo.commitHash}`}
-                target="_blank"
                 rel="noopener noreferrer"
+                target="_blank"
               >
                 View on GitHub →
               </a>

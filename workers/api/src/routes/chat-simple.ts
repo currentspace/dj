@@ -1,29 +1,31 @@
-import { Hono } from "hono";
-import type { Env } from "../index";
-import { z } from "zod";
 import { ChatAnthropic } from "@langchain/anthropic";
-import { DynamicStructuredTool } from "@langchain/core/tools";
 import {
+  AIMessage,
   HumanMessage,
   SystemMessage,
-  AIMessage,
 } from "@langchain/core/messages";
+import { DynamicStructuredTool } from "@langchain/core/tools";
+import { Hono } from "hono";
+import { z } from "zod";
+
+import type { Env } from "../index";
+
 import { executeSpotifyTool } from "../lib/spotify-tools";
 
 const chatRouter = new Hono<{ Bindings: Env }>();
 
 // Request schema
 const ChatRequestSchema = z.object({
-  message: z.string().min(1).max(2000),
   conversationHistory: z
     .array(
       z.object({
-        role: z.enum(["user", "assistant"]),
         content: z.string(),
+        role: z.enum(["user", "assistant"]),
       })
     )
     .max(20)
     .default([]),
+  message: z.string().min(1).max(2000),
   mode: z.enum(["analyze", "create", "edit"]).default("analyze"),
 });
 
@@ -33,29 +35,8 @@ const ChatRequestSchema = z.object({
 function createSpotifyTools(spotifyToken: string): DynamicStructuredTool[] {
   const tools: DynamicStructuredTool[] = [
     new DynamicStructuredTool({
-      name: "search_spotify_tracks",
       description:
         "Search for tracks on Spotify with optional audio feature filters",
-      schema: z.object({
-        query: z
-          .string()
-          .describe("Search query (artist name, song name, etc.)"),
-        limit: z
-          .number()
-          .min(1)
-          .max(50)
-          .default(10)
-          .describe("Number of results"),
-        filters: z
-          .object({
-            min_energy: z.number().min(0).max(1).optional(),
-            max_energy: z.number().min(0).max(1).optional(),
-            min_tempo: z.number().min(0).max(300).optional(),
-            max_tempo: z.number().min(0).max(300).optional(),
-            genre: z.string().optional(),
-          })
-          .optional(),
-      }),
       func: async (args) => {
         const startTime = Date.now();
         console.log(
@@ -89,18 +70,32 @@ function createSpotifyTools(spotifyToken: string): DynamicStructuredTool[] {
           throw error;
         }
       },
+      name: "search_spotify_tracks",
+      schema: z.object({
+        filters: z
+          .object({
+            genre: z.string().optional(),
+            max_energy: z.number().min(0).max(1).optional(),
+            max_tempo: z.number().min(0).max(300).optional(),
+            min_energy: z.number().min(0).max(1).optional(),
+            min_tempo: z.number().min(0).max(300).optional(),
+          })
+          .optional(),
+        limit: z
+          .number()
+          .min(1)
+          .max(50)
+          .default(10)
+          .describe("Number of results"),
+        query: z
+          .string()
+          .describe("Search query (artist name, song name, etc.)"),
+      }),
     }),
 
     new DynamicStructuredTool({
-      name: "get_audio_features",
       description:
         "Get detailed audio features for tracks (energy, danceability, tempo, etc.)",
-      schema: z.object({
-        track_ids: z
-          .array(z.string())
-          .max(100)
-          .describe("Array of Spotify track IDs"),
-      }),
       func: async (args) => {
         const startTime = Date.now();
         console.log(
@@ -134,33 +129,18 @@ function createSpotifyTools(spotifyToken: string): DynamicStructuredTool[] {
           throw error;
         }
       },
+      name: "get_audio_features",
+      schema: z.object({
+        track_ids: z
+          .array(z.string())
+          .max(100)
+          .describe("Array of Spotify track IDs"),
+      }),
     }),
 
     new DynamicStructuredTool({
-      name: "get_recommendations",
       description:
         "Get track recommendations based on seeds and target audio features",
-      schema: z.object({
-        seed_tracks: z
-          .array(z.string())
-          .max(5)
-          .optional()
-          .describe("Seed track IDs"),
-        seed_artists: z
-          .array(z.string())
-          .max(5)
-          .optional()
-          .describe("Seed artist IDs"),
-        seed_genres: z
-          .array(z.string())
-          .max(5)
-          .optional()
-          .describe("Seed genres"),
-        target_energy: z.number().min(0).max(1).optional(),
-        target_danceability: z.number().min(0).max(1).optional(),
-        target_valence: z.number().min(0).max(1).optional(),
-        limit: z.number().min(1).max(100).default(20),
-      }),
       func: async (args) => {
         const startTime = Date.now();
         console.log(
@@ -214,23 +194,32 @@ function createSpotifyTools(spotifyToken: string): DynamicStructuredTool[] {
           throw error;
         }
       },
+      name: "get_recommendations",
+      schema: z.object({
+        limit: z.number().min(1).max(100).default(20),
+        seed_artists: z
+          .array(z.string())
+          .max(5)
+          .optional()
+          .describe("Seed artist IDs"),
+        seed_genres: z
+          .array(z.string())
+          .max(5)
+          .optional()
+          .describe("Seed genres"),
+        seed_tracks: z
+          .array(z.string())
+          .max(5)
+          .optional()
+          .describe("Seed track IDs"),
+        target_danceability: z.number().min(0).max(1).optional(),
+        target_energy: z.number().min(0).max(1).optional(),
+        target_valence: z.number().min(0).max(1).optional(),
+      }),
     }),
 
     new DynamicStructuredTool({
-      name: "create_playlist",
       description: "Create a new Spotify playlist and add tracks",
-      schema: z.object({
-        name: z.string().min(1).max(100).describe("Playlist name"),
-        description: z
-          .string()
-          .max(300)
-          .optional()
-          .describe("Playlist description"),
-        public: z.boolean().default(false).describe("Make playlist public"),
-        track_uris: z
-          .array(z.string())
-          .describe("Spotify track URIs (spotify:track:...)"),
-      }),
       func: async (args) => {
         const startTime = Date.now();
         console.log(`[Tool:create_playlist] Creating playlist: "${args.name}"`);
@@ -278,24 +267,23 @@ function createSpotifyTools(spotifyToken: string): DynamicStructuredTool[] {
           throw error;
         }
       },
+      name: "create_playlist",
+      schema: z.object({
+        description: z
+          .string()
+          .max(300)
+          .optional()
+          .describe("Playlist description"),
+        name: z.string().min(1).max(100).describe("Playlist name"),
+        public: z.boolean().default(false).describe("Make playlist public"),
+        track_uris: z
+          .array(z.string())
+          .describe("Spotify track URIs (spotify:track:...)"),
+      }),
     }),
 
     new DynamicStructuredTool({
-      name: "modify_playlist",
       description: "Add, remove, or reorder tracks in an existing playlist",
-      schema: z.object({
-        playlist_id: z.string().describe("Spotify playlist ID"),
-        action: z
-          .enum(["add", "remove", "reorder"])
-          .describe("Action to perform"),
-        track_uris: z
-          .array(z.string())
-          .describe("Track URIs to add/remove/reorder"),
-        position: z
-          .number()
-          .optional()
-          .describe("Position for insertion (add/reorder)"),
-      }),
       func: async (args) => {
         const startTime = Date.now();
         console.log(
@@ -327,19 +315,25 @@ function createSpotifyTools(spotifyToken: string): DynamicStructuredTool[] {
           throw error;
         }
       },
+      name: "modify_playlist",
+      schema: z.object({
+        action: z
+          .enum(["add", "remove", "reorder"])
+          .describe("Action to perform"),
+        playlist_id: z.string().describe("Spotify playlist ID"),
+        position: z
+          .number()
+          .optional()
+          .describe("Position for insertion (add/reorder)"),
+        track_uris: z
+          .array(z.string())
+          .describe("Track URIs to add/remove/reorder"),
+      }),
     }),
 
     new DynamicStructuredTool({
-      name: "analyze_playlist",
       description:
         "Analyze an existing playlist to understand its characteristics",
-      schema: z.object({
-        playlist_id: z.string().describe("Spotify playlist ID to analyze"),
-        include_recommendations: z
-          .boolean()
-          .default(false)
-          .describe("Include AI recommendations"),
-      }),
       func: async (args) => {
         const startTime = Date.now();
         console.log(
@@ -385,15 +379,19 @@ function createSpotifyTools(spotifyToken: string): DynamicStructuredTool[] {
           throw error;
         }
       },
+      name: "analyze_playlist",
+      schema: z.object({
+        include_recommendations: z
+          .boolean()
+          .default(false)
+          .describe("Include AI recommendations"),
+        playlist_id: z.string().describe("Spotify playlist ID to analyze"),
+      }),
     }),
 
     new DynamicStructuredTool({
-      name: "get_track_details",
       description:
         "Get detailed information about a specific track including artist, album, popularity",
-      schema: z.object({
-        track_id: z.string().describe("Spotify track ID to get details for"),
-      }),
       func: async (args) => {
         const startTime = Date.now();
         console.log(
@@ -419,15 +417,15 @@ function createSpotifyTools(spotifyToken: string): DynamicStructuredTool[] {
           throw error;
         }
       },
+      name: "get_track_details",
+      schema: z.object({
+        track_id: z.string().describe("Spotify track ID to get details for"),
+      }),
     }),
 
     new DynamicStructuredTool({
-      name: "get_artist_info",
       description:
         "Get detailed information about an artist including genres, popularity, and follower count",
-      schema: z.object({
-        artist_id: z.string().describe("Spotify artist ID"),
-      }),
       func: async (args) => {
         const startTime = Date.now();
         console.log(
@@ -453,18 +451,14 @@ function createSpotifyTools(spotifyToken: string): DynamicStructuredTool[] {
           throw error;
         }
       },
+      name: "get_artist_info",
+      schema: z.object({
+        artist_id: z.string().describe("Spotify artist ID"),
+      }),
     }),
 
     new DynamicStructuredTool({
-      name: "get_artist_top_tracks",
       description: "Get an artist's most popular tracks",
-      schema: z.object({
-        artist_id: z.string().describe("Spotify artist ID"),
-        market: z
-          .string()
-          .default("US")
-          .describe("Market/country code for track availability"),
-      }),
       func: async (args) => {
         const startTime = Date.now();
         console.log(
@@ -492,20 +486,18 @@ function createSpotifyTools(spotifyToken: string): DynamicStructuredTool[] {
           throw error;
         }
       },
+      name: "get_artist_top_tracks",
+      schema: z.object({
+        artist_id: z.string().describe("Spotify artist ID"),
+        market: z
+          .string()
+          .default("US")
+          .describe("Market/country code for track availability"),
+      }),
     }),
 
     new DynamicStructuredTool({
-      name: "search_artists",
       description: "Search for artists on Spotify",
-      schema: z.object({
-        query: z.string().describe("Artist name or search query"),
-        limit: z
-          .number()
-          .min(1)
-          .max(50)
-          .default(10)
-          .describe("Number of results"),
-      }),
       func: async (args) => {
         const startTime = Date.now();
         console.log(
@@ -533,16 +525,20 @@ function createSpotifyTools(spotifyToken: string): DynamicStructuredTool[] {
           throw error;
         }
       },
+      name: "search_artists",
+      schema: z.object({
+        limit: z
+          .number()
+          .min(1)
+          .max(50)
+          .default(10)
+          .describe("Number of results"),
+        query: z.string().describe("Artist name or search query"),
+      }),
     }),
 
     new DynamicStructuredTool({
-      name: "get_related_artists",
       description: "Get artists similar to a given artist",
-      schema: z.object({
-        artist_id: z
-          .string()
-          .describe("Spotify artist ID to find related artists for"),
-      }),
       func: async (args) => {
         const startTime = Date.now();
         console.log(
@@ -570,15 +566,17 @@ function createSpotifyTools(spotifyToken: string): DynamicStructuredTool[] {
           throw error;
         }
       },
+      name: "get_related_artists",
+      schema: z.object({
+        artist_id: z
+          .string()
+          .describe("Spotify artist ID to find related artists for"),
+      }),
     }),
 
     new DynamicStructuredTool({
-      name: "get_album_info",
       description:
         "Get detailed information about an album including tracks and release date",
-      schema: z.object({
-        album_id: z.string().describe("Spotify album ID"),
-      }),
       func: async (args) => {
         const startTime = Date.now();
         console.log(
@@ -604,12 +602,14 @@ function createSpotifyTools(spotifyToken: string): DynamicStructuredTool[] {
           throw error;
         }
       },
+      name: "get_album_info",
+      schema: z.object({
+        album_id: z.string().describe("Spotify album ID"),
+      }),
     }),
 
     new DynamicStructuredTool({
-      name: "get_available_genres",
       description: "Get list of available genre seeds for recommendations",
-      schema: z.object({}),
       func: async () => {
         const startTime = Date.now();
         console.log(
@@ -637,6 +637,8 @@ function createSpotifyTools(spotifyToken: string): DynamicStructuredTool[] {
           throw error;
         }
       },
+      name: "get_available_genres",
+      schema: z.object({}),
     }),
   ];
 
@@ -670,11 +672,9 @@ chatRouter.post("/message", async (c) => {
     const request = ChatRequestSchema.parse(body);
 
     // Extract playlist ID if present in message
-    let playlistId: string | null = null;
+    let playlistId: null | string = null;
     let actualMessage = request.message;
-    const playlistIdMatch = request.message.match(
-      /^\[Playlist ID: ([^\]]+)\] (.+)$/
-    );
+    const playlistIdMatch = /^\[Playlist ID: ([^\]]+)\] (.+)$/.exec(request.message);
     if (playlistIdMatch) {
       playlistId = playlistIdMatch[1];
       actualMessage = playlistIdMatch[2];
@@ -750,10 +750,10 @@ chatRouter.post("/message", async (c) => {
 
     const llm = new ChatAnthropic({
       apiKey: c.env.ANTHROPIC_API_KEY,
+      maxRetries: 0, // Disable Langchain retries, we handle manually
+      maxTokens: 2000,
       model: "claude-sonnet-4-5-20250929",
       temperature: 0.2,
-      maxTokens: 2000,
-      maxRetries: 0, // Disable Langchain retries, we handle manually
     });
 
     console.log(
@@ -1088,8 +1088,8 @@ Use tools to make informed decisions.`,
               .join(", ")}]`
           );
           toolResults.push({
-            tool_call_id: toolCall.id,
             output: `Error: Tool ${toolCall.name} not found`,
+            tool_call_id: toolCall.id,
           });
           continue;
         }
@@ -1122,8 +1122,8 @@ Use tools to make informed decisions.`,
           );
 
           toolResults.push({
-            tool_call_id: toolCall.id,
             output: result,
+            tool_call_id: toolCall.id,
           });
         } catch (error) {
           const toolDuration = Date.now() - toolStartTime;
@@ -1148,8 +1148,8 @@ Use tools to make informed decisions.`,
             );
           }
           toolResults.push({
-            tool_call_id: toolCall.id,
             output: `Error: ${errorMessage}`,
+            tool_call_id: toolCall.id,
           });
         }
       }
@@ -1158,12 +1158,12 @@ Use tools to make informed decisions.`,
 
       // Create tool response message
       const toolMessage = {
-        role: "tool" as const,
         content: toolResults
           .map(
             (r) => `Tool ${r.tool_call_id} result: ${JSON.stringify(r.output)}`
           )
           .join("\n\n"),
+        role: "tool" as const,
         tool_call_id: initialResponse.tool_calls[0].id,
       };
 
@@ -1179,8 +1179,8 @@ Use tools to make informed decisions.`,
 
       // Create ToolMessage for the results (not SystemMessage)
       const toolResponseMessage = {
-        role: "tool" as const,
         content: toolResults.map((r) => JSON.stringify(r.output)).join("\n"),
+        role: "tool" as const,
         tool_call_id: initialResponse.tool_calls[0].id,
       };
 
@@ -1237,20 +1237,20 @@ Use tools to make informed decisions.`,
       `[Chat:${requestId}] Conversation length: ${
         [
           ...request.conversationHistory,
-          { role: "user", content: request.message },
+          { content: request.message, role: "user" },
         ].length + 1
       } messages`
     );
 
     return c.json({
-      message: responseContent,
       conversationHistory: [
         ...request.conversationHistory,
-        { role: "user" as const, content: actualMessage }, // Use actualMessage without playlist ID prefix
-        { role: "assistant" as const, content: responseContent },
+        { content: actualMessage, role: "user" as const }, // Use actualMessage without playlist ID prefix
+        { content: responseContent, role: "assistant" as const },
       ],
-      requestId,
       duration,
+      message: responseContent,
+      requestId,
     });
   } catch (error) {
     const duration = Date.now() - startTime;
@@ -1274,10 +1274,10 @@ Use tools to make informed decisions.`,
       });
       return c.json(
         {
-          error: "Invalid request format",
           details: error.errors,
-          requestId,
           duration,
+          error: "Invalid request format",
+          requestId,
         },
         400
       );
@@ -1302,9 +1302,9 @@ Use tools to make informed decisions.`,
         console.error(`[Chat:${requestId}] Rate limit error detected`);
         return c.json(
           {
+            duration,
             error: "Rate limit exceeded. Please try again in a few moments.",
             requestId,
-            duration,
           },
           429
         );
@@ -1317,13 +1317,13 @@ Use tools to make informed decisions.`,
         console.error(`[Chat:${requestId}] Anthropic service overloaded`);
         return c.json(
           {
+            duration,
             error:
               "The AI service is experiencing high demand right now. Please try again in a few moments - this usually resolves quickly.",
             errorType: "ServiceOverloaded",
+            requestId,
             retryable: true,
             suggestedWaitTime: 30,
-            requestId,
-            duration,
           },
           503
         );
@@ -1333,9 +1333,9 @@ Use tools to make informed decisions.`,
         console.error(`[Chat:${requestId}] Anthropic API error detected`);
         return c.json(
           {
+            duration,
             error: "AI service temporarily unavailable",
             requestId,
-            duration,
           },
           503
         );
@@ -1345,9 +1345,9 @@ Use tools to make informed decisions.`,
         console.error(`[Chat:${requestId}] Spotify API error detected`);
         return c.json(
           {
+            duration,
             error: "Music service temporarily unavailable",
             requestId,
-            duration,
           },
           503
         );
@@ -1358,6 +1358,7 @@ Use tools to make informed decisions.`,
     console.error(`[Chat:${requestId}] ${"=".repeat(50)}`);
     return c.json(
       {
+        duration,
         error:
           error instanceof Error
             ? error.message
@@ -1365,7 +1366,6 @@ Use tools to make informed decisions.`,
         errorType:
           error instanceof Error ? error.constructor.name : "UnknownError",
         requestId,
-        duration,
       },
       500
     );
@@ -1377,8 +1377,8 @@ Use tools to make informed decisions.`,
  */
 chatRouter.get("/health", (c) => {
   return c.json({
-    status: "ok",
     service: "chat-simple",
+    status: "ok",
     timestamp: new Date().toISOString(),
   });
 });

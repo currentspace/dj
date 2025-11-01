@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+
 import type { Env } from '../index';
 
 const anthropicStatusRouter = new Hono<{ Bindings: Env }>();
@@ -14,17 +15,17 @@ anthropicStatusRouter.get('/limits', async (c) => {
     // Make a minimal API call to get rate limit headers
     // Using the completions endpoint with minimal tokens
     const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
+      body: JSON.stringify({
+        max_tokens: 1,
+        messages: [{ content: 'Hi', role: 'user' }],
+        model: 'claude-3-haiku-20240307', // Use cheapest model for testing
+      }),
       headers: {
+        'anthropic-version': '2023-06-01',
         'Content-Type': 'application/json',
         'x-api-key': c.env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
       },
-      body: JSON.stringify({
-        model: 'claude-3-haiku-20240307', // Use cheapest model for testing
-        messages: [{ role: 'user', content: 'Hi' }],
-        max_tokens: 1,
-      }),
+      method: 'POST',
     });
 
     // Extract rate limit headers
@@ -32,10 +33,10 @@ anthropicStatusRouter.get('/limits', async (c) => {
       'requests-limit': response.headers.get('anthropic-ratelimit-requests-limit'),
       'requests-remaining': response.headers.get('anthropic-ratelimit-requests-remaining'),
       'requests-reset': response.headers.get('anthropic-ratelimit-requests-reset'),
+      'retry-after': response.headers.get('retry-after'),
       'tokens-limit': response.headers.get('anthropic-ratelimit-tokens-limit'),
       'tokens-remaining': response.headers.get('anthropic-ratelimit-tokens-remaining'),
       'tokens-reset': response.headers.get('anthropic-ratelimit-tokens-reset'),
-      'retry-after': response.headers.get('retry-after'),
     };
 
     console.log(`[AnthropicStatus:${requestId}] Status: ${response.status}`);
@@ -88,20 +89,20 @@ anthropicStatusRouter.get('/limits', async (c) => {
     }
 
     return c.json({
-      status,
-      message,
       details,
-      timestamp: new Date().toISOString(),
+      message,
       requestId,
+      status,
+      timestamp: new Date().toISOString(),
     });
 
   } catch (error) {
     console.error(`[AnthropicStatus:${requestId}] Error checking status:`, error);
     return c.json({
-      status: 'error',
-      message: 'Failed to check Anthropic API status',
       error: error instanceof Error ? error.message : String(error),
+      message: 'Failed to check Anthropic API status',
       requestId,
+      status: 'error',
     }, 500);
   }
 });
@@ -119,17 +120,17 @@ anthropicStatusRouter.get('/usage', async (c) => {
 
     // Make a HEAD request to minimize cost
     const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
+      body: JSON.stringify({
+        max_tokens: 1,
+        messages: [{ content: 'test', role: 'user' }],
+        model: 'claude-3-haiku-20240307',
+      }),
       headers: {
+        'anthropic-version': '2023-06-01',
         'Content-Type': 'application/json',
         'x-api-key': c.env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
       },
-      body: JSON.stringify({
-        model: 'claude-3-haiku-20240307',
-        messages: [{ role: 'user', content: 'test' }],
-        max_tokens: 1,
-      }),
+      method: 'POST',
     });
 
     const now = new Date();
@@ -146,24 +147,24 @@ anthropicStatusRouter.get('/usage', async (c) => {
     const tokensUsed = tokensLimit - tokensRemaining;
 
     const usage = {
+      healthy: response.status === 200,
       requests: {
-        used: requestsUsed,
         limit: requestsLimit,
-        remaining: requestsRemaining,
         percentUsed: requestsLimit > 0 ? Math.round((requestsUsed / requestsLimit) * 100) : 0,
+        remaining: requestsRemaining,
         resetsAt: requestsReset,
         resetsIn: requestsReset ? `${Math.round((new Date(requestsReset).getTime() - now.getTime()) / 1000)} seconds` : null,
-      },
-      tokens: {
-        used: tokensUsed,
-        limit: tokensLimit,
-        remaining: tokensRemaining,
-        percentUsed: tokensLimit > 0 ? Math.round((tokensUsed / tokensLimit) * 100) : 0,
-        resetsAt: tokensReset,
-        resetsIn: tokensReset ? `${Math.round((new Date(tokensReset).getTime() - now.getTime()) / 1000)} seconds` : null,
+        used: requestsUsed,
       },
       status: response.status,
-      healthy: response.status === 200,
+      tokens: {
+        limit: tokensLimit,
+        percentUsed: tokensLimit > 0 ? Math.round((tokensUsed / tokensLimit) * 100) : 0,
+        remaining: tokensRemaining,
+        resetsAt: tokensReset,
+        resetsIn: tokensReset ? `${Math.round((new Date(tokensReset).getTime() - now.getTime()) / 1000)} seconds` : null,
+        used: tokensUsed,
+      },
       warnings: [],
     };
 
@@ -184,9 +185,9 @@ anthropicStatusRouter.get('/usage', async (c) => {
     console.log(`[AnthropicStatus:${requestId}] Usage:`, usage);
 
     return c.json({
-      usage,
-      timestamp: new Date().toISOString(),
       requestId,
+      timestamp: new Date().toISOString(),
+      usage,
     });
 
   } catch (error) {

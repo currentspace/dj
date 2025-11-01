@@ -1,37 +1,15 @@
-import { useActionState, useOptimistic, Suspense } from 'react';
-import { apiClient } from '@dj/api-client';
 import type { Playlist } from '@dj/shared-types';
+
+import { apiClient } from '@dj/api-client';
+import { Suspense, useActionState, useOptimistic } from 'react';
+
 import { PlaylistSkeleton } from './PlaylistSkeleton';
 import { TrackList } from './TrackList';
-
-// Server action for generating playlist
-async function generatePlaylistAction(
-  _prevState: { playlist: Playlist | null; error: string | null },
-  formData: FormData
-): Promise<{ playlist: Playlist | null; error: string | null }> {
-  const promptValue = formData.get('prompt');
-
-  if (typeof promptValue !== 'string' || !promptValue.trim()) {
-    return { playlist: null, error: 'Please enter a description' };
-  }
-
-  const prompt = promptValue;
-
-  try {
-    const response = await apiClient.generatePlaylist(prompt);
-    return { playlist: response.playlist, error: null };
-  } catch (error) {
-    return {
-      playlist: null,
-      error: error instanceof Error ? error.message : 'Failed to generate playlist'
-    };
-  }
-}
 
 export function PlaylistGenerator() {
   const [state, formAction, isPending] = useActionState(
     generatePlaylistAction,
-    { playlist: null, error: null }
+    { error: null, playlist: null }
   );
 
   const [optimisticPlaylist, setOptimisticPlaylist] = useOptimistic(
@@ -67,19 +45,19 @@ export function PlaylistGenerator() {
             <p>Tell me what kind of music you're in the mood for...</p>
           </label>
           <textarea
+            className="prompt-input"
+            disabled={isPending}
             id="prompt"
             name="prompt"
             placeholder="e.g., Upbeat songs for a morning workout, or Chill jazz for studying..."
             rows={4}
-            disabled={isPending}
-            className="prompt-input"
           />
         </div>
 
         <button
-          type="submit"
-          disabled={isPending}
           className="generate-button"
+          disabled={isPending}
+          type="submit"
         >
           {isPending ? 'Generating...' : 'Generate Playlist'}
         </button>
@@ -105,9 +83,9 @@ export function PlaylistGenerator() {
 
             <footer className="playlist-actions">
               <button
-                onClick={handleSaveToSpotify}
                 className="save-button"
                 disabled={optimisticPlaylist.spotifyId === 'saving...'}
+                onClick={handleSaveToSpotify}
               >
                 {optimisticPlaylist.spotifyId === 'saving...'
                   ? 'Saving...'
@@ -119,4 +97,28 @@ export function PlaylistGenerator() {
       )}
     </div>
   );
+}
+
+// Server action for generating playlist
+async function generatePlaylistAction(
+  _prevState: { error: null | string; playlist: null | Playlist; },
+  formData: FormData
+): Promise<{ error: null | string; playlist: null | Playlist; }> {
+  const promptValue = formData.get('prompt');
+
+  if (typeof promptValue !== 'string' || !promptValue.trim()) {
+    return { error: 'Please enter a description', playlist: null };
+  }
+
+  const prompt = promptValue;
+
+  try {
+    const response = await apiClient.generatePlaylist(prompt);
+    return { error: null, playlist: response.playlist };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : 'Failed to generate playlist',
+      playlist: null
+    };
+  }
 }

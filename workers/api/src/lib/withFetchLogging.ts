@@ -5,10 +5,10 @@ export async function withFetchLogging<T>(fn: () => Promise<T>): Promise<T> {
     try {
       const isReq = input instanceof Request;
       const isURL = input instanceof URL;
-      const url = isReq ? input.url : isURL ? (input as URL).toString() : (input as string);
+      const url = isReq ? input.url : isURL ? (input).toString() : (input);
 
-      const method = (init?.method ?? (isReq ? (input as Request).method : "GET") ?? "GET").toUpperCase();
-      const hdrs = new Headers(init?.headers ?? (isReq ? (input as Request).headers : undefined));
+      const method = (init?.method ?? (isReq ? (input).method : "GET") ?? "GET").toUpperCase();
+      const hdrs = new Headers(init?.headers ?? (isReq ? (input).headers : undefined));
       const hObj = Object.fromEntries(hdrs.entries());
       if (hObj.authorization) hObj.authorization = "<redacted>";
 

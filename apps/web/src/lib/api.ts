@@ -6,12 +6,12 @@ export async function generatePlaylist(prompt: string) {
   const token = localStorage.getItem('spotify_token')
 
   const response = await fetch(`${API_BASE}/playlist/generate`, {
-    method: 'POST',
+    body: JSON.stringify({ prompt }),
     headers: {
       'Content-Type': 'application/json',
       ...(token && { 'Authorization': `Bearer ${token}` })
     },
-    body: JSON.stringify({ prompt })
+    method: 'POST'
   })
 
   if (!response.ok) {
@@ -29,12 +29,12 @@ export async function savePlaylistToSpotify(playlist: Playlist) {
   }
 
   const response = await fetch(`${API_BASE}/playlist/save`, {
-    method: 'POST',
+    body: JSON.stringify({ playlist }),
     headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
     },
-    body: JSON.stringify({ playlist })
+    method: 'POST'
   })
 
   if (!response.ok) {

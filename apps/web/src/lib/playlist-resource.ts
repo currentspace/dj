@@ -1,21 +1,30 @@
+import type { SpotifyPlaylist } from '@dj/shared-types'
+
 // Playlist resource management using React 19 patterns
 import { getUserPlaylists } from './api-client'
-import type { SpotifyPlaylist } from '@dj/shared-types'
+
+interface PlaylistResource {
+  error?: Error
+  promise: Promise<PlaylistsResponse>
+  status: 'fulfilled' | 'pending' | 'rejected'
+  value?: PlaylistsResponse
+}
 
 interface PlaylistsResponse {
   items: SpotifyPlaylist[]
 }
 
-type PlaylistResource = {
-  promise: Promise<PlaylistsResponse>
-  status: 'pending' | 'fulfilled' | 'rejected'
-  value?: PlaylistsResponse
-  error?: Error
-}
-
 const cache = new Map<string, PlaylistResource>()
 
-export function createPlaylistResource(key: string = 'default'): PlaylistResource {
+export function clearPlaylistCache(key?: string) {
+  if (key) {
+    cache.delete(key)
+  } else {
+    cache.clear()
+  }
+}
+
+export function createPlaylistResource(key = 'default'): PlaylistResource {
   // Check if we already have this resource
   const existing = cache.get(key)
   if (existing) {
@@ -40,14 +49,6 @@ export function createPlaylistResource(key: string = 'default'): PlaylistResourc
 
   cache.set(key, resource)
   return resource
-}
-
-export function clearPlaylistCache(key?: string) {
-  if (key) {
-    cache.delete(key)
-  } else {
-    cache.clear()
-  }
 }
 
 // Helper to preload playlists

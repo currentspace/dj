@@ -1,51 +1,67 @@
-import { Hono } from 'hono';
-import type { Env } from '../index';
-import { z } from 'zod';
+import type { StreamDebugData, StreamLogData, StreamToolData, StreamToolResult } from '@dj/shared-types';
+
 import { ChatAnthropic } from '@langchain/anthropic';
+import { AIMessage, HumanMessage, SystemMessage, ToolMessage } from '@langchain/core/messages';
 import { DynamicStructuredTool } from '@langchain/core/tools';
-import { HumanMessage, SystemMessage, AIMessage, ToolMessage } from '@langchain/core/messages';
+import { Hono } from 'hono';
+import { z } from 'zod';
+
+import type { Env } from '../index';
+
+import { ProgressNarrator } from '../lib/progress-narrator';
 import { executeSpotifyTool } from '../lib/spotify-tools';
-import type { StreamToolData, StreamToolResult, StreamDebugData, StreamLogData } from '@dj/shared-types';
 import { AudioEnrichmentService } from '../services/AudioEnrichmentService';
 import { LastFmService } from '../services/LastFmService';
-import { ProgressNarrator } from '../lib/progress-narrator';
+import { getChildLogger, getLogger, runWithLogger } from '../utils/LoggerContext';
+import { rateLimitedAnthropicCall, rateLimitedSpotifyCall } from '../utils/RateLimitedAPIClients';
 import { ServiceLogger } from '../utils/ServiceLogger';
-import { runWithLogger, getLogger, getChildLogger } from '../utils/LoggerContext';
-import { rateLimitedSpotifyCall, rateLimitedAnthropicCall } from '../utils/RateLimitedAPIClients';
 
 const chatStreamRouter = new Hono<{ Bindings: Env }>();
 
 // Request schema
 const ChatRequestSchema = z.object({
-  message: z.string().min(1).max(2000),
   conversationHistory: z.array(z.object({
-    role: z.enum(['user', 'assistant']),
-    content: z.string()
+    content: z.string(),
+    role: z.enum(['user', 'assistant'])
   })).max(20).default([]),
+  message: z.string().min(1).max(2000),
   mode: z.enum(['analyze', 'create', 'edit']).default('analyze')
 });
 
 // SSE message types
 type StreamEvent =
-  | { type: 'thinking'; data: string }
-  | { type: 'tool_start'; data: StreamToolData }
-  | { type: 'tool_end'; data: StreamToolResult }
-  | { type: 'content'; data: string }
-  | { type: 'error'; data: string }
-  | { type: 'done'; data: null }
-  | { type: 'log'; data: StreamLogData }
-  | { type: 'debug'; data: StreamDebugData };
+  | { data: null; type: 'done'; }
+  | { data: StreamDebugData; type: 'debug'; }
+  | { data: StreamLogData; type: 'log'; }
+  | { data: StreamToolData; type: 'tool_start'; }
+  | { data: StreamToolResult; type: 'tool_end'; }
+  | { data: string; type: 'content'; }
+  | { data: string; type: 'error'; }
+  | { data: string; type: 'thinking'; };
 
 // Writer queue to prevent concurrent writes
 class SSEWriter {
-  private writer: WritableStreamDefaultWriter;
+  private closed = false;
   private encoder: TextEncoder;
   private writeQueue: Promise<void> = Promise.resolve();
-  private closed = false;
+  private writer: WritableStreamDefaultWriter;
 
   constructor(writer: WritableStreamDefaultWriter) {
     this.writer = writer;
     this.encoder = new TextEncoder();
+  }
+
+  async close(): Promise<void> {
+    this.closed = true;
+    await this.writeQueue;
+    await this.writer.close();
+  }
+
+  /**
+   * Wait for all queued writes to complete
+   */
+  async flush(): Promise<void> {
+    await this.writeQueue;
   }
 
   async write(event: StreamEvent): Promise<void> {
@@ -84,13 +100,6 @@ class SSEWriter {
     });
   }
 
-  /**
-   * Wait for all queued writes to complete
-   */
-  async flush(): Promise<void> {
-    await this.writeQueue;
-  }
-
   async writeHeartbeat(): Promise<void> {
     if (this.closed) return;
 
@@ -106,567 +115,11 @@ class SSEWriter {
 
     return this.writeQueue;
   }
-
-  async close(): Promise<void> {
-    this.closed = true;
-    await this.writeQueue;
-    await this.writer.close();
-  }
 }
 
 /**
  * Create Spotify tools with streaming callbacks
  */
-
-// Enhanced tool executor with progress streaming
-async function executeSpotifyToolWithProgress(
-  toolName: string,
-  args: Record<string, unknown>,
-  token: string,
-  sseWriter: SSEWriter,
-  env?: Env,
-  narrator?: ProgressNarrator,
-  userRequest?: string,
-  recentMessages?: string[]
-): Promise<unknown> {
-  // Get logger from AsyncLocalStorage context
-  const logger = getLogger();
-  if (!logger) {
-    throw new Error('executeSpotifyToolWithProgress called outside logger context');
-  }
-  console.log(`[Tool] Executing ${toolName} with args:`, JSON.stringify(args).substring(0, 200));
-
-  if (toolName === 'analyze_playlist') {
-    const { playlist_id } = args;
-
-    try {
-      // Use narrator if available, otherwise fallback to static message
-      const startMessage = narrator
-        ? await narrator.generateMessage({
-            eventType: 'tool_call_start',
-            toolName: 'analyze_playlist',
-            parameters: args,
-            userRequest,
-            previousMessages: recentMessages,
-          })
-        : '📊 Starting playlist analysis...';
-
-      sseWriter.writeAsync({ type: 'thinking', data: startMessage });
-
-      // Step 1: Get playlist details
-      const fetchMessage = narrator
-        ? await narrator.generateMessage({
-            eventType: 'analyzing_request',
-            userRequest,
-            previousMessages: recentMessages,
-          })
-        : '🔍 Fetching playlist information...';
-      sseWriter.writeAsync({ type: 'thinking', data: fetchMessage });
-
-      console.log(`[SpotifyAPI] Fetching playlist details: ${playlist_id}`);
-      const playlistResponse = await rateLimitedSpotifyCall(
-        () => fetch(
-          `https://api.spotify.com/v1/playlists/${playlist_id}`,
-          { headers: { 'Authorization': `Bearer ${token}` } }
-        ),
-        getLogger(),
-        `get playlist ${playlist_id}`
-      );
-
-      console.log(`[SpotifyAPI] Playlist response status: ${playlistResponse?.status}`);
-      if (!playlistResponse || !playlistResponse.ok) {
-        throw new Error(`Failed to get playlist: ${playlistResponse?.status || 'null response'}`);
-      }
-
-      const playlist = await playlistResponse.json() as any;
-      console.log(`[SpotifyAPI] Playlist loaded: "${playlist.name}" with ${playlist.tracks?.total} tracks`);
-
-      const foundMessage = narrator
-        ? await narrator.generateMessage({
-            eventType: 'searching_tracks',
-            parameters: { name: playlist.name, trackCount: playlist.tracks?.total || 0 },
-            userRequest,
-            previousMessages: recentMessages,
-          })
-        : `🎼 Found "${playlist.name}" with ${playlist.tracks?.total || 0} tracks`;
-      sseWriter.writeAsync({ type: 'thinking', data: foundMessage });
-
-      // Step 2: Get tracks
-      const tracksMessage = narrator
-        ? await narrator.generateMessage({
-            eventType: 'analyzing_audio',
-            metadata: { trackCount: playlist.tracks?.total || 0 },
-            userRequest,
-            previousMessages: recentMessages,
-          })
-        : '🎵 Fetching track details...';
-      sseWriter.writeAsync({ type: 'thinking', data: tracksMessage });
-
-      console.log(`[SpotifyAPI] Fetching tracks from playlist: ${playlist_id}`);
-      const tracksResponse = await rateLimitedSpotifyCall(
-        () => fetch(
-          `https://api.spotify.com/v1/playlists/${playlist_id}/tracks?limit=100`,
-          { headers: { 'Authorization': `Bearer ${token}` } }
-        ),
-        getLogger(),
-        `get tracks for playlist ${playlist_id}`
-      );
-
-      console.log(`[SpotifyAPI] Tracks response status: ${tracksResponse?.status}`);
-      if (!tracksResponse || !tracksResponse.ok) {
-        const errorBody = tracksResponse ? await tracksResponse.text() : 'null response';
-        console.error(`[SpotifyAPI] Tracks fetch failed: ${tracksResponse?.status || 'null'} - ${errorBody}`);
-        throw new Error(`Failed to get tracks: ${tracksResponse?.status || 'null response'}`);
-      }
-
-      const tracksData = await tracksResponse.json() as any;
-      const tracks = tracksData.items.map((item: any) => item.track).filter(Boolean);
-      const trackIds = tracks.map((t: any) => t.id).filter(Boolean);
-
-      console.log(`[SpotifyAPI] Loaded ${tracks.length} tracks from playlist`);
-
-      // Debug: Log first 3 tracks' structure to see what fields Spotify returns
-      if (tracks.length > 0) {
-        console.log(`[SpotifyAPI] ========== TRACK STRUCTURE DEBUG ==========`);
-        tracks.slice(0, 3).forEach((track: any, idx: number) => {
-          console.log(`[SpotifyAPI] Track ${idx + 1}: "${track.name}" by ${track.artists?.[0]?.name}`);
-          console.log(`[SpotifyAPI]   - ID: ${track.id}`);
-          console.log(`[SpotifyAPI]   - has external_ids: ${!!track.external_ids}`);
-          console.log(`[SpotifyAPI]   - external_ids value:`, track.external_ids);
-          console.log(`[SpotifyAPI]   - ISRC: ${track.external_ids?.isrc || 'NOT PRESENT'}`);
-          console.log(`[SpotifyAPI]   - Available fields:`, Object.keys(track).join(', '));
-        });
-        console.log(`[SpotifyAPI] ========== END TRACK STRUCTURE DEBUG ==========`);
-      }
-
-      sseWriter.writeAsync({ type: 'thinking', data: `✅ Loaded ${tracks.length} tracks successfully` });
-
-      // Step 3: Analyze track metadata (audio features API deprecated)
-      sseWriter.writeAsync({ type: 'thinking', data: '🎵 Analyzing track metadata...' });
-
-      // Calculate metadata-based statistics
-      const validTracks = tracks.filter((t: any) => t && t.popularity !== undefined);
-      const avgPopularity = validTracks.length > 0
-        ? validTracks.reduce((sum: number, t: any) => sum + t.popularity, 0) / validTracks.length
-        : 0;
-
-      const avgDuration = validTracks.length > 0
-        ? validTracks.reduce((sum: number, t: any) => sum + (t.duration_ms || 0), 0) / validTracks.length
-        : 0;
-
-      const explicitCount = validTracks.filter((t: any) => t.explicit).length;
-      const explicitPercentage = validTracks.length > 0 ? (explicitCount / validTracks.length) * 100 : 0;
-
-      // Extract unique artists for genre analysis
-      const artistIds = new Set<string>();
-      validTracks.forEach((t: any) => {
-        if (t.artists) {
-          t.artists.forEach((artist: any) => {
-            if (artist.id) artistIds.add(artist.id);
-          });
-        }
-      });
-
-      // Step 4: Fetch artist genres (batch request, limit to 50 artists)
-      sseWriter.writeAsync({ type: 'thinking', data: '🎸 Fetching artist genres...' });
-      const artistIdsArray = Array.from(artistIds).slice(0, 50);
-      let genres: string[] = [];
-
-      if (artistIdsArray.length > 0) {
-        const artistsResponse = await rateLimitedSpotifyCall(
-          () => fetch(
-            `https://api.spotify.com/v1/artists?ids=${artistIdsArray.join(',')}`,
-            { headers: { 'Authorization': `Bearer ${token}` } }
-          ),
-          getLogger(),
-          `get ${artistIdsArray.length} artists`
-        );
-
-        if (artistsResponse && artistsResponse.ok) {
-          const artistsData = await artistsResponse.json() as any;
-          const genreMap = new Map<string, number>();
-
-          artistsData.artists.forEach((artist: any) => {
-            if (artist && artist.genres) {
-              artist.genres.forEach((genre: string) => {
-                genreMap.set(genre, (genreMap.get(genre) || 0) + 1);
-              });
-            }
-          });
-
-          // Get top genres sorted by frequency
-          genres = Array.from(genreMap.entries())
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 10)
-            .map(([genre]) => genre);
-
-          sseWriter.writeAsync({ type: 'thinking', data: `🎯 Found ${genres.length} genres across ${artistsData.artists.length} artists` });
-        }
-      }
-
-      // Flush after metadata + genre analysis
-      await sseWriter.flush();
-
-      // Step 5: Analyze release dates
-      const releaseDates = validTracks
-        .map((t: any) => t.album?.release_date)
-        .filter(Boolean);
-
-      const releaseYears = releaseDates
-        .map((date: string) => parseInt(date.split('-')[0]))
-        .filter((year: number) => !isNaN(year));
-
-      const avgReleaseYear = releaseYears.length > 0
-        ? Math.round(releaseYears.reduce((sum: number, year: number) => sum + year, 0) / releaseYears.length)
-        : null;
-
-      const oldestYear = releaseYears.length > 0 ? Math.min(...releaseYears) : null;
-      const newestYear = releaseYears.length > 0 ? Math.max(...releaseYears) : null;
-
-      // Step 6: Deezer enrichment (BPM often null, but rank/gain/release_date are valuable)
-      let deezerData = null;
-      if (env?.AUDIO_FEATURES_CACHE) {
-        try {
-          console.log(`[DeezerEnrichment] ========== STARTING DEEZER ENRICHMENT ==========`);
-          console.log(`[DeezerEnrichment] KV Cache available: YES`);
-          const enrichmentService = new AudioEnrichmentService(env.AUDIO_FEATURES_CACHE);
-
-          // Process tracks sequentially with rate limiting at 40 TPS
-          const tracksToEnrich = validTracks.slice(0, 100); // Process up to 100 tracks
-          const bpmResults: number[] = [];
-          const rankResults: number[] = [];
-          const gainResults: number[] = [];
-          let enrichedCount = 0;
-
-          console.log(`[DeezerEnrichment] Will attempt to enrich ${tracksToEnrich.length} tracks`);
-          sseWriter.writeAsync({ type: 'thinking', data: `🎵 Enriching ${tracksToEnrich.length} tracks with Deezer data (BPM, rank, gain)...` });
-
-          // Debug: Check if tracks have external_ids
-          const tracksWithISRC = tracksToEnrich.filter(t => t.external_ids?.isrc).length;
-          console.log(`[BPMEnrichment] Pre-enrichment ISRC check: ${tracksWithISRC}/${tracksToEnrich.length} tracks have ISRC`);
-
-          // Debug: Log first 3 tracks to see their structure in detail
-          if (tracksToEnrich.length > 0) {
-            console.log(`[BPMEnrichment] ========== ENRICHMENT TRACK STRUCTURE DEBUG ==========`);
-            tracksToEnrich.slice(0, 3).forEach((track, idx) => {
-              console.log(`[BPMEnrichment] Track ${idx + 1}: "${track.name}" by ${track.artists?.[0]?.name}`);
-              console.log(`[BPMEnrichment]   - ID: ${track.id}`);
-              console.log(`[BPMEnrichment]   - Duration: ${track.duration_ms}ms`);
-              console.log(`[BPMEnrichment]   - has external_ids: ${!!track.external_ids}`);
-              console.log(`[BPMEnrichment]   - external_ids type: ${typeof track.external_ids}`);
-              console.log(`[BPMEnrichment]   - external_ids value:`, JSON.stringify(track.external_ids));
-              console.log(`[BPMEnrichment]   - ISRC: ${track.external_ids?.isrc || 'NOT PRESENT'}`);
-              console.log(`[BPMEnrichment]   - Track object keys:`, Object.keys(track).join(', '));
-            });
-            console.log(`[BPMEnrichment] ========== END ENRICHMENT TRACK STRUCTURE DEBUG ==========`);
-          }
-
-          if (tracksWithISRC === 0) {
-            console.warn(`[BPMEnrichment] ⚠️ CRITICAL: No tracks have ISRC in external_ids`);
-            console.warn(`[BPMEnrichment] Will need to fetch full track details from Spotify /tracks API`);
-            sseWriter.writeAsync({ type: 'thinking', data: '⚠️ Tracks missing ISRC data - fetching from Spotify API...' });
-          } else {
-            console.log(`[BPMEnrichment] ✅ Found ${tracksWithISRC} tracks with ISRC, proceeding with enrichment`);
-          }
-
-          for (let i = 0; i < tracksToEnrich.length; i++) {
-            const track = tracksToEnrich[i];
-
-            // Log every track attempt for first 5 tracks, then every 10th
-            if (i < 5 || i % 10 === 0) {
-              console.log(`[BPMEnrichment] Processing track ${i + 1}/${tracksToEnrich.length}: "${track.name}"`);
-            }
-
-            try {
-              const spotifyTrack = {
-                id: track.id,
-                name: track.name,
-                duration_ms: track.duration_ms,
-                artists: track.artists || [],
-                external_ids: track.external_ids
-              };
-
-              // Log the track being sent to enrichment service
-              if (i < 3) {
-                console.log(`[BPMEnrichment] Calling enrichTrack with:`, {
-                  id: spotifyTrack.id,
-                  name: spotifyTrack.name,
-                  has_external_ids: !!spotifyTrack.external_ids,
-                  isrc: spotifyTrack.external_ids?.isrc || 'NONE'
-                });
-              }
-
-              const deezerResult = await enrichmentService.enrichTrack(spotifyTrack);
-
-              // Log the result for first few tracks
-              if (i < 3) {
-                console.log(`[DeezerEnrichment] Result for "${track.name}":`, {
-                  bpm: deezerResult.bpm,
-                  gain: deezerResult.gain,
-                  rank: deezerResult.rank,
-                  release_date: deezerResult.release_date,
-                  source: deezerResult.source
-                });
-              }
-
-              // Collect all available Deezer data
-              if (deezerResult.bpm && AudioEnrichmentService.isValidBPM(deezerResult.bpm)) {
-                bpmResults.push(deezerResult.bpm);
-              }
-              if (deezerResult.rank !== null && deezerResult.rank > 0) {
-                rankResults.push(deezerResult.rank);
-              }
-              if (deezerResult.gain !== null) {
-                gainResults.push(deezerResult.gain);
-              }
-
-              if (deezerResult.source) {
-                enrichedCount++;
-
-                // Stream progress updates every 5 tracks
-                if ((i + 1) % 5 === 0) {
-                  sseWriter.writeAsync({ type: 'thinking', data: `🎵 Enriched ${enrichedCount}/${tracksToEnrich.length} tracks...` });
-                }
-              }
-
-              // No manual rate limiting needed - orchestrator handles it via continuous queue
-            } catch (error) {
-              getChildLogger('BPMEnrichment').error(`Failed for track "${track.name}"`, error);
-              // Continue with next track
-            }
-          }
-
-          console.log(`[DeezerEnrichment] ========== ENRICHMENT COMPLETE ==========`);
-          console.log(`[DeezerEnrichment] Total tracks processed: ${tracksToEnrich.length}`);
-          console.log(`[DeezerEnrichment] Tracks with Deezer match: ${enrichedCount}`);
-          console.log(`[DeezerEnrichment] BPM results: ${bpmResults.length}`);
-          console.log(`[DeezerEnrichment] Rank results: ${rankResults.length}`);
-          console.log(`[DeezerEnrichment] Gain results: ${gainResults.length}`);
-
-          if (enrichedCount > 0) {
-            deezerData = {
-              total_checked: tracksToEnrich.length,
-              tracks_found: enrichedCount,
-              source: 'deezer'
-            } as any;
-
-            // Add BPM stats if available
-            if (bpmResults.length > 0) {
-              const avgBPM = bpmResults.reduce((sum, bpm) => sum + bpm, 0) / bpmResults.length;
-              deezerData.bpm = {
-                avg: Math.round(avgBPM),
-                range: { min: Math.min(...bpmResults), max: Math.max(...bpmResults) },
-                sample_size: bpmResults.length
-              };
-            }
-
-            // Add rank stats if available
-            if (rankResults.length > 0) {
-              const avgRank = rankResults.reduce((sum, rank) => sum + rank, 0) / rankResults.length;
-              deezerData.rank = {
-                avg: Math.round(avgRank),
-                range: { min: Math.min(...rankResults), max: Math.max(...rankResults) },
-                sample_size: rankResults.length
-              };
-            }
-
-            // Add gain stats if available
-            if (gainResults.length > 0) {
-              const avgGain = gainResults.reduce((sum, gain) => sum + gain, 0) / gainResults.length;
-              deezerData.gain = {
-                avg: parseFloat(avgGain.toFixed(1)),
-                range: { min: Math.min(...gainResults), max: Math.max(...gainResults) },
-                sample_size: gainResults.length
-              };
-            }
-
-            const dataTypes = [
-              bpmResults.length > 0 ? 'BPM' : null,
-              rankResults.length > 0 ? 'rank' : null,
-              gainResults.length > 0 ? 'gain' : null
-            ].filter(Boolean).join(', ');
-
-            sseWriter.writeAsync({ type: 'thinking', data: `✅ Deezer enrichment complete! Found ${dataTypes} for ${enrichedCount}/${tracksToEnrich.length} tracks` });
-          } else {
-            sseWriter.writeAsync({ type: 'thinking', data: '⚠️ No Deezer data available for these tracks' });
-          }
-        } catch (error) {
-          getChildLogger('DeezerEnrichment').error('Enrichment failed', error);
-          sseWriter.writeAsync({ type: 'thinking', data: '⚠️ Deezer enrichment unavailable - continuing with metadata only' });
-        }
-      }
-
-      // Flush after Deezer enrichment
-      await sseWriter.flush();
-
-      // Step 7: Optimized Last.fm enrichment (tracks + unique artists separately)
-      let lastfmData = null;
-      if (env?.LASTFM_API_KEY && env?.AUDIO_FEATURES_CACHE) {
-        try {
-          const lastfmService = new LastFmService(env.LASTFM_API_KEY, env.AUDIO_FEATURES_CACHE);
-
-          const tracksForLastFm = validTracks.slice(0, 50); // Process up to 50 tracks
-          const signalsMap = new Map();
-
-          // Step 7a: Get track signals (4 API calls per track = 200 total)
-          sseWriter.writeAsync({ type: 'thinking', data: `🎧 Enriching ${tracksForLastFm.length} tracks with Last.fm data (40 TPS)...` });
-
-          for (let i = 0; i < tracksForLastFm.length; i++) {
-            const track = tracksForLastFm[i];
-
-            try {
-              const lastfmTrack = {
-                name: track.name,
-                artist: track.artists?.[0]?.name || 'Unknown',
-                duration_ms: track.duration_ms
-              };
-
-              // Get track signals WITHOUT artist info (skipArtistInfo=true)
-              const signals = await lastfmService.getTrackSignals(lastfmTrack, true);
-
-              if (signals) {
-                const key = `${track.id}`;
-                signalsMap.set(key, signals);
-
-                // Stream simple progress every 2 tracks
-                // Note: Narrator calls disabled here - concurrent ChatAnthropic instance creation fails
-                if ((i + 1) % 2 === 0 || i === tracksForLastFm.length - 1) {
-                  sseWriter.writeAsync({
-                    type: 'thinking',
-                    data: `🎧 Enriched ${i + 1}/${tracksForLastFm.length} tracks...`
-                  });
-                }
-              }
-            } catch (error) {
-              getChildLogger('LastFm').error(`Failed for track ${track.name}`, error);
-            }
-          }
-
-          // Step 7b: Get unique artists and fetch artist info separately (cached + rate-limited queue)
-          const uniqueArtists = [...new Set(tracksForLastFm.map(t => t.artists?.[0]?.name).filter(Boolean))];
-          sseWriter.writeAsync({ type: 'thinking', data: `🎤 Fetching artist info for ${uniqueArtists.length} unique artists...` });
-
-          const artistInfoMap = await lastfmService.batchGetArtistInfo(uniqueArtists, async (current, total) => {
-            // Report progress every 10 artists with simple message
-            // Note: Narrator calls disabled here - concurrent ChatAnthropic instance creation fails
-            if (current % 10 === 0 || current === total) {
-              sseWriter.writeAsync({ type: 'thinking', data: `🎤 Enriched ${current}/${total} artists...` });
-            }
-          });
-
-          // Step 7c: Attach artist info to track signals and update cache
-          for (const [trackId, signals] of signalsMap.entries()) {
-            const artistKey = signals.canonicalArtist.toLowerCase();
-            if (artistInfoMap.has(artistKey)) {
-              signals.artistInfo = artistInfoMap.get(artistKey);
-
-              // Update cache with complete signals including artist info
-              const cacheKey = lastfmService.generateCacheKey(signals.canonicalArtist, signals.canonicalTrack);
-              await lastfmService.updateCachedSignals(cacheKey, signals);
-            }
-          }
-
-          if (signalsMap.size > 0) {
-            // Aggregate tags across all tracks
-            const aggregatedTags = LastFmService.aggregateTags(signalsMap);
-
-            // Calculate average popularity
-            const popularity = LastFmService.calculateAveragePopularity(signalsMap);
-
-            // Get some similar tracks from the first few tracks
-            const similarTracks = new Set<string>();
-            let count = 0;
-            for (const signals of signalsMap.values()) {
-              if (count >= 3) break; // Only get similar from first 3 tracks
-              signals.similar.slice(0, 3).forEach(s => {
-                similarTracks.add(`${s.artist} - ${s.name}`);
-              });
-              count++;
-            }
-
-            lastfmData = {
-              crowd_tags: aggregatedTags.slice(0, 10),
-              avg_listeners: popularity.avgListeners,
-              avg_playcount: popularity.avgPlaycount,
-              similar_tracks: Array.from(similarTracks).slice(0, 10),
-              sample_size: signalsMap.size,
-              artists_enriched: artistInfoMap.size,
-              source: 'lastfm'
-            };
-
-            sseWriter.writeAsync({ type: 'thinking', data: `✅ Enriched ${signalsMap.size} tracks + ${artistInfoMap.size} artists!` });
-          }
-        } catch (error) {
-          getChildLogger('LastFm').error('Enrichment failed', error);
-          sseWriter.writeAsync({ type: 'thinking', data: '⚠️ Last.fm enrichment unavailable - continuing without tags' });
-        }
-      }
-
-      // Flush any pending narrator messages before final analysis
-      await sseWriter.flush();
-
-      sseWriter.writeAsync({ type: 'thinking', data: '🧮 Computing playlist insights...' });
-
-      const analysis = {
-        playlist_name: playlist.name,
-        playlist_description: playlist.description,
-        total_tracks: tracks.length,
-        metadata_analysis: {
-          avg_popularity: Math.round(avgPopularity),
-          avg_duration_ms: Math.round(avgDuration),
-          avg_duration_minutes: Math.round(avgDuration / 60000 * 10) / 10,
-          explicit_tracks: explicitCount,
-          explicit_percentage: Math.round(explicitPercentage),
-          top_genres: genres,
-          release_year_range: oldestYear && newestYear ? {
-            oldest: oldestYear,
-            newest: newestYear,
-            average: avgReleaseYear
-          } : null,
-          total_artists: artistIdsArray.length
-        },
-        deezer_analysis: deezerData, // Deezer BPM, rank, gain if available
-        lastfm_analysis: lastfmData, // Last.fm tags and popularity if available
-        track_ids: trackIds,
-        message: (() => {
-          const sources = [
-            deezerData ? `Deezer (${[
-              deezerData.bpm ? 'BPM' : null,
-              deezerData.rank ? 'rank' : null,
-              deezerData.gain ? 'gain' : null
-            ].filter(Boolean).join(', ')})` : null,
-            lastfmData ? 'Last.fm (tags, popularity)' : null
-          ].filter(Boolean);
-          return sources.length > 0
-            ? `Enriched with ${sources.join(' + ')}! Use get_playlist_tracks for track details.`
-            : 'Use get_playlist_tracks to fetch track details in batches, or get_track_details for specific tracks.';
-        })()
-      };
-
-      sseWriter.writeAsync({ type: 'thinking', data: `🎉 Analysis complete for "${analysis.playlist_name}"!` });
-
-      // Log data size for debugging
-      const analysisJson = JSON.stringify(analysis);
-      console.log(`[Tool] analyze_playlist completed successfully`);
-      console.log(`[Tool] Analysis JSON size: ${analysisJson.length} bytes (${(analysisJson.length / 1024).toFixed(1)}KB)`);
-      console.log(`[Tool] Returning metadata analysis with ${trackIds.length} track IDs`);
-
-      return analysis;
-
-    } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-      sseWriter.writeAsync({ type: 'thinking', data: `❌ Analysis failed: ${errorMsg}` });
-      getChildLogger('Tool:analyze_playlist').error('Analysis failed', error, {
-        errorMessage: errorMsg,
-        errorType: error?.constructor?.name
-      });
-      throw error;
-    }
-  }
-
-  // Fall back to original tool executor for other tools
-  return await executeSpotifyTool(toolName, args, token);
-}
 
 function createStreamingSpotifyTools(
   spotifyToken: string,
@@ -682,53 +135,49 @@ function createStreamingSpotifyTools(
 
   const tools: DynamicStructuredTool[] = [
     new DynamicStructuredTool({
-      name: 'search_spotify_tracks',
       description: 'Search for tracks on Spotify',
-      schema: z.object({
-        query: z.string(),
-        limit: z.number().min(1).max(50).default(10)
-      }),
       func: async (args) => {
         if (abortSignal?.aborted) throw new Error('Request aborted');
 
         await sseWriter.write({
-          type: 'tool_start',
-          data: { tool: 'search_spotify_tracks', args }
+          data: { args, tool: 'search_spotify_tracks' },
+          type: 'tool_start'
         });
 
         const result = await executeSpotifyTool('search_spotify_tracks', args, spotifyToken);
 
         await sseWriter.write({
-          type: 'tool_end',
           data: {
-            tool: 'search_spotify_tracks',
-            result: Array.isArray(result) ? `Found ${result.length} tracks` : 'Search complete'
-          }
+            result: Array.isArray(result) ? `Found ${result.length} tracks` : 'Search complete',
+            tool: 'search_spotify_tracks'
+          },
+          type: 'tool_end'
         });
 
         return result;
-      }
+      },
+      name: 'search_spotify_tracks',
+      schema: z.object({
+        limit: z.number().min(1).max(50).default(10),
+        query: z.string()
+      })
     }),
 
     new DynamicStructuredTool({
-      name: 'analyze_playlist',
       description: 'Analyze a playlist',
-      schema: z.object({
-        playlist_id: z.string().optional()
-      }),
       func: async (args) => {
         if (abortSignal?.aborted) throw new Error('Request aborted');
 
         // Auto-inject playlist ID if missing or empty
-        let finalArgs = { ...args };
+        const finalArgs = { ...args };
         if (!args.playlist_id && contextPlaylistId) {
           console.log(`[analyze_playlist] Auto-injecting playlist_id: ${contextPlaylistId}`);
           finalArgs.playlist_id = contextPlaylistId;
         }
 
         await sseWriter.write({
-          type: 'tool_start',
-          data: { tool: 'analyze_playlist', args: finalArgs }
+          data: { args: finalArgs, tool: 'analyze_playlist' },
+          type: 'tool_start'
         });
 
         // Use enhanced executeSpotifyTool with progress streaming and narrator
@@ -744,32 +193,30 @@ function createStreamingSpotifyTools(
         );
 
         await sseWriter.write({
-          type: 'tool_end',
           data: {
-            tool: 'analyze_playlist',
-            result: (result as any)?.playlist_name ? `Analyzed "${(result as any).playlist_name}"` : 'Analysis complete'
-          }
+            result: (result as any)?.playlist_name ? `Analyzed "${(result as any).playlist_name}"` : 'Analysis complete',
+            tool: 'analyze_playlist'
+          },
+          type: 'tool_end'
         });
 
         return result;
-      }
+      },
+      name: 'analyze_playlist',
+      schema: z.object({
+        playlist_id: z.string().optional()
+      })
     }),
 
     new DynamicStructuredTool({
-      name: 'get_playlist_tracks',
       description: 'Get tracks from a playlist with pagination. Returns compact track info (name, artists, duration, popularity). Use this after analyze_playlist to get actual track details.',
-      schema: z.object({
-        playlist_id: z.string().optional(),
-        offset: z.number().min(0).default(0),
-        limit: z.number().min(1).max(50).default(20)
-      }),
       func: async (args) => {
         if (abortSignal?.aborted) throw new Error('Request aborted');
 
         // Auto-inject playlist ID and apply defaults
-        let finalArgs = {
-          offset: args.offset ?? 0,
+        const finalArgs = {
           limit: args.limit ?? 20,
+          offset: args.offset ?? 0,
           playlist_id: args.playlist_id
         };
 
@@ -783,13 +230,13 @@ function createStreamingSpotifyTools(
         }
 
         await sseWriter.write({
-          type: 'tool_start',
-          data: { tool: 'get_playlist_tracks', args: finalArgs }
+          data: { args: finalArgs, tool: 'get_playlist_tracks' },
+          type: 'tool_start'
         });
 
         await sseWriter.write({
-          type: 'thinking',
-          data: `📥 Fetching tracks ${finalArgs.offset}-${finalArgs.offset + finalArgs.limit}...`
+          data: `📥 Fetching tracks ${finalArgs.offset}-${finalArgs.offset + finalArgs.limit}...`,
+          type: 'thinking'
         });
 
         // Fetch tracks from Spotify
@@ -802,7 +249,7 @@ function createStreamingSpotifyTools(
           `get playlist tracks offset=${finalArgs.offset}`
         );
 
-        if (!response || !response.ok) {
+        if (!response?.ok) {
           throw new Error(`Failed to get playlist tracks: ${response?.status || 'null response'}`);
         }
 
@@ -811,55 +258,57 @@ function createStreamingSpotifyTools(
 
         // Return compact track info
         const compactTracks = tracks.map((track: any) => ({
-          id: track.id,
-          name: track.name,
+          album: track.album?.name,
           artists: track.artists?.map((a: any) => a.name).join(', ') || 'Unknown',
           duration_ms: track.duration_ms,
+          id: track.id,
+          name: track.name,
           popularity: track.popularity,
-          uri: track.uri,
-          album: track.album?.name
+          uri: track.uri
         }));
 
         await sseWriter.write({
-          type: 'thinking',
-          data: `✅ Loaded ${compactTracks.length} tracks`
+          data: `✅ Loaded ${compactTracks.length} tracks`,
+          type: 'thinking'
         });
 
         await sseWriter.write({
-          type: 'tool_end',
           data: {
-            tool: 'get_playlist_tracks',
-            result: `Fetched ${compactTracks.length} tracks`
-          }
+            result: `Fetched ${compactTracks.length} tracks`,
+            tool: 'get_playlist_tracks'
+          },
+          type: 'tool_end'
         });
 
         return {
-          tracks: compactTracks,
-          offset: finalArgs.offset,
+          has_more: (finalArgs.offset + compactTracks.length) < data.total,
           limit: finalArgs.limit,
+          offset: finalArgs.offset,
           total: data.total,
-          has_more: (finalArgs.offset + compactTracks.length) < data.total
+          tracks: compactTracks
         };
-      }
+      },
+      name: 'get_playlist_tracks',
+      schema: z.object({
+        limit: z.number().min(1).max(50).default(20),
+        offset: z.number().min(0).default(0),
+        playlist_id: z.string().optional()
+      })
     }),
 
     new DynamicStructuredTool({
-      name: 'get_track_details',
       description: 'Get detailed information about specific tracks. Use when you need full metadata like album details, release dates, external URLs, etc.',
-      schema: z.object({
-        track_ids: z.array(z.string()).min(1).max(50)
-      }),
       func: async (args) => {
         if (abortSignal?.aborted) throw new Error('Request aborted');
 
         await sseWriter.write({
-          type: 'tool_start',
-          data: { tool: 'get_track_details', args }
+          data: { args, tool: 'get_track_details' },
+          type: 'tool_start'
         });
 
         await sseWriter.write({
-          type: 'thinking',
-          data: `🔍 Fetching details for ${args.track_ids.length} tracks...`
+          data: `🔍 Fetching details for ${args.track_ids.length} tracks...`,
+          type: 'thinking'
         });
 
         // Fetch tracks from Spotify (supports up to 50 tracks)
@@ -872,7 +321,7 @@ function createStreamingSpotifyTools(
           `get ${args.track_ids.length} track details`
         );
 
-        if (!response || !response.ok) {
+        if (!response?.ok) {
           throw new Error(`Failed to get track details: ${response?.status || 'null response'}`);
         }
 
@@ -881,61 +330,59 @@ function createStreamingSpotifyTools(
 
         // Return detailed track info
         const detailedTracks = tracks.map((track: any) => ({
-          id: track.id,
-          name: track.name,
+          album: {
+            id: track.album?.id,
+            images: track.album?.images?.map((img: any) => ({
+              height: img.height,
+              url: img.url,
+              width: img.width
+            })),
+            name: track.album?.name,
+            release_date: track.album?.release_date,
+            total_tracks: track.album?.total_tracks
+          },
           artists: track.artists?.map((a: any) => ({
             id: a.id,
             name: a.name
           })),
-          album: {
-            id: track.album?.id,
-            name: track.album?.name,
-            release_date: track.album?.release_date,
-            total_tracks: track.album?.total_tracks,
-            images: track.album?.images?.map((img: any) => ({
-              url: img.url,
-              height: img.height,
-              width: img.width
-            }))
-          },
           duration_ms: track.duration_ms,
-          popularity: track.popularity,
           explicit: track.explicit,
-          uri: track.uri,
           external_urls: track.external_urls,
-          preview_url: track.preview_url
+          id: track.id,
+          name: track.name,
+          popularity: track.popularity,
+          preview_url: track.preview_url,
+          uri: track.uri
         }));
 
         await sseWriter.write({
-          type: 'thinking',
-          data: `✅ Loaded details for ${detailedTracks.length} tracks`
+          data: `✅ Loaded details for ${detailedTracks.length} tracks`,
+          type: 'thinking'
         });
 
         await sseWriter.write({
-          type: 'tool_end',
           data: {
-            tool: 'get_track_details',
-            result: `Fetched details for ${detailedTracks.length} tracks`
-          }
+            result: `Fetched details for ${detailedTracks.length} tracks`,
+            tool: 'get_track_details'
+          },
+          type: 'tool_end'
         });
 
         return { tracks: detailedTracks };
-      }
+      },
+      name: 'get_track_details',
+      schema: z.object({
+        track_ids: z.array(z.string()).min(1).max(50)
+      })
     }),
 
     // Note: get_audio_features tool removed - Spotify deprecated this API for apps created after Nov 27, 2024
     // We now use Deezer + Last.fm enrichment instead via analyze_playlist
 
     new DynamicStructuredTool({
-      name: 'get_recommendations',
       description: 'Get track recommendations',
-      schema: z.object({
-        seed_tracks: z.array(z.string()).max(5).optional(),
-        seed_artists: z.array(z.string()).max(5).optional(),
-        limit: z.number().min(1).max(100).default(20)
-      }),
       func: async (args) => {
-        let finalArgs = { ...args };
+        const finalArgs = { ...args };
 
         // Smart context inference: if no seeds but we have playlist context
         if ((!args.seed_tracks || args.seed_tracks.length === 0) &&
@@ -974,87 +421,79 @@ function createStreamingSpotifyTools(
         if (abortSignal?.aborted) throw new Error('Request aborted');
 
         await sseWriter.write({
-          type: 'tool_start',
-          data: { tool: 'get_recommendations', args: finalArgs }
+          data: { args: finalArgs, tool: 'get_recommendations' },
+          type: 'tool_start'
         });
 
         const result = await executeSpotifyTool('get_recommendations', finalArgs, spotifyToken);
 
         await sseWriter.write({
-          type: 'tool_end',
           data: {
-            tool: 'get_recommendations',
-            result: Array.isArray(result) ? `Found ${result.length} recommendations` : 'Complete'
-          }
+            result: Array.isArray(result) ? `Found ${result.length} recommendations` : 'Complete',
+            tool: 'get_recommendations'
+          },
+          type: 'tool_end'
         });
 
         return result;
-      }
+      },
+      name: 'get_recommendations',
+      schema: z.object({
+        limit: z.number().min(1).max(100).default(20),
+        seed_artists: z.array(z.string()).max(5).optional(),
+        seed_tracks: z.array(z.string()).max(5).optional()
+      })
     }),
 
     new DynamicStructuredTool({
-      name: 'create_playlist',
       description: 'Create a new Spotify playlist',
-      schema: z.object({
-        name: z.string().min(1).max(100),
-        description: z.string().max(300).optional(),
-        track_uris: z.array(z.string())
-      }),
       func: async (args) => {
         if (abortSignal?.aborted) throw new Error('Request aborted');
 
         await sseWriter.write({
-          type: 'tool_start',
-          data: { tool: 'create_playlist', args: { name: args.name, tracks: args.track_uris.length } }
+          data: { args: { name: args.name, tracks: args.track_uris.length }, tool: 'create_playlist' },
+          type: 'tool_start'
         });
 
         const result = await executeSpotifyTool('create_playlist', args, spotifyToken);
 
         await sseWriter.write({
-          type: 'tool_end',
           data: {
-            tool: 'create_playlist',
-            result: (result as any)?.id ? `Created playlist: ${args.name}` : 'Playlist created'
-          }
+            result: (result as any)?.id ? `Created playlist: ${args.name}` : 'Playlist created',
+            tool: 'create_playlist'
+          },
+          type: 'tool_end'
         });
 
         return result;
-      }
+      },
+      name: 'create_playlist',
+      schema: z.object({
+        description: z.string().max(300).optional(),
+        name: z.string().min(1).max(100),
+        track_uris: z.array(z.string())
+      })
     }),
 
     new DynamicStructuredTool({
-      name: 'extract_playlist_vibe',
       description: 'Use AI to deeply analyze playlist enrichment data and extract subtle vibe signals that go beyond genre tags. Returns natural language vibe profile with discovery hints.',
-      schema: z.object({
-        analysis_data: z.object({
-          metadata_analysis: z.any().optional(),
-          deezer_analysis: z.any().optional(),
-          lastfm_analysis: z.any().optional()
-        }).describe('Full analysis from analyze_playlist'),
-        sample_tracks: z.array(z.object({
-          name: z.string(),
-          artists: z.string(),
-          duration_ms: z.number().optional(),
-          popularity: z.number().optional()
-        })).max(20).optional().describe('Sample track names for additional context')
-      }),
       func: async (args) => {
         if (abortSignal?.aborted) throw new Error('Request aborted');
 
         await sseWriter.write({
-          type: 'tool_start',
-          data: { tool: 'extract_playlist_vibe', args: { has_metadata: !!args.analysis_data } }
+          data: { args: { has_metadata: !!args.analysis_data }, tool: 'extract_playlist_vibe' },
+          type: 'tool_start'
         });
 
         await sseWriter.write({
-          type: 'thinking',
-          data: `🎨 Analyzing playlist vibe using AI...`
+          data: `🎨 Analyzing playlist vibe using AI...`,
+          type: 'thinking'
         });
 
         const anthropic = new ChatAnthropic({
-          model: 'claude-sonnet-4-5-20250929',
           apiKey: env.ANTHROPIC_API_KEY,
-          maxRetries: 0
+          maxRetries: 0,
+          model: 'claude-sonnet-4-5-20250929'
         });
 
         const vibePrompt = `You are a music critic analyzing a playlist's vibe. Extract SUBTLE signals that algorithms miss.
@@ -1109,7 +548,7 @@ Return ONLY valid JSON:
           ]);
 
           const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
-          const jsonMatch = content.match(/\{[\s\S]*\}/);
+          const jsonMatch = /\{[\s\S]*\}/.exec(content);
           if (!jsonMatch) {
             throw new Error('No JSON found in vibe analysis response');
           }
@@ -1117,16 +556,16 @@ Return ONLY valid JSON:
           const vibeAnalysis = JSON.parse(jsonMatch[0]);
 
           await sseWriter.write({
-            type: 'thinking',
-            data: `✅ Vibe extracted: ${vibeAnalysis.vibe_profile?.substring(0, 80)}...`
+            data: `✅ Vibe extracted: ${vibeAnalysis.vibe_profile?.substring(0, 80)}...`,
+            type: 'thinking'
           });
 
           await sseWriter.write({
-            type: 'tool_end',
             data: {
-              tool: 'extract_playlist_vibe',
-              result: `Analyzed vibe: ${vibeAnalysis.emotional_characteristics?.slice(0, 3).join(', ')}`
-            }
+              result: `Analyzed vibe: ${vibeAnalysis.emotional_characteristics?.slice(0, 3).join(', ')}`,
+              tool: 'extract_playlist_vibe'
+            },
+            type: 'tool_end'
           });
 
           return vibeAnalysis;
@@ -1136,64 +575,72 @@ Return ONLY valid JSON:
           // Fallback: Basic analysis from tags
           const tags = args.analysis_data.lastfm_analysis?.crowd_tags?.slice(0, 5).map((t: any) => t.tag) || [];
           const fallbackVibe = {
-            vibe_profile: `Playlist characterized by tags: ${tags.join(', ')}`,
-            emotional_characteristics: tags,
-            production_style: 'Unknown',
-            vocal_style: 'Unknown',
-            instrumentation_notes: 'Unknown',
-            era_feel: 'Unknown',
             discovery_hints: {
-              genre_combinations: tags.slice(0, 2),
+              artist_archetypes: [],
               avoid_these: [],
               era_ranges: [],
-              artist_archetypes: [],
-              spotify_params: { target_energy: 0.5, target_valence: 0.5, target_danceability: 0.5 }
-            }
+              genre_combinations: tags.slice(0, 2),
+              spotify_params: { target_danceability: 0.5, target_energy: 0.5, target_valence: 0.5 }
+            },
+            emotional_characteristics: tags,
+            era_feel: 'Unknown',
+            instrumentation_notes: 'Unknown',
+            production_style: 'Unknown',
+            vibe_profile: `Playlist characterized by tags: ${tags.join(', ')}`,
+            vocal_style: 'Unknown'
           };
 
           await sseWriter.write({
-            type: 'thinking',
-            data: `⚠️ Using basic tag analysis (AI unavailable)`
+            data: `⚠️ Using basic tag analysis (AI unavailable)`,
+            type: 'thinking'
           });
 
           await sseWriter.write({
-            type: 'tool_end',
             data: {
-              tool: 'extract_playlist_vibe',
-              result: `Basic analysis: ${tags.join(', ')}`
-            }
+              result: `Basic analysis: ${tags.join(', ')}`,
+              tool: 'extract_playlist_vibe'
+            },
+            type: 'tool_end'
           });
 
           return fallbackVibe;
         }
-      }
+      },
+      name: 'extract_playlist_vibe',
+      schema: z.object({
+        analysis_data: z.object({
+          deezer_analysis: z.any().optional(),
+          lastfm_analysis: z.any().optional(),
+          metadata_analysis: z.any().optional()
+        }).describe('Full analysis from analyze_playlist'),
+        sample_tracks: z.array(z.object({
+          artists: z.string(),
+          duration_ms: z.number().optional(),
+          name: z.string(),
+          popularity: z.number().optional()
+        })).max(20).optional().describe('Sample track names for additional context')
+      })
     }),
 
     new DynamicStructuredTool({
-      name: 'plan_discovery_strategy',
       description: 'Use AI to create a smart multi-pronged discovery strategy based on vibe analysis. Returns specific search queries and parameters to find interesting recommendations.',
-      schema: z.object({
-        vibe_profile: z.any().describe('Output from extract_playlist_vibe'),
-        user_request: z.string().describe('User\'s original request to understand intent'),
-        similar_tracks_available: z.array(z.string()).max(20).optional().describe('Last.fm similar tracks if available')
-      }),
       func: async (args) => {
         if (abortSignal?.aborted) throw new Error('Request aborted');
 
         await sseWriter.write({
-          type: 'tool_start',
-          data: { tool: 'plan_discovery_strategy', args: { has_vibe: !!args.vibe_profile } }
+          data: { args: { has_vibe: !!args.vibe_profile }, tool: 'plan_discovery_strategy' },
+          type: 'tool_start'
         });
 
         await sseWriter.write({
-          type: 'thinking',
-          data: `🎯 Planning discovery strategy using AI...`
+          data: `🎯 Planning discovery strategy using AI...`,
+          type: 'thinking'
         });
 
         const anthropic = new ChatAnthropic({
-          model: 'claude-sonnet-4-5-20250929',
           apiKey: env.ANTHROPIC_API_KEY,
-          maxRetries: 0
+          maxRetries: 0,
+          model: 'claude-sonnet-4-5-20250929'
         });
 
         const strategyPrompt = `You are a music discovery strategist. Create a smart plan to find interesting tracks.
@@ -1247,7 +694,7 @@ Return ONLY valid JSON:
           ]);
 
           const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
-          const jsonMatch = content.match(/\{[\s\S]*\}/);
+          const jsonMatch = /\{[\s\S]*\}/.exec(content);
           if (!jsonMatch) {
             throw new Error('No JSON found in strategy response');
           }
@@ -1255,16 +702,16 @@ Return ONLY valid JSON:
           const strategy = JSON.parse(jsonMatch[0]);
 
           await sseWriter.write({
-            type: 'thinking',
-            data: `✅ Strategy: ${strategy.strategy_summary?.substring(0, 80)}...`
+            data: `✅ Strategy: ${strategy.strategy_summary?.substring(0, 80)}...`,
+            type: 'thinking'
           });
 
           await sseWriter.write({
-            type: 'tool_end',
             data: {
-              tool: 'plan_discovery_strategy',
-              result: `Created ${strategy.tag_searches?.length || 0} tag searches, ${strategy.spotify_searches?.length || 0} custom queries`
-            }
+              result: `Created ${strategy.tag_searches?.length || 0} tag searches, ${strategy.spotify_searches?.length || 0} custom queries`,
+              tool: 'plan_discovery_strategy'
+            },
+            type: 'tool_end'
           });
 
           return strategy;
@@ -1273,53 +720,54 @@ Return ONLY valid JSON:
 
           // Fallback: Basic strategy
           const fallbackStrategy = {
-            strategy_summary: 'Using basic tag-based discovery',
+            avoid: [],
             lastfm_similar_priority: args.similar_tracks_available?.slice(0, 5) || [],
-            tag_searches: [],
-            spotify_searches: [],
             recommendation_seeds: {
               approach: 'Use top tracks as seeds',
-              parameters: { target_energy: 0.5, target_valence: 0.5, target_danceability: 0.5 }
+              parameters: { target_danceability: 0.5, target_energy: 0.5, target_valence: 0.5 }
             },
-            avoid: []
+            spotify_searches: [],
+            strategy_summary: 'Using basic tag-based discovery',
+            tag_searches: []
           };
 
           await sseWriter.write({
-            type: 'thinking',
-            data: `⚠️ Using basic strategy (AI unavailable)`
+            data: `⚠️ Using basic strategy (AI unavailable)`,
+            type: 'thinking'
           });
 
           await sseWriter.write({
-            type: 'tool_end',
             data: {
-              tool: 'plan_discovery_strategy',
-              result: 'Basic fallback strategy'
-            }
+              result: 'Basic fallback strategy',
+              tool: 'plan_discovery_strategy'
+            },
+            type: 'tool_end'
           });
 
           return fallbackStrategy;
         }
-      }
+      },
+      name: 'plan_discovery_strategy',
+      schema: z.object({
+        similar_tracks_available: z.array(z.string()).max(20).optional().describe('Last.fm similar tracks if available'),
+        user_request: z.string().describe('User\'s original request to understand intent'),
+        vibe_profile: z.any().describe('Output from extract_playlist_vibe')
+      })
     }),
 
     new DynamicStructuredTool({
-      name: 'recommend_from_similar',
       description: 'Get Spotify track IDs from Last.fm similar tracks. Provide artist-track strings (e.g., "Daft Punk - One More Time") and get back Spotify IDs ready to use.',
-      schema: z.object({
-        similar_tracks: z.array(z.string()).min(1).max(20).describe('Array of "Artist - Track" strings from Last.fm similar_tracks'),
-        limit_per_track: z.number().min(1).max(5).default(1).describe('How many search results to return per track (default 1 = best match)')
-      }),
       func: async (args) => {
         if (abortSignal?.aborted) throw new Error('Request aborted');
 
         await sseWriter.write({
-          type: 'tool_start',
-          data: { tool: 'recommend_from_similar', args }
+          data: { args, tool: 'recommend_from_similar' },
+          type: 'tool_start'
         });
 
         await sseWriter.write({
-          type: 'thinking',
-          data: `🔍 Searching Spotify for ${args.similar_tracks.length} Last.fm recommendations...`
+          data: `🔍 Searching Spotify for ${args.similar_tracks.length} Last.fm recommendations...`,
+          type: 'thinking'
         });
 
         const recommendations: any[] = [];
@@ -1356,13 +804,13 @@ Return ONLY valid JSON:
 
               for (const spotifyTrack of tracks) {
                 recommendations.push({
+                  artists: spotifyTrack.artists?.map((a: any) => a.name).join(', '),
                   id: spotifyTrack.id,
                   name: spotifyTrack.name,
-                  artists: spotifyTrack.artists?.map((a: any) => a.name).join(', '),
-                  uri: spotifyTrack.uri,
+                  original_query: trackString,
                   popularity: spotifyTrack.popularity,
                   source: 'lastfm_similar',
-                  original_query: trackString
+                  uri: spotifyTrack.uri
                 });
               }
 
@@ -1377,45 +825,45 @@ Return ONLY valid JSON:
         }
 
         await sseWriter.write({
-          type: 'thinking',
-          data: `✅ Found ${recommendations.length} tracks (${successCount}/${args.similar_tracks.length} successful)`
+          data: `✅ Found ${recommendations.length} tracks (${successCount}/${args.similar_tracks.length} successful)`,
+          type: 'thinking'
         });
 
         await sseWriter.write({
-          type: 'tool_end',
           data: {
-            tool: 'recommend_from_similar',
-            result: `Found ${recommendations.length} Spotify tracks from ${successCount} Last.fm recommendations`
-          }
+            result: `Found ${recommendations.length} Spotify tracks from ${successCount} Last.fm recommendations`,
+            tool: 'recommend_from_similar'
+          },
+          type: 'tool_end'
         });
 
         return {
-          tracks: recommendations,
-          total_found: recommendations.length,
           queries_successful: successCount,
-          queries_total: args.similar_tracks.length
+          queries_total: args.similar_tracks.length,
+          total_found: recommendations.length,
+          tracks: recommendations
         };
-      }
+      },
+      name: 'recommend_from_similar',
+      schema: z.object({
+        limit_per_track: z.number().min(1).max(5).default(1).describe('How many search results to return per track (default 1 = best match)'),
+        similar_tracks: z.array(z.string()).min(1).max(20).describe('Array of "Artist - Track" strings from Last.fm similar_tracks')
+      })
     }),
 
     new DynamicStructuredTool({
-      name: 'recommend_from_tags',
       description: 'Discover tracks based on Last.fm crowd tags/genres. Searches Spotify using tag combinations.',
-      schema: z.object({
-        tags: z.array(z.string()).min(1).max(5).describe('Genre/mood tags from Last.fm crowd_tags (e.g., ["italo-disco", "80s", "synth-pop"])'),
-        limit: z.number().min(1).max(50).default(20).describe('Total number of tracks to return')
-      }),
       func: async (args) => {
         if (abortSignal?.aborted) throw new Error('Request aborted');
 
         await sseWriter.write({
-          type: 'tool_start',
-          data: { tool: 'recommend_from_tags', args }
+          data: { args, tool: 'recommend_from_tags' },
+          type: 'tool_start'
         });
 
         await sseWriter.write({
-          type: 'thinking',
-          data: `🏷️ Searching Spotify for tracks matching tags: ${args.tags.join(', ')}`
+          data: `🏷️ Searching Spotify for tracks matching tags: ${args.tags.join(', ')}`,
+          type: 'thinking'
         });
 
         // Build Spotify search query from tags
@@ -1446,7 +894,7 @@ Return ONLY valid JSON:
           `search by tags: ${args.tags.join(', ')}`
         );
 
-        if (!response || !response.ok) {
+        if (!response?.ok) {
           throw new Error(`Spotify search failed: ${response?.status || 'null response'}`);
         }
 
@@ -1454,76 +902,63 @@ Return ONLY valid JSON:
         const tracks = data.tracks?.items || [];
 
         const recommendations = tracks.map((track: any) => ({
-          id: track.id,
-          name: track.name,
-          artists: track.artists?.map((a: any) => a.name).join(', '),
-          uri: track.uri,
-          popularity: track.popularity,
           album: track.album?.name,
+          artists: track.artists?.map((a: any) => a.name).join(', '),
+          id: track.id,
+          matched_tags: args.tags,
+          name: track.name,
+          popularity: track.popularity,
           source: 'tag_based',
-          matched_tags: args.tags
+          uri: track.uri
         }));
 
         await sseWriter.write({
-          type: 'thinking',
-          data: `✅ Found ${recommendations.length} tracks matching ${args.tags.length} tags`
+          data: `✅ Found ${recommendations.length} tracks matching ${args.tags.length} tags`,
+          type: 'thinking'
         });
 
         await sseWriter.write({
-          type: 'tool_end',
           data: {
-            tool: 'recommend_from_tags',
-            result: `Found ${recommendations.length} tracks for tags: ${args.tags.join(', ')}`
-          }
+            result: `Found ${recommendations.length} tracks for tags: ${args.tags.join(', ')}`,
+            tool: 'recommend_from_tags'
+          },
+          type: 'tool_end'
         });
 
         return {
-          tracks: recommendations,
-          total_found: recommendations.length,
+          search_query: query,
           tags_used: args.tags,
-          search_query: query
+          total_found: recommendations.length,
+          tracks: recommendations
         };
-      }
+      },
+      name: 'recommend_from_tags',
+      schema: z.object({
+        limit: z.number().min(1).max(50).default(20).describe('Total number of tracks to return'),
+        tags: z.array(z.string()).min(1).max(5).describe('Genre/mood tags from Last.fm crowd_tags (e.g., ["italo-disco", "80s", "synth-pop"])')
+      })
     }),
 
     new DynamicStructuredTool({
-      name: 'curate_recommendations',
       description: 'Use AI to intelligently rank and filter track recommendations based on user criteria and playlist characteristics. Provide tracks and context, get back curated top picks with reasoning.',
-      schema: z.object({
-        candidate_tracks: z.array(z.object({
-          id: z.string(),
-          name: z.string(),
-          artists: z.string(),
-          popularity: z.number().optional(),
-          source: z.string().optional()
-        })).min(1).max(100).describe('Tracks to curate (from various sources like tag search, similar tracks, Spotify recommendations)'),
-        playlist_context: z.object({
-          bpm_range: z.object({ min: z.number(), max: z.number() }).optional(),
-          dominant_tags: z.array(z.string()).optional(),
-          avg_popularity: z.number().optional(),
-          era: z.string().optional()
-        }).describe('Context from analyze_playlist to guide curation'),
-        user_request: z.string().describe('User\'s original request to understand intent'),
-        top_n: z.number().min(1).max(50).default(10).describe('How many curated recommendations to return')
-      }),
       func: async (args) => {
         if (abortSignal?.aborted) throw new Error('Request aborted');
 
         await sseWriter.write({
-          type: 'tool_start',
-          data: { tool: 'curate_recommendations', args: { track_count: args.candidate_tracks.length, top_n: args.top_n } }
+          data: { args: { top_n: args.top_n, track_count: args.candidate_tracks.length }, tool: 'curate_recommendations' },
+          type: 'tool_start'
         });
 
         await sseWriter.write({
-          type: 'thinking',
-          data: `🤖 Using AI to curate ${args.top_n} best picks from ${args.candidate_tracks.length} candidates...`
+          data: `🤖 Using AI to curate ${args.top_n} best picks from ${args.candidate_tracks.length} candidates...`,
+          type: 'thinking'
         });
 
         // Use Claude Sonnet 4.5 for high-quality intelligent curation
         const anthropic = new ChatAnthropic({
-          model: 'claude-sonnet-4-5-20250929',
           apiKey: env.ANTHROPIC_API_KEY,
-          maxRetries: 0
+          maxRetries: 0,
+          model: 'claude-sonnet-4-5-20250929'
         });
 
         const curationPrompt = `You are a music curator helping select the best track recommendations.
@@ -1561,7 +996,7 @@ Return ONLY a JSON object with this structure:
 
           // Parse JSON from response
           const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content);
-          const jsonMatch = content.match(/\{[\s\S]*\}/);
+          const jsonMatch = /\{[\s\S]*\}/.exec(content);
           if (!jsonMatch) {
             throw new Error('No JSON found in response');
           }
@@ -1579,23 +1014,23 @@ Return ONLY a JSON object with this structure:
             .filter(Boolean);
 
           await sseWriter.write({
-            type: 'thinking',
-            data: `✅ Curated ${orderedTracks.length} top picks: ${reasoning}`
+            data: `✅ Curated ${orderedTracks.length} top picks: ${reasoning}`,
+            type: 'thinking'
           });
 
           await sseWriter.write({
-            type: 'tool_end',
             data: {
-              tool: 'curate_recommendations',
-              result: `Curated ${orderedTracks.length} tracks using AI`
-            }
+              result: `Curated ${orderedTracks.length} tracks using AI`,
+              tool: 'curate_recommendations'
+            },
+            type: 'tool_end'
           });
 
           return {
             curated_tracks: orderedTracks,
-            total_curated: orderedTracks.length,
             original_count: args.candidate_tracks.length,
-            reasoning: reasoning
+            reasoning: reasoning,
+            total_curated: orderedTracks.length
           };
         } catch (error) {
           console.error('[curate_recommendations] AI curation failed:', error);
@@ -1606,30 +1041,598 @@ Return ONLY a JSON object with this structure:
             .slice(0, args.top_n);
 
           await sseWriter.write({
-            type: 'thinking',
-            data: `⚠️ AI curation unavailable, using popularity-based ranking`
+            data: `⚠️ AI curation unavailable, using popularity-based ranking`,
+            type: 'thinking'
           });
 
           await sseWriter.write({
-            type: 'tool_end',
             data: {
-              tool: 'curate_recommendations',
-              result: `Fallback: Sorted ${fallbackTracks.length} tracks by popularity`
-            }
+              result: `Fallback: Sorted ${fallbackTracks.length} tracks by popularity`,
+              tool: 'curate_recommendations'
+            },
+            type: 'tool_end'
           });
 
           return {
             curated_tracks: fallbackTracks,
-            total_curated: fallbackTracks.length,
             original_count: args.candidate_tracks.length,
-            reasoning: 'Ranked by popularity (AI curation unavailable)'
+            reasoning: 'Ranked by popularity (AI curation unavailable)',
+            total_curated: fallbackTracks.length
           };
         }
-      }
+      },
+      name: 'curate_recommendations',
+      schema: z.object({
+        candidate_tracks: z.array(z.object({
+          artists: z.string(),
+          id: z.string(),
+          name: z.string(),
+          popularity: z.number().optional(),
+          source: z.string().optional()
+        })).min(1).max(100).describe('Tracks to curate (from various sources like tag search, similar tracks, Spotify recommendations)'),
+        playlist_context: z.object({
+          avg_popularity: z.number().optional(),
+          bpm_range: z.object({ max: z.number(), min: z.number() }).optional(),
+          dominant_tags: z.array(z.string()).optional(),
+          era: z.string().optional()
+        }).describe('Context from analyze_playlist to guide curation'),
+        top_n: z.number().min(1).max(50).default(10).describe('How many curated recommendations to return'),
+        user_request: z.string().describe('User\'s original request to understand intent')
+      })
     })
   ];
 
   return tools;
+}
+
+// Enhanced tool executor with progress streaming
+async function executeSpotifyToolWithProgress(
+  toolName: string,
+  args: Record<string, unknown>,
+  token: string,
+  sseWriter: SSEWriter,
+  env?: Env,
+  narrator?: ProgressNarrator,
+  userRequest?: string,
+  recentMessages?: string[]
+): Promise<unknown> {
+  // Get logger from AsyncLocalStorage context
+  const logger = getLogger();
+  if (!logger) {
+    throw new Error('executeSpotifyToolWithProgress called outside logger context');
+  }
+  console.log(`[Tool] Executing ${toolName} with args:`, JSON.stringify(args).substring(0, 200));
+
+  if (toolName === 'analyze_playlist') {
+    const { playlist_id } = args;
+
+    try {
+      // Use narrator if available, otherwise fallback to static message
+      const startMessage = narrator
+        ? await narrator.generateMessage({
+            eventType: 'tool_call_start',
+            parameters: args,
+            previousMessages: recentMessages,
+            toolName: 'analyze_playlist',
+            userRequest,
+          })
+        : '📊 Starting playlist analysis...';
+
+      sseWriter.writeAsync({ data: startMessage, type: 'thinking' });
+
+      // Step 1: Get playlist details
+      const fetchMessage = narrator
+        ? await narrator.generateMessage({
+            eventType: 'analyzing_request',
+            previousMessages: recentMessages,
+            userRequest,
+          })
+        : '🔍 Fetching playlist information...';
+      sseWriter.writeAsync({ data: fetchMessage, type: 'thinking' });
+
+      console.log(`[SpotifyAPI] Fetching playlist details: ${playlist_id}`);
+      const playlistResponse = await rateLimitedSpotifyCall(
+        () => fetch(
+          `https://api.spotify.com/v1/playlists/${playlist_id}`,
+          { headers: { 'Authorization': `Bearer ${token}` } }
+        ),
+        getLogger(),
+        `get playlist ${playlist_id}`
+      );
+
+      console.log(`[SpotifyAPI] Playlist response status: ${playlistResponse?.status}`);
+      if (!playlistResponse?.ok) {
+        throw new Error(`Failed to get playlist: ${playlistResponse?.status || 'null response'}`);
+      }
+
+      const playlist = await playlistResponse.json() as any;
+      console.log(`[SpotifyAPI] Playlist loaded: "${playlist.name}" with ${playlist.tracks?.total} tracks`);
+
+      const foundMessage = narrator
+        ? await narrator.generateMessage({
+            eventType: 'searching_tracks',
+            parameters: { name: playlist.name, trackCount: playlist.tracks?.total || 0 },
+            previousMessages: recentMessages,
+            userRequest,
+          })
+        : `🎼 Found "${playlist.name}" with ${playlist.tracks?.total || 0} tracks`;
+      sseWriter.writeAsync({ data: foundMessage, type: 'thinking' });
+
+      // Step 2: Get tracks
+      const tracksMessage = narrator
+        ? await narrator.generateMessage({
+            eventType: 'analyzing_audio',
+            metadata: { trackCount: playlist.tracks?.total || 0 },
+            previousMessages: recentMessages,
+            userRequest,
+          })
+        : '🎵 Fetching track details...';
+      sseWriter.writeAsync({ data: tracksMessage, type: 'thinking' });
+
+      console.log(`[SpotifyAPI] Fetching tracks from playlist: ${playlist_id}`);
+      const tracksResponse = await rateLimitedSpotifyCall(
+        () => fetch(
+          `https://api.spotify.com/v1/playlists/${playlist_id}/tracks?limit=100`,
+          { headers: { 'Authorization': `Bearer ${token}` } }
+        ),
+        getLogger(),
+        `get tracks for playlist ${playlist_id}`
+      );
+
+      console.log(`[SpotifyAPI] Tracks response status: ${tracksResponse?.status}`);
+      if (!tracksResponse?.ok) {
+        const errorBody = tracksResponse ? await tracksResponse.text() : 'null response';
+        console.error(`[SpotifyAPI] Tracks fetch failed: ${tracksResponse?.status || 'null'} - ${errorBody}`);
+        throw new Error(`Failed to get tracks: ${tracksResponse?.status || 'null response'}`);
+      }
+
+      const tracksData = await tracksResponse.json() as any;
+      const tracks = tracksData.items.map((item: any) => item.track).filter(Boolean);
+      const trackIds = tracks.map((t: any) => t.id).filter(Boolean);
+
+      console.log(`[SpotifyAPI] Loaded ${tracks.length} tracks from playlist`);
+
+      // Debug: Log first 3 tracks' structure to see what fields Spotify returns
+      if (tracks.length > 0) {
+        console.log(`[SpotifyAPI] ========== TRACK STRUCTURE DEBUG ==========`);
+        tracks.slice(0, 3).forEach((track: any, idx: number) => {
+          console.log(`[SpotifyAPI] Track ${idx + 1}: "${track.name}" by ${track.artists?.[0]?.name}`);
+          console.log(`[SpotifyAPI]   - ID: ${track.id}`);
+          console.log(`[SpotifyAPI]   - has external_ids: ${!!track.external_ids}`);
+          console.log(`[SpotifyAPI]   - external_ids value:`, track.external_ids);
+          console.log(`[SpotifyAPI]   - ISRC: ${track.external_ids?.isrc || 'NOT PRESENT'}`);
+          console.log(`[SpotifyAPI]   - Available fields:`, Object.keys(track).join(', '));
+        });
+        console.log(`[SpotifyAPI] ========== END TRACK STRUCTURE DEBUG ==========`);
+      }
+
+      sseWriter.writeAsync({ data: `✅ Loaded ${tracks.length} tracks successfully`, type: 'thinking' });
+
+      // Step 3: Analyze track metadata (audio features API deprecated)
+      sseWriter.writeAsync({ data: '🎵 Analyzing track metadata...', type: 'thinking' });
+
+      // Calculate metadata-based statistics
+      const validTracks = tracks.filter((t: any) => t?.popularity !== undefined);
+      const avgPopularity = validTracks.length > 0
+        ? validTracks.reduce((sum: number, t: any) => sum + t.popularity, 0) / validTracks.length
+        : 0;
+
+      const avgDuration = validTracks.length > 0
+        ? validTracks.reduce((sum: number, t: any) => sum + (t.duration_ms || 0), 0) / validTracks.length
+        : 0;
+
+      const explicitCount = validTracks.filter((t: any) => t.explicit).length;
+      const explicitPercentage = validTracks.length > 0 ? (explicitCount / validTracks.length) * 100 : 0;
+
+      // Extract unique artists for genre analysis
+      const artistIds = new Set<string>();
+      validTracks.forEach((t: any) => {
+        if (t.artists) {
+          t.artists.forEach((artist: any) => {
+            if (artist.id) artistIds.add(artist.id);
+          });
+        }
+      });
+
+      // Step 4: Fetch artist genres (batch request, limit to 50 artists)
+      sseWriter.writeAsync({ data: '🎸 Fetching artist genres...', type: 'thinking' });
+      const artistIdsArray = Array.from(artistIds).slice(0, 50);
+      let genres: string[] = [];
+
+      if (artistIdsArray.length > 0) {
+        const artistsResponse = await rateLimitedSpotifyCall(
+          () => fetch(
+            `https://api.spotify.com/v1/artists?ids=${artistIdsArray.join(',')}`,
+            { headers: { 'Authorization': `Bearer ${token}` } }
+          ),
+          getLogger(),
+          `get ${artistIdsArray.length} artists`
+        );
+
+        if (artistsResponse && artistsResponse.ok) {
+          const artistsData = await artistsResponse.json() as any;
+          const genreMap = new Map<string, number>();
+
+          artistsData.artists.forEach((artist: any) => {
+            if (artist?.genres) {
+              artist.genres.forEach((genre: string) => {
+                genreMap.set(genre, (genreMap.get(genre) || 0) + 1);
+              });
+            }
+          });
+
+          // Get top genres sorted by frequency
+          genres = Array.from(genreMap.entries())
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 10)
+            .map(([genre]) => genre);
+
+          sseWriter.writeAsync({ data: `🎯 Found ${genres.length} genres across ${artistsData.artists.length} artists`, type: 'thinking' });
+        }
+      }
+
+      // Flush after metadata + genre analysis
+      await sseWriter.flush();
+
+      // Step 5: Analyze release dates
+      const releaseDates = validTracks
+        .map((t: any) => t.album?.release_date)
+        .filter(Boolean);
+
+      const releaseYears = releaseDates
+        .map((date: string) => parseInt(date.split('-')[0]))
+        .filter((year: number) => !isNaN(year));
+
+      const avgReleaseYear = releaseYears.length > 0
+        ? Math.round(releaseYears.reduce((sum: number, year: number) => sum + year, 0) / releaseYears.length)
+        : null;
+
+      const oldestYear = releaseYears.length > 0 ? Math.min(...releaseYears) : null;
+      const newestYear = releaseYears.length > 0 ? Math.max(...releaseYears) : null;
+
+      // Step 6: Deezer enrichment (BPM often null, but rank/gain/release_date are valuable)
+      let deezerData = null;
+      if (env?.AUDIO_FEATURES_CACHE) {
+        try {
+          console.log(`[DeezerEnrichment] ========== STARTING DEEZER ENRICHMENT ==========`);
+          console.log(`[DeezerEnrichment] KV Cache available: YES`);
+          const enrichmentService = new AudioEnrichmentService(env.AUDIO_FEATURES_CACHE);
+
+          // Process tracks sequentially with rate limiting at 40 TPS
+          const tracksToEnrich = validTracks.slice(0, 100); // Process up to 100 tracks
+          const bpmResults: number[] = [];
+          const rankResults: number[] = [];
+          const gainResults: number[] = [];
+          let enrichedCount = 0;
+
+          console.log(`[DeezerEnrichment] Will attempt to enrich ${tracksToEnrich.length} tracks`);
+          sseWriter.writeAsync({ data: `🎵 Enriching ${tracksToEnrich.length} tracks with Deezer data (BPM, rank, gain)...`, type: 'thinking' });
+
+          // Debug: Check if tracks have external_ids
+          const tracksWithISRC = tracksToEnrich.filter(t => t.external_ids?.isrc).length;
+          console.log(`[BPMEnrichment] Pre-enrichment ISRC check: ${tracksWithISRC}/${tracksToEnrich.length} tracks have ISRC`);
+
+          // Debug: Log first 3 tracks to see their structure in detail
+          if (tracksToEnrich.length > 0) {
+            console.log(`[BPMEnrichment] ========== ENRICHMENT TRACK STRUCTURE DEBUG ==========`);
+            tracksToEnrich.slice(0, 3).forEach((track, idx) => {
+              console.log(`[BPMEnrichment] Track ${idx + 1}: "${track.name}" by ${track.artists?.[0]?.name}`);
+              console.log(`[BPMEnrichment]   - ID: ${track.id}`);
+              console.log(`[BPMEnrichment]   - Duration: ${track.duration_ms}ms`);
+              console.log(`[BPMEnrichment]   - has external_ids: ${!!track.external_ids}`);
+              console.log(`[BPMEnrichment]   - external_ids type: ${typeof track.external_ids}`);
+              console.log(`[BPMEnrichment]   - external_ids value:`, JSON.stringify(track.external_ids));
+              console.log(`[BPMEnrichment]   - ISRC: ${track.external_ids?.isrc || 'NOT PRESENT'}`);
+              console.log(`[BPMEnrichment]   - Track object keys:`, Object.keys(track).join(', '));
+            });
+            console.log(`[BPMEnrichment] ========== END ENRICHMENT TRACK STRUCTURE DEBUG ==========`);
+          }
+
+          if (tracksWithISRC === 0) {
+            console.warn(`[BPMEnrichment] ⚠️ CRITICAL: No tracks have ISRC in external_ids`);
+            console.warn(`[BPMEnrichment] Will need to fetch full track details from Spotify /tracks API`);
+            sseWriter.writeAsync({ data: '⚠️ Tracks missing ISRC data - fetching from Spotify API...', type: 'thinking' });
+          } else {
+            console.log(`[BPMEnrichment] ✅ Found ${tracksWithISRC} tracks with ISRC, proceeding with enrichment`);
+          }
+
+          for (let i = 0; i < tracksToEnrich.length; i++) {
+            const track = tracksToEnrich[i];
+
+            // Log every track attempt for first 5 tracks, then every 10th
+            if (i < 5 || i % 10 === 0) {
+              console.log(`[BPMEnrichment] Processing track ${i + 1}/${tracksToEnrich.length}: "${track.name}"`);
+            }
+
+            try {
+              const spotifyTrack = {
+                artists: track.artists || [],
+                duration_ms: track.duration_ms,
+                external_ids: track.external_ids,
+                id: track.id,
+                name: track.name
+              };
+
+              // Log the track being sent to enrichment service
+              if (i < 3) {
+                console.log(`[BPMEnrichment] Calling enrichTrack with:`, {
+                  has_external_ids: !!spotifyTrack.external_ids,
+                  id: spotifyTrack.id,
+                  isrc: spotifyTrack.external_ids?.isrc || 'NONE',
+                  name: spotifyTrack.name
+                });
+              }
+
+              const deezerResult = await enrichmentService.enrichTrack(spotifyTrack);
+
+              // Log the result for first few tracks
+              if (i < 3) {
+                console.log(`[DeezerEnrichment] Result for "${track.name}":`, {
+                  bpm: deezerResult.bpm,
+                  gain: deezerResult.gain,
+                  rank: deezerResult.rank,
+                  release_date: deezerResult.release_date,
+                  source: deezerResult.source
+                });
+              }
+
+              // Collect all available Deezer data
+              if (deezerResult.bpm && AudioEnrichmentService.isValidBPM(deezerResult.bpm)) {
+                bpmResults.push(deezerResult.bpm);
+              }
+              if (deezerResult.rank !== null && deezerResult.rank > 0) {
+                rankResults.push(deezerResult.rank);
+              }
+              if (deezerResult.gain !== null) {
+                gainResults.push(deezerResult.gain);
+              }
+
+              if (deezerResult.source) {
+                enrichedCount++;
+
+                // Stream progress updates every 5 tracks
+                if ((i + 1) % 5 === 0) {
+                  sseWriter.writeAsync({ data: `🎵 Enriched ${enrichedCount}/${tracksToEnrich.length} tracks...`, type: 'thinking' });
+                }
+              }
+
+              // No manual rate limiting needed - orchestrator handles it via continuous queue
+            } catch (error) {
+              getChildLogger('BPMEnrichment').error(`Failed for track "${track.name}"`, error);
+              // Continue with next track
+            }
+          }
+
+          console.log(`[DeezerEnrichment] ========== ENRICHMENT COMPLETE ==========`);
+          console.log(`[DeezerEnrichment] Total tracks processed: ${tracksToEnrich.length}`);
+          console.log(`[DeezerEnrichment] Tracks with Deezer match: ${enrichedCount}`);
+          console.log(`[DeezerEnrichment] BPM results: ${bpmResults.length}`);
+          console.log(`[DeezerEnrichment] Rank results: ${rankResults.length}`);
+          console.log(`[DeezerEnrichment] Gain results: ${gainResults.length}`);
+
+          if (enrichedCount > 0) {
+            deezerData = {
+              source: 'deezer',
+              total_checked: tracksToEnrich.length,
+              tracks_found: enrichedCount
+            } as any;
+
+            // Add BPM stats if available
+            if (bpmResults.length > 0) {
+              const avgBPM = bpmResults.reduce((sum, bpm) => sum + bpm, 0) / bpmResults.length;
+              deezerData.bpm = {
+                avg: Math.round(avgBPM),
+                range: { max: Math.max(...bpmResults), min: Math.min(...bpmResults) },
+                sample_size: bpmResults.length
+              };
+            }
+
+            // Add rank stats if available
+            if (rankResults.length > 0) {
+              const avgRank = rankResults.reduce((sum, rank) => sum + rank, 0) / rankResults.length;
+              deezerData.rank = {
+                avg: Math.round(avgRank),
+                range: { max: Math.max(...rankResults), min: Math.min(...rankResults) },
+                sample_size: rankResults.length
+              };
+            }
+
+            // Add gain stats if available
+            if (gainResults.length > 0) {
+              const avgGain = gainResults.reduce((sum, gain) => sum + gain, 0) / gainResults.length;
+              deezerData.gain = {
+                avg: parseFloat(avgGain.toFixed(1)),
+                range: { max: Math.max(...gainResults), min: Math.min(...gainResults) },
+                sample_size: gainResults.length
+              };
+            }
+
+            const dataTypes = [
+              bpmResults.length > 0 ? 'BPM' : null,
+              rankResults.length > 0 ? 'rank' : null,
+              gainResults.length > 0 ? 'gain' : null
+            ].filter(Boolean).join(', ');
+
+            sseWriter.writeAsync({ data: `✅ Deezer enrichment complete! Found ${dataTypes} for ${enrichedCount}/${tracksToEnrich.length} tracks`, type: 'thinking' });
+          } else {
+            sseWriter.writeAsync({ data: '⚠️ No Deezer data available for these tracks', type: 'thinking' });
+          }
+        } catch (error) {
+          getChildLogger('DeezerEnrichment').error('Enrichment failed', error);
+          sseWriter.writeAsync({ data: '⚠️ Deezer enrichment unavailable - continuing with metadata only', type: 'thinking' });
+        }
+      }
+
+      // Flush after Deezer enrichment
+      await sseWriter.flush();
+
+      // Step 7: Optimized Last.fm enrichment (tracks + unique artists separately)
+      let lastfmData = null;
+      if (env?.LASTFM_API_KEY && env?.AUDIO_FEATURES_CACHE) {
+        try {
+          const lastfmService = new LastFmService(env.LASTFM_API_KEY, env.AUDIO_FEATURES_CACHE);
+
+          const tracksForLastFm = validTracks.slice(0, 50); // Process up to 50 tracks
+          const signalsMap = new Map();
+
+          // Step 7a: Get track signals (4 API calls per track = 200 total)
+          sseWriter.writeAsync({ data: `🎧 Enriching ${tracksForLastFm.length} tracks with Last.fm data (40 TPS)...`, type: 'thinking' });
+
+          for (let i = 0; i < tracksForLastFm.length; i++) {
+            const track = tracksForLastFm[i];
+
+            try {
+              const lastfmTrack = {
+                artist: track.artists?.[0]?.name || 'Unknown',
+                duration_ms: track.duration_ms,
+                name: track.name
+              };
+
+              // Get track signals WITHOUT artist info (skipArtistInfo=true)
+              const signals = await lastfmService.getTrackSignals(lastfmTrack, true);
+
+              if (signals) {
+                const key = `${track.id}`;
+                signalsMap.set(key, signals);
+
+                // Stream simple progress every 2 tracks
+                // Note: Narrator calls disabled here - concurrent ChatAnthropic instance creation fails
+                if ((i + 1) % 2 === 0 || i === tracksForLastFm.length - 1) {
+                  sseWriter.writeAsync({
+                    data: `🎧 Enriched ${i + 1}/${tracksForLastFm.length} tracks...`,
+                    type: 'thinking'
+                  });
+                }
+              }
+            } catch (error) {
+              getChildLogger('LastFm').error(`Failed for track ${track.name}`, error);
+            }
+          }
+
+          // Step 7b: Get unique artists and fetch artist info separately (cached + rate-limited queue)
+          const uniqueArtists = [...new Set(tracksForLastFm.map(t => t.artists?.[0]?.name).filter(Boolean))];
+          sseWriter.writeAsync({ data: `🎤 Fetching artist info for ${uniqueArtists.length} unique artists...`, type: 'thinking' });
+
+          const artistInfoMap = await lastfmService.batchGetArtistInfo(uniqueArtists, async (current, total) => {
+            // Report progress every 10 artists with simple message
+            // Note: Narrator calls disabled here - concurrent ChatAnthropic instance creation fails
+            if (current % 10 === 0 || current === total) {
+              sseWriter.writeAsync({ data: `🎤 Enriched ${current}/${total} artists...`, type: 'thinking' });
+            }
+          });
+
+          // Step 7c: Attach artist info to track signals and update cache
+          for (const [trackId, signals] of signalsMap.entries()) {
+            const artistKey = signals.canonicalArtist.toLowerCase();
+            if (artistInfoMap.has(artistKey)) {
+              signals.artistInfo = artistInfoMap.get(artistKey);
+
+              // Update cache with complete signals including artist info
+              const cacheKey = lastfmService.generateCacheKey(signals.canonicalArtist, signals.canonicalTrack);
+              await lastfmService.updateCachedSignals(cacheKey, signals);
+            }
+          }
+
+          if (signalsMap.size > 0) {
+            // Aggregate tags across all tracks
+            const aggregatedTags = LastFmService.aggregateTags(signalsMap);
+
+            // Calculate average popularity
+            const popularity = LastFmService.calculateAveragePopularity(signalsMap);
+
+            // Get some similar tracks from the first few tracks
+            const similarTracks = new Set<string>();
+            let count = 0;
+            for (const signals of signalsMap.values()) {
+              if (count >= 3) break; // Only get similar from first 3 tracks
+              signals.similar.slice(0, 3).forEach(s => {
+                similarTracks.add(`${s.artist} - ${s.name}`);
+              });
+              count++;
+            }
+
+            lastfmData = {
+              artists_enriched: artistInfoMap.size,
+              avg_listeners: popularity.avgListeners,
+              avg_playcount: popularity.avgPlaycount,
+              crowd_tags: aggregatedTags.slice(0, 10),
+              sample_size: signalsMap.size,
+              similar_tracks: Array.from(similarTracks).slice(0, 10),
+              source: 'lastfm'
+            };
+
+            sseWriter.writeAsync({ data: `✅ Enriched ${signalsMap.size} tracks + ${artistInfoMap.size} artists!`, type: 'thinking' });
+          }
+        } catch (error) {
+          getChildLogger('LastFm').error('Enrichment failed', error);
+          sseWriter.writeAsync({ data: '⚠️ Last.fm enrichment unavailable - continuing without tags', type: 'thinking' });
+        }
+      }
+
+      // Flush any pending narrator messages before final analysis
+      await sseWriter.flush();
+
+      sseWriter.writeAsync({ data: '🧮 Computing playlist insights...', type: 'thinking' });
+
+      const analysis = {
+        deezer_analysis: deezerData, // Deezer BPM, rank, gain if available
+        lastfm_analysis: lastfmData, // Last.fm tags and popularity if available
+        message: (() => {
+          const sources = [
+            deezerData ? `Deezer (${[
+              deezerData.bpm ? 'BPM' : null,
+              deezerData.rank ? 'rank' : null,
+              deezerData.gain ? 'gain' : null
+            ].filter(Boolean).join(', ')})` : null,
+            lastfmData ? 'Last.fm (tags, popularity)' : null
+          ].filter(Boolean);
+          return sources.length > 0
+            ? `Enriched with ${sources.join(' + ')}! Use get_playlist_tracks for track details.`
+            : 'Use get_playlist_tracks to fetch track details in batches, or get_track_details for specific tracks.';
+        })(),
+        metadata_analysis: {
+          avg_duration_minutes: Math.round(avgDuration / 60000 * 10) / 10,
+          avg_duration_ms: Math.round(avgDuration),
+          avg_popularity: Math.round(avgPopularity),
+          explicit_percentage: Math.round(explicitPercentage),
+          explicit_tracks: explicitCount,
+          release_year_range: oldestYear && newestYear ? {
+            average: avgReleaseYear,
+            newest: newestYear,
+            oldest: oldestYear
+          } : null,
+          top_genres: genres,
+          total_artists: artistIdsArray.length
+        },
+        playlist_description: playlist.description,
+        playlist_name: playlist.name,
+        total_tracks: tracks.length,
+        track_ids: trackIds
+      };
+
+      sseWriter.writeAsync({ data: `🎉 Analysis complete for "${analysis.playlist_name}"!`, type: 'thinking' });
+
+      // Log data size for debugging
+      const analysisJson = JSON.stringify(analysis);
+      console.log(`[Tool] analyze_playlist completed successfully`);
+      console.log(`[Tool] Analysis JSON size: ${analysisJson.length} bytes (${(analysisJson.length / 1024).toFixed(1)}KB)`);
+      console.log(`[Tool] Returning metadata analysis with ${trackIds.length} track IDs`);
+
+      return analysis;
+
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      sseWriter.writeAsync({ data: `❌ Analysis failed: ${errorMsg}`, type: 'thinking' });
+      getChildLogger('Tool:analyze_playlist').error('Analysis failed', error, {
+        errorMessage: errorMsg,
+        errorType: error?.constructor?.name
+      });
+      throw error;
+    }
+  }
+
+  // Fall back to original tool executor for other tools
+  return await executeSpotifyTool(toolName, args, token);
 }
 
 /**
@@ -1660,11 +1663,11 @@ chatStreamRouter.post('/message', async (c) => {
 
   // Set proper SSE headers for Cloudflare
   const headers = new Headers({
-    'Content-Type': 'text/event-stream',
+    'Access-Control-Allow-Origin': '*',
     'Cache-Control': 'no-cache, no-transform',
     'Content-Encoding': 'identity',
-    'X-Accel-Buffering': 'no',
-    'Access-Control-Allow-Origin': '*'
+    'Content-Type': 'text/event-stream',
+    'X-Accel-Buffering': 'no'
   });
 
   // Get request body, authorization, and environment before starting async processing
@@ -1713,80 +1716,80 @@ chatStreamRouter.post('/message', async (c) => {
       console.log(`[Stream:${requestId}] Sending initial debug event`);
       // Send debug info as first event
       await sseWriter.write({
-        type: 'debug',
         data: {
           buildInfo: {
-            commitHash: 'current',
-            buildTime: new Date().toISOString(),
             branch: 'main',
+            buildTime: new Date().toISOString(),
+            commitHash: 'current',
             version: '1.0.0'
           },
           requestId,
           serverTime: new Date().toISOString()
-        }
+        },
+        type: 'debug'
       });
 
       // Parse request
       const body = requestBody;
       await sseWriter.write({
-        type: 'log',
         data: {
           level: 'info',
           message: `[${requestId}] Request received - Body size: ${JSON.stringify(body).length} bytes`
-        }
+        },
+        type: 'log'
       });
 
       const request = ChatRequestSchema.parse(body);
 
       await sseWriter.write({
-        type: 'debug',
         data: {
-          requestId,
-          mode: request.mode,
-          messageLength: request.message.length,
           historyLength: request.conversationHistory.length,
-          rawMessage: request.message.substring(0, 100)
-        }
+          messageLength: request.message.length,
+          mode: request.mode,
+          rawMessage: request.message.substring(0, 100),
+          requestId
+        },
+        type: 'debug'
       });
 
       // Extract playlist ID if present
-      let playlistId: string | null = null;
+      let playlistId: null | string = null;
       let actualMessage = request.message;
-      const playlistIdMatch = request.message.match(/^\[Playlist ID: ([^\]]+)\] (.+)$/);
+      const playlistIdMatch = /^\[Playlist ID: ([^\]]+)\] (.+)$/.exec(request.message);
 
       if (playlistIdMatch) {
         playlistId = playlistIdMatch[1];
         actualMessage = playlistIdMatch[2];
         await sseWriter.write({
-          type: 'log',
           data: {
             level: 'info',
             message: `[${requestId}] ✅ Playlist ID extracted: ${playlistId}`
-          }
+          },
+          type: 'log'
         });
       } else {
         await sseWriter.write({
-          type: 'log',
           data: {
             level: 'warn',
             message: `[${requestId}] ⚠️ No playlist ID found in message: "${request.message.substring(0, 50)}..."`
-          }
+          },
+          type: 'log'
         });
       }
 
       // Get Spotify token
       if (!authorization?.startsWith('Bearer ')) {
-        await sseWriter.write({ type: 'error', data: 'Unauthorized - Missing or invalid Authorization header' });
+        await sseWriter.write({ data: 'Unauthorized - Missing or invalid Authorization header', type: 'error' });
         return;
       }
       const spotifyToken = authorization.replace('Bearer ', '');
 
       await sseWriter.write({
-        type: 'log',
         data: {
           level: 'info',
           message: `[${requestId}] Auth token present`
-        }
+        },
+        type: 'log'
       });
 
       // Initialize progress narrator with Haiku
@@ -1800,7 +1803,7 @@ chatStreamRouter.post('/message', async (c) => {
         userRequest: request.message,
       });
       recentMessages.push(initialMessage);
-      sseWriter.writeAsync({ type: 'thinking', data: initialMessage });
+      sseWriter.writeAsync({ data: initialMessage, type: 'thinking' });
 
       // Create tools with streaming callbacks
       const tools = createStreamingSpotifyTools(
@@ -1829,11 +1832,11 @@ chatStreamRouter.post('/message', async (c) => {
       const createModelWithTools = () => {
         const llm = new ChatAnthropic({
           apiKey: env.ANTHROPIC_API_KEY,
-          model: 'claude-sonnet-4-5-20250929',
-          temperature: 0.2,
-          maxTokens: 2000,
-          streaming: true,
           maxRetries: 0,
+          maxTokens: 2000,
+          model: 'claude-sonnet-4-5-20250929',
+          streaming: true,
+          temperature: 0.2,
           // Note: Cannot use both temperature and topP with Sonnet 4.5
         });
         return llm.bindTools(tools);
@@ -1956,20 +1959,20 @@ KEY INSIGHT: Sonnet 4.5 UNDERSTANDS the vibe BEFORE searching, then PLANS strate
 Be concise and helpful. Describe playlists using genres, popularity, era, and descriptions.`;
 
       await sseWriter.write({
-        type: 'log',
         data: {
           level: 'info',
           message: `[${requestId}] System prompt includes playlist: ${playlistId ? 'YES' : 'NO'}`
-        }
+        },
+        type: 'log'
       });
 
       await sseWriter.write({
-        type: 'debug',
         data: {
-          systemPromptLength: systemPrompt.length,
           hasPlaylistContext: !!playlistId,
-          playlistId: playlistId
-        }
+          playlistId: playlistId,
+          systemPromptLength: systemPrompt.length
+        },
+        type: 'debug'
       });
 
       // Build messages
@@ -1982,11 +1985,11 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
       ];
 
       await sseWriter.write({
-        type: 'log',
         data: {
           level: 'info',
           message: `[${requestId}] Messages prepared: ${messages.length} total, sending to Claude...`
-        }
+        },
+        type: 'log'
       });
       console.log(`[Stream:${requestId}] User message: "${actualMessage}"`);
 
@@ -1995,7 +1998,7 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
       let toolCalls: any[] = [];
 
       console.log(`[Stream:${requestId}] Starting Claude streaming...`);
-      sseWriter.writeAsync({ type: 'thinking', data: 'Analyzing your request...' });
+      sseWriter.writeAsync({ data: 'Analyzing your request...', type: 'thinking' });
 
       // Check for abort before API call
       if (abortController.signal.aborted) {
@@ -2019,8 +2022,8 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
         console.error(`[Stream:${requestId}] Anthropic API call failed:`, apiError);
         if (apiError instanceof Error) {
           console.error(`[Stream:${requestId}] Error details:`, {
-            name: apiError.name,
             message: apiError.message,
+            name: apiError.name,
             stack: apiError.stack?.substring(0, 500)
           });
         }
@@ -2050,7 +2053,7 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
 
         if (textContent) {
           fullResponse += textContent;
-          await sseWriter.write({ type: 'content', data: textContent });
+          await sseWriter.write({ data: textContent, type: 'content' });
           console.log(`[Stream:${requestId}] Content chunk ${chunkCount}: ${textContent.substring(0, 50)}...`);
         }
 
@@ -2064,7 +2067,7 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
       console.log(`[Stream:${requestId}] Initial streaming complete. Chunks: ${chunkCount}, Tool calls: ${toolCalls.length}, Content length: ${fullResponse.length}`);
 
       // Agentic loop: Keep executing tools until Claude stops requesting them
-      let conversationMessages = [...messages];
+      const conversationMessages = [...messages];
       let currentToolCalls = toolCalls;
       let turnCount = 0;
       const MAX_TURNS = 5; // Prevent infinite loops - reduced from 15
@@ -2086,13 +2089,13 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
           if (lastThree[0] === lastThree[1] && lastThree[1] === lastThree[2]) {
             console.warn(`[Stream:${requestId}] ⚠️ Loop detected: identical tool calls 3 times in a row. Breaking.`);
             console.warn(`[Stream:${requestId}] Tool signature: ${lastThree[0]}`);
-            sseWriter.writeAsync({ type: 'thinking', data: 'Detected repetitive tool calls, wrapping up...' });
+            sseWriter.writeAsync({ data: 'Detected repetitive tool calls, wrapping up...', type: 'thinking' });
             break;
           }
         }
 
         console.log(`[Stream:${requestId}] 🔄 Agentic loop turn ${turnCount}: Executing ${currentToolCalls.length} tool calls...`);
-        sseWriter.writeAsync({ type: 'thinking', data: 'Using Spotify tools...' });
+        sseWriter.writeAsync({ data: 'Using Spotify tools...', type: 'thinking' });
 
         // Execute tools and build ToolMessages properly
         const toolMessages = [];
@@ -2153,7 +2156,7 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
 
         // Get next response with tool results
         console.log(`[Stream:${requestId}] Getting next response from Claude (turn ${turnCount})...`);
-        sseWriter.writeAsync({ type: 'thinking', data: 'Preparing response...' });
+        sseWriter.writeAsync({ data: 'Preparing response...', type: 'thinking' });
 
         console.log(`[Stream:${requestId}] Sending tool results back to Claude...`);
         console.log(`[Stream:${requestId}] Full response so far: "${fullResponse.substring(0, 100)}"`);
@@ -2194,22 +2197,22 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
         } catch (streamError) {
           const logger = getLogger();
           logger?.error('Claude streaming API call failed', streamError, {
-            turn: turnCount,
-            errorType: streamError?.constructor?.name,
-            errorMessage: streamError instanceof Error ? streamError.message : String(streamError),
             conversationLength: conversationMessages.length,
-            hasAnyContent
+            errorMessage: streamError instanceof Error ? streamError.message : String(streamError),
+            errorType: streamError?.constructor?.name,
+            hasAnyContent,
+            turn: turnCount
           });
 
           // If we already have content from any turn (initial or tools), break gracefully
           if (hasAnyContent) {
             logger?.info('Breaking agentic loop due to streaming error (content already available)', {
-              turn: turnCount,
-              hasAnyContent
+              hasAnyContent,
+              turn: turnCount
             });
             await sseWriter.write({
-              type: 'content',
-              data: '\n\n✅ Task completed successfully!'
+              data: '\n\n✅ Task completed successfully!',
+              type: 'content'
             });
             // Set fullResponse so we don't hit the "no content" fallback
             fullResponse = 'Task completed (graceful degradation after streaming error)';
@@ -2243,10 +2246,10 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
               : 'no content';
 
             console.log(`[Stream:${requestId}] Turn ${turnCount} chunk ${nextChunkCount}:`, {
-              hasContent: !!chunk.content,
-              contentLength: typeof chunk.content === 'string' ? chunk.content.length : 0,
-              chunkKeys: Object.keys(chunk),
               chunkContent: contentPreview,
+              chunkKeys: Object.keys(chunk),
+              contentLength: typeof chunk.content === 'string' ? chunk.content.length : 0,
+              hasContent: !!chunk.content,
               hasToolCalls: !!chunk.tool_calls
             });
 
@@ -2270,7 +2273,7 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
               }
               fullResponse += textContent;
               hasAnyContent = true; // Track that we got content
-              await sseWriter.write({ type: 'content', data: textContent });
+              await sseWriter.write({ data: textContent, type: 'content' });
             }
 
             // Check for MORE tool calls in the response
@@ -2282,11 +2285,11 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
         } catch (chunkError) {
           const logger = getLogger();
           logger?.error('Error processing Claude stream chunks', chunkError, {
-            turn: turnCount,
             chunksProcessed: nextChunkCount,
-            partialResponseLength: fullResponse.length,
+            errorMessage: chunkError instanceof Error ? chunkError.message : String(chunkError),
             errorType: chunkError?.constructor?.name,
-            errorMessage: chunkError instanceof Error ? chunkError.message : String(chunkError)
+            partialResponseLength: fullResponse.length,
+            turn: turnCount
           });
 
           // If we got partial content, continue; otherwise break
@@ -2312,7 +2315,7 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
         );
         conversationMessages.push(finalPrompt);
 
-        sseWriter.writeAsync({ type: 'thinking', data: 'Preparing final response...' });
+        sseWriter.writeAsync({ data: 'Preparing final response...', type: 'thinking' });
 
         let finalResponse;
         try {
@@ -2325,16 +2328,16 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
         } catch (finalStreamError) {
           const logger = getLogger();
           logger?.error('Final Claude streaming API call failed', finalStreamError, {
-            turn: turnCount,
-            errorType: finalStreamError?.constructor?.name,
+            conversationLength: conversationMessages.length,
             errorMessage: finalStreamError instanceof Error ? finalStreamError.message : String(finalStreamError),
-            conversationLength: conversationMessages.length
+            errorType: finalStreamError?.constructor?.name,
+            turn: turnCount
           });
 
           // Provide a fallback response
           await sseWriter.write({
-            type: 'content',
-            data: 'I encountered a connection issue while preparing the final response. However, I was able to complete the task successfully.'
+            data: 'I encountered a connection issue while preparing the final response. However, I was able to complete the task successfully.',
+            type: 'content'
           });
           fullResponse = 'Task completed despite connection error.';
           console.warn(`[Stream:${requestId}] Final response skipped due to streaming error`);
@@ -2362,22 +2365,22 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
 
               if (textContent) {
                 fullResponse += textContent;
-                await sseWriter.write({ type: 'content', data: textContent });
+                await sseWriter.write({ data: textContent, type: 'content' });
               }
             }
           } catch (finalChunkError) {
             const logger = getLogger();
             logger?.error('Error processing final response chunks', finalChunkError, {
-              partialResponseLength: fullResponse.length,
+              errorMessage: finalChunkError instanceof Error ? finalChunkError.message : String(finalChunkError),
               errorType: finalChunkError?.constructor?.name,
-              errorMessage: finalChunkError instanceof Error ? finalChunkError.message : String(finalChunkError)
+              partialResponseLength: fullResponse.length
             });
 
             // If we got no content, provide fallback
             if (fullResponse.length === 0) {
               await sseWriter.write({
-                type: 'content',
-                data: 'The task was completed successfully.'
+                data: 'The task was completed successfully.',
+                type: 'content'
               });
               fullResponse = 'Task completed.';
             }
@@ -2392,12 +2395,12 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
       // If still no response after everything, provide fallback
       if (fullResponse.length === 0) {
         console.error(`[Stream:${requestId}] WARNING: No content received from Claude!`);
-        await sseWriter.write({ type: 'content', data: 'I apologize, but I encountered an issue generating a response. Please try again.' });
+        await sseWriter.write({ data: 'I apologize, but I encountered an issue generating a response. Please try again.', type: 'content' });
       }
 
       // Send completion
       console.log(`[Stream:${requestId}] Sending done event`);
-      await sseWriter.write({ type: 'done', data: null });
+      await sseWriter.write({ data: null, type: 'done' });
       console.log(`[Stream:${requestId}] Stream complete - all events sent`);
 
       } catch (error) {
@@ -2406,12 +2409,12 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
           logger.info('Request was aborted by client');
         } else {
           logger.error('Stream processing error', error, {
-            errorType: error?.constructor?.name,
-            errorMessage: error instanceof Error ? error.message : String(error)
+            errorMessage: error instanceof Error ? error.message : String(error),
+            errorType: error?.constructor?.name
           });
           await sseWriter.write({
-            type: 'error',
-            data: error instanceof Error ? error.message : 'An error occurred'
+            data: error instanceof Error ? error.message : 'An error occurred',
+            type: 'error'
           });
         }
       } finally {
@@ -2471,11 +2474,11 @@ chatStreamRouter.get('/events', async (c) => {
 
   // Set proper SSE headers
   const headers = new Headers({
-    'Content-Type': 'text/event-stream',
+    'Access-Control-Allow-Origin': '*',
     'Cache-Control': 'no-cache, no-transform',
     'Content-Encoding': 'identity',
-    'X-Accel-Buffering': 'no',
-    'Access-Control-Allow-Origin': '*'
+    'Content-Type': 'text/event-stream',
+    'X-Accel-Buffering': 'no'
   });
 
   // Simple heartbeat to demonstrate connection

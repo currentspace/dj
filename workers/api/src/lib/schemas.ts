@@ -20,17 +20,17 @@ export type AnthropicMessage = z.infer<typeof AnthropicMessageSchema>;
 
 // Spotify API Response Schemas
 export const SpotifyTrackSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  uri: z.string(),
-  preview_url: z.string().nullable(),
+  artists: z.array(z.object({
+    id: z.string(),
+    name: z.string()
+  })),
   external_urls: z.object({
     spotify: z.string()
   }).optional(),
-  artists: z.array(z.object({
-    name: z.string(),
-    id: z.string()
-  }))
+  id: z.string(),
+  name: z.string(),
+  preview_url: z.string().nullable(),
+  uri: z.string()
 });
 
 export const SpotifySearchResponseSchema = z.object({
@@ -40,31 +40,31 @@ export const SpotifySearchResponseSchema = z.object({
 });
 
 export const SpotifyUserSchema = z.object({
-  id: z.string(),
   display_name: z.string().nullable().optional(),
-  email: z.string().optional()
+  email: z.string().optional(),
+  id: z.string()
 });
 
 export const SpotifyPlaylistSchema = z.object({
-  id: z.string(),
-  name: z.string(),
   external_urls: z.object({
     spotify: z.string()
-  }).optional()
+  }).optional(),
+  id: z.string(),
+  name: z.string()
 });
 
-export type SpotifyTrack = z.infer<typeof SpotifyTrackSchema>;
-export type SpotifySearchResponse = z.infer<typeof SpotifySearchResponseSchema>;
-export type SpotifyUser = z.infer<typeof SpotifyUserSchema>;
 export type SpotifyPlaylist = z.infer<typeof SpotifyPlaylistSchema>;
+export type SpotifySearchResponse = z.infer<typeof SpotifySearchResponseSchema>;
+export type SpotifyTrack = z.infer<typeof SpotifyTrackSchema>;
+export type SpotifyUser = z.infer<typeof SpotifyUserSchema>;
 
 // Generated Playlist Schema (from Claude)
 export const GeneratedPlaylistSchema = z.object({
-  name: z.string(),
   description: z.string(),
+  name: z.string(),
   tracks: z.array(z.object({
-    name: z.string(),
     artist: z.string(),
+    name: z.string(),
     query: z.string()
   }))
 });
@@ -78,23 +78,23 @@ export const GeneratePlaylistRequestSchema = z.object({
 
 // Enhanced track schema for playlist processing
 export const PlaylistTrackSchema = z.object({
-  name: z.string(),
   artist: z.string(),
+  external_url: z.string().optional(),
+  name: z.string(),
+  preview_url: z.string().nullable().optional(),
   query: z.string(),
   spotifyId: z.string().optional(),
-  spotifyUri: z.string().optional(),
-  preview_url: z.string().nullable().optional(),
-  external_url: z.string().optional()
+  spotifyUri: z.string().optional()
 });
 
 export const SavePlaylistRequestSchema = z.object({
   playlist: z.object({
-    name: z.string(),
     description: z.string(),
+    name: z.string(),
     tracks: z.array(PlaylistTrackSchema)
   })
 });
 
 export type GeneratePlaylistRequest = z.infer<typeof GeneratePlaylistRequestSchema>;
-export type SavePlaylistRequest = z.infer<typeof SavePlaylistRequestSchema>;
 export type PlaylistTrack = z.infer<typeof PlaylistTrackSchema>;
+export type SavePlaylistRequest = z.infer<typeof SavePlaylistRequestSchema>;

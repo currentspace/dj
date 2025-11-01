@@ -1,11 +1,11 @@
 // Hook for MCP Session Management
-import { useState, useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 interface MCPSession {
-  sessionToken: string;
-  mcpServerUrl: string;
-  userId?: string;
   displayName?: string;
+  mcpServerUrl: string;
+  sessionToken: string;
+  userId?: string;
 }
 
 export function useMCPSession() {
@@ -20,10 +20,10 @@ export function useMCPSession() {
 
     try {
       const response = await fetch('/api/mcp/session/create', {
-        method: 'POST',
         headers: {
           'Authorization': `Bearer ${spotifyToken}`
-        }
+        },
+        method: 'POST'
       });
 
       if (!response.ok) {
@@ -58,10 +58,10 @@ export function useMCPSession() {
 
     try {
       await fetch('/api/mcp/session/destroy', {
-        method: 'POST',
         headers: {
           'Authorization': `Bearer ${session.sessionToken}`
-        }
+        },
+        method: 'POST'
       });
     } catch (error) {
       console.error('Failed to destroy MCP session:', error);
@@ -81,13 +81,13 @@ export function useMCPSession() {
       servers: {
         spotify: {
           command: 'remote',
-          url: session.mcpServerUrl,
+          env: {
+            SESSION_TOKEN: session.sessionToken
+          },
           headers: {
             'Authorization': `Bearer ${session.sessionToken}`
           },
-          env: {
-            SESSION_TOKEN: session.sessionToken
-          }
+          url: session.mcpServerUrl
         }
       }
     };
@@ -110,10 +110,10 @@ export function useMCPSession() {
   }, []);
 
   return {
-    session,
-    isInitializing,
-    initializeSession,
     destroySession,
-    getMCPConfig
+    getMCPConfig,
+    initializeSession,
+    isInitializing,
+    session
   };
 }

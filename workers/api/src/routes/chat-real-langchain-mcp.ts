@@ -1,32 +1,34 @@
-import { Hono } from "hono";
-import type { Env } from "../index";
-import { z } from "zod";
-import { SessionManager } from "../lib/session-manager";
 import { ChatAnthropic } from "@langchain/anthropic";
-import { MultiServerMCPClient } from "@langchain/mcp-adapters";
 import {
+  AIMessage,
   HumanMessage,
   SystemMessage,
-  AIMessage,
 } from "@langchain/core/messages";
-import { withLoopbackFetch } from "../lib/withLoopbackFetch";
-import { withFetchLogging } from "../lib/withFetchLogging";
+import { MultiServerMCPClient } from "@langchain/mcp-adapters";
+import { Hono } from "hono";
+import { z } from "zod";
+
+import type { Env } from "../index";
+
 import { convertMCPToolsToLangChain } from "../lib/mcp-to-langchain";
+import { SessionManager } from "../lib/session-manager";
+import { withFetchLogging } from "../lib/withFetchLogging";
+import { withLoopbackFetch } from "../lib/withLoopbackFetch";
 
 const realLangChainMcpRouter = new Hono<{ Bindings: Env }>();
 
 // Request schema
 const RealLangChainMCPRequestSchema = z.object({
-  message: z.string().min(1).max(2000),
   conversationHistory: z
     .array(
       z.object({
-        role: z.enum(["user", "assistant"]),
         content: z.string(),
+        role: z.enum(["user", "assistant"]),
       })
     )
     .max(20)
     .default([]),
+  message: z.string().min(1).max(2000),
   mode: z.enum(["analyze", "create", "edit"]).default("analyze"),
 });
 
@@ -115,7 +117,7 @@ realLangChainMcpRouter.post("/message", async (c) => {
     );
 
     let tools: any[];
-    let transportUsed = "http";
+    const transportUsed = "http";
 
     try {
       // Use loopback fetch to intercept self-requests and route them internally
@@ -129,14 +131,14 @@ realLangChainMcpRouter.post("/message", async (c) => {
 
             const client = new MultiServerMCPClient({
               spotify: {
-                transport: "http", // Keep it simple; SSE not needed for tools
-                url: mcpServerUrl,
                 headers: {
+                  Accept: "application/json",
                   Authorization: `Bearer ${sessionToken}`,
                   "MCP-Protocol-Version": "2025-06-18",
-                  Accept: "application/json",
                   "User-Agent": "langchain-mcp-worker/1.0",
                 },
+                transport: "http", // Keep it simple; SSE not needed for tools
+                url: mcpServerUrl,
               },
             });
 
@@ -197,16 +199,16 @@ realLangChainMcpRouter.post("/message", async (c) => {
 
       return c.json(
         {
+          duration: Date.now() - startTime,
           error: `Failed to initialize MCP tools: ${errorMessage}`,
           errorType: error instanceof Error ? error.name : "Error",
           requestId,
-          duration: Date.now() - startTime,
         },
         500
       );
     }
 
-    if (!tools || !tools.length) {
+    if (!tools?.length) {
       console.error(`[RealLangChainMCP:${requestId}] No MCP tools available`);
       return c.json({ error: "No MCP tools available" }, 500);
     }
@@ -218,9 +220,9 @@ realLangChainMcpRouter.post("/message", async (c) => {
     // Initialize ChatAnthropic model
     const llm = new ChatAnthropic({
       apiKey: c.env.ANTHROPIC_API_KEY,
+      maxTokens: 2000,
       model: "claude-sonnet-4-5-20250929",
       temperature: 0.2,
-      maxTokens: 2000,
     });
 
     // System prompts based on mode
@@ -324,8 +326,8 @@ Always explain your reasoning for changes.`,
               JSON.stringify(toolResult).substring(0, 200)
             );
             toolResults.push({
-              tool_call_id: toolCall.id,
               result: toolResult,
+              tool_call_id: toolCall.id,
             });
             console.log(
               `[RealLangChainMCP:${requestId}] Tool ${toolCall.name} completed successfully`
@@ -336,8 +338,8 @@ Always explain your reasoning for changes.`,
               error
             );
             toolResults.push({
-              tool_call_id: toolCall.id,
               error: error instanceof Error ? error.message : String(error),
+              tool_call_id: toolCall.id,
             });
           }
         } else {
@@ -345,8 +347,8 @@ Always explain your reasoning for changes.`,
             `[RealLangChainMCP:${requestId}] Tool ${toolCall.name} not found in available tools`
           );
           toolResults.push({
-            tool_call_id: toolCall.id,
             error: `Tool ${toolCall.name} not found`,
+            tool_call_id: toolCall.id,
           });
         }
       }
@@ -390,8 +392,8 @@ Always explain your reasoning for changes.`,
     // Build conversation history
     const finalHistory = [
       ...request.conversationHistory,
-      { role: "user" as const, content: request.message },
-      { role: "assistant" as const, content: finalMessage },
+      { content: request.message, role: "user" as const },
+      { content: finalMessage, role: "assistant" as const },
     ];
 
     const duration = Date.now() - startTime;
@@ -400,10 +402,10 @@ Always explain your reasoning for changes.`,
     );
 
     return c.json({
-      message: finalMessage,
       conversationHistory: finalHistory,
-      requestId,
       duration,
+      message: finalMessage,
+      requestId,
       transport: transportUsed,
     });
   } catch (error) {
@@ -424,10 +426,10 @@ Always explain your reasoning for changes.`,
 
     return c.json(
       {
+        duration,
         error: errorMessage,
         errorType: error instanceof Error ? error.name : "UnknownError",
         requestId,
-        duration,
       },
       500
     );
@@ -464,12 +466,12 @@ realLangChainMcpRouter.get("/test", async (c) => {
       async () => {
         const client = new MultiServerMCPClient({
           spotify: {
-            transport: "http",
-            url: mcpServerUrl,
             headers: {
               Authorization: `Bearer ${sessionToken}`,
               "MCP-Protocol-Version": "2025-06-18",
             },
+            transport: "http",
+            url: mcpServerUrl,
           },
         });
 
@@ -486,19 +488,19 @@ realLangChainMcpRouter.get("/test", async (c) => {
     );
 
     return c.json({
-      success: true,
       serverUrl: mcpServerUrl,
       sessionId: sessionToken,
+      success: true,
+      testId,
       toolCount: tools.length,
       tools: toolNames,
-      testId,
     });
   } catch (error) {
     console.error(`[RealLangChainMCP:${testId}] Test failed:`, error);
     return c.json(
       {
-        success: false,
         error: error instanceof Error ? error.message : String(error),
+        success: false,
         testId,
       },
       500

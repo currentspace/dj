@@ -1,24 +1,25 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { spotifyRouter } from './routes/spotify'
-import { playlistRouter } from './routes/playlist'
-import { testRouter } from './routes/test'
-import { mcpRouter } from './routes/mcp'
+
+import { anthropicStatusRouter } from './routes/anthropic-status'
 import { chatRouter } from './routes/chat-simple'
 import { chatStreamRouter } from './routes/chat-stream'
 import { chatTestRouter } from './routes/chat-test'
-import { anthropicStatusRouter } from './routes/anthropic-status'
+import { mcpRouter } from './routes/mcp'
+import { playlistRouter } from './routes/playlist'
+import { spotifyRouter } from './routes/spotify'
 import { sseTestRouter } from './routes/sse-test'
+import { testRouter } from './routes/test'
 
 export interface Env {
   ANTHROPIC_API_KEY: string
-  SPOTIFY_CLIENT_ID: string
-  SPOTIFY_CLIENT_SECRET: string
-  LASTFM_API_KEY?: string // For Last.fm tags, popularity, and similarity
-  SESSIONS?: KVNamespace // KV namespace for session storage
+  ASSETS: Fetcher
   AUDIO_FEATURES_CACHE?: KVNamespace // KV namespace for BPM cache (Deezer + MusicBrainz)
   ENVIRONMENT: string
-  ASSETS: Fetcher
+  LASTFM_API_KEY?: string // For Last.fm tags, popularity, and similarity
+  SESSIONS?: KVNamespace // KV namespace for session storage
+  SPOTIFY_CLIENT_ID: string
+  SPOTIFY_CLIENT_SECRET: string
 }
 
 const app = new Hono<{ Bindings: Env }>()

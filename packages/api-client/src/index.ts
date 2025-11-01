@@ -1,32 +1,68 @@
 import type {
-  Playlist,
-  GeneratePlaylistRequest,
-  GeneratePlaylistResponse,
-  SavePlaylistRequest,
-  SavePlaylistResponse,
-  SpotifyAuthResponse,
+  ApiError,
   ChatRequest,
   ChatResponse,
-  ApiError
+  GeneratePlaylistRequest,
+  GeneratePlaylistResponse,
+  Playlist,
+  SavePlaylistRequest,
+  SavePlaylistResponse,
+  SpotifyAuthResponse
 } from '@dj/shared-types';
 
 export class DJApiClient {
   private baseUrl: string;
-  private token: string | null = null;
+  private token: null | string = null;
 
-  constructor(baseUrl: string = '/api') {
+  constructor(baseUrl = '/api') {
     this.baseUrl = baseUrl;
     this.token = localStorage.getItem('spotify_token');
-  }
-
-  setToken(token: string) {
-    this.token = token;
-    localStorage.setItem('spotify_token', token);
   }
 
   clearToken() {
     this.token = null;
     localStorage.removeItem('spotify_token');
+  }
+
+  async generatePlaylist(prompt: string): Promise<GeneratePlaylistResponse> {
+    return this.request<GeneratePlaylistResponse>('/playlist/generate', {
+      body: JSON.stringify({ prompt } as GeneratePlaylistRequest),
+      method: 'POST'
+    });
+  }
+
+  async getSpotifyAuthUrl(): Promise<SpotifyAuthResponse> {
+    return this.request<SpotifyAuthResponse>('/spotify/auth-url');
+  }
+
+  async savePlaylistToSpotify(playlist: Playlist): Promise<SavePlaylistResponse> {
+    if (!this.token) {
+      throw new Error('Not authenticated with Spotify');
+    }
+
+    return this.request<SavePlaylistResponse>('/playlist/save', {
+      body: JSON.stringify({ playlist } as SavePlaylistRequest),
+      method: 'POST'
+    });
+  }
+
+  async searchSpotify(query: string, type = 'track') {
+    return this.request(`/spotify/search`, {
+      body: JSON.stringify({ query, type }),
+      method: 'POST'
+    });
+  }
+
+  async sendChatMessage(chatRequest: ChatRequest): Promise<ChatResponse> {
+    return this.request<ChatResponse>('/chat/message', {
+      body: JSON.stringify(chatRequest),
+      method: 'POST'
+    });
+  }
+
+  setToken(token: string) {
+    this.token = token;
+    localStorage.setItem('spotify_token', token);
   }
 
   private async request<T>(
@@ -40,7 +76,7 @@ export class DJApiClient {
     };
 
     if (this.token) {
-      headers['Authorization'] = `Bearer ${this.token}`;
+      headers.Authorization = `Bearer ${this.token}`;
     }
 
     const response = await fetch(url, {
@@ -57,42 +93,6 @@ export class DJApiClient {
     }
 
     return response.json();
-  }
-
-  async getSpotifyAuthUrl(): Promise<SpotifyAuthResponse> {
-    return this.request<SpotifyAuthResponse>('/spotify/auth-url');
-  }
-
-  async generatePlaylist(prompt: string): Promise<GeneratePlaylistResponse> {
-    return this.request<GeneratePlaylistResponse>('/playlist/generate', {
-      method: 'POST',
-      body: JSON.stringify({ prompt } as GeneratePlaylistRequest)
-    });
-  }
-
-  async savePlaylistToSpotify(playlist: Playlist): Promise<SavePlaylistResponse> {
-    if (!this.token) {
-      throw new Error('Not authenticated with Spotify');
-    }
-
-    return this.request<SavePlaylistResponse>('/playlist/save', {
-      method: 'POST',
-      body: JSON.stringify({ playlist } as SavePlaylistRequest)
-    });
-  }
-
-  async searchSpotify(query: string, type: string = 'track') {
-    return this.request(`/spotify/search`, {
-      method: 'POST',
-      body: JSON.stringify({ query, type })
-    });
-  }
-
-  async sendChatMessage(chatRequest: ChatRequest): Promise<ChatResponse> {
-    return this.request<ChatResponse>('/chat/message', {
-      method: 'POST',
-      body: JSON.stringify(chatRequest)
-    });
   }
 }
 

@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 
 export function useSpotifyAuth() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [token, setToken] = useState<string | null>(null)
+  const [token, setToken] = useState<null | string>(null)
 
   useEffect(() => {
     console.log('🔍 Auth check starting...');
@@ -26,8 +26,8 @@ export function useSpotifyAuth() {
 
     console.log('🔗 URL params:', {
       code: code ? 'Found' : 'Not found',
-      state: state ? 'Found' : 'Not found',
-      error
+      error,
+      state: state ? 'Found' : 'Not found'
     });
 
     if (error) {
@@ -42,9 +42,9 @@ export function useSpotifyAuth() {
     const authSuccess = urlParams.get('auth_success')
 
     console.log('🔗 Server callback params:', {
-      spotify_token: spotifyToken ? 'Found' : 'Not found',
       auth_success: authSuccess ? 'Found' : 'Not found',
-      error
+      error,
+      spotify_token: spotifyToken ? 'Found' : 'Not found'
     });
 
     if (spotifyToken && authSuccess) {
@@ -91,8 +91,8 @@ export function useSpotifyAuth() {
 
   return {
     isAuthenticated,
-    token,
     login,
     logout,
+    token,
   }
 }

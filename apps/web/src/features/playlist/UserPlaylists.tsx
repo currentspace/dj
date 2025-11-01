@@ -1,37 +1,38 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
+
 import { useSpotifyAuth } from '../../hooks/useSpotifyAuth';
 
 interface SpotifyPlaylist {
-  id: string;
-  name: string;
   description: string;
   external_urls: {
     spotify: string;
   };
-  images: Array<{
-    url: string;
+  id: string;
+  images: {
     height: number;
+    url: string;
     width: number;
-  }>;
-  tracks: {
-    total: number;
-  };
-  public: boolean;
+  }[];
+  name: string;
   owner: {
     display_name: string;
+  };
+  public: boolean;
+  tracks: {
+    total: number;
   };
 }
 
 interface UserPlaylistsProps {
   onPlaylistSelect?: (playlist: SpotifyPlaylist) => void;
-  selectedPlaylist?: SpotifyPlaylist | null;
+  selectedPlaylist?: null | SpotifyPlaylist;
 }
 
 function UserPlaylists({ onPlaylistSelect, selectedPlaylist }: UserPlaylistsProps) {
   const { token } = useSpotifyAuth();
   const [playlists, setPlaylists] = useState<SpotifyPlaylist[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<null | string>(null);
 
   useEffect(() => {
     if (token) {
@@ -87,7 +88,7 @@ function UserPlaylists({ onPlaylistSelect, selectedPlaylist }: UserPlaylistsProp
         </div>
         <div className="error-state">
           <p>❌ {error}</p>
-          <button onClick={loadPlaylists} className="retry-button">
+          <button className="retry-button" onClick={loadPlaylists}>
             Try Again
           </button>
         </div>
@@ -106,16 +107,16 @@ function UserPlaylists({ onPlaylistSelect, selectedPlaylist }: UserPlaylistsProp
       <div className="playlists-grid">
         {playlists.map((playlist) => (
           <div
-            key={playlist.id}
             className={`playlist-card ${selectedPlaylist?.id === playlist.id ? 'selected' : ''}`}
+            key={playlist.id}
             onClick={() => onPlaylistSelect?.(playlist)}
           >
             <div className="playlist-image">
               {playlist.images && playlist.images.length > 0 ? (
                 <img
-                  src={playlist.images[0].url}
                   alt={playlist.name}
                   loading="lazy"
+                  src={playlist.images[0].url}
                 />
               ) : (
                 <div className="placeholder-image">🎵</div>
@@ -135,11 +136,11 @@ function UserPlaylists({ onPlaylistSelect, selectedPlaylist }: UserPlaylistsProp
 
             <div className="playlist-actions">
               <a
-                href={playlist.external_urls.spotify}
-                target="_blank"
-                rel="noopener noreferrer"
                 className="open-spotify-button"
+                href={playlist.external_urls.spotify}
                 onClick={(e) => e.stopPropagation()}
+                rel="noopener noreferrer"
+                target="_blank"
               >
                 Open in Spotify
               </a>

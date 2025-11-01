@@ -1,0 +1,188 @@
+================================================================================
+DJ CODEBASE: RUNTIME ENVIRONMENTS & ARCHITECTURE SUMMARY
+================================================================================
+
+FIVE DISTINCT PACKAGES IN THREE ENVIRONMENTS:
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ BROWSER ENVIRONMENT                                                         │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│ 📱 @dj/web (React 19.1 Application)                                        │
+│    - Runtime: Browser (Vite bundler)                                       │
+│    - Framework: React 19.1 + TypeScript                                    │
+│    - Dependencies:                                                          │
+│      • react, react-dom                                                    │
+│      • @ark-ui/react (UI components)                                       │
+│      • @dj/api-client (HTTP client)                                        │
+│      • @dj/shared-types (types)                                            │
+│      • zod (validation)                                                    │
+│    - Outputs: SPA bundle                                                   │
+│    - Port: 3000                                                            │
+│    - TypeScript: lib=[ES2022, DOM, DOM.Iterable], jsx=react-jsx           │
+│                                                                              │
+│ 🔌 @dj/api-client (Fetch HTTP Client)                                      │
+│    - Runtime: Browser (with potential for server with polyfills)          │
+│    - Dependencies:                                                          │
+│      • @dj/shared-types                                                    │
+│    - API: DJApiClient class using fetch API                               │
+│    - Storage: localStorage for Spotify tokens                             │
+│    - Used by: @dj/web                                                      │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ CLOUDFLARE WORKERS ENVIRONMENT                                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│ ⚙️  @dj/api-worker (Main API & AI Backend)                                 │
+│    - Runtime: Cloudflare Workers (V8 + nodejs_compat)                     │
+│    - Framework: Hono 4.9                                                   │
+│    - AI: Langchain + Claude Anthropic                                      │
+│    - Dependencies:                                                          │
+│      • hono (web framework)                                                │
+│      • @langchain/anthropic, @langchain/core, langchain                   │
+│      • @langchain/mcp-adapters (MCP server)                                │
+│      • @dj/shared-types (types)                                            │
+│      • zod, nanoid                                                         │
+│    - Services:                                                              │
+│      • Spotify API integration                                             │
+│      • Claude AI chat streaming                                            │
+│      • Audio enrichment (Deezer, Last.fm, MusicBrainz)                    │
+│      • MCP server for tool calling                                         │
+│    - Storage: Cloudflare KV namespaces                                    │
+│    - Port: 8787 (dev)                                                      │
+│    - TypeScript: lib=[ES2022], types=@cloudflare/workers-types            │
+│                                                                              │
+│ 🔔 @dj/webhook-worker (Webhook Handler)                                    │
+│    - Runtime: Cloudflare Workers                                           │
+│    - Framework: Hono 4.9                                                   │
+│    - Dependencies:                                                          │
+│      • hono                                                                 │
+│      • @dj/shared-types (types)                                            │
+│      • zod (validation)                                                    │
+│    - Purpose: Spotify webhook verification & handling                     │
+│    - Minimal implementation                                                │
+│    - TypeScript: lib=[ES2022], types=@cloudflare/workers-types            │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ SHARED/TYPE-ONLY ENVIRONMENT                                                │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│ 📚 @dj/shared-types (TypeScript Interfaces)                               │
+│    - Runtime: None (types only)                                            │
+│    - Dependencies: ZERO                                                    │
+│    - Exports:                                                              │
+│      • Playlist, Track                                                     │
+│      • ChatMessage, ChatRequest, ChatResponse                              │
+│      • SpotifyTrack, SpotifyPlaylist, SpotifyAudioFeatures               │
+│      • StreamToolData, StreamToolResult, StreamDebugData                  │
+│      • WebhookEvent, SpotifyWebhookPayload                                │
+│      • ApiError                                                            │
+│    - Used by: @dj/web, @dj/api-client, @dj/api-worker, @dj/webhook-worker│
+│    - TypeScript: lib=[ES2022], no DOM/React/Worker types                  │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+================================================================================
+DEPENDENCY GRAPH
+================================================================================
+
+                            @dj/shared-types
+                         (Zero dependencies)
+                                  ↑
+                    ┌─────────────┴─────────────┐
+                    │                           │
+            @dj/api-client              @dj/api-worker
+          (Browser HTTP Client)       (Worker: AI Backend)
+                    │                           │
+                    │                           │
+                    ↓                           ↓
+              @dj/web                 @dj/webhook-worker
+            (React App)                (Worker: Webhooks)
+
+Browser Code    → React + fetch + localStorage
+Worker Code     → Hono + Langchain + KVNamespace
+Shared Code     → Pure TypeScript interfaces
+
+================================================================================
+CROSS-ENVIRONMENT ANALYSIS
+================================================================================
+
+✅ VERIFIED SAFE - No Cross-Environment Pollution:
+
+   Browser (@dj/web):
+   ✅ Uses: React, fetch, localStorage, DOM, Vite
+   ✅ Does NOT use: Hono, Langchain, Wrangler, Worker types
+   
+   Workers (@dj/api-worker, @dj/webhook-worker):
+   ✅ Uses: Hono, Langchain, Cloudflare APIs
+   ✅ Does NOT use: React, JSX, browser-specific code
+   
+   Shared (@dj/shared-types):
+   ✅ Pure TypeScript interfaces only
+   ✅ Zero external dependencies
+   ✅ No environment-specific code
+
+================================================================================
+ESLINT CONFIGURATION
+================================================================================
+
+Current Setup: Single monorepo-wide config (eslint.config.js)
+
+Pros:
+  ✅ Simple maintenance
+  ✅ Prevents major mistakes
+  ✅ Consistent base rules across all packages
+  ✅ Works fine for current team size
+
+Cons:
+  ⚠️  React rules applied to worker code
+  ⚠️  All globals defined simultaneously (hard to catch mistakes)
+  ⚠️  Can't strictly enforce environment boundaries
+  ⚠️  Noise from irrelevant warnings
+
+Recommendation:
+  YES - Separate ESLint configs would be better for:
+    • Developer experience (relevant warnings only)
+    • Lint accuracy (catch subtle mistakes)
+    • Scalability (easier to add new environments)
+    • Bug prevention (enforces boundaries)
+
+Priority: MEDIUM (works now, improves with scaling)
+
+================================================================================
+BUILD PIPELINE
+================================================================================
+
+Development (pnpm dev):
+  Terminal 1: pnpm dev:web   → Vite on port 3000
+  Terminal 2: pnpm dev:api   → Wrangler on port 8787
+  
+Production Build (pnpm build:worker):
+  1. Build @dj/shared-types
+  2. Build @dj/api-client
+  3. Build @dj/web (React SPA)
+  4. Build @dj/api-worker (Worker bundle)
+  
+Deployment:
+  • GitHub Actions auto-deploys to Cloudflare
+  • Frontend served from Cloudflare Workers
+  • API routes handled by @dj/api-worker
+  • Webhooks handled by @dj/webhook-worker
+
+================================================================================
+ARCHITECTURE SCORE
+================================================================================
+
+Environment Isolation:     A+ (Excellent - zero pollution)
+Type Safety:              A  (Good - appropriate configs per env)
+Dependency Management:    A  (Good - workspace protocol, clear deps)
+ESLint Configuration:     B+ (Good - works, but could be split)
+Documentation:            N/A (This analysis)
+
+Overall: WELL-ARCHITECTED MONOREPO ✅
+
+================================================================================

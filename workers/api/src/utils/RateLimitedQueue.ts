@@ -8,34 +8,34 @@
  * - Guards onResult so callback errors don't poison the loop
  */
 
-type Task<T> = () => Promise<T>;
-
 export interface QueueOptions {
-  rate?: number;        // tokens per second, default 40
   burst?: number;       // max tokens, default = rate
   concurrency?: number; // parallel tasks, default 1
   jitterMs?: number;    // 0..jitterMs added to wakeups, default 0
   minTickMs?: number;   // minimum tick delay (Workers timers coalesce at 0ms), default 1
+  rate?: number;        // tokens per second, default 40
 }
 
-export class RateLimitedQueue<T> {
-  private queue: Task<T>[] = [];
-  private processing = false;
+type Task<T> = () => Promise<T>;
 
-  private readonly rate: number;
+export class RateLimitedQueue<T> {
   private readonly burst: number;
   private readonly concurrency: number;
-  private readonly jitterMs: number;
-  private readonly minTickMs: number;
 
+  private readonly jitterMs: number;
+  private kickFn: (() => void) | null = null; // For continuous processing
+  private lastRefill: number; // performance.now()
+  private readonly minTickMs: number;
+  private processing = false;
+
+  private queue: Task<T>[] = [];
+  private readonly rate: number;
+
+  private running = 0;
+  // scheduling
+  private timer: null | number = null;
   // token bucket
   private tokens: number;
-  private lastRefill: number; // performance.now()
-
-  // scheduling
-  private timer: number | null = null;
-  private running = 0;
-  private kickFn: (() => void) | null = null; // For continuous processing
 
   constructor(opts: QueueOptions = {}) {
     this.rate = opts.rate ?? 40;
@@ -44,6 +44,15 @@ export class RateLimitedQueue<T> {
     this.jitterMs = Math.max(0, opts.jitterMs ?? 0);
     this.minTickMs = Math.max(0, opts.minTickMs ?? 1);
 
+    this.tokens = this.burst;
+    this.lastRefill = performance.now();
+  }
+
+  clear(): void {
+    this.queue = [];
+    this.processing = false;
+    this.running = 0;
+    this.clearTimer();
     this.tokens = this.burst;
     this.lastRefill = performance.now();
   }
@@ -60,31 +69,18 @@ export class RateLimitedQueue<T> {
     }
   }
 
-  size(): number {
-    return this.queue.length;
-  }
-
-  clear(): void {
-    this.queue = [];
-    this.processing = false;
-    this.running = 0;
-    this.clearTimer();
-    this.tokens = this.burst;
-    this.lastRefill = performance.now();
-  }
-
   /**
    * Process all tasks, returning results in enqueue order.
    * Optional onResult receives (resultOrNull, index, total). It is guarded.
    */
   async processAll(
-    onResult?: (result: T | null, index: number, total: number) => void | Promise<void>
-  ): Promise<(T | null)[]> {
+    onResult?: (result: null | T, index: number, total: number) => Promise<void> | void
+  ): Promise<(null | T)[]> {
     if (this.processing) throw new Error("Already processing");
     this.processing = true;
 
     const total = this.queue.length;
-    const results: (T | null)[] = Array(total);
+    const results: (null | T)[] = Array(total);
     let issued = 0;   // number of tasks taken from queue & assigned an index
     let finished = 0; // number of tasks completed
 
@@ -98,7 +94,7 @@ export class RateLimitedQueue<T> {
       }
     };
 
-    const maybeResolve = (resolve: (v: (T | null)[]) => void) => {
+    const maybeResolve = (resolve: (v: (null | T)[]) => void) => {
       if (finished === total) {
         this.processing = false;
         this.clearTimer();
@@ -205,8 +201,8 @@ export class RateLimitedQueue<T> {
     };
 
     // Promise plumbing
-    let resolveOuter!: (v: (T | null)[]) => void;
-    const done = new Promise<(T | null)[]>((resolve) => (resolveOuter = resolve));
+    let resolveOuter!: (v: (null | T)[]) => void;
+    const done = new Promise<(null | T)[]>((resolve) => (resolveOuter = resolve));
 
     // Start the scheduler
     // (We don't mutate this.queue during processing; we index into it for order.)
@@ -224,7 +220,7 @@ export class RateLimitedQueue<T> {
       }
     };
     // Fire and forget watcher
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
+     
     watcher();
 
     return done;
@@ -235,8 +231,8 @@ export class RateLimitedQueue<T> {
    * Uses processAll and forwards onResult, but keeps the old method name.
    */
   async processAllWithCallback(
-    onResult: (result: T | null, index: number, total: number) => void
-  ): Promise<(T | null)[]> {
+    onResult: (result: null | T, index: number, total: number) => void
+  ): Promise<(null | T)[]> {
     return this.processAll(onResult);
   }
 
@@ -248,14 +244,14 @@ export class RateLimitedQueue<T> {
    * Use for orchestrators that need to handle nested/recursive task enqueueing.
    */
   async processContinuously(
-    onResult?: (result: T | null) => void | Promise<void>
+    onResult?: (result: null | T) => Promise<void> | void
   ): Promise<void> {
     console.log('[RateLimitedQueue] processContinuously() called');
     if (this.processing) throw new Error("Already processing");
     this.processing = true;
     console.log('[RateLimitedQueue] Continuous processing started');
 
-    let globalIndex = 0;
+    const globalIndex = 0;
 
     // Internal: refill tokens from elapsed time
     const refill = () => {
@@ -358,7 +354,11 @@ export class RateLimitedQueue<T> {
     });
   }
 
+  size(): number {
+    return this.queue.length;
+  }
+
   // replaced at runtime by constructor; defined to satisfy TS
-  // eslint-disable-next-line @typescript-eslint/no-empty-function
+   
   private clearTimer(): void {}
 }

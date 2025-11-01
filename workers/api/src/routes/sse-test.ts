@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+
 import type { Env } from '../index';
 
 const sseTestRouter = new Hono<{ Bindings: Env }>();
@@ -36,11 +37,11 @@ sseTestRouter.get('/simple', async () => {
 
   return new Response(readable, {
     headers: {
-      'Content-Type': 'text/event-stream',
+      'Access-Control-Allow-Origin': '*',
       'Cache-Control': 'no-cache, no-transform',
       'Content-Encoding': 'identity',
-      'X-Accel-Buffering': 'no',
-      'Access-Control-Allow-Origin': '*'
+      'Content-Type': 'text/event-stream',
+      'X-Accel-Buffering': 'no'
     }
   });
 });
@@ -80,11 +81,11 @@ sseTestRouter.post('/post-stream', async (c) => {
 
   return new Response(readable, {
     headers: {
-      'Content-Type': 'text/event-stream',
+      'Access-Control-Allow-Origin': '*',
       'Cache-Control': 'no-cache, no-transform',
       'Content-Encoding': 'identity',
-      'X-Accel-Buffering': 'no',
-      'Access-Control-Allow-Origin': '*'
+      'Content-Type': 'text/event-stream',
+      'X-Accel-Buffering': 'no'
     }
   });
 });

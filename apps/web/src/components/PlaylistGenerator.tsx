@@ -1,11 +1,12 @@
 import { useState } from 'react'
+
 import { generatePlaylist } from '../lib/api'
 
 export function PlaylistGenerator() {
   const [prompt, setPrompt] = useState('')
   const [loading, setLoading] = useState(false)
   const [playlist, setPlaylist] = useState<any>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<null | string>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -32,14 +33,14 @@ export function PlaylistGenerator() {
           <p>Tell me what kind of music you're in the mood for...</p>
         </label>
         <textarea
+          disabled={loading}
           id="prompt"
-          value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           placeholder="e.g., Upbeat songs for a morning workout, or Chill jazz for studying..."
           rows={4}
-          disabled={loading}
+          value={prompt}
         />
-        <button type="submit" disabled={loading || !prompt.trim()}>
+        <button disabled={loading || !prompt.trim()} type="submit">
           {loading ? 'Generating...' : 'Generate Playlist'}
         </button>
       </form>
@@ -56,7 +57,7 @@ export function PlaylistGenerator() {
           <p>{playlist.description}</p>
           <div className="track-list">
             {playlist.tracks?.map((track: any, index: number) => (
-              <div key={index} className="track">
+              <div className="track" key={index}>
                 <span className="track-number">{index + 1}</span>
                 <div className="track-info">
                   <div className="track-name">{track.name}</div>

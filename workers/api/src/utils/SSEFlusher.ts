@@ -18,39 +18,13 @@
  */
 
 export interface SSEFlusherOptions {
-  everyN?: number;  // Flush every N messages (default: 20)
   everyMs?: number; // Flush after this time window in ms (default: 500)
+  everyN?: number;  // Flush every N messages (default: 20)
 }
 
 export interface SSEWriter {
-  writeAsync: (data: any) => Promise<void>;
   flush: () => Promise<void>;
-}
-
-/**
- * Create a smart flusher that triggers based on message count or elapsed time
- */
-export function makeSSEFlusher(
-  writeAsync: (data: any) => Promise<void>,
-  flush: () => Promise<void>,
-  options: SSEFlusherOptions = {}
-): () => Promise<void> {
-  const { everyN = 20, everyMs = 500 } = options;
-
-  let sinceLastFlush = 0;
-  let lastFlushTime = Date.now();
-
-  return async function maybeFlush(): Promise<void> {
-    sinceLastFlush++;
-    const now = Date.now();
-    const elapsed = now - lastFlushTime;
-
-    if (sinceLastFlush >= everyN || elapsed >= everyMs) {
-      await flush();
-      sinceLastFlush = 0;
-      lastFlushTime = now;
-    }
-  };
+  writeAsync: (data: any) => Promise<void>;
 }
 
 /**
@@ -60,16 +34,25 @@ export function makeControlledSSEFlusher(
   flush: () => Promise<void>,
   options: SSEFlusherOptions = {}
 ): {
+  forceFlush: () => Promise<void>;
   mark: () => void;
   maybeFlush: () => Promise<void>;
-  forceFlush: () => Promise<void>;
 } {
-  const { everyN = 20, everyMs = 500 } = options;
+  const { everyMs = 500, everyN = 20 } = options;
 
   let sinceLastFlush = 0;
   let lastFlushTime = Date.now();
 
   return {
+    /**
+     * Force an immediate flush regardless of counters
+     */
+    forceFlush: async () => {
+      await flush();
+      sinceLastFlush = 0;
+      lastFlushTime = Date.now();
+    },
+
     /**
      * Mark that a message was written (increments counter)
      */
@@ -90,14 +73,31 @@ export function makeControlledSSEFlusher(
         lastFlushTime = now;
       }
     },
+  };
+}
 
-    /**
-     * Force an immediate flush regardless of counters
-     */
-    forceFlush: async () => {
+/**
+ * Create a smart flusher that triggers based on message count or elapsed time
+ */
+export function makeSSEFlusher(
+  writeAsync: (data: any) => Promise<void>,
+  flush: () => Promise<void>,
+  options: SSEFlusherOptions = {}
+): () => Promise<void> {
+  const { everyMs = 500, everyN = 20 } = options;
+
+  let sinceLastFlush = 0;
+  let lastFlushTime = Date.now();
+
+  return async function maybeFlush(): Promise<void> {
+    sinceLastFlush++;
+    const now = Date.now();
+    const elapsed = now - lastFlushTime;
+
+    if (sinceLastFlush >= everyN || elapsed >= everyMs) {
       await flush();
       sinceLastFlush = 0;
-      lastFlushTime = Date.now();
-    },
+      lastFlushTime = now;
+    }
   };
 }

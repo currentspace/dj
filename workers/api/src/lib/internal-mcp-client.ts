@@ -3,15 +3,17 @@
  * This avoids the Cloudflare Workers limitation where workers cannot fetch their own URLs
  */
 
-import { executeSpotifyTool, spotifyTools } from './spotify-tools';
 import { DynamicStructuredTool } from '@langchain/core/tools';
+
 import type { Env } from '../index';
 
+import { executeSpotifyTool, spotifyTools } from './spotify-tools';
+
 export interface InternalMCPTool {
-  name: string;
   description: string;
-  parameters: any;
   func: (args: any) => Promise<any>;
+  name: string;
+  parameters: any;
 }
 
 /**
@@ -20,9 +22,7 @@ export interface InternalMCPTool {
  */
 export function createInternalMCPTools(spotifyToken: string): InternalMCPTool[] {
   return Object.entries(spotifyTools).map(([name, definition]) => ({
-    name,
     description: definition.description,
-    parameters: definition.inputSchema,
     func: async (args: any) => {
       console.log(`[InternalMCP] Executing tool: ${name}`);
       console.log(`[InternalMCP] Arguments:`, args);
@@ -35,7 +35,9 @@ export function createInternalMCPTools(spotifyToken: string): InternalMCPTool[] 
         console.error(`[InternalMCP] Tool ${name} failed:`, error);
         throw error;
       }
-    }
+    },
+    name,
+    parameters: definition.inputSchema
   }));
 }
 
@@ -44,12 +46,12 @@ export function createInternalMCPTools(spotifyToken: string): InternalMCPTool[] 
  */
 export function toLangChainTools(internalTools: InternalMCPTool[]): any[] {
   return internalTools.map(tool => new DynamicStructuredTool({
-    name: tool.name,
     description: tool.description,
-    schema: tool.parameters,
     func: tool.func,
+    name: tool.name,
     // Add required properties
     returnDirect: false,
+    schema: tool.parameters,
     verbose: false
   }));
 }

@@ -1,8 +1,10 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
+
 import type { Env } from '../index'
+
+import { isSuccessResponse, safeParse } from '../lib/guards'
 import { SpotifySearchResponseSchema } from '../lib/schemas'
-import { safeParse, isSuccessResponse } from '../lib/guards'
 
 const spotifyRouter = new Hono<{ Bindings: Env }>()
 
@@ -10,21 +12,21 @@ const SPOTIFY_AUTH_URL = 'https://accounts.spotify.com/authorize'
 const SPOTIFY_TOKEN_URL = 'https://accounts.spotify.com/api/token'
 const REDIRECT_URI = 'https://dj.current.space/api/spotify/callback'
 
-// PKCE helper functions
-function generateCodeVerifier(): string {
-  const array = new Uint8Array(32)
-  crypto.getRandomValues(array)
-  return btoa(String.fromCharCode.apply(null, Array.from(array)))
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=/g, '')
-}
-
 async function generateCodeChallenge(verifier: string): Promise<string> {
   const encoder = new TextEncoder()
   const data = encoder.encode(verifier)
   const digest = await crypto.subtle.digest('SHA-256', data)
   return btoa(String.fromCharCode.apply(null, Array.from(new Uint8Array(digest))))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '')
+}
+
+// PKCE helper functions
+function generateCodeVerifier(): string {
+  const array = new Uint8Array(32)
+  crypto.getRandomValues(array)
+  return btoa(String.fromCharCode.apply(null, Array.from(array)))
     .replace(/\+/g, '-')
     .replace(/\//g, '_')
     .replace(/=/g, '')
@@ -37,17 +39,23 @@ const SearchRequestSchema = z.object({
 })
 
 const CreatePlaylistRequestSchema = z.object({
-  name: z.string().min(1).max(100),
   description: z.string().max(300).optional(),
+  name: z.string().min(1).max(100),
   public: z.boolean().optional().default(false),
   trackUris: z.array(z.string()).max(100)
 })
 
 const ModifyPlaylistRequestSchema = z.object({
-  playlistId: z.string().min(1),
   action: z.enum(['add', 'remove']),
+  playlistId: z.string().min(1),
   trackUris: z.array(z.string()).min(1).max(100)
 })
+
+function base64urlDecode(data: string): string {
+  const pad = data.length % 4
+  const padded = data + '='.repeat(pad === 0 ? 0 : 4 - pad)
+  return atob(padded.replace(/-/g, '+').replace(/_/g, '/'))
+}
 
 // Base64URL helpers (URL-safe encoding)
 function base64urlEncode(data: string): string {
@@ -55,12 +63,6 @@ function base64urlEncode(data: string): string {
     .replace(/\+/g, '-')
     .replace(/\//g, '_')
     .replace(/=/g, '')
-}
-
-function base64urlDecode(data: string): string {
-  const pad = data.length % 4
-  const padded = data + '='.repeat(pad === 0 ? 0 : 4 - pad)
-  return atob(padded.replace(/-/g, '+').replace(/_/g, '/'))
 }
 
 // HMAC helper for cookie integrity
@@ -72,7 +74,7 @@ async function hmacSign(data: string, key: string): Promise<string> {
   const cryptoKey = await crypto.subtle.importKey(
     'raw',
     keyData,
-    { name: 'HMAC', hash: 'SHA-256' },
+    { hash: 'SHA-256', name: 'HMAC' },
     false,
     ['sign']
   )
@@ -96,8 +98,8 @@ spotifyRouter.get('/auth-url', async (c) => {
   // Create signed cookie payload with verifier
   const cookieData = {
     state,
-    verifier: codeVerifier,
-    timestamp: Date.now()
+    timestamp: Date.now(),
+    verifier: codeVerifier
   }
 
   const payload = base64urlEncode(JSON.stringify(cookieData))
@@ -106,10 +108,10 @@ spotifyRouter.get('/auth-url', async (c) => {
 
   const params = new URLSearchParams({
     client_id: c.env.SPOTIFY_CLIENT_ID,
-    response_type: 'code',
-    redirect_uri: REDIRECT_URI,
-    code_challenge_method: 'S256',
     code_challenge: codeChallenge,
+    code_challenge_method: 'S256',
+    redirect_uri: REDIRECT_URI,
+    response_type: 'code',
     scope: 'playlist-modify-public playlist-modify-private user-read-private user-read-playback-state user-read-currently-playing user-read-recently-played user-top-read playlist-read-private playlist-read-collaborative',
     show_dialog: 'true',
     state: state // Only random state in URL, no secrets
@@ -165,7 +167,7 @@ spotifyRouter.get('/callback', async (c) => {
 
     // Decode and validate cookie data
     const cookieData = JSON.parse(base64urlDecode(payload))
-    const { state: cookieState, verifier: codeVerifier, timestamp } = cookieData
+    const { state: cookieState, timestamp, verifier: codeVerifier } = cookieData
 
     // Validate state matches (CSRF protection)
     if (state !== cookieState) {
@@ -182,18 +184,18 @@ spotifyRouter.get('/callback', async (c) => {
 
     // Exchange code for tokens server-side
     const tokenResponse = await fetch(SPOTIFY_TOKEN_URL, {
-      method: 'POST',
+      body: new URLSearchParams({
+        client_id: c.env.SPOTIFY_CLIENT_ID,
+        client_secret: c.env.SPOTIFY_CLIENT_SECRET,
+        code,
+        code_verifier: codeVerifier,
+        grant_type: 'authorization_code',
+        redirect_uri: REDIRECT_URI,
+      }),
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
-      body: new URLSearchParams({
-        grant_type: 'authorization_code',
-        code,
-        redirect_uri: REDIRECT_URI,
-        client_id: c.env.SPOTIFY_CLIENT_ID,
-        client_secret: c.env.SPOTIFY_CLIENT_SECRET,
-        code_verifier: codeVerifier,
-      }),
+      method: 'POST',
     })
 
     if (!tokenResponse.ok) {
@@ -235,18 +237,18 @@ spotifyRouter.post('/token', async (c) => {
     }
 
     const response = await fetch(SPOTIFY_TOKEN_URL, {
-      method: 'POST',
+      body: new URLSearchParams({
+        client_id: c.env.SPOTIFY_CLIENT_ID,
+        client_secret: c.env.SPOTIFY_CLIENT_SECRET,
+        code,
+        code_verifier: codeVerifier,
+        grant_type: 'authorization_code',
+        redirect_uri: REDIRECT_URI,
+      }),
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
-      body: new URLSearchParams({
-        grant_type: 'authorization_code',
-        code,
-        redirect_uri: REDIRECT_URI,
-        client_id: c.env.SPOTIFY_CLIENT_ID,
-        client_secret: c.env.SPOTIFY_CLIENT_SECRET,
-        code_verifier: codeVerifier,
-      }),
+      method: 'POST',
     })
 
     if (!response.ok) {
@@ -371,16 +373,16 @@ spotifyRouter.post('/playlists', async (c) => {
 
     // Create the playlist
     const createResponse = await fetch(`https://api.spotify.com/v1/users/${userId}/playlists`, {
-      method: 'POST',
+      body: JSON.stringify({
+        description: playlistRequest.description,
+        name: playlistRequest.name,
+        public: playlistRequest.public
+      }),
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        name: playlistRequest.name,
-        description: playlistRequest.description,
-        public: playlistRequest.public
-      })
+      method: 'POST'
     })
 
     if (!isSuccessResponse(createResponse)) {
@@ -393,14 +395,14 @@ spotifyRouter.post('/playlists', async (c) => {
     // Add tracks to the playlist if provided
     if (playlistRequest.trackUris.length > 0) {
       const addTracksResponse = await fetch(`https://api.spotify.com/v1/playlists/${playlist.id}/tracks`, {
-        method: 'POST',
+        body: JSON.stringify({
+          uris: playlistRequest.trackUris
+        }),
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          uris: playlistRequest.trackUris
-        })
+        method: 'POST'
       })
 
       if (!isSuccessResponse(addTracksResponse)) {
@@ -437,19 +439,19 @@ spotifyRouter.post('/playlists/modify', async (c) => {
       return c.json({ error: 'No authorization token' }, 401)
     }
 
-    const { playlistId, action, trackUris } = modifyRequest
+    const { action, playlistId, trackUris } = modifyRequest
 
     if (action === 'add') {
       // Add tracks to playlist
       const response = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks`, {
-        method: 'POST',
+        body: JSON.stringify({
+          uris: trackUris
+        }),
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          uris: trackUris
-        })
+        method: 'POST'
       })
 
       if (!isSuccessResponse(response)) {
@@ -458,19 +460,19 @@ spotifyRouter.post('/playlists/modify', async (c) => {
       }
 
       const result = await response.json()
-      return c.json({ success: true, action: 'added', snapshot_id: result.snapshot_id })
+      return c.json({ action: 'added', snapshot_id: result.snapshot_id, success: true })
 
     } else if (action === 'remove') {
       // Remove tracks from playlist
       const response = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks`, {
-        method: 'DELETE',
+        body: JSON.stringify({
+          tracks: trackUris.map(uri => ({ uri }))
+        }),
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          tracks: trackUris.map(uri => ({ uri }))
-        })
+        method: 'DELETE'
       })
 
       if (!isSuccessResponse(response)) {
@@ -479,7 +481,7 @@ spotifyRouter.post('/playlists/modify', async (c) => {
       }
 
       const result = await response.json()
-      return c.json({ success: true, action: 'removed', snapshot_id: result.snapshot_id })
+      return c.json({ action: 'removed', snapshot_id: result.snapshot_id, success: true })
     }
 
     return c.json({ error: 'Invalid action' }, 400)
@@ -558,25 +560,9 @@ spotifyRouter.get('/debug/scopes', async (c) => {
     )
 
     return c.json({
-      token_info: {
-        user_id: userData.id,
-        display_name: userData.display_name,
-        email: userData.email,
-        product: userData.product,
-        country: userData.country
-      },
-      scope_tests: {
-        'user-read-private': meResponse.ok,
-        'playlist-read-private': playlistsResponse.ok,
-        'audio-features': {
-          accessible: audioFeaturesResponse.ok,
-          status: audioFeaturesResponse.status,
-          note: audioFeaturesResponse.ok
-            ? 'Audio features working!'
-            : audioFeaturesResponse.status === 403
-            ? 'DEPRECATED: Spotify removed this API for apps created after Nov 27, 2024. Not a scope issue.'
-            : `Failed with status ${audioFeaturesResponse.status}`
-        }
+      instructions: {
+        if_audio_features_forbidden: 'Spotify deprecated this API on Nov 27, 2024 for new apps. Audio analysis (tempo, energy, etc.) is no longer available. The app will analyze playlists using track metadata instead.',
+        note: 'This is a Spotify platform limitation, not an authentication issue. Re-logging in will not fix this.'
       },
       required_scopes: [
         'playlist-modify-public',
@@ -589,9 +575,25 @@ spotifyRouter.get('/debug/scopes', async (c) => {
         'user-read-recently-played',
         'user-top-read'
       ],
-      instructions: {
-        if_audio_features_forbidden: 'Spotify deprecated this API on Nov 27, 2024 for new apps. Audio analysis (tempo, energy, etc.) is no longer available. The app will analyze playlists using track metadata instead.',
-        note: 'This is a Spotify platform limitation, not an authentication issue. Re-logging in will not fix this.'
+      scope_tests: {
+        'audio-features': {
+          accessible: audioFeaturesResponse.ok,
+          note: audioFeaturesResponse.ok
+            ? 'Audio features working!'
+            : audioFeaturesResponse.status === 403
+            ? 'DEPRECATED: Spotify removed this API for apps created after Nov 27, 2024. Not a scope issue.'
+            : `Failed with status ${audioFeaturesResponse.status}`,
+          status: audioFeaturesResponse.status
+        },
+        'playlist-read-private': playlistsResponse.ok,
+        'user-read-private': meResponse.ok
+      },
+      token_info: {
+        country: userData.country,
+        display_name: userData.display_name,
+        email: userData.email,
+        product: userData.product,
+        user_id: userData.id
       }
     })
   } catch (error) {

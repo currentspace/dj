@@ -3,6 +3,23 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 
 export default defineConfig({
+  build: {
+    minify: 'esbuild',
+    outDir: 'dist',
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          api: ['@dj/api-client', '@dj/shared-types'],
+          vendor: ['react', 'react-dom']
+        }
+      }
+    },
+    sourcemap: true,
+    target: 'esnext'
+  },
+  optimizeDeps: {
+    include: ['react', 'react-dom']
+  },
   plugins: [
     react({
       babel: {
@@ -16,34 +33,17 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
-      '@dj/shared-types': path.resolve(__dirname, '../../packages/shared-types/src'),
-      '@dj/api-client': path.resolve(__dirname, '../../packages/api-client/src')
-    }
-  },
-  build: {
-    outDir: 'dist',
-    target: 'esnext',
-    sourcemap: true,
-    minify: 'esbuild',
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom'],
-          api: ['@dj/api-client', '@dj/shared-types']
-        }
-      }
+      '@dj/api-client': path.resolve(__dirname, '../../packages/api-client/src'),
+      '@dj/shared-types': path.resolve(__dirname, '../../packages/shared-types/src')
     }
   },
   server: {
     port: 3000,
     proxy: {
       '/api': {
-        target: 'http://localhost:8787',
-        changeOrigin: true
+        changeOrigin: true,
+        target: 'http://localhost:8787'
       }
     }
-  },
-  optimizeDeps: {
-    include: ['react', 'react-dom']
   }
 });

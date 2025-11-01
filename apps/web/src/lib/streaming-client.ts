@@ -1,34 +1,41 @@
 // SSE streaming client for real-time chat responses
-import type { StreamToolData, StreamToolResult, StreamDebugData, StreamLogData } from '@dj/shared-types';
-
-export type StreamEvent =
-  | { type: 'thinking'; data: string }
-  | { type: 'tool_start'; data: StreamToolData }
-  | { type: 'tool_end'; data: StreamToolResult }
-  | { type: 'content'; data: string }
-  | { type: 'error'; data: string }
-  | { type: 'done'; data: null }
-  | { type: 'log'; data: StreamLogData }
-  | { type: 'debug'; data: StreamDebugData };
+import type { StreamDebugData, StreamLogData, StreamToolData, StreamToolResult } from '@dj/shared-types';
 
 export interface StreamCallbacks {
-  onThinking?: (message: string) => void;
-  onToolStart?: (tool: string, args: Record<string, unknown>) => void;
-  onToolEnd?: (tool: string, result: unknown) => void;
   onContent?: (content: string) => void;
-  onError?: (error: string) => void;
-  onDone?: () => void;
-  onLog?: (level: 'info' | 'warn' | 'error', message: string) => void;
   onDebug?: (data: StreamDebugData) => void;
+  onDone?: () => void;
+  onError?: (error: string) => void;
+  onLog?: (level: 'error' | 'info' | 'warn', message: string) => void;
+  onThinking?: (message: string) => void;
+  onToolEnd?: (tool: string, result: unknown) => void;
+  onToolStart?: (tool: string, args: Record<string, unknown>) => void;
 }
 
+export type StreamEvent =
+  | { data: null; type: 'done'; }
+  | { data: StreamDebugData; type: 'debug'; }
+  | { data: StreamLogData; type: 'log'; }
+  | { data: StreamToolData; type: 'tool_start'; }
+  | { data: StreamToolResult; type: 'tool_end'; }
+  | { data: string; type: 'content'; }
+  | { data: string; type: 'error'; }
+  | { data: string; type: 'thinking'; };
+
 export class ChatStreamClient {
-  private abortController: AbortController | null = null;
   private static readonly MAX_BUFFER_SIZE = 2 * 1024 * 1024; // 2MB safety cap
+  private abortController: AbortController | null = null;
+
+  close() {
+    if (this.abortController) {
+      this.abortController.abort('Client requested close');
+      this.abortController = null;
+    }
+  }
 
   async streamMessage(
     message: string,
-    conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>,
+    conversationHistory: { content: string; role: 'assistant' | 'user'; }[],
     mode: 'analyze' | 'create' | 'edit',
     callbacks: StreamCallbacks,
     options?: { signal?: AbortSignal }
@@ -52,9 +59,56 @@ export class ChatStreamClient {
     };
   }
 
+  private clearToken(): void {
+    if (typeof window !== 'undefined' && 'localStorage' in window) {
+      localStorage.removeItem('spotify_token');
+    }
+  }
+
+  private handleEvent(event: StreamEvent, callbacks: StreamCallbacks) {
+    try {
+      switch (event.type) {
+        case 'content':
+          callbacks.onContent?.(event.data);
+          break;
+        case 'debug':
+          // Log debug info in collapsed group for cleaner console
+          console.groupCollapsed('[Server Debug]');
+          console.warn(event.data);
+          console.groupEnd();
+          break;
+        case 'done':
+          callbacks.onDone?.();
+          break;
+        case 'error':
+          callbacks.onError?.(event.data);
+          break;
+        case 'log': {
+          // Log to browser console with better formatting
+          const logColor = event.data.level === 'error' ? 'color: red' :
+                          event.data.level === 'warn' ? 'color: orange' :
+                          'color: blue';
+          console.warn(`%c[Server ${event.data.level}]`, logColor, event.data.message);
+          break;
+        }
+        case 'thinking':
+          callbacks.onThinking?.(event.data);
+          break;
+        case 'tool_end':
+          callbacks.onToolEnd?.(event.data.tool, event.data.result);
+          break;
+        case 'tool_start':
+          callbacks.onToolStart?.(event.data.tool, event.data.args);
+          break;
+      }
+    } catch (error) {
+      console.error('[ChatStream] Error handling event:', event, error);
+    }
+  }
+
   private async streamWithFetch(
     message: string,
-    conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }>,
+    conversationHistory: { content: string; role: 'assistant' | 'user'; }[],
     mode: 'analyze' | 'create' | 'edit',
     token: string,
     callbacks: StreamCallbacks,
@@ -71,20 +125,20 @@ export class ChatStreamClient {
 
     try {
       console.log('[ChatStream] Starting stream request to /api/chat-stream/message');
-      console.log('[ChatStream] Request body:', { message, conversationHistory, mode });
+      console.log('[ChatStream] Request body:', { conversationHistory, message, mode });
 
       const response = await fetch('/api/chat-stream/message', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'text/event-stream',
-          'Authorization': `Bearer ${token}`,
-        },
         body: JSON.stringify({
-          message,
           conversationHistory,
+          message,
           mode,
         }),
+        headers: {
+          'Accept': 'text/event-stream',
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        method: 'POST',
         signal: this.abortController.signal,
       });
 
@@ -264,59 +318,6 @@ export class ChatStreamClient {
         callbacks.onError?.(error instanceof Error ? error.message : 'Stream failed');
       }
     } finally {
-      this.abortController = null;
-    }
-  }
-
-  private handleEvent(event: StreamEvent, callbacks: StreamCallbacks) {
-    try {
-      switch (event.type) {
-        case 'thinking':
-          callbacks.onThinking?.(event.data);
-          break;
-        case 'tool_start':
-          callbacks.onToolStart?.(event.data.tool, event.data.args);
-          break;
-        case 'tool_end':
-          callbacks.onToolEnd?.(event.data.tool, event.data.result);
-          break;
-        case 'content':
-          callbacks.onContent?.(event.data);
-          break;
-        case 'error':
-          callbacks.onError?.(event.data);
-          break;
-        case 'done':
-          callbacks.onDone?.();
-          break;
-        case 'log':
-          // Log to browser console with better formatting
-          const logColor = event.data.level === 'error' ? 'color: red' :
-                          event.data.level === 'warn' ? 'color: orange' :
-                          'color: blue';
-          console.log(`%c[Server ${event.data.level}]`, logColor, event.data.message);
-          break;
-        case 'debug':
-          // Log debug info in collapsed group for cleaner console
-          console.groupCollapsed('[Server Debug]');
-          console.log(event.data);
-          console.groupEnd();
-          break;
-      }
-    } catch (error) {
-      console.error('[ChatStream] Error handling event:', event, error);
-    }
-  }
-
-  private clearToken(): void {
-    if (typeof window !== 'undefined' && 'localStorage' in window) {
-      localStorage.removeItem('spotify_token');
-    }
-  }
-
-  close() {
-    if (this.abortController) {
-      this.abortController.abort('Client requested close');
       this.abortController = null;
     }
   }

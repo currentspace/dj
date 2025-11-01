@@ -14,7 +14,7 @@ export async function withLoopbackFetch<T>(
   function toURL(input: RequestInfo | URL): URL {
     if (input instanceof URL) return input;
     if (typeof input === "string") return new URL(input, selfOrigin);
-    return new URL((input as Request).url);
+    return new URL((input).url);
   }
 
   function isLoopbackTarget(u: URL, r?: Request) {
@@ -49,7 +49,7 @@ export async function withLoopbackFetch<T>(
           const auth = c.req.header("authorization");
           if (auth) headers.set("authorization", auth);
         }
-        const req = new Request(url.toString(), { ...init, method, headers });
+        const req = new Request(url.toString(), { ...init, headers, method });
         const res = await app.fetch(req, c.env, c.executionCtx);
         console.log(`[LoopbackFetch] Internal dispatch returned ${res.status}`);
         return res;

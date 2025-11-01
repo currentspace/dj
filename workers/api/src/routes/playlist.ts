@@ -1,17 +1,19 @@
 import { Hono } from 'hono'
+
 import type { Env } from '../index'
+
+import { isSuccessResponse, safeParse } from '../lib/guards'
 import {
   AnthropicMessageSchema,
   GeneratedPlaylistSchema,
   GeneratePlaylistRequestSchema,
-  SavePlaylistRequestSchema,
-  SpotifySearchResponseSchema,
-  SpotifyUserSchema,
-  SpotifyPlaylistSchema,
+  type PlaylistTrack,
   PlaylistTrackSchema,
-  type PlaylistTrack
+  SavePlaylistRequestSchema,
+  SpotifyPlaylistSchema,
+  SpotifySearchResponseSchema,
+  SpotifyUserSchema
 } from '../lib/schemas'
-import { safeParse, isSuccessResponse } from '../lib/guards'
 
 const playlistRouter = new Hono<{ Bindings: Env }>()
 
@@ -29,18 +31,10 @@ playlistRouter.post('/generate', async (c) => {
 
     // Step 1: Generate playlist ideas with Anthropic
     const anthropicResponse = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': c.env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01'
-      },
       body: JSON.stringify({
-        model: 'claude-3-haiku-20240307',
         max_tokens: 1024,
         messages: [
           {
-            role: 'user',
             content: `You are a music expert DJ. Based on the following request, generate a playlist with 10-15 songs.
             Return ONLY a valid JSON object with this exact structure (no other text):
             {
@@ -51,10 +45,18 @@ playlistRouter.post('/generate', async (c) => {
               ]
             }
 
-            Request: ${prompt}`
+            Request: ${prompt}`,
+            role: 'user'
           }
-        ]
-      })
+        ],
+        model: 'claude-3-haiku-20240307'
+      }),
+      headers: {
+        'anthropic-version': '2023-06-01',
+        'Content-Type': 'application/json',
+        'x-api-key': c.env.ANTHROPIC_API_KEY
+      },
+      method: 'POST'
     })
 
     if (!isSuccessResponse(anthropicResponse)) {
@@ -101,14 +103,14 @@ playlistRouter.post('/generate', async (c) => {
               const responseData = await searchResponse.json()
               const searchData = safeParse(SpotifySearchResponseSchema, responseData)
 
-              if (searchData && searchData.tracks?.items && searchData.tracks.items.length > 0) {
+              if (searchData?.tracks?.items && searchData.tracks.items.length > 0) {
                 const spotifyTrack = searchData.tracks.items[0]
                 const enhancedTrack: PlaylistTrack = {
                   ...track,
-                  spotifyId: spotifyTrack.id,
-                  spotifyUri: spotifyTrack.uri,
+                  external_url: spotifyTrack.external_urls?.spotify,
                   preview_url: spotifyTrack.preview_url,
-                  external_url: spotifyTrack.external_urls?.spotify
+                  spotifyId: spotifyTrack.id,
+                  spotifyUri: spotifyTrack.uri
                 }
 
                 // Validate the enhanced track
@@ -174,16 +176,16 @@ playlistRouter.post('/save', async (c) => {
     const createResponse = await fetch(
       `https://api.spotify.com/v1/users/${userId}/playlists`,
       {
-        method: 'POST',
+        body: JSON.stringify({
+          description: playlist.description,
+          name: playlist.name,
+          public: false
+        }),
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          name: playlist.name,
-          description: playlist.description,
-          public: false
-        })
+        method: 'POST'
       }
     )
 
@@ -209,14 +211,14 @@ playlistRouter.post('/save', async (c) => {
       const addTracksResponse = await fetch(
         `https://api.spotify.com/v1/playlists/${createdPlaylist.id}/tracks`,
         {
-          method: 'POST',
+          body: JSON.stringify({
+            uris: trackUris
+          }),
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({
-            uris: trackUris
-          })
+          method: 'POST'
         }
       )
 
@@ -226,9 +228,9 @@ playlistRouter.post('/save', async (c) => {
     }
 
     return c.json({
-      success: true,
       playlistId: createdPlaylist.id,
-      playlistUrl: createdPlaylist.external_urls?.spotify
+      playlistUrl: createdPlaylist.external_urls?.spotify,
+      success: true
     })
   } catch (error) {
     console.error('Save playlist error:', error)

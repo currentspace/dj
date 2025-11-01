@@ -1,16 +1,17 @@
 import { Hono } from 'hono';
-import type { Env } from '../index';
 import { z } from 'zod';
+
+import type { Env } from '../index';
 
 const fallbackRouter = new Hono<{ Bindings: Env }>();
 
 // Request schema
 const ChatRequestSchema = z.object({
-  message: z.string().min(1).max(2000),
   conversationHistory: z.array(z.object({
-    role: z.enum(['user', 'assistant']),
-    content: z.string()
+    content: z.string(),
+    role: z.enum(['user', 'assistant'])
   })).max(20).default([]),
+  message: z.string().min(1).max(2000),
   mode: z.enum(['analyze', 'create', 'edit']).default('analyze')
 });
 
@@ -58,13 +59,13 @@ Please try again in a few minutes. The service typically recovers quickly from h
     }
 
     return c.json({
-      message: response,
       conversationHistory: [
         ...request.conversationHistory,
-        { role: 'user' as const, content: request.message },
-        { role: 'assistant' as const, content: response }
+        { content: request.message, role: 'user' as const },
+        { content: response, role: 'assistant' as const }
       ],
       fallbackMode: true,
+      message: response,
       requestId
     });
 
