@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@dj/shared-types": "workspace:*"
+    "@dj/shared-types": "workspace:*",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "tsup": "^8.3.5",

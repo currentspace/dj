@@ -149,3 +149,12 @@ export interface WebhookEvent {
   timestamp: number;
   type: string;
 }
+
+// ===== Zod Schemas and Validation =====
+// Export all Zod schemas for runtime validation
+
+export * from './validation';
+export * from './schemas/spotify-schemas';
+export * from './schemas/external-api-schemas';
+export * from './schemas/sse-schemas';
+export * from './schemas/api-schemas';
