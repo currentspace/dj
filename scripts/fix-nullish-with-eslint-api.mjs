@@ -10,8 +10,8 @@ import { writeFileSync } from 'fs';
 
 async function fixNullishCoalescing() {
   const eslint = new ESLint({
-    fix: false, // We'll apply suggestions manually
     cache: false,
+    fix: false, // We'll apply suggestions manually
   });
 
   console.log('Running ESLint to find prefer-nullish-coalescing violations...\n');
@@ -38,8 +38,8 @@ async function fixNullishCoalescing() {
 
     if (fixes.length > 0) {
       filesToFix.set(result.filePath, {
-        source: result.source,
-        fixes: fixes.sort((a, b) => b.range[0] - a.range[0]) // Sort reverse to apply from end to start
+        fixes: fixes.sort((a, b) => b.range[0] - a.range[0]), // Sort reverse to apply from end to start
+        source: result.source
       });
     }
   }
@@ -47,7 +47,7 @@ async function fixNullishCoalescing() {
   console.log(`Found ${filesToFix.size} files with fixable violations\n`);
 
   // Apply fixes
-  for (const [filePath, { source, fixes }] of filesToFix.entries()) {
+  for (const [filePath, { fixes, source }] of filesToFix.entries()) {
     let fixed = source;
 
     // Apply fixes from end to start to preserve indices
