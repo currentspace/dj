@@ -12,11 +12,11 @@
  * window.mark();
  *
  * // Get current RPS
- * console.log(`Current RPS: ${window.rps().toFixed(1)}`);
+ * getLogger()?.info(`Current RPS: ${window.rps().toFixed(1)}`);
  *
  * // Periodic logging (e.g., every 2-3 seconds)
  * setInterval(() => {
- *   console.log(`Launch rate: ${window.rps().toFixed(1)} req/s`);
+ *   getLogger()?.info(`Launch rate: ${window.rps().toFixed(1)} req/s`);
  * }, 2000);
  * ```
  */

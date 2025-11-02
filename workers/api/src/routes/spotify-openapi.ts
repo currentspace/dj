@@ -11,6 +11,7 @@ import {parse, SpotifySearchResponseSchema, SpotifyTokenResponseSchema} from '@d
 import type {Env} from '../index'
 
 import {isSuccessResponse, safeParse} from '../lib/guards'
+import {getLogger} from '../utils/LoggerContext'
 
 const SPOTIFY_AUTH_URL = 'https://accounts.spotify.com/authorize'
 const SPOTIFY_TOKEN_URL = 'https://accounts.spotify.com/api/token'
@@ -73,12 +74,12 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       const error = c.req.query('error')
 
       if (error) {
-        console.error('OAuth error:', error)
+        getLogger()?.error('OAuth error:', error)
         return c.redirect(`${env.FRONTEND_URL ?? 'https://dj.current.space'}?error=${encodeURIComponent(error)}`)
       }
 
       if (!code || !state) {
-        console.error('Missing code or state parameter')
+        getLogger()?.error('Missing code or state parameter')
         return c.redirect(`${env.FRONTEND_URL ?? 'https://dj.current.space'}?error=missing_parameters`)
       }
 
@@ -88,20 +89,20 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       const cookieValue = cookieMatch?.[1]
 
       if (!cookieValue) {
-        console.error('Missing OAuth cookie')
+        getLogger()?.error('Missing OAuth cookie')
         return c.redirect(`${env.FRONTEND_URL ?? 'https://dj.current.space'}?error=missing_cookie`)
       }
 
       const [payload, signature] = cookieValue.split('.')
       if (!payload || !signature) {
-        console.error('Invalid cookie format')
+        getLogger()?.error('Invalid cookie format')
         return c.redirect(`${env.FRONTEND_URL ?? 'https://dj.current.space'}?error=invalid_cookie`)
       }
 
       // Verify HMAC signature
       const isValidSignature = await hmacVerify(payload, signature, env.SPOTIFY_CLIENT_SECRET)
       if (!isValidSignature) {
-        console.error('Invalid cookie signature')
+        getLogger()?.error('Invalid cookie signature')
         return c.redirect(`${env.FRONTEND_URL ?? 'https://dj.current.space'}?error=tampered_cookie`)
       }
 
@@ -111,14 +112,14 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
 
       // Validate state matches (CSRF protection)
       if (state !== cookieState) {
-        console.error('State mismatch - possible CSRF attack')
+        getLogger()?.error('State mismatch - possible CSRF attack')
         return c.redirect(`${env.FRONTEND_URL ?? 'https://dj.current.space'}?error=state_mismatch`)
       }
 
       // Check cookie age (15 minutes max)
       const maxAge = 15 * 60 * 1000
       if (Date.now() - timestamp > maxAge) {
-        console.error('OAuth cookie expired')
+        getLogger()?.error('OAuth cookie expired')
         return c.redirect(`${env.FRONTEND_URL ?? 'https://dj.current.space'}?error=expired_auth`)
       }
 
@@ -140,7 +141,7 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
 
       if (!tokenResponse.ok) {
         const errorText = await tokenResponse.text()
-        console.error('Token exchange failed:', tokenResponse.status, errorText)
+        getLogger()?.error('Token exchange failed:', tokenResponse.status, errorText)
         return c.redirect(`${env.FRONTEND_URL ?? 'https://dj.current.space'}?error=token_exchange_failed`)
       }
 
@@ -149,7 +150,7 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       try {
         tokenData = parse(SpotifyTokenResponseSchema, data)
       } catch (error) {
-        console.error('Invalid token response format:', error)
+        getLogger()?.error('Invalid token response format:', error)
         return c.redirect(`${env.FRONTEND_URL ?? 'https://dj.current.space'}?error=invalid_token_response`)
       }
 
@@ -163,7 +164,7 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
 
       return c.redirect(redirectUrl.toString())
     } catch (error) {
-      console.error('Callback error:', error)
+      getLogger()?.error('Callback error:', error)
       return c.redirect(`${env.FRONTEND_URL ?? 'https://dj.current.space'}?error=callback_failed`)
     }
   })
@@ -193,7 +194,7 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
 
       if (!response.ok) {
         const errorText = await response.text()
-        console.error('Token exchange failed:', errorText)
+        getLogger()?.error('Token exchange failed:', errorText)
         return c.json(
           {
             error: 'Token exchange failed',
@@ -208,7 +209,7 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       try {
         tokenData = parse(SpotifyTokenResponseSchema, data)
       } catch (error) {
-        console.error('Invalid token response format:', error)
+        getLogger()?.error('Invalid token response format:', error)
         return c.json(
           {
             error: 'Invalid token response',
@@ -227,7 +228,7 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
         token_type: 'Bearer' as const,
       })
     } catch (error) {
-      console.error('Token exchange error:', error)
+      getLogger()?.error('Token exchange error:', error)
       return c.json(
         {
           error: 'Token exchange failed',
@@ -259,7 +260,7 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       )
 
       if (!isSuccessResponse(response)) {
-        console.error(`Spotify search failed: ${response.status} ${response.statusText}`)
+        getLogger()?.error(`Spotify search failed: ${response.status} ${response.statusText}`)
         return c.json({error: 'Spotify search failed'}, 400)
       }
 
@@ -267,14 +268,14 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       const spotifyData = safeParse(SpotifySearchResponseSchema, responseData)
 
       if (!spotifyData) {
-        console.error('Invalid Spotify search response format')
+        getLogger()?.error('Invalid Spotify search response format')
         return c.json({error: 'Invalid response from Spotify'}, 400)
       }
 
       // Response automatically validated against contract schema
       return c.json(spotifyData)
     } catch (error) {
-      console.error('Spotify search error:', error)
+      getLogger()?.error('Spotify search error:', error)
       const message = error instanceof Error ? error.message : 'Search failed'
       return c.json({error: message}, 401)
     }

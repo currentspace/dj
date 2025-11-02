@@ -176,7 +176,7 @@ export class ProgressNarrator {
 
     // Generate common messages in parallel
     await Promise.all(contexts.map(ctx => this.generateMessage(ctx))).catch(err => {
-      console.error('[ProgressNarrator] Cache warmup failed:', err)
+      getLogger()?.error('[ProgressNarrator] Cache warmup failed:', err)
     })
   }
 

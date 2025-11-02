@@ -14,6 +14,7 @@ import {
 // Spotify Tools for Anthropic Function Calling
 import {z} from 'zod'
 
+import {getLogger} from '../utils/LoggerContext'
 import {rateLimitedSpotifyCall} from '../utils/RateLimitedAPIClients'
 import {formatZodError, safeParse} from './guards'
 
@@ -225,7 +226,7 @@ export async function executeSpotifyTool(
   args: Record<string, unknown>,
   token: string,
 ): Promise<unknown> {
-  console.log(`[Tool] Executing ${toolName} with args:`, JSON.stringify(args).substring(0, 200))
+  getLogger()?.info(`[Tool] Executing ${toolName} with args:`, JSON.stringify(args).substring(0, 200))
   const startTime = Date.now()
 
   try {
@@ -271,16 +272,16 @@ export async function executeSpotifyTool(
         result = await searchSpotifyTracks(args as z.infer<typeof SearchTracksSchema>, token)
         break
       default:
-        console.error(`[Tool] Unknown tool: ${toolName}`)
+        getLogger()?.error(`[Tool] Unknown tool: ${toolName}`)
         throw new Error(`Unknown tool: ${toolName}`)
     }
 
     const duration = Date.now() - startTime
-    console.log(`[Tool] ${toolName} completed successfully in ${duration}ms`)
+    getLogger()?.info(`[Tool] ${toolName} completed successfully in ${duration}ms`)
     return result
   } catch (error) {
     const duration = Date.now() - startTime
-    console.error(`[Tool] ${toolName} failed after ${duration}ms:`, error)
+    getLogger()?.error(`[Tool] ${toolName} failed after ${duration}ms:`, error)
     throw error
   }
 }
@@ -288,17 +289,17 @@ export async function executeSpotifyTool(
 async function analyzePlaylist(args: any, token: string) {
   const {playlist_id} = args
 
-  console.log(`[analyzePlaylist] Starting analysis with args:`, JSON.stringify(args))
-  console.log(`[analyzePlaylist] Extracted playlist_id: "${playlist_id}"`)
-  console.log(`[analyzePlaylist] Token present: ${token ? 'YES' : 'NO'}`)
+  getLogger()?.info(`[analyzePlaylist] Starting analysis with args:`, JSON.stringify(args))
+  getLogger()?.info(`[analyzePlaylist] Extracted playlist_id: "${playlist_id}"`)
+  getLogger()?.info(`[analyzePlaylist] Token present: ${token ? 'YES' : 'NO'}`)
 
   if (!playlist_id) {
-    console.error(`[analyzePlaylist] CRITICAL: playlist_id is missing or empty!`)
+    getLogger()?.error(`[analyzePlaylist] CRITICAL: playlist_id is missing or empty!`)
     throw new Error('playlist_id parameter is required')
   }
 
   // Get playlist details
-  console.log(`[analyzePlaylist] Fetching playlist details for ID: ${playlist_id}`)
+  getLogger()?.info(`[analyzePlaylist] Fetching playlist details for ID: ${playlist_id}`)
   const playlistResponse = await rateLimitedSpotifyCall(
     () =>
       fetch(`https://api.spotify.com/v1/playlists/${playlist_id}`, {
@@ -308,11 +309,11 @@ async function analyzePlaylist(args: any, token: string) {
     'playlist:details',
   )
 
-  console.log(`[analyzePlaylist] Playlist API response status: ${playlistResponse.status}`)
+  getLogger()?.info(`[analyzePlaylist] Playlist API response status: ${playlistResponse.status}`)
 
   if (!playlistResponse.ok) {
     const errorText = await playlistResponse.text()
-    console.error(`[analyzePlaylist] Failed to get playlist: ${playlistResponse.status} - ${errorText}`)
+    getLogger()?.error(`[analyzePlaylist] Failed to get playlist: ${playlistResponse.status} - ${errorText}`)
     throw new Error(`Failed to get playlist: ${playlistResponse.status}`)
   }
 
@@ -320,15 +321,15 @@ async function analyzePlaylist(args: any, token: string) {
   const playlistResult = safeParse(SpotifyPlaylistFullSchema, playlistJson)
 
   if (!playlistResult.success) {
-    console.error('[analyzePlaylist] Failed to parse playlist:', formatZodError(playlistResult.error))
+    getLogger()?.error('[analyzePlaylist] Failed to parse playlist:', formatZodError(playlistResult.error))
     throw new Error(`Invalid playlist data: ${formatZodError(playlistResult.error)}`)
   }
 
   const playlist = playlistResult.data
-  console.log(`[analyzePlaylist] Successfully got playlist: "${playlist.name}" (${playlist.tracks?.total} tracks)`)
+  getLogger()?.info(`[analyzePlaylist] Successfully got playlist: "${playlist.name}" (${playlist.tracks?.total} tracks)`)
 
   // Get tracks
-  console.log(`[analyzePlaylist] Fetching playlist tracks...`)
+  getLogger()?.info(`[analyzePlaylist] Fetching playlist tracks...`)
   const tracksResponse = await rateLimitedSpotifyCall(
     () =>
       fetch(`https://api.spotify.com/v1/playlists/${playlist_id}/tracks?limit=100`, {
@@ -338,11 +339,11 @@ async function analyzePlaylist(args: any, token: string) {
     'playlist:tracks',
   )
 
-  console.log(`[analyzePlaylist] Tracks API response status: ${tracksResponse.status}`)
+  getLogger()?.info(`[analyzePlaylist] Tracks API response status: ${tracksResponse.status}`)
 
   if (!tracksResponse.ok) {
     const errorText = await tracksResponse.text()
-    console.error(`[analyzePlaylist] Failed to get playlist tracks: ${tracksResponse.status} - ${errorText}`)
+    getLogger()?.error(`[analyzePlaylist] Failed to get playlist tracks: ${tracksResponse.status} - ${errorText}`)
     throw new Error(`Failed to get playlist tracks: ${tracksResponse.status}`)
   }
 
@@ -350,7 +351,7 @@ async function analyzePlaylist(args: any, token: string) {
   const tracksResult = safeParse(SpotifyPlaylistTracksResponseSchema, tracksJson)
 
   if (!tracksResult.success) {
-    console.error('[analyzePlaylist] Failed to parse tracks:', formatZodError(tracksResult.error))
+    getLogger()?.error('[analyzePlaylist] Failed to parse tracks:', formatZodError(tracksResult.error))
     throw new Error(`Invalid tracks data: ${formatZodError(tracksResult.error)}`)
   }
 
@@ -359,29 +360,29 @@ async function analyzePlaylist(args: any, token: string) {
     .map(item => item.track)
     .filter((track): track is NonNullable<typeof track> => track !== null)
   const trackIds = tracks.map(t => t.id).filter(Boolean)
-  console.log(`[analyzePlaylist] Found ${tracks.length} tracks, ${trackIds.length} with valid IDs`)
+  getLogger()?.info(`[analyzePlaylist] Found ${tracks.length} tracks, ${trackIds.length} with valid IDs`)
 
   // Log the structure of a single track object to see what Spotify returns
   if (tracks.length > 0) {
     const sampleTrack = tracks[0]
-    console.log(`[analyzePlaylist] Sample track object keys: ${Object.keys(sampleTrack).join(', ')}`)
-    console.log(`[analyzePlaylist] Single track JSON size: ${JSON.stringify(sampleTrack).length} bytes`)
+    getLogger()?.info(`[analyzePlaylist] Sample track object keys: ${Object.keys(sampleTrack).join(', ')}`)
+    getLogger()?.info(`[analyzePlaylist] Single track JSON size: ${JSON.stringify(sampleTrack).length} bytes`)
 
     // Log size of specific fields
     if (sampleTrack.album) {
-      console.log(`[analyzePlaylist]   - album field size: ${JSON.stringify(sampleTrack.album).length} bytes`)
-      console.log(`[analyzePlaylist]   - album keys: ${Object.keys(sampleTrack.album).join(', ')}`)
+      getLogger()?.info(`[analyzePlaylist]   - album field size: ${JSON.stringify(sampleTrack.album).length} bytes`)
+      getLogger()?.info(`[analyzePlaylist]   - album keys: ${Object.keys(sampleTrack.album).join(', ')}`)
     }
     // Note: available_markets not included in schema to reduce payload size
     if (sampleTrack.external_ids) {
-      console.log(`[analyzePlaylist]   - external_ids: ${JSON.stringify(sampleTrack.external_ids)}`)
+      getLogger()?.info(`[analyzePlaylist]   - external_ids: ${JSON.stringify(sampleTrack.external_ids)}`)
     }
   }
 
   // Get audio features
   let audioFeatures: (null | z.infer<typeof SpotifyAudioFeaturesSchema>)[] = []
   if (trackIds.length > 0) {
-    console.log(`[analyzePlaylist] Fetching audio features for ${trackIds.length} tracks...`)
+    getLogger()?.info(`[analyzePlaylist] Fetching audio features for ${trackIds.length} tracks...`)
     const featuresResponse = await rateLimitedSpotifyCall(
       () =>
         fetch(`https://api.spotify.com/v1/audio-features?ids=${trackIds.slice(0, 100).join(',')}`, {
@@ -391,7 +392,7 @@ async function analyzePlaylist(args: any, token: string) {
       'audio-features:analyze',
     )
 
-    console.log(`[analyzePlaylist] Audio features API response status: ${featuresResponse.status}`)
+    getLogger()?.info(`[analyzePlaylist] Audio features API response status: ${featuresResponse.status}`)
 
     if (featuresResponse.ok) {
       const featuresJson = await featuresResponse.json()
@@ -399,24 +400,24 @@ async function analyzePlaylist(args: any, token: string) {
 
       if (featuresResult.success) {
         audioFeatures = featuresResult.data.audio_features ?? []
-        console.log(`[analyzePlaylist] Got audio features for ${audioFeatures.filter(f => f).length} tracks`)
+        getLogger()?.info(`[analyzePlaylist] Got audio features for ${audioFeatures.filter(f => f).length} tracks`)
       } else {
-        console.error('[analyzePlaylist] Failed to parse audio features:', formatZodError(featuresResult.error))
+        getLogger()?.error('[analyzePlaylist] Failed to parse audio features:', formatZodError(featuresResult.error))
       }
     } else {
       const errorText = await featuresResponse.text()
-      console.error(`[analyzePlaylist] Failed to get audio features: ${featuresResponse.status} - ${errorText}`)
-      console.error(
+      getLogger()?.error(`[analyzePlaylist] Failed to get audio features: ${featuresResponse.status} - ${errorText}`)
+      getLogger()?.error(
         `[analyzePlaylist] Request URL: https://api.spotify.com/v1/audio-features?ids=${trackIds.slice(0, 100).join(',').substring(0, 200)}...`,
       )
-      console.error(`[analyzePlaylist] Token starts with: ${token.substring(0, 10)}...`)
+      getLogger()?.error(`[analyzePlaylist] Token starts with: ${token.substring(0, 10)}...`)
     }
   }
 
   // Calculate averages
-  console.log(`[analyzePlaylist] Calculating audio analysis from ${audioFeatures.length} features...`)
+  getLogger()?.info(`[analyzePlaylist] Calculating audio analysis from ${audioFeatures.length} features...`)
   const validFeatures = audioFeatures.filter((f: any) => f !== null)
-  console.log(`[analyzePlaylist] Valid features: ${validFeatures.length}/${audioFeatures.length}`)
+  getLogger()?.info(`[analyzePlaylist] Valid features: ${validFeatures.length}/${audioFeatures.length}`)
 
   // Create a MUCH smaller analysis object for Claude (was 55KB, now ~2KB)
   const analysis = {
@@ -461,10 +462,10 @@ async function analyzePlaylist(args: any, token: string) {
   }
 
   const analysisSize = JSON.stringify(analysis).length
-  console.log(
+  getLogger()?.info(
     `[analyzePlaylist] Analysis complete! Playlist: "${analysis.playlist_name}", Tracks: ${analysis.total_tracks}, Audio data: ${analysis.audio_analysis ? 'YES' : 'NO'}`,
   )
-  console.log(`[analyzePlaylist] Analysis object size: ${analysisSize} bytes (reduced from ~55KB)`)
+  getLogger()?.info(`[analyzePlaylist] Analysis object size: ${analysisSize} bytes (reduced from ~55KB)`)
 
   // Log what would have been sent in the old version
   const oldAnalysis = {
@@ -476,14 +477,14 @@ async function analyzePlaylist(args: any, token: string) {
     tracks: tracks.slice(0, 20), // This was the problem!
   }
   const oldSize = JSON.stringify(oldAnalysis).length
-  console.log(`[analyzePlaylist] OLD analysis size would have been: ${oldSize} bytes`)
-  console.log(`[analyzePlaylist] Size breakdown of old format:`)
-  console.log(`[analyzePlaylist]   - tracks field: ${JSON.stringify(tracks.slice(0, 20)).length} bytes`)
-  console.log(`[analyzePlaylist]   - audio_features field: ${JSON.stringify(audioFeatures.slice(0, 20)).length} bytes`)
-  console.log(
+  getLogger()?.info(`[analyzePlaylist] OLD analysis size would have been: ${oldSize} bytes`)
+  getLogger()?.info(`[analyzePlaylist] Size breakdown of old format:`)
+  getLogger()?.info(`[analyzePlaylist]   - tracks field: ${JSON.stringify(tracks.slice(0, 20)).length} bytes`)
+  getLogger()?.info(`[analyzePlaylist]   - audio_features field: ${JSON.stringify(audioFeatures.slice(0, 20)).length} bytes`)
+  getLogger()?.info(
     `[analyzePlaylist]   - other fields: ${oldSize - JSON.stringify(tracks.slice(0, 20)).length - JSON.stringify(audioFeatures.slice(0, 20)).length} bytes`,
   )
-  console.log(
+  getLogger()?.info(
     `[analyzePlaylist] Size reduction: ${oldSize} → ${analysisSize} (${Math.round((1 - analysisSize / oldSize) * 100)}% smaller)`,
   )
 
@@ -491,7 +492,7 @@ async function analyzePlaylist(args: any, token: string) {
 }
 
 async function createPlaylist(args: any, token: string) {
-  console.log(`[Tool:createPlaylist] Creating playlist: ${args.name}`)
+  getLogger()?.info(`[Tool:createPlaylist] Creating playlist: ${args.name}`)
 
   // Get user ID first
   const userResponse = await rateLimitedSpotifyCall(
@@ -504,7 +505,7 @@ async function createPlaylist(args: any, token: string) {
   )
 
   if (!userResponse.ok) {
-    console.error(`[Tool:createPlaylist] Failed to get user profile: ${userResponse.status}`)
+    getLogger()?.error(`[Tool:createPlaylist] Failed to get user profile: ${userResponse.status}`)
     throw new Error('Failed to get user profile')
   }
 
@@ -512,12 +513,12 @@ async function createPlaylist(args: any, token: string) {
   const userResult = safeParse(SpotifyUserSchema, userJson)
 
   if (!userResult.success) {
-    console.error('[Tool:createPlaylist] Failed to parse user data:', formatZodError(userResult.error))
+    getLogger()?.error('[Tool:createPlaylist] Failed to parse user data:', formatZodError(userResult.error))
     throw new Error(`Invalid user data: ${formatZodError(userResult.error)}`)
   }
 
   const userId = userResult.data.id
-  console.log(`[Tool:createPlaylist] User ID: ${userId}`)
+  getLogger()?.info(`[Tool:createPlaylist] User ID: ${userId}`)
 
   // Create playlist
   const createResponse = await rateLimitedSpotifyCall(
@@ -539,7 +540,7 @@ async function createPlaylist(args: any, token: string) {
   )
 
   if (!createResponse.ok) {
-    console.error(`[Tool:createPlaylist] Failed to create playlist: ${createResponse.status}`)
+    getLogger()?.error(`[Tool:createPlaylist] Failed to create playlist: ${createResponse.status}`)
     throw new Error('Failed to create playlist')
   }
 
@@ -547,12 +548,12 @@ async function createPlaylist(args: any, token: string) {
   const playlistResult = safeParse(SpotifyCreatePlaylistResponseSchema, playlistJson)
 
   if (!playlistResult.success) {
-    console.error('[Tool:createPlaylist] Failed to parse playlist response:', formatZodError(playlistResult.error))
+    getLogger()?.error('[Tool:createPlaylist] Failed to parse playlist response:', formatZodError(playlistResult.error))
     throw new Error(`Invalid playlist response: ${formatZodError(playlistResult.error)}`)
   }
 
   const playlist = playlistResult.data
-  console.log(`[Tool:createPlaylist] Playlist created with ID: ${playlist.id}`)
+  getLogger()?.info(`[Tool:createPlaylist] Playlist created with ID: ${playlist.id}`)
 
   // Add tracks if provided
   if (args.track_uris && args.track_uris.length > 0) {
@@ -600,7 +601,7 @@ async function getAlbumInfo(args: any, token: string) {
   const albumResult = safeParse(SpotifyAlbumFullSchema, albumJson)
 
   if (!albumResult.success) {
-    console.error('[getAlbumInfo] Failed to parse album data:', formatZodError(albumResult.error))
+    getLogger()?.error('[getAlbumInfo] Failed to parse album data:', formatZodError(albumResult.error))
     throw new Error(`Invalid album data: ${formatZodError(albumResult.error)}`)
   }
 
@@ -627,7 +628,7 @@ async function getAlbumInfo(args: any, token: string) {
       if (featuresResult.success) {
         audioFeatures = featuresResult.data.audio_features ?? []
       } else {
-        console.error('[getAlbumInfo] Failed to parse audio features:', formatZodError(featuresResult.error))
+        getLogger()?.error('[getAlbumInfo] Failed to parse audio features:', formatZodError(featuresResult.error))
       }
     }
   }
@@ -677,7 +678,7 @@ async function getArtistTopTracks(args: any, token: string) {
   const result = safeParse(SpotifyPagingSchema(SpotifyTrackFullSchema), json)
 
   if (!result.success) {
-    console.error('[getArtistTopTracks] Failed to parse response:', formatZodError(result.error))
+    getLogger()?.error('[getArtistTopTracks] Failed to parse response:', formatZodError(result.error))
     return []
   }
 
@@ -687,15 +688,15 @@ async function getArtistTopTracks(args: any, token: string) {
 async function getAudioFeatures(args: any, token: string) {
   const {track_ids} = args
 
-  console.log(`[getAudioFeatures] Starting with args:`, JSON.stringify(args))
-  console.log(`[getAudioFeatures] Extracted track_ids:`, track_ids)
+  getLogger()?.info(`[getAudioFeatures] Starting with args:`, JSON.stringify(args))
+  getLogger()?.info(`[getAudioFeatures] Extracted track_ids:`, track_ids)
 
   if (!track_ids || !Array.isArray(track_ids) || track_ids.length === 0) {
-    console.error(`[getAudioFeatures] CRITICAL: track_ids is missing, not an array, or empty!`)
+    getLogger()?.error(`[getAudioFeatures] CRITICAL: track_ids is missing, not an array, or empty!`)
     throw new Error('track_ids parameter is required and must be a non-empty array')
   }
 
-  console.log(`[getAudioFeatures] Fetching audio features for ${track_ids.length} tracks`)
+  getLogger()?.info(`[getAudioFeatures] Fetching audio features for ${track_ids.length} tracks`)
   const response = await rateLimitedSpotifyCall(
     () =>
       fetch(`https://api.spotify.com/v1/audio-features?ids=${track_ids.join(',')}`, {
@@ -705,11 +706,11 @@ async function getAudioFeatures(args: any, token: string) {
     'audio-features:batch',
   )
 
-  console.log(`[getAudioFeatures] API response status: ${response.status}`)
+  getLogger()?.info(`[getAudioFeatures] API response status: ${response.status}`)
 
   if (!response.ok) {
     const errorText = await response.text()
-    console.error(`[getAudioFeatures] Failed to get audio features: ${response.status} - ${errorText}`)
+    getLogger()?.error(`[getAudioFeatures] Failed to get audio features: ${response.status} - ${errorText}`)
     throw new Error(`Failed to get audio features: ${response.status}`)
   }
 
@@ -717,12 +718,12 @@ async function getAudioFeatures(args: any, token: string) {
   const result = safeParse(SpotifyAudioFeaturesBatchSchema, json)
 
   if (!result.success) {
-    console.error('[getAudioFeatures] Failed to parse response:', formatZodError(result.error))
+    getLogger()?.error('[getAudioFeatures] Failed to parse response:', formatZodError(result.error))
     return []
   }
 
   const features = result.data.audio_features ?? []
-  console.log(`[getAudioFeatures] Retrieved ${features.length} audio features`)
+  getLogger()?.info(`[getAudioFeatures] Retrieved ${features.length} audio features`)
   return features
 }
 
@@ -745,7 +746,7 @@ async function getAvailableGenres(token: string) {
   const result = safeParse(GenresSchema, json)
 
   if (!result.success) {
-    console.error('[getAvailableGenres] Failed to parse response:', formatZodError(result.error))
+    getLogger()?.error('[getAvailableGenres] Failed to parse response:', formatZodError(result.error))
     return []
   }
 
@@ -780,7 +781,7 @@ async function getRecommendations(args: any, token: string) {
   const result = safeParse(SpotifyRecommendationsResponseSchema, json)
 
   if (!result.success) {
-    console.error('[getRecommendations] Failed to parse response:', formatZodError(result.error))
+    getLogger()?.error('[getRecommendations] Failed to parse response:', formatZodError(result.error))
     return []
   }
 
@@ -808,7 +809,7 @@ async function getRelatedArtists(args: any, token: string) {
   const result = safeParse(ArtistsSchema, json)
 
   if (!result.success) {
-    console.error('[getRelatedArtists] Failed to parse response:', formatZodError(result.error))
+    getLogger()?.error('[getRelatedArtists] Failed to parse response:', formatZodError(result.error))
     return []
   }
 
@@ -835,7 +836,7 @@ async function getTrackDetails(args: any, token: string) {
   const trackResult = safeParse(SpotifyTrackFullSchema, trackJson)
 
   if (!trackResult.success) {
-    console.error('[getTrackDetails] Failed to parse track:', formatZodError(trackResult.error))
+    getLogger()?.error('[getTrackDetails] Failed to parse track:', formatZodError(trackResult.error))
     throw new Error(`Invalid track data: ${formatZodError(trackResult.error)}`)
   }
 
@@ -859,7 +860,7 @@ async function getTrackDetails(args: any, token: string) {
     if (featuresResult.success) {
       audioFeatures = featuresResult.data
     } else {
-      console.error('[getTrackDetails] Failed to parse audio features:', formatZodError(featuresResult.error))
+      getLogger()?.error('[getTrackDetails] Failed to parse audio features:', formatZodError(featuresResult.error))
     }
   }
 
@@ -952,7 +953,7 @@ async function searchArtists(args: any, token: string) {
   const result = safeParse(ArtistsPagingSchema, json)
 
   if (!result.success) {
-    console.error('[searchArtists] Failed to parse response:', formatZodError(result.error))
+    getLogger()?.error('[searchArtists] Failed to parse response:', formatZodError(result.error))
     return []
   }
 
@@ -983,7 +984,7 @@ async function searchSpotifyTracks(
   const result = safeParse(SpotifySearchResponseSchema, json)
 
   if (!result.success) {
-    console.error('[searchSpotifyTracks] Failed to parse response:', formatZodError(result.error))
+    getLogger()?.error('[searchSpotifyTracks] Failed to parse response:', formatZodError(result.error))
     throw new Error(`Invalid search response: ${formatZodError(result.error)}`)
   }
 

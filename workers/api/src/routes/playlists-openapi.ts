@@ -17,6 +17,7 @@ import {
 import type {Env} from '../index'
 
 import {isSuccessResponse} from '../lib/guards'
+import {getLogger} from '../utils/LoggerContext'
 
 /**
  * Register playlist routes on the provided OpenAPI app
@@ -43,7 +44,7 @@ export function registerPlaylistRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       })
 
       if (!isSuccessResponse(response)) {
-        console.error(`Get playlists failed: ${response.status} ${response.statusText}`)
+        getLogger()?.error(`Get playlists failed: ${response.status} ${response.statusText}`)
         return c.json({error: 'Failed to get playlists'}, 401)
       }
 
@@ -51,14 +52,14 @@ export function registerPlaylistRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       const parseResult = SpotifyUserPlaylistsResponseSchema.safeParse(rawData)
 
       if (!parseResult.success) {
-        console.error('Invalid Spotify playlists response:', parseResult.error)
+        getLogger()?.error('Invalid Spotify playlists response:', parseResult.error)
         return c.json({error: 'Invalid response from Spotify API'}, 500)
       }
 
       // Response automatically validated against contract schema
       return c.json(parseResult.data)
     } catch (error) {
-      console.error('Get playlists error:', error)
+      getLogger()?.error('Get playlists error:', error)
       const message = error instanceof Error ? error.message : 'Failed to get playlists'
       return c.json({error: message}, 401)
     }
@@ -92,7 +93,7 @@ export function registerPlaylistRoutes(app: OpenAPIHono<{Bindings: Env}>) {
         if (response.status === 404) {
           return c.json({error: 'Playlist not found'}, 404)
         }
-        console.error(`Get playlist tracks failed: ${response.status} ${response.statusText}`)
+        getLogger()?.error(`Get playlist tracks failed: ${response.status} ${response.statusText}`)
         return c.json({error: 'Failed to get playlist tracks'}, 401)
       }
 
@@ -100,14 +101,14 @@ export function registerPlaylistRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       const parseResult = SpotifyPlaylistTracksResponseSchema.safeParse(rawData)
 
       if (!parseResult.success) {
-        console.error('Invalid Spotify playlist tracks response:', parseResult.error)
+        getLogger()?.error('Invalid Spotify playlist tracks response:', parseResult.error)
         return c.json({error: 'Invalid response from Spotify API'}, 500)
       }
 
       // Response automatically validated against contract schema
       return c.json({items: parseResult.data.items})
     } catch (error) {
-      console.error('Get playlist tracks error:', error)
+      getLogger()?.error('Get playlist tracks error:', error)
       const message = error instanceof Error ? error.message : 'Failed to get playlist tracks'
       return c.json({error: message}, 401)
     }
@@ -139,7 +140,7 @@ export function registerPlaylistRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       const userParseResult = SpotifyUserSchema.safeParse(rawUserData)
 
       if (!userParseResult.success) {
-        console.error('Invalid Spotify user response:', userParseResult.error)
+        getLogger()?.error('Invalid Spotify user response:', userParseResult.error)
         return c.json({error: 'Invalid response from Spotify API'}, 500)
       }
 
@@ -160,7 +161,7 @@ export function registerPlaylistRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       })
 
       if (!isSuccessResponse(createResponse)) {
-        console.error(`Create playlist failed: ${createResponse.status} ${createResponse.statusText}`)
+        getLogger()?.error(`Create playlist failed: ${createResponse.status} ${createResponse.statusText}`)
         return c.json({error: 'Failed to create playlist'}, 400)
       }
 
@@ -168,14 +169,14 @@ export function registerPlaylistRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       const playlistParseResult = SpotifyPlaylistFullSchema.safeParse(rawPlaylist)
 
       if (!playlistParseResult.success) {
-        console.error('Invalid Spotify create playlist response:', playlistParseResult.error)
+        getLogger()?.error('Invalid Spotify create playlist response:', playlistParseResult.error)
         return c.json({error: 'Invalid response from Spotify API'}, 500)
       }
 
       // Response automatically validated against contract schema
       return c.json(playlistParseResult.data, 201)
     } catch (error) {
-      console.error('Create playlist error:', error)
+      getLogger()?.error('Create playlist error:', error)
       const message = error instanceof Error ? error.message : 'Failed to create playlist'
       return c.json({error: message}, 400)
     }
@@ -206,7 +207,7 @@ export function registerPlaylistRoutes(app: OpenAPIHono<{Bindings: Env}>) {
         })
 
         if (!isSuccessResponse(response)) {
-          console.error(`Add tracks failed: ${response.status} ${response.statusText}`)
+          getLogger()?.error(`Add tracks failed: ${response.status} ${response.statusText}`)
           return c.json({error: 'Failed to add tracks'}, 400)
         }
 
@@ -214,7 +215,7 @@ export function registerPlaylistRoutes(app: OpenAPIHono<{Bindings: Env}>) {
         const addParseResult = SpotifyAddTracksResponseSchema.safeParse(rawResult)
 
         if (!addParseResult.success) {
-          console.error('Invalid Spotify add tracks response:', addParseResult.error)
+          getLogger()?.error('Invalid Spotify add tracks response:', addParseResult.error)
           return c.json({error: 'Invalid response from Spotify API'}, 500)
         }
 
@@ -238,7 +239,7 @@ export function registerPlaylistRoutes(app: OpenAPIHono<{Bindings: Env}>) {
         })
 
         if (!isSuccessResponse(response)) {
-          console.error(`Remove tracks failed: ${response.status} ${response.statusText}`)
+          getLogger()?.error(`Remove tracks failed: ${response.status} ${response.statusText}`)
           return c.json({error: 'Failed to remove tracks'}, 400)
         }
 
@@ -246,7 +247,7 @@ export function registerPlaylistRoutes(app: OpenAPIHono<{Bindings: Env}>) {
         const removeParseResult = SpotifyAddTracksResponseSchema.safeParse(rawResult)
 
         if (!removeParseResult.success) {
-          console.error('Invalid Spotify remove tracks response:', removeParseResult.error)
+          getLogger()?.error('Invalid Spotify remove tracks response:', removeParseResult.error)
           return c.json({error: 'Invalid response from Spotify API'}, 500)
         }
 
@@ -260,7 +261,7 @@ export function registerPlaylistRoutes(app: OpenAPIHono<{Bindings: Env}>) {
 
       return c.json({error: 'Invalid action'}, 400)
     } catch (error) {
-      console.error('Modify playlist error:', error)
+      getLogger()?.error('Modify playlist error:', error)
       const message = error instanceof Error ? error.message : 'Failed to modify playlist'
       return c.json({error: message}, 400)
     }

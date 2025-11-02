@@ -22,6 +22,7 @@ import {
 } from '@dj/shared-types'
 import {z} from 'zod'
 
+import {getLogger} from '../utils/LoggerContext'
 import {getGlobalOrchestrator, rateLimitedLastFmCall} from '../utils/RateLimitedAPIClients'
 
 export interface LastFmCache {
@@ -181,7 +182,7 @@ export class LastFmService {
     >()
     const uniqueArtists = [...new Set(artists)] // Deduplicate
 
-    console.log(`[LastFm] Fetching artist info for ${uniqueArtists.length} unique artists (orchestrated)...`)
+    getLogger()?.info(`[LastFm] Fetching artist info for ${uniqueArtists.length} unique artists (orchestrated)...`)
 
     const orchestrator = getGlobalOrchestrator()
 
@@ -219,7 +220,7 @@ export class LastFmService {
               similar: {name: string; url: string}[]
               tags: string[]
             }
-            console.log(`[LastFm] Artist cache hit: ${artist}`)
+            getLogger()?.info(`[LastFm] Artist cache hit: ${artist}`)
             return {artist, info: artistInfo}
           }
         }
@@ -236,7 +237,7 @@ export class LastFmService {
 
         return {artist, info: artistInfo}
       } catch (error) {
-        console.error(`[LastFm] Failed to get artist info for ${artist}:`, error)
+        getLogger()?.error(`[LastFm] Failed to get artist info for ${artist}:`, error)
         return {artist, info: null}
       }
     })
@@ -315,14 +316,14 @@ export class LastFmService {
         // If this has meaningful data (tags or popularity), return it
         const hasData = cached.signals.topTags.length > 0 || cached.signals.listeners > 0
         if (hasData) {
-          console.log(`[LastFm] ✅ Cache hit for ${track.artist} - ${track.name}`)
+          getLogger()?.info(`[LastFm] ✅ Cache hit for ${track.artist} - ${track.name}`)
           return cached.signals
         }
 
         // If this is a recent miss (less than 5 minutes old), return the miss
         const age = Date.now() - new Date(cached.fetched_at).getTime()
         if (cached.is_miss && age < this.missCacheTTL * 1000) {
-          console.log(
+          getLogger()?.info(
             `[LastFm] 🔄 Recent miss cached for ${track.artist} - ${track.name}, age: ${Math.round(age / 1000 / 60)}m`,
           )
           return cached.signals
@@ -330,7 +331,7 @@ export class LastFmService {
 
         // Store existing partial data for merging
         existingSignals = cached.signals
-        console.log(`[LastFm] 🔄 Retrying old miss for ${track.artist} - ${track.name}`)
+        getLogger()?.info(`[LastFm] 🔄 Retrying old miss for ${track.artist} - ${track.name}`)
       }
     }
 
@@ -401,19 +402,19 @@ export class LastFmService {
           userplaycount: signals.userplaycount ?? existingSignals.userplaycount,
           wiki: signals.wiki ?? existingSignals.wiki,
         }
-        console.log(`[LastFm] 🔗 Merged with existing data for ${track.artist} - ${track.name}`)
+        getLogger()?.info(`[LastFm] 🔗 Merged with existing data for ${track.artist} - ${track.name}`)
       }
 
       // Cache the result with appropriate TTL
       if (this.cache) {
         const isMiss = signals.topTags.length === 0 && signals.listeners === 0
         await this.setCached(cacheKey, signals, isMiss)
-        console.log(`[LastFm] Cached ${isMiss ? 'miss' : 'hit'} for ${track.artist} - ${track.name}`)
+        getLogger()?.info(`[LastFm] Cached ${isMiss ? 'miss' : 'hit'} for ${track.artist} - ${track.name}`)
       }
 
       return signals
     } catch (error) {
-      console.error('[LastFm] Failed to get track signals:', error)
+      getLogger()?.error('[LastFm] Failed to get track signals:', error)
       return null
     }
   }
@@ -435,9 +436,9 @@ export class LastFmService {
         expirationTtl: this.cacheTTL,
       })
 
-      console.log(`[LastFm] Updated cache for ${cacheKey} with artist info`)
+      getLogger()?.info(`[LastFm] Updated cache for ${cacheKey} with artist info`)
     } catch (error) {
-      console.error('[LastFm] Cache update error:', error)
+      getLogger()?.error('[LastFm] Cache update error:', error)
     }
   }
 
@@ -539,7 +540,7 @@ export class LastFmService {
         tags: tagNames,
       }
     } catch (error) {
-      console.error('[LastFm] Artist info failed:', error)
+      getLogger()?.error('[LastFm] Artist info failed:', error)
       return null
     }
   }
@@ -562,13 +563,13 @@ export class LastFmService {
       const age = now - fetchedAt
 
       if (age > lastfmCache.ttl * 1000) {
-        console.log(`[LastFm] Cache expired for ${key}`)
+        getLogger()?.info(`[LastFm] Cache expired for ${key}`)
         return null
       }
 
       return lastfmCache
     } catch (error) {
-      console.error('[LastFm] Cache read error:', error)
+      getLogger()?.error('[LastFm] Cache read error:', error)
       return null
     }
   }
@@ -597,7 +598,7 @@ export class LastFmService {
 
       return null
     } catch (error) {
-      console.error('[LastFm] Correction failed:', error)
+      getLogger()?.error('[LastFm] Correction failed:', error)
       return null
     }
   }
@@ -630,7 +631,7 @@ export class LastFmService {
         name: t.name,
       }))
     } catch (error) {
-      console.error('[LastFm] Similar tracks failed:', error)
+      getLogger()?.error('[LastFm] Similar tracks failed:', error)
       return []
     }
   }
@@ -655,7 +656,7 @@ export class LastFmService {
 
       return tags.slice(0, 10).map(t => t.name)
     } catch (error) {
-      console.error('[LastFm] Top tags failed:', error)
+      getLogger()?.error('[LastFm] Top tags failed:', error)
       return []
     }
   }
@@ -739,7 +740,7 @@ export class LastFmService {
         wiki,
       }
     } catch (error) {
-      console.error('[LastFm] Track info failed:', error)
+      getLogger()?.error('[LastFm] Track info failed:', error)
       return null
     }
   }
@@ -777,9 +778,9 @@ export class LastFmService {
       })
 
       const ttlDisplay = isMiss ? `${Math.round(ttl / 60)}m` : `${Math.round(ttl / 86400)}d`
-      console.log(`[LastFm] Cached ${isMiss ? 'miss' : 'hit'} for ${key} (TTL: ${ttlDisplay})`)
+      getLogger()?.info(`[LastFm] Cached ${isMiss ? 'miss' : 'hit'} for ${key} (TTL: ${ttlDisplay})`)
     } catch (error) {
-      console.error('[LastFm] Cache write error:', error)
+      getLogger()?.error('[LastFm] Cache write error:', error)
     }
   }
 }

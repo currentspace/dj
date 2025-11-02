@@ -10,6 +10,8 @@
 
 import {z} from 'zod'
 
+import {getLogger} from './LoggerContext'
+
 export interface QueueOptions {
   burst?: number // max tokens, default = rate
   concurrency?: number // parallel tasks, default 1
@@ -130,7 +132,7 @@ export class RateLimitedQueue<T> {
           }
         }
         // still log for observability (Workers console is fine)
-        console.error('[RateLimitedQueue] task failed:', err)
+        getLogger()?.error('[RateLimitedQueue] task failed:', err)
       } finally {
         this.running--
         finished++
@@ -253,10 +255,10 @@ export class RateLimitedQueue<T> {
    * Use for orchestrators that need to handle nested/recursive task enqueueing.
    */
   async processContinuously(onResult?: (result: null | T) => Promise<void> | void): Promise<void> {
-    console.log('[RateLimitedQueue] processContinuously() called')
+    getLogger()?.info('[RateLimitedQueue] processContinuously() called')
     if (this.processing) throw new Error('Already processing')
     this.processing = true
-    console.log('[RateLimitedQueue] Continuous processing started')
+    getLogger()?.info('[RateLimitedQueue] Continuous processing started')
 
     // globalIndex reserved for future use with continuous processing
 
@@ -289,7 +291,7 @@ export class RateLimitedQueue<T> {
             /* swallow */
           }
         }
-        console.error('[RateLimitedQueue] task failed:', err)
+        getLogger()?.error('[RateLimitedQueue] task failed:', err)
       } finally {
         this.running--
         kick()
@@ -328,7 +330,7 @@ export class RateLimitedQueue<T> {
 
       refill()
 
-      console.log(
+      getLogger()?.info(
         `[RateLimitedQueue] tick() - queue.length: ${
           this.queue.length
         }, running: ${this.running}, tokens: ${this.tokens.toFixed(2)}`,
@@ -339,7 +341,7 @@ export class RateLimitedQueue<T> {
       while (this.running < this.concurrency && this.tokens >= 1 && this.queue.length > 0) {
         this.tokens -= 1
         const task = this.queue.shift()! // Take from front
-        console.log(
+        getLogger()?.info(
           `[RateLimitedQueue] Launching task - remaining queue: ${this.queue.length}, running: ${this.running + 1}`,
         )
         runOne(task)
@@ -347,7 +349,7 @@ export class RateLimitedQueue<T> {
 
       // If there are still tasks, schedule next wakeup
       if (this.queue.length > 0) {
-        console.log(`[RateLimitedQueue] Scheduling next tick for ${this.queue.length} remaining tasks`)
+        getLogger()?.info(`[RateLimitedQueue] Scheduling next tick for ${this.queue.length} remaining tasks`)
         scheduleNext()
       }
     }

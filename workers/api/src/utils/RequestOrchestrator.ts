@@ -19,6 +19,7 @@
  * 2. Batch: await orchestrator.executeBatch('id', tasks, 'spotify')
  */
 
+import {getLogger} from './LoggerContext'
 import {RateLimitedQueue} from './RateLimitedQueue'
 
 interface LaneConfig {
@@ -66,7 +67,7 @@ export class RequestOrchestrator {
 
     // Start continuous processing
     this.rateLimiter.processContinuously().catch(err => {
-      console.error('[RequestOrchestrator] Fatal error:', err)
+      getLogger()?.error('[RequestOrchestrator] Fatal error:', err)
     })
   }
 
