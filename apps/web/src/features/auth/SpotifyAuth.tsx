@@ -5,7 +5,7 @@ interface SpotifyAuthProps {
   onLogin: () => void;
 }
 
-export function SpotifyAuth({ onLogin, isLoading, error, onClearError }: SpotifyAuthProps) {
+export function SpotifyAuth({ error, isLoading, onClearError, onLogin }: SpotifyAuthProps) {
   const handleLogin = (): void => {
     onClearError();
     onLogin();
@@ -27,11 +27,11 @@ export function SpotifyAuth({ onLogin, isLoading, error, onClearError }: Spotify
             <button
               onClick={onClearError}
               style={{
-                marginLeft: '0.5rem',
                 background: 'transparent',
                 border: 'none',
                 color: '#ff4444',
                 cursor: 'pointer',
+                marginLeft: '0.5rem',
                 textDecoration: 'underline',
               }}
               type="button"
@@ -43,9 +43,9 @@ export function SpotifyAuth({ onLogin, isLoading, error, onClearError }: Spotify
 
         <button
           className="spotify-login-btn"
+          disabled={isLoading}
           onClick={handleLogin}
           type="button"
-          disabled={isLoading}
         >
           <span className="spotify-logo">♪</span>
           {isLoading ? 'Connecting...' : 'Login with Spotify'}
