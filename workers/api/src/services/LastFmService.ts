@@ -86,7 +86,7 @@ export class LastFmService {
 
   constructor(apiKey: string, cache?: KVNamespace) {
     this.apiKey = apiKey;
-    this.cache = cache || null;
+    this.cache = cache ?? null;
   }
 
   /**
@@ -97,7 +97,7 @@ export class LastFmService {
 
     for (const signals of signalsMap.values()) {
       for (const tag of signals.topTags) {
-        tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
+        tagCounts.set(tag, (tagCounts.get(tag) ?? 0) + 1);
       }
     }
 
@@ -275,8 +275,8 @@ export class LastFmService {
     try {
       // Step 1: Get corrected/canonical names
       const corrected = await this.getCorrection(track.artist, track.name);
-      const canonicalArtist = corrected?.artist || track.artist;
-      const canonicalTrack = corrected?.track || track.name;
+      const canonicalArtist = corrected?.artist ?? track.artist;
+      const canonicalTrack = corrected?.track ?? track.name;
 
       // Step 2: Get track info (popularity, MBID, album, wiki, duration)
       const info = await this.getTrackInfo(canonicalArtist, canonicalTrack);
@@ -295,31 +295,31 @@ export class LastFmService {
 
       let signals: LastFmSignals = {
         // Album info
-        album: info?.album || null,
+        album: info?.album ?? null,
         // Artist info (null if skipArtistInfo=true)
         artistInfo,
         // Track identifiers
         canonicalArtist,
         canonicalTrack,
-        duration: info?.duration || null,
+        duration: info?.duration ?? null,
 
         // Track popularity
-        listeners: info?.listeners || 0,
-        mbid: info?.mbid || null,
-        playcount: info?.playcount || 0,
+        listeners: info?.listeners ?? 0,
+        mbid: info?.mbid ?? null,
+        playcount: info?.playcount ?? 0,
 
         // Similar tracks
-        similar: similar || [],
+        similar: similar ?? [],
 
         // Tags/genres
-        topTags: tags || [],
+        topTags: tags ?? [],
 
-        url: info?.url || null,
+        url: info?.url ?? null,
 
         userplaycount: info?.userplaycount,
 
         // Track description
-        wiki: info?.wiki || null
+        wiki: info?.wiki ?? null
       };
 
       // Merge with existing signals (additive)
@@ -327,8 +327,8 @@ export class LastFmService {
         signals = {
           album: signals.album ?? existingSignals.album,
           artistInfo: signals.artistInfo ?? existingSignals.artistInfo,
-          canonicalArtist: signals.canonicalArtist || existingSignals.canonicalArtist,
-          canonicalTrack: signals.canonicalTrack || existingSignals.canonicalTrack,
+          canonicalArtist: signals.canonicalArtist ?? existingSignals.canonicalArtist,
+          canonicalTrack: signals.canonicalTrack ?? existingSignals.canonicalTrack,
           duration: signals.duration ?? existingSignals.duration,
           listeners: Math.max(signals.listeners, existingSignals.listeners),
           mbid: signals.mbid ?? existingSignals.mbid,
@@ -402,7 +402,7 @@ export class LastFmService {
     );
 
     if (!response?.ok) {
-      throw new Error(`Last.fm API error: ${response?.status || 'null'}`);
+      throw new Error(`Last.fm API error: ${response?.status ?? 'null'}`);
     }
 
     return response.json();
@@ -432,24 +432,24 @@ export class LastFmService {
       let bio = null;
       if (artistData.bio) {
         bio = {
-          content: artistData.bio.content || '',
-          summary: artistData.bio.summary || ''
+          content: artistData.bio.content ?? '',
+          summary: artistData.bio.summary ?? ''
         };
       }
 
       // Extract tags
-      const tags = artistData.tags?.tag || [];
+      const tags = artistData.tags?.tag ?? [];
       const tagNames = Array.isArray(tags) ? tags.slice(0, 10).map((t: any) => t.name) : [];
 
       // Extract similar artists
-      const similar = artistData.similar?.artist || [];
+      const similar = artistData.similar?.artist ?? [];
       const similarArtists = Array.isArray(similar) ? similar.slice(0, 10).map((a: any) => ({
-        name: a.name || '',
-        url: a.url || ''
+        name: a.name ?? '',
+        url: a.url ?? ''
       })) : [];
 
       // Extract images
-      const images = artistData.image || [];
+      const images = artistData.image ?? [];
       const smallImg = images.find((img: any) => img.size === 'small');
       const mediumImg = images.find((img: any) => img.size === 'medium');
       const largeImg = images.find((img: any) => img.size === 'large' || img.size === 'extralarge');
@@ -463,8 +463,8 @@ export class LastFmService {
       return {
         bio,
         images: imageMap,
-        listeners: parseInt(artistData.stats?.listeners || '0', 10),
-        playcount: parseInt(artistData.stats?.playcount || '0', 10),
+        listeners: parseInt(artistData.stats?.listeners ?? '0', 10),
+        playcount: parseInt(artistData.stats?.playcount ?? '0', 10),
         similar: similarArtists,
         tags: tagNames
       };
@@ -516,8 +516,8 @@ export class LastFmService {
       const correction = data?.corrections?.correction;
       if (correction?.track) {
         return {
-          artist: correction.track.artist?.name || artist,
-          track: correction.track.name || track
+          artist: correction.track.artist?.name ?? artist,
+          track: correction.track.name ?? track
         };
       }
 
@@ -544,9 +544,9 @@ export class LastFmService {
       if (!tracks || !Array.isArray(tracks)) return [];
 
       return tracks.map((t: any) => ({
-        artist: t.artist?.name || '',
-        match: parseFloat(t.match || '0'),
-        name: t.name || ''
+        artist: t.artist?.name ?? '',
+        match: parseFloat(t.match ?? '0'),
+        name: t.name ?? ''
       }));
     } catch (error) {
       console.error('[LastFm] Similar tracks failed:', error);
@@ -612,15 +612,15 @@ export class LastFmService {
       let album = null;
       if (trackData.album) {
         // Get largest available album image
-        const images = trackData.album.image || [];
+        const images = trackData.album.image ?? [];
         const largestImage = images.find((img: any) => img.size === 'extralarge' || img.size === 'large' || img.size === 'medium');
 
         album = {
-          artist: trackData.album.artist || artist,
-          image: largestImage?.['#text'] || null,
-          mbid: trackData.album.mbid || null,
-          title: trackData.album.title || trackData.album['#text'] || '',
-          url: trackData.album.url || null
+          artist: trackData.album.artist ?? artist,
+          image: largestImage?.['#text'] ?? null,
+          mbid: trackData.album.mbid ?? null,
+          title: trackData.album.title ?? trackData.album['#text'] ?? '',
+          url: trackData.album.url ?? null
         };
       }
 
@@ -628,19 +628,19 @@ export class LastFmService {
       let wiki = null;
       if (trackData.wiki) {
         wiki = {
-          content: trackData.wiki.content || '',
-          published: trackData.wiki.published || '',
-          summary: trackData.wiki.summary || ''
+          content: trackData.wiki.content ?? '',
+          published: trackData.wiki.published ?? '',
+          summary: trackData.wiki.summary ?? ''
         };
       }
 
       return {
         album,
         duration: trackData.duration ? parseInt(trackData.duration, 10) : null,
-        listeners: parseInt(trackData.listeners || '0', 10),
-        mbid: trackData.mbid || null,
-        playcount: parseInt(trackData.playcount || '0', 10),
-        url: trackData.url || null,
+        listeners: parseInt(trackData.listeners ?? '0', 10),
+        mbid: trackData.mbid ?? null,
+        playcount: parseInt(trackData.playcount ?? '0', 10),
+        url: trackData.url ?? null,
         userplaycount: trackData.userplaycount ? parseInt(trackData.userplaycount, 10) : undefined,
         wiki
       };
