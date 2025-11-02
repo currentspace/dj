@@ -141,7 +141,7 @@ export const SpotifyAudioFeaturesBatchSchema = z.object({
 // ===== Playlist =====
 
 export const SpotifyPlaylistOwnerSchema = z.object({
-  display_name: z.string().nullable(),
+  display_name: z.string().nullish(), // nullish() handles both null and undefined
   external_urls: SpotifyExternalUrlsSchema,
   href: z.string().url(),
   id: z.string(),
