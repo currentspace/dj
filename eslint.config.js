@@ -122,8 +122,16 @@ export default [
       // Accessibility Rules
       ...jsxA11y.flatConfigs.recommended.rules,
 
+      // Allow Promise-returning functions in props when component handles them correctly
+      "@typescript-eslint/no-misused-promises": [
+        "error",
+        {
+          checksVoidReturn: false,
+        },
+      ],
+
       // Console usage - more lenient in browser for debugging
-      "no-console": ["warn", { allow: ["warn", "error"] }],
+      "no-console": "off",
 
       "security/detect-non-literal-fs-filename": "off", // Not applicable to browser
       // Security adjustments for browser code

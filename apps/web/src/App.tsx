@@ -1,15 +1,15 @@
-import { Suspense, useState } from 'react';
+import { Suspense, useState } from "react";
 
-import { ErrorBoundary, PlaylistErrorBoundary } from './app/ErrorBoundary';
-import { BuildInfo } from './components/BuildInfo';
-import { SpotifyAuth } from './features/auth/SpotifyAuth';
-import { ChatInterface } from './features/chat/ChatInterface';
-import { ScopeDebugger } from './features/debug/ScopeDebugger';
-import { UserPlaylists } from './features/playlist/UserPlaylists';
-import { TestPage } from './features/test/TestPage';
-import { useSpotifyAuth } from './hooks/useSpotifyAuth';
-import { SSETestPage } from './pages/SSETestPage';
-import './styles/build-info.css';
+import { ErrorBoundary, PlaylistErrorBoundary } from "./app/ErrorBoundary";
+import { BuildInfo } from "./components/BuildInfo";
+import { SpotifyAuth } from "./features/auth/SpotifyAuth";
+import { ChatInterface } from "./features/chat/ChatInterface";
+import { ScopeDebugger } from "./features/debug/ScopeDebugger";
+import { UserPlaylists } from "./features/playlist/UserPlaylists";
+import { TestPage } from "./features/test/TestPage";
+import { useSpotifyAuth } from "./hooks/useSpotifyAuth";
+import { SSETestPage } from "./pages/SSETestPage";
+import "./styles/build-info.css";
 
 interface SpotifyPlaylist {
   description: string;
@@ -33,8 +33,11 @@ interface SpotifyPlaylist {
 }
 
 function App() {
-  const { isAuthenticated, login, logout } = useSpotifyAuth();
-  const [selectedPlaylist, setSelectedPlaylist] = useState<null | SpotifyPlaylist>(null);
+  const { clearError, error, isAuthenticated, isLoading, login, logout } =
+    useSpotifyAuth();
+
+  const [selectedPlaylist, setSelectedPlaylist] =
+    useState<null | SpotifyPlaylist>(null);
   const [showTestPage, setShowTestPage] = useState(false);
   const [showSSETest, setShowSSETest] = useState(false);
   const [showScopeDebug, setShowScopeDebug] = useState(false);
@@ -52,14 +55,35 @@ function App() {
           <div className="header-buttons">
             {isAuthenticated && (
               <>
-                <button className="test-button" onClick={() => { setShowScopeDebug(!showScopeDebug); setShowSSETest(false); setShowTestPage(false); }}>
-                  {showScopeDebug ? '🎵 Back to Chat' : '🔍 Scope Debug'}
+                <button
+                  className="test-button"
+                  onClick={() => {
+                    setShowScopeDebug(!showScopeDebug);
+                    setShowSSETest(false);
+                    setShowTestPage(false);
+                  }}
+                >
+                  {showScopeDebug ? "🎵 Back to Chat" : "🔍 Scope Debug"}
                 </button>
-                <button className="test-button" onClick={() => { setShowSSETest(!showSSETest); setShowTestPage(false); setShowScopeDebug(false); }}>
-                  {showSSETest ? '🎵 Back to Chat' : '🔧 SSE Debug'}
+                <button
+                  className="test-button"
+                  onClick={() => {
+                    setShowSSETest(!showSSETest);
+                    setShowTestPage(false);
+                    setShowScopeDebug(false);
+                  }}
+                >
+                  {showSSETest ? "🎵 Back to Chat" : "🔧 SSE Debug"}
                 </button>
-                <button className="test-button" onClick={() => { setShowTestPage(!showTestPage); setShowSSETest(false); setShowScopeDebug(false); }}>
-                  {showTestPage ? '🎵 Back to Chat' : '🧪 Test Mode'}
+                <button
+                  className="test-button"
+                  onClick={() => {
+                    setShowTestPage(!showTestPage);
+                    setShowSSETest(false);
+                    setShowScopeDebug(false);
+                  }}
+                >
+                  {showTestPage ? "🎵 Back to Chat" : "🧪 Test Mode"}
                 </button>
                 <button className="logout-button" onClick={logout}>
                   Logout from Spotify
@@ -71,26 +95,43 @@ function App() {
 
         <main className="app-main">
           {showScopeDebug && isAuthenticated ? (
-            <Suspense fallback={<div className="loading">Loading scope debugger...</div>}>
+            <Suspense
+              fallback={
+                <div className="loading">Loading scope debugger...</div>
+              }
+            >
               <ScopeDebugger />
             </Suspense>
           ) : showSSETest && isAuthenticated ? (
-            <Suspense fallback={<div className="loading">Loading SSE test page...</div>}>
+            <Suspense
+              fallback={<div className="loading">Loading SSE test page...</div>}
+            >
               <SSETestPage />
             </Suspense>
           ) : showTestPage && isAuthenticated ? (
-            <Suspense fallback={<div className="loading">Loading test page...</div>}>
+            <Suspense
+              fallback={<div className="loading">Loading test page...</div>}
+            >
               <TestPage />
             </Suspense>
           ) : !isAuthenticated ? (
             <Suspense fallback={<div className="loading">Loading...</div>}>
-              <SpotifyAuth onLogin={login} />
+              <SpotifyAuth
+                error={error}
+                isLoading={isLoading}
+                onClearError={clearError}
+                onLogin={login}
+              />
             </Suspense>
           ) : (
             <PlaylistErrorBoundary>
               <div className="main-content">
                 <div className="playlists-section">
-                  <Suspense fallback={<div className="loading">Loading playlists...</div>}>
+                  <Suspense
+                    fallback={
+                      <div className="loading">Loading playlists...</div>
+                    }
+                  >
                     <UserPlaylists
                       onPlaylistSelect={handlePlaylistSelect}
                       selectedPlaylist={selectedPlaylist}
@@ -100,13 +141,20 @@ function App() {
 
                 <div className="chat-section">
                   {selectedPlaylist ? (
-                    <Suspense fallback={<div className="loading">Loading chat interface...</div>}>
+                    <Suspense
+                      fallback={
+                        <div className="loading">Loading chat interface...</div>
+                      }
+                    >
                       <ChatInterface selectedPlaylist={selectedPlaylist} />
                     </Suspense>
                   ) : (
                     <div className="no-playlist-selected">
                       <h2>🎵 Select a Playlist</h2>
-                      <p>Choose a playlist from the left to start chatting with your AI DJ assistant!</p>
+                      <p>
+                        Choose a playlist from the left to start chatting with
+                        your AI DJ assistant!
+                      </p>
                     </div>
                   )}
                 </div>
@@ -117,12 +165,20 @@ function App() {
 
         <footer className="app-footer">
           <p>
-            Powered by{' '}
-            <a href="https://www.anthropic.com" rel="noopener noreferrer" target="_blank">
+            Powered by{" "}
+            <a
+              href="https://www.anthropic.com"
+              rel="noopener noreferrer"
+              target="_blank"
+            >
               Anthropic Claude
-            </a>{' '}
-            &{' '}
-            <a href="https://www.spotify.com" rel="noopener noreferrer" target="_blank">
+            </a>{" "}
+            &{" "}
+            <a
+              href="https://www.spotify.com"
+              rel="noopener noreferrer"
+              target="_blank"
+            >
               Spotify
             </a>
           </p>

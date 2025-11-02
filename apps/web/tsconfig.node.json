@@ -2,10 +2,23 @@
   "compilerOptions": {
     "composite": true,
     "skipLibCheck": true,
+
+    /* Node.js-specific settings for build-time files */
+    "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "lib": ["ES2022"],
+    "types": ["node"],
+
+    /* Node.js module compatibility */
     "allowSyntheticDefaultImports": true,
-    "strict": true
+    "esModuleInterop": true,
+
+    /* Type checking */
+    "strict": true,
+
+    /* No browser-specific features */
+    "jsx": "preserve"
   },
   "include": ["vite.config.ts"]
 }
