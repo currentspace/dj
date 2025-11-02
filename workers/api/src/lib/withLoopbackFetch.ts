@@ -24,7 +24,7 @@ export async function withLoopbackFetch<T>(
     return true;
   }
 
-  // @ts-ignore – we're temporarily replacing global fetch
+  // @ts-expect-error – we're temporarily replacing global fetch
   globalThis.fetch = async (input: any, init?: RequestInit) => {
     const url = toURL(input);
     if (input instanceof Request) {
@@ -61,7 +61,7 @@ export async function withLoopbackFetch<T>(
   try {
     return await fn();
   } finally {
-    // @ts-ignore
+    // @ts-expect-error
     globalThis.fetch = origFetch;
   }
 }

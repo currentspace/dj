@@ -1,6 +1,6 @@
 export async function withFetchLogging<T>(fn: () => Promise<T>): Promise<T> {
   const orig = fetch.bind(globalThis);
-  // @ts-ignore
+  // @ts-expect-error
   globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     try {
       const isReq = input instanceof Request;
@@ -37,7 +37,7 @@ export async function withFetchLogging<T>(fn: () => Promise<T>): Promise<T> {
   try {
     return await fn();
   } finally {
-    // @ts-ignore
+    // @ts-expect-error
     globalThis.fetch = orig;
   }
 }
