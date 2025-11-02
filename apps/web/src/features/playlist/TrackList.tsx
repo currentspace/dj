@@ -10,7 +10,7 @@ export const TrackList = memo(function TrackList({ tracks }: TrackListProps) {
   return (
     <div className="track-list">
       {tracks.map((track, index) => (
-        <TrackItem key={track.id || index} number={index + 1} track={track} />
+        <TrackItem key={track.id ?? index} number={index + 1} track={track} />
       ))}
     </div>
   );
