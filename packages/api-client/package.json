@@ -10,7 +10,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@dj/api-contracts": "workspace:*",
     "@dj/shared-types": "workspace:*",
+    "hono": "^4.9.8",
     "zod": "^3.25.76"
   },
   "devDependencies": {
