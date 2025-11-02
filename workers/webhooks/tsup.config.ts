@@ -1,11 +1,9 @@
 import { defineConfig } from 'tsup'
 
 export default defineConfig({
+  bundle: true,
+  clean: true,
   entry: ['src/index.ts'],
-  format: ['esm'],  // Workers use ESM only
-  platform: 'node', // Can use 'node' with nodejs_compat
-  target: 'es2022', // Workers runtime supports modern JS
-  noExternal: [/.*/], // Bundle ALL dependencies for Workers
   external: [
     // Keep Node.js built-ins external - Workers provides these
     'node:*',
@@ -24,12 +22,14 @@ export default defineConfig({
     'process',
     'timers'
   ],
+  format: ['esm'],  // Workers use ESM only
   minify: true, // Recommended for production
-  splitting: false, // Workers don't support code splitting
+  noExternal: [/.*/], // Bundle ALL dependencies for Workers
+  platform: 'node', // Can use 'node' with nodejs_compat
+  skipNodeModulesBundle: false, // Important: bundle node_modules
   sourcemap: true, // Helpful for debugging
-  clean: true,
+  splitting: false, // Workers don't support code splitting
+  target: 'es2022', // Workers runtime supports modern JS
   // Workers-specific optimizations
   treeshake: true,
-  bundle: true,
-  skipNodeModulesBundle: false, // Important: bundle node_modules
 })

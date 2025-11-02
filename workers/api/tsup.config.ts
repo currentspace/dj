@@ -1,16 +1,21 @@
 import { defineConfig } from 'tsup'
 
 export default defineConfig({
-  entry: ['src/index.ts'],
-  format: ['esm'],
-  platform: 'browser', // V8 isolate (not Node.js)
-  target: 'es2022',
-  splitting: false,
-  sourcemap: true,
   clean: true,
-  treeshake: true,
-  skipNodeModulesBundle: true, // Don't bundle all node_modules
-  minify: true,
+  entry: ['src/index.ts'],
+  esbuildOptions(options) {
+    // Make sure ESBuild knows we target browser-ish runtime
+    options.platform = 'browser';
+    options.mainFields = ['module', 'browser', 'main'];
+    // Trim dead code paths more aggressively
+    options.treeShaking = true;
+    // If the lib checks process.env, prevent inlining Node shims
+    options.define = {
+      ...(options.define || {}),
+      'process.env.DEBUG': 'false',
+      'process.env.NODE_DEBUG': 'false',
+    };
+  },
   // Important: keep Node stdlib out of the bundle (stdio path)
   external: [
     // Node built-ins that trip Workers
@@ -38,17 +43,12 @@ export default defineConfig({
     // External packages that stdio transport imports
     'cross-spawn'
   ],
-  esbuildOptions(options) {
-    // Make sure ESBuild knows we target browser-ish runtime
-    options.platform = 'browser';
-    options.mainFields = ['module', 'browser', 'main'];
-    // Trim dead code paths more aggressively
-    options.treeShaking = true;
-    // If the lib checks process.env, prevent inlining Node shims
-    options.define = {
-      ...(options.define || {}),
-      'process.env.NODE_DEBUG': 'false',
-      'process.env.DEBUG': 'false',
-    };
-  },
+  format: ['esm'],
+  minify: true,
+  platform: 'browser', // V8 isolate (not Node.js)
+  skipNodeModulesBundle: true, // Don't bundle all node_modules
+  sourcemap: true,
+  splitting: false,
+  target: 'es2022',
+  treeshake: true,
 })
