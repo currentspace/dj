@@ -1,57 +1,23 @@
 // Spotify Tools for Anthropic Function Calling
 import { z } from 'zod';
 
+import {
+  formatZodError,
+  safeParse,
+  SpotifyAlbumFullSchema,
+  SpotifyAudioFeaturesBatchSchema,
+  SpotifyAudioFeaturesSchema,
+  SpotifyCreatePlaylistResponseSchema,
+  SpotifyPlaylistFullSchema,
+  SpotifyPlaylistTracksResponseSchema,
+  SpotifyPagingSchema,
+  SpotifyRecommendationsResponseSchema,
+  SpotifySearchResponseSchema,
+  SpotifyTrackFullSchema,
+  SpotifyUserSchema,
+} from '@dj/shared-types';
+
 import { rateLimitedSpotifyCall } from '../utils/RateLimitedAPIClients';
-
-// Spotify API response schemas
-const SpotifyTrackSchema = z.object({
-  album: z.object({
-    id: z.string(),
-    images: z.array(z.object({
-      height: z.number(),
-      url: z.string(),
-      width: z.number()
-    })),
-    name: z.string()
-  }),
-  artists: z.array(z.object({
-    id: z.string(),
-    name: z.string()
-  })),
-  external_urls: z.object({ spotify: z.string() }),
-  id: z.string(),
-  name: z.string(),
-  preview_url: z.string().nullable(),
-  uri: z.string()
-});
-
-const SpotifySearchResponseSchema = z.object({
-  tracks: z.object({
-    items: z.array(SpotifyTrackSchema)
-  })
-});
-
-const SpotifyAudioFeaturesSchema = z.object({
-  acousticness: z.number(),
-  danceability: z.number(),
-  energy: z.number(),
-  id: z.string(),
-  instrumentalness: z.number(),
-  key: z.number(),
-  liveness: z.number(),
-  loudness: z.number(),
-  mode: z.number(),
-  speechiness: z.number(),
-  tempo: z.number(),
-  valence: z.number()
-});
-
-const SpotifyAudioFeaturesResponseSchema = z.object({
-  audio_features: z.array(SpotifyAudioFeaturesSchema.nullable())
-});
-
-type SpotifyAudioFeatures = z.infer<typeof SpotifyAudioFeaturesSchema>;
-type SpotifyTrack = z.infer<typeof SpotifyTrackSchema>;
 
 // Tool schemas
 export const SearchTracksSchema = z.object({
@@ -302,7 +268,7 @@ export async function executeSpotifyTool(
         result = await searchArtists(args, token);
         break;
       case 'search_spotify_tracks':
-        result = await searchSpotifyTracks(args, token);
+        result = await searchSpotifyTracks(args as z.infer<typeof SearchTracksSchema>, token);
         break;
       default:
         console.error(`[Tool] Unknown tool: ${toolName}`);
@@ -352,7 +318,15 @@ async function analyzePlaylist(args: any, token: string) {
     throw new Error(`Failed to get playlist: ${playlistResponse.status}`);
   }
 
-  const playlist = await playlistResponse.json() as any;
+  const playlistJson = await playlistResponse.json();
+  const playlistResult = safeParse(SpotifyPlaylistFullSchema, playlistJson);
+
+  if (!playlistResult.success) {
+    console.error('[analyzePlaylist] Failed to parse playlist:', formatZodError(playlistResult.error));
+    throw new Error(`Invalid playlist data: ${formatZodError(playlistResult.error)}`);
+  }
+
+  const playlist = playlistResult.data;
   console.log(`[analyzePlaylist] Successfully got playlist: "${playlist.name}" (${playlist.tracks?.total} tracks)`);
 
   // Get tracks
@@ -376,9 +350,17 @@ async function analyzePlaylist(args: any, token: string) {
     throw new Error(`Failed to get playlist tracks: ${tracksResponse.status}`);
   }
 
-  const tracksData = await tracksResponse.json() as any;
-  const tracks = tracksData.items.map((item: any) => item.track).filter(Boolean);
-  const trackIds = tracks.map((t: any) => t.id).filter(Boolean);
+  const tracksJson = await tracksResponse.json();
+  const tracksResult = safeParse(SpotifyPlaylistTracksResponseSchema, tracksJson);
+
+  if (!tracksResult.success) {
+    console.error('[analyzePlaylist] Failed to parse tracks:', formatZodError(tracksResult.error));
+    throw new Error(`Invalid tracks data: ${formatZodError(tracksResult.error)}`);
+  }
+
+  const tracksData = tracksResult.data;
+  const tracks = tracksData.items.map(item => item.track).filter((track): track is NonNullable<typeof track> => track !== null);
+  const trackIds = tracks.map(t => t.id).filter(Boolean);
   console.log(`[analyzePlaylist] Found ${tracks.length} tracks, ${trackIds.length} with valid IDs`);
 
   // Log the structure of a single track object to see what Spotify returns
@@ -392,16 +374,14 @@ async function analyzePlaylist(args: any, token: string) {
       console.log(`[analyzePlaylist]   - album field size: ${JSON.stringify(sampleTrack.album).length} bytes`);
       console.log(`[analyzePlaylist]   - album keys: ${Object.keys(sampleTrack.album).join(', ')}`);
     }
-    if (sampleTrack.available_markets) {
-      console.log(`[analyzePlaylist]   - available_markets count: ${sampleTrack.available_markets.length} countries`);
-    }
+    // Note: available_markets not included in schema to reduce payload size
     if (sampleTrack.external_ids) {
       console.log(`[analyzePlaylist]   - external_ids: ${JSON.stringify(sampleTrack.external_ids)}`);
     }
   }
 
   // Get audio features
-  let audioFeatures = [];
+  let audioFeatures: (z.infer<typeof SpotifyAudioFeaturesSchema> | null)[] = [];
   if (trackIds.length > 0) {
     console.log(`[analyzePlaylist] Fetching audio features for ${trackIds.length} tracks...`);
     const featuresResponse = await rateLimitedSpotifyCall(
@@ -418,9 +398,15 @@ async function analyzePlaylist(args: any, token: string) {
     console.log(`[analyzePlaylist] Audio features API response status: ${featuresResponse.status}`);
 
     if (featuresResponse.ok) {
-      const featuresData = await featuresResponse.json() as any;
-      audioFeatures = featuresData.audio_features ?? [];
-      console.log(`[analyzePlaylist] Got audio features for ${audioFeatures.filter(f => f).length} tracks`);
+      const featuresJson = await featuresResponse.json();
+      const featuresResult = safeParse(SpotifyAudioFeaturesBatchSchema, featuresJson);
+
+      if (featuresResult.success) {
+        audioFeatures = featuresResult.data.audio_features ?? [];
+        console.log(`[analyzePlaylist] Got audio features for ${audioFeatures.filter(f => f).length} tracks`);
+      } else {
+        console.error('[analyzePlaylist] Failed to parse audio features:', formatZodError(featuresResult.error));
+      }
     } else {
       const errorText = await featuresResponse.text();
       console.error(`[analyzePlaylist] Failed to get audio features: ${featuresResponse.status} - ${errorText}`);
@@ -511,8 +497,15 @@ async function createPlaylist(args: any, token: string) {
     throw new Error('Failed to get user profile');
   }
 
-  const userData = await userResponse.json() as any;
-  const userId = userData.id;
+  const userJson = await userResponse.json();
+  const userResult = safeParse(SpotifyUserSchema, userJson);
+
+  if (!userResult.success) {
+    console.error('[Tool:createPlaylist] Failed to parse user data:', formatZodError(userResult.error));
+    throw new Error(`Invalid user data: ${formatZodError(userResult.error)}`);
+  }
+
+  const userId = userResult.data.id;
   console.log(`[Tool:createPlaylist] User ID: ${userId}`);
 
   // Create playlist
@@ -541,7 +534,15 @@ async function createPlaylist(args: any, token: string) {
     throw new Error('Failed to create playlist');
   }
 
-  const playlist = await createResponse.json() as any;
+  const playlistJson = await createResponse.json();
+  const playlistResult = safeParse(SpotifyCreatePlaylistResponseSchema, playlistJson);
+
+  if (!playlistResult.success) {
+    console.error('[Tool:createPlaylist] Failed to parse playlist response:', formatZodError(playlistResult.error));
+    throw new Error(`Invalid playlist response: ${formatZodError(playlistResult.error)}`);
+  }
+
+  const playlist = playlistResult.data;
   console.log(`[Tool:createPlaylist] Playlist created with ID: ${playlist.id}`);
 
   // Add tracks if provided
@@ -590,12 +591,20 @@ async function getAlbumInfo(args: any, token: string) {
     throw new Error(`Failed to get album info: ${response.status}`);
   }
 
-  const album = await response.json() as any;
+  const albumJson = await response.json();
+  const albumResult = safeParse(SpotifyAlbumFullSchema, albumJson);
+
+  if (!albumResult.success) {
+    console.error('[getAlbumInfo] Failed to parse album data:', formatZodError(albumResult.error));
+    throw new Error(`Invalid album data: ${formatZodError(albumResult.error)}`);
+  }
+
+  const album = albumResult.data;
 
   // Get track IDs for audio features
-  const trackIds = album.tracks?.items?.map((t: any) => t.id).filter(Boolean) ?? [];
+  const trackIds = album.tracks?.items?.map(t => t.id).filter(Boolean) ?? [];
 
-  let audioFeatures = [];
+  let audioFeatures: (z.infer<typeof SpotifyAudioFeaturesSchema> | null)[] = [];
   if (trackIds.length > 0) {
     const featuresResponse = await rateLimitedSpotifyCall(
       () => fetch(
@@ -609,8 +618,14 @@ async function getAlbumInfo(args: any, token: string) {
     );
 
     if (featuresResponse.ok) {
-      const featuresData = await featuresResponse.json() as any;
-      audioFeatures = featuresData.audio_features ?? [];
+      const featuresJson = await featuresResponse.json();
+      const featuresResult = safeParse(SpotifyAudioFeaturesBatchSchema, featuresJson);
+
+      if (featuresResult.success) {
+        audioFeatures = featuresResult.data.audio_features ?? [];
+      } else {
+        console.error('[getAlbumInfo] Failed to parse audio features:', formatZodError(featuresResult.error));
+      }
     }
   }
 
@@ -659,8 +674,15 @@ async function getArtistTopTracks(args: any, token: string) {
     throw new Error(`Failed to get artist top tracks: ${response.status}`);
   }
 
-  const data = await response.json() as any;
-  return data.tracks ?? [];
+  const json = await response.json();
+  const result = safeParse(SpotifyPagingSchema(SpotifyTrackFullSchema), json);
+
+  if (!result.success) {
+    console.error('[getArtistTopTracks] Failed to parse response:', formatZodError(result.error));
+    return [];
+  }
+
+  return result.data.items ?? [];
 }
 
 async function getAudioFeatures(args: any, token: string) {
@@ -694,8 +716,15 @@ async function getAudioFeatures(args: any, token: string) {
     throw new Error(`Failed to get audio features: ${response.status}`);
   }
 
-  const data = await response.json() as any;
-  const features = data.audio_features ?? [];
+  const json = await response.json();
+  const result = safeParse(SpotifyAudioFeaturesBatchSchema, json);
+
+  if (!result.success) {
+    console.error('[getAudioFeatures] Failed to parse response:', formatZodError(result.error));
+    return [];
+  }
+
+  const features = result.data.audio_features ?? [];
   console.log(`[getAudioFeatures] Retrieved ${features.length} audio features`);
   return features;
 }
@@ -716,8 +745,16 @@ async function getAvailableGenres(token: string) {
     throw new Error(`Failed to get available genres: ${response.status}`);
   }
 
-  const data = await response.json() as any;
-  return data.genres ?? [];
+  const json = await response.json();
+  const GenresSchema = z.object({ genres: z.array(z.string()) });
+  const result = safeParse(GenresSchema, json);
+
+  if (!result.success) {
+    console.error('[getAvailableGenres] Failed to parse response:', formatZodError(result.error));
+    return [];
+  }
+
+  return result.data.genres ?? [];
 }
 
 async function getRecommendations(args: any, token: string) {
@@ -746,8 +783,15 @@ async function getRecommendations(args: any, token: string) {
     throw new Error(`Failed to get recommendations: ${response.status}`);
   }
 
-  const data = await response.json() as any;
-  return data.tracks ?? [];
+  const json = await response.json();
+  const result = safeParse(SpotifyRecommendationsResponseSchema, json);
+
+  if (!result.success) {
+    console.error('[getRecommendations] Failed to parse response:', formatZodError(result.error));
+    return [];
+  }
+
+  return result.data.tracks ?? [];
 }
 
 async function getRelatedArtists(args: any, token: string) {
@@ -768,8 +812,16 @@ async function getRelatedArtists(args: any, token: string) {
     throw new Error(`Failed to get related artists: ${response.status}`);
   }
 
-  const data = await response.json() as any;
-  return data.artists ?? [];
+  const json = await response.json();
+  const ArtistsSchema = z.object({ artists: z.array(z.any()) }); // Artists have complex schema
+  const result = safeParse(ArtistsSchema, json);
+
+  if (!result.success) {
+    console.error('[getRelatedArtists] Failed to parse response:', formatZodError(result.error));
+    return [];
+  }
+
+  return result.data.artists ?? [];
 }
 
 async function getTrackDetails(args: any, token: string) {
@@ -790,7 +842,15 @@ async function getTrackDetails(args: any, token: string) {
     throw new Error(`Failed to get track details: ${response.status}`);
   }
 
-  const track = await response.json() as any;
+  const trackJson = await response.json();
+  const trackResult = safeParse(SpotifyTrackFullSchema, trackJson);
+
+  if (!trackResult.success) {
+    console.error('[getTrackDetails] Failed to parse track:', formatZodError(trackResult.error));
+    throw new Error(`Invalid track data: ${formatZodError(trackResult.error)}`);
+  }
+
+  const track = trackResult.data;
 
   // Also get audio features for complete info
   const featuresResponse = await rateLimitedSpotifyCall(
@@ -806,7 +866,14 @@ async function getTrackDetails(args: any, token: string) {
 
   let audioFeatures = null;
   if (featuresResponse.ok) {
-    audioFeatures = await featuresResponse.json();
+    const featuresJson = await featuresResponse.json();
+    const featuresResult = safeParse(SpotifyAudioFeaturesSchema, featuresJson);
+
+    if (featuresResult.success) {
+      audioFeatures = featuresResult.data;
+    } else {
+      console.error('[getTrackDetails] Failed to parse audio features:', formatZodError(featuresResult.error));
+    }
   }
 
   return {
@@ -892,12 +959,22 @@ async function searchArtists(args: any, token: string) {
     throw new Error(`Failed to search artists: ${response.status}`);
   }
 
-  const data = await response.json() as any;
-  return data.artists?.items ?? [];
+  const json = await response.json();
+  const ArtistsPagingSchema = z.object({
+    artists: SpotifyPagingSchema(z.any()) // Artist schema is complex, use any for now
+  });
+  const result = safeParse(ArtistsPagingSchema, json);
+
+  if (!result.success) {
+    console.error('[searchArtists] Failed to parse response:', formatZodError(result.error));
+    return [];
+  }
+
+  return result.data.artists?.items ?? [];
 }
 
 // Implementation functions
-async function searchSpotifyTracks(args: z.infer<typeof SearchTracksSchema>, token: string): Promise<SpotifyTrack[]> {
+async function searchSpotifyTracks(args: z.infer<typeof SearchTracksSchema>, token: string): Promise<z.infer<typeof SpotifyTrackFullSchema>[]> {
   const { filters, limit = 10, query } = args;
 
   const response = await rateLimitedSpotifyCall(
@@ -915,9 +992,15 @@ async function searchSpotifyTracks(args: z.infer<typeof SearchTracksSchema>, tok
     throw new Error(`Spotify search failed: ${response.status}`);
   }
 
-  const rawData = await response.json();
-  const data = SpotifySearchResponseSchema.parse(rawData);
-  const tracks = data.tracks.items;
+  const json = await response.json();
+  const result = safeParse(SpotifySearchResponseSchema, json);
+
+  if (!result.success) {
+    console.error('[searchSpotifyTracks] Failed to parse response:', formatZodError(result.error));
+    throw new Error(`Invalid search response: ${formatZodError(result.error)}`);
+  }
+
+  const tracks = result.data.tracks?.items ?? [];
 
   // Apply filters if provided
   if (filters && tracks.length > 0) {

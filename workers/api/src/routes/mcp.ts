@@ -385,7 +385,8 @@ async function handleMCPRequest(request: any, spotifyToken: string, requestId: s
       console.log(`[MCP:${requestId}] Protocol version: ${initResult.result.protocolVersion}`);
       console.log(`[MCP:${requestId}] Server: ${initResult.result.serverInfo.name} v${initResult.result.serverInfo.version}`);
 
-      return initResult; }t; }
+      return initResult;
+    }
 
     case 'tools/list':
       { console.log(`[MCP:${requestId}] TOOLS/LIST - Fetching available tools`);
@@ -407,7 +408,8 @@ async function handleMCPRequest(request: any, spotifyToken: string, requestId: s
       console.log(`[MCP:${requestId}] Available tools: ${toolsResult.result.tools.length}`);
       console.log(`[MCP:${requestId}] Tool names: [${toolsResult.result.tools.map(t => t.name).join(', ')}]`);
 
-      return toolsResult; }t; }
+      return toolsResult;
+    }
 
     case 'tools/call':
       { const { arguments: args, name } = request.params ?? {};
