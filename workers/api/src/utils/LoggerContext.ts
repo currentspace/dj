@@ -6,6 +6,7 @@
  */
 
 import {AsyncLocalStorage} from 'node:async_hooks'
+import {z} from 'zod'
 
 import {ServiceLogger} from './ServiceLogger'
 
@@ -13,8 +14,10 @@ interface LoggerContext {
   logger: ServiceLogger
 }
 
-// Create AsyncLocalStorage instance
-const loggerStorage = new AsyncLocalStorage<LoggerContext>()
+// Schema for LoggerContext validation
+const LoggerContextSchema = z.object({
+  logger: z.custom<ServiceLogger>(val => val !== null && typeof val === 'object'),
+})
 
 /**
  * Get a child logger with additional context
@@ -28,13 +31,39 @@ export function getChildLogger(subContext: string): ServiceLogger {
   return logger.child(subContext)
 }
 
+// Create AsyncLocalStorage instance with validation
+// Note: AsyncLocalStorage is provided by nodejs_compat in Cloudflare Workers
+const loggerStorageRaw = new AsyncLocalStorage<LoggerContext>()
+
+// Validate the storage instance structure
+if (
+  typeof loggerStorageRaw !== 'object' ||
+  loggerStorageRaw === null ||
+  typeof (loggerStorageRaw as {getStore?: unknown}).getStore !== 'function' ||
+  typeof (loggerStorageRaw as {run?: unknown}).run !== 'function'
+) {
+  throw new Error('AsyncLocalStorage instance is invalid')
+}
+
 /**
  * Get the current request's logger
  * Returns null if called outside of a logger context
  */
 export function getLogger(): null | ServiceLogger {
-  const context = loggerStorage.getStore()
-  return context?.logger ?? null
+  // Type guard ensures loggerStorageRaw has getStore method
+  if (typeof (loggerStorageRaw as {getStore?: unknown}).getStore !== 'function') {
+    return null
+  }
+
+  const contextRaw = loggerStorageRaw.getStore()
+
+  // Validate context using Zod schema (handles null/undefined automatically)
+  const validation = LoggerContextSchema.safeParse(contextRaw)
+  if (!validation.success) {
+    return null
+  }
+
+  return validation.data.logger
 }
 
 /**
@@ -42,5 +71,26 @@ export function getLogger(): null | ServiceLogger {
  * Must be called with async/await (not thenables) to ensure context preservation
  */
 export async function runWithLogger<T>(logger: ServiceLogger, fn: () => Promise<T>): Promise<T> {
-  return await loggerStorage.run({logger}, fn)
+  const context: LoggerContext = {logger}
+
+  // Validate context before using it
+  const validation = LoggerContextSchema.safeParse(context)
+  if (!validation.success) {
+    throw new Error('Invalid logger context')
+  }
+
+  // Type guard ensures loggerStorageRaw has run method
+  if (typeof (loggerStorageRaw as {run?: unknown}).run !== 'function') {
+    throw new Error('AsyncLocalStorage.run is not available')
+  }
+
+  // Type guard validates the storage object structure
+  const storageWithRun = loggerStorageRaw as {
+    run?: (context: LoggerContext, fn: () => Promise<T>) => Promise<T>
+  }
+  if (typeof storageWithRun.run === 'function') {
+    return await storageWithRun.run(validation.data, fn)
+  }
+
+  throw new Error('AsyncLocalStorage.run is not available')
 }

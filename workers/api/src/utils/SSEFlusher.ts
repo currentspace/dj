@@ -24,7 +24,7 @@ export interface SSEFlusherOptions {
 
 export interface SSEWriter {
   flush: () => Promise<void>
-  writeAsync: (data: any) => Promise<void>
+  writeAsync: (data: unknown) => Promise<void>
 }
 
 /**
@@ -80,7 +80,7 @@ export function makeControlledSSEFlusher(
  * Create a smart flusher that triggers based on message count or elapsed time
  */
 export function makeSSEFlusher(
-  writeAsync: (data: any) => Promise<void>,
+  writeAsync: (data: unknown) => Promise<void>,
   flush: () => Promise<void>,
   options: SSEFlusherOptions = {},
 ): () => Promise<void> {

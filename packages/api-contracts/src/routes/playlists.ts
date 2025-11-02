@@ -27,7 +27,7 @@ export const getUserPlaylists = createRoute({
     200: {
       content: {
         'application/json': {
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+           
           schema: UserPlaylistsResponseSchema,
         },
       },
@@ -130,7 +130,7 @@ export const createPlaylist = createRoute({
     201: {
       content: {
         'application/json': {
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+           
           schema: SpotifyPlaylistSimpleSchema,
         },
       },

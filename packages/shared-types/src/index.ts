@@ -117,7 +117,7 @@ export interface SpotifyWebhookPayload {
 export type StreamDebugData = Record<string, unknown>
 
 export interface StreamLogData {
-  level: 'error' | 'info' | 'warn'
+  level: 'debug' | 'error' | 'info' | 'warn'
   message: string
 }
 

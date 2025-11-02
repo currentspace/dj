@@ -18,7 +18,7 @@ export const streamChatMessage = createRoute({
     body: {
       content: {
         'application/json': {
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+           
           schema: ChatRequestSchema,
         },
       },
@@ -74,7 +74,7 @@ export const sendChatMessage = createRoute({
     body: {
       content: {
         'application/json': {
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+           
           schema: ChatRequestSchema,
         },
       },

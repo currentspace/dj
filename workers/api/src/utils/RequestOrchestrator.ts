@@ -40,7 +40,7 @@ const LANE_LIMITS: Record<LaneKey, number> = {
 
 export class RequestOrchestrator {
   private lanes = new Map<LaneKey, LaneConfig>()
-  private rateLimiter: RateLimitedQueue<any>
+  private rateLimiter: RateLimitedQueue<unknown>
 
   constructor(options?: {
     jitterMs?: number // Jitter in ms (default: 5)
@@ -81,8 +81,6 @@ export class RequestOrchestrator {
    * 5. Release lane slot
    */
   async execute<T>(task: Task<T>, lane: LaneKey = 'default'): Promise<T> {
-    const laneConfig = this.lanes.get(lane)!
-
     // Wait for lane slot if needed
     await this.acquireLaneSlot(lane)
 
@@ -95,7 +93,7 @@ export class RequestOrchestrator {
             resolve(value)
             return value
           } catch (error) {
-            reject(error)
+            reject(error instanceof Error ? error : new Error(String(error)))
             return null
           }
         })

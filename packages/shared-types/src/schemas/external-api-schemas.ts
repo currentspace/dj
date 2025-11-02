@@ -225,34 +225,34 @@ export const MusicBrainzSearchResponseSchema = z.object({
  * Enriched track data combining Deezer and Last.fm
  */
 export const EnrichedTrackDataSchema = z.object({
-  // Deezer data
-  bpm: z.number().min(0).max(300).nullable(),
-  gain: z.number().nullable(),
-  rank: z.number().nullable(),
-  release_date: z.string().nullable(),
-  source: z.enum(['deezer', 'deezer-via-musicbrainz', 'none']),
-
   // Last.fm data
   album: LastFmAlbumSchema.nullable().optional(),
   artistInfo: LastFmArtistInfoSchema.nullable().optional(),
+  // Deezer data
+  bpm: z.number().min(0).max(300).nullable(),
+  gain: z.number().nullable(),
   listeners: z.number().nullable().optional(),
+
   playcount: z.number().nullable().optional(),
+  rank: z.number().nullable(),
+  release_date: z.string().nullable(),
   similar: z.array(LastFmSimilarTrackSchema).optional(),
+  source: z.enum(['deezer', 'deezer-via-musicbrainz', 'none']),
   topTags: z.array(LastFmTagSchema).optional(),
   wiki: LastFmWikiSchema.nullable().optional(),
 })
 
 // ===== Type Exports =====
 
-export type DeezerTrack = z.infer<typeof DeezerTrackSchema>
 export type DeezerSearchResponse = z.infer<typeof DeezerSearchResponseSchema>
+export type DeezerTrack = z.infer<typeof DeezerTrackSchema>
 
-export type LastFmTrackInfo = z.infer<typeof LastFmTrackInfoSchema>
+export type EnrichedTrackData = z.infer<typeof EnrichedTrackDataSchema>
 export type LastFmArtistInfo = z.infer<typeof LastFmArtistInfoSchema>
 export type LastFmSimilarTrack = z.infer<typeof LastFmSimilarTrackSchema>
 export type LastFmTag = z.infer<typeof LastFmTagSchema>
 
+export type LastFmTrackInfo = z.infer<typeof LastFmTrackInfoSchema>
 export type MusicBrainzRecording = z.infer<typeof MusicBrainzRecordingSchema>
-export type MusicBrainzSearchResponse = z.infer<typeof MusicBrainzSearchResponseSchema>
 
-export type EnrichedTrackData = z.infer<typeof EnrichedTrackDataSchema>
+export type MusicBrainzSearchResponse = z.infer<typeof MusicBrainzSearchResponseSchema>

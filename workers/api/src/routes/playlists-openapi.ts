@@ -115,12 +115,10 @@ export function registerPlaylistRoutes(app: OpenAPIHono<{Bindings: Env}>) {
 
   // POST /api/spotify/playlists - Create a new playlist
   app.openapi(createPlaylist, async c => {
-    const env = c.env as Env
-
     try {
       // Headers and body automatically validated by contract
       const token = c.req.header('authorization')?.replace('Bearer ', '')
-      const {name, description, public: isPublic} = await c.req.json()
+      const {description, name, public: isPublic} = await c.req.json()
 
       if (!token) {
         return c.json({error: 'No authorization token'}, 401)

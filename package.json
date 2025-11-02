@@ -10,7 +10,7 @@
     "build": "node scripts/build-info.js && pnpm -r build",
     "build:worker": "node scripts/build-info.js && pnpm install && pnpm --filter @dj/shared-types build && pnpm --filter @dj/api-client build && pnpm --filter @dj/web build && pnpm --filter @dj/api-worker build",
     "typecheck": "pnpm -r typecheck",
-    "lint": "eslint .",
+    "lint": "eslint --cache .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "pnpm -r test",

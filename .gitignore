@@ -35,3 +35,6 @@ dist-ssr
 # Generated build info
 **/build-info.json
 apps/web/tsconfig.node.tsbuildinfo
+
+# ESLint cache
+.eslintcache

@@ -1652,6 +1652,7 @@ async function executeSpotifyToolWithProgress(
           }
 
           for (let i = 0; i < tracksToEnrich.length; i++) {
+            // eslint-disable-next-line security/detect-object-injection
             const track = tracksToEnrich[i]
 
             // Log every track attempt for first 5 tracks, then every 10th
@@ -1820,6 +1821,7 @@ async function executeSpotifyToolWithProgress(
           })
 
           for (let i = 0; i < tracksForLastFm.length; i++) {
+            // eslint-disable-next-line security/detect-object-injection
             const track = tracksForLastFm[i]
 
             try {
@@ -1857,11 +1859,12 @@ async function executeSpotifyToolWithProgress(
             type: 'thinking',
           })
 
-          const artistInfoMap = await lastfmService.batchGetArtistInfo(uniqueArtists, async (current, total) => {
+          const artistInfoMap = await lastfmService.batchGetArtistInfo(uniqueArtists, (current, total) => {
             // Report progress every 10 artists with simple message
             // Note: Narrator calls disabled here - concurrent ChatAnthropic instance creation fails
             if (current % 10 === 0 || current === total) {
-              sseWriter.writeAsync({
+              // Fire and forget - don't await, just queue the write
+              void sseWriter.writeAsync({
                 data: `🎤 Enriched ${current}/${total} artists...`,
                 type: 'thinking',
               })
@@ -1869,7 +1872,7 @@ async function executeSpotifyToolWithProgress(
           })
 
           // Step 7c: Attach artist info to track signals and update cache
-          for (const [trackId, signals] of signalsMap.entries()) {
+          for (const [_trackId, signals] of signalsMap.entries()) {
             const artistKey = signals.canonicalArtist.toLowerCase()
             if (artistInfoMap.has(artistKey)) {
               signals.artistInfo = artistInfoMap.get(artistKey)
@@ -2068,7 +2071,7 @@ chatStreamRouter.post('/message', async c => {
       logger.info('SSEWriter created, starting heartbeat')
 
       // Heartbeat to keep connection alive
-      const heartbeatInterval = setInterval(async () => {
+      const heartbeatInterval = setInterval(() => {
         if (abortController.signal.aborted) {
           clearInterval(heartbeatInterval)
           return
@@ -2933,14 +2936,14 @@ chatStreamRouter.get('/events', async c => {
 
   // Simple heartbeat to demonstrate connection
   const processStream = async () => {
-    const heartbeatInterval = setInterval(async () => {
+    const heartbeatInterval = setInterval(() => {
       if (abortController.signal.aborted) {
         clearInterval(heartbeatInterval)
         return
       }
       try {
         await writer.write(encoder.encode(': heartbeat\n\n'))
-      } catch (error) {
+      } catch {
         clearInterval(heartbeatInterval)
       }
     }, 15000)

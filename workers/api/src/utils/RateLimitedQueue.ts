@@ -8,6 +8,8 @@
  * - Guards onResult so callback errors don't poison the loop
  */
 
+import {z} from 'zod'
+
 export interface QueueOptions {
   burst?: number // max tokens, default = rate
   concurrency?: number // parallel tasks, default 1
@@ -80,7 +82,7 @@ export class RateLimitedQueue<T> {
     this.processing = true
 
     const total = this.queue.length
-    const results: (null | T)[] = Array(total)
+    const results: (null | T)[] = Array.from({length: total}, () => null)
     let issued = 0 // number of tasks taken from queue & assigned an index
     let finished = 0 // number of tasks completed
 
@@ -119,7 +121,7 @@ export class RateLimitedQueue<T> {
       } catch (err) {
         // mirror your original: push null on failure
         // eslint-disable-next-line security/detect-object-injection -- Safe: index is a controlled integer from task queue
-        results[index] = null as T
+        results[index] = null
         if (onResult) {
           try {
             await onResult(null, index, total)
@@ -151,12 +153,14 @@ export class RateLimitedQueue<T> {
         return Math.max(this.minTickMs, wait + jitter)
       }
 
-      this.timer = setTimeout(tick, nextWakeMs()) as unknown as number
+      this.timer = toTimerId(setTimeout(tick, nextWakeMs()))
     }
 
     const clearIfSet = () => {
       if (this.timer !== null) {
-        clearTimeout(this.timer as unknown as number)
+        if (isValidTimerId(this.timer)) {
+          clearTimeout(this.timer)
+        }
         this.timer = null
       }
     }
@@ -201,7 +205,7 @@ export class RateLimitedQueue<T> {
       }
       // If there are still tasks to issue and we have capacity/tokens, tick with minTickMs
       if (this.running < this.concurrency && issued < total) {
-        this.timer ??= setTimeout(tick, this.minTickMs) as unknown as number
+        this.timer ??= toTimerId(setTimeout(tick, this.minTickMs))
       }
     }
 
@@ -254,7 +258,7 @@ export class RateLimitedQueue<T> {
     this.processing = true
     console.log('[RateLimitedQueue] Continuous processing started')
 
-    const globalIndex = 0
+    // globalIndex reserved for future use with continuous processing
 
     // Internal: refill tokens from elapsed time
     const refill = () => {
@@ -305,12 +309,14 @@ export class RateLimitedQueue<T> {
         return Math.max(this.minTickMs, wait + jitter)
       }
 
-      this.timer = setTimeout(tick, nextWakeMs()) as unknown as number
+      this.timer = toTimerId(setTimeout(tick, nextWakeMs()))
     }
 
     const clearIfSet = () => {
       if (this.timer !== null) {
-        clearTimeout(this.timer as unknown as number)
+        if (isValidTimerId(this.timer)) {
+          clearTimeout(this.timer)
+        }
         this.timer = null
       }
     }
@@ -349,7 +355,7 @@ export class RateLimitedQueue<T> {
     const kick = () => {
       // If there are tasks and we have capacity, tick immediately
       if (this.running < this.concurrency && this.queue.length > 0) {
-        this.timer ??= setTimeout(tick, this.minTickMs) as unknown as number
+        this.timer ??= toTimerId(setTimeout(tick, this.minTickMs))
       }
     }
 
@@ -374,4 +380,18 @@ export class RateLimitedQueue<T> {
   private clearTimer(): void {
     /* empty */
   }
+}
+
+// Type guard for timer IDs (setTimeout return value in Cloudflare Workers)
+const TimerIdSchema = z.number()
+
+function isValidTimerId(value: unknown): value is number {
+  return TimerIdSchema.safeParse(value).success
+}
+
+function toTimerId(value: unknown): number {
+  if (isValidTimerId(value)) {
+    return value
+  }
+  throw new Error(`Invalid timer ID: ${typeof value}`)
 }

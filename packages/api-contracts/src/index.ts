@@ -68,7 +68,7 @@ export function buildApiApp() {
         </body>
       </html>
     `
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+     
     return c.html(html)
   })
 

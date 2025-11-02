@@ -22,9 +22,26 @@
  * ```
  */
 
+import {z} from 'zod'
+
 import type {ServiceLogger} from './ServiceLogger'
 
 import {globalOrchestrator} from './RequestOrchestrator'
+
+// Error details schema for structured error logging
+const ErrorDetailsSchema = z.object({
+  code: z.number().optional(),
+  context: z.string().optional(),
+  message: z.string().optional(),
+  name: z.string().optional(),
+  status: z.number().optional(),
+})
+
+type ErrorDetails = z.infer<typeof ErrorDetailsSchema>
+
+// Schema for errors that may have status/code properties
+const ErrorWithStatusSchema = z.object({status: z.number()})
+const ErrorWithCodeSchema = z.object({code: z.number()})
 
 /**
  * Get the global orchestrator instance
@@ -52,13 +69,7 @@ export async function rateLimitedAnthropicCall<T>(
       return result
     } catch (error) {
       const duration = performance.now() - start
-      const errorDetails: any = {context}
-      if (error instanceof Error) {
-        errorDetails.message = error.message
-        errorDetails.name = error.name
-        if ('status' in error) errorDetails.status = (error as any).status
-        if ('code' in error) errorDetails.code = (error as any).code
-      }
+      const errorDetails = buildErrorDetails(error, context)
       logger?.error(`Anthropic API call failed after ${duration.toFixed(0)}ms`, error, errorDetails)
       throw error
     }
@@ -138,4 +149,34 @@ export async function rateLimitedSpotifyCall<T>(
       throw error
     }
   }, 'spotify')
+}
+
+// Helper to build error details from an error
+function buildErrorDetails(error: unknown, context?: string): ErrorDetails {
+  const details: ErrorDetails = {context}
+
+  if (error instanceof Error) {
+    details.message = error.message
+    details.name = error.name
+  }
+
+  if (hasStatus(error)) {
+    details.status = error.status
+  }
+
+  if (hasCode(error)) {
+    details.code = error.code
+  }
+
+  return ErrorDetailsSchema.parse(details)
+}
+
+// Type guard for errors with code property using Zod
+function hasCode(error: unknown): error is {code: number} {
+  return ErrorWithCodeSchema.safeParse(error).success
+}
+
+// Type guard for errors with status property using Zod
+function hasStatus(error: unknown): error is {status: number} {
+  return ErrorWithStatusSchema.safeParse(error).success
 }

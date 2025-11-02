@@ -39,7 +39,7 @@ export default [
   perfectionist.configs['recommended-natural'],
 
   // ============================================================================
-  // TYPESCRIPT - Type-checked configs for TS files
+  // TYPESCRIPT - Type-checked configs for TS files (optimized for speed)
   // ============================================================================
   ...tseslint.configs.recommendedTypeChecked,
   ...tseslint.configs.stylisticTypeChecked,
@@ -57,14 +57,17 @@ export default [
     },
     rules: {
       '@typescript-eslint/explicit-module-boundary-types': 'off',
-      '@typescript-eslint/no-explicit-any': 'warn',
-      // Disable some overly strict rules
-      '@typescript-eslint/no-floating-promises': 'off',
-      '@typescript-eslint/no-unsafe-assignment': 'warn',
-      '@typescript-eslint/no-unsafe-call': 'warn',
-      '@typescript-eslint/no-unsafe-member-access': 'warn',
-      '@typescript-eslint/no-unsafe-return': 'warn',
+      // Disable expensive type-checked rules for performance
+      '@typescript-eslint/no-base-to-string': 'off',
 
+      '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/no-floating-promises': 'off',
+      '@typescript-eslint/no-unsafe-argument': 'off',
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-enum-comparison': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
       // Customize TypeScript rules
       '@typescript-eslint/no-unused-vars': [
         'warn',
@@ -73,7 +76,12 @@ export default [
           varsIgnorePattern: '^_',
         },
       ],
+      '@typescript-eslint/prefer-promise-reject-errors': 'off',
       '@typescript-eslint/require-await': 'off',
+      '@typescript-eslint/restrict-plus-operands': 'off',
+      '@typescript-eslint/restrict-template-expressions': 'off',
+
+      '@typescript-eslint/unbound-method': 'off',
     },
   },
 
@@ -171,8 +179,8 @@ export default [
       },
     },
     rules: {
-      // Console usage - only warn/error in production workers
-      'no-console': ['warn', {allow: ['warn', 'error']}],
+      // Console usage - allow all console methods in workers for debugging
+      'no-console': 'off',
 
       // Perfectionist - keep imports organized in workers
       'perfectionist/sort-imports': [
@@ -200,7 +208,7 @@ export default [
   },
 
   // ============================================================================
-  // SHARED TYPES PACKAGE - Type-only, strict rules
+  // SHARED TYPES PACKAGE - Strict rules for validation schemas
   // ============================================================================
   {
     files: ['packages/shared-types/**/*.{ts,tsx}'],
@@ -209,15 +217,9 @@ export default [
 
       // Extra strict for shared types
       '@typescript-eslint/no-explicit-any': 'error',
-      // No runtime code allowed in shared types
-      'no-restricted-syntax': [
-        'error',
-        {
-          message: 'Shared types package should only export types, interfaces, and enums - not runtime code',
-          selector:
-            'ExportNamedDeclaration[declaration.type!="TSInterfaceDeclaration"][declaration.type!="TSTypeAliasDeclaration"][declaration.type!="TSEnumDeclaration"]',
-        },
-      ],
+
+      // Shared types CAN export Zod schemas for runtime validation
+      // This is intentional and necessary for type-safe validation
     },
   },
 

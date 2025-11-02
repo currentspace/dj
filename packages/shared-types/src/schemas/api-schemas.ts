@@ -4,6 +4,7 @@
  */
 
 import {z} from 'zod'
+
 import {SpotifyPlaylistSimpleSchema} from './spotify-schemas'
 
 // ===== Error Response =====
@@ -118,17 +119,17 @@ export type ChatMessage = z.infer<typeof ChatMessageSchema>
 export type ChatRequest = z.infer<typeof ChatRequestSchema>
 export type ChatResponse = z.infer<typeof ChatResponseSchema>
 
-export type Track = z.infer<typeof TrackSchema>
-export type Playlist = z.infer<typeof PlaylistSchema>
 export type GeneratePlaylistRequest = z.infer<typeof GeneratePlaylistRequestSchema>
 export type GeneratePlaylistResponse = z.infer<typeof GeneratePlaylistResponseSchema>
+export type Playlist = z.infer<typeof PlaylistSchema>
 export type SavePlaylistRequest = z.infer<typeof SavePlaylistRequestSchema>
 export type SavePlaylistResponse = z.infer<typeof SavePlaylistResponseSchema>
-
 export type SpotifyAuthResponse = z.infer<typeof SpotifyAuthResponseSchema>
+
 export type SpotifySearchRequest = z.infer<typeof SpotifySearchRequestSchema>
+export type SpotifyWebhookPayload = z.infer<typeof SpotifyWebhookPayloadSchema>
+
+export type Track = z.infer<typeof TrackSchema>
 
 export type UserPlaylistsResponse = z.infer<typeof UserPlaylistsResponseSchema>
-
-export type SpotifyWebhookPayload = z.infer<typeof SpotifyWebhookPayloadSchema>
 export type WebhookEvent = z.infer<typeof WebhookEventSchema>

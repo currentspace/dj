@@ -1,5 +1,8 @@
 import {z} from 'zod'
 
+// Safe parse result type
+export type SafeParseResult<T> = {data: null; error: z.ZodError; success: false} | {data: T; error: null; success: true}
+
 // Response helper with proper status typing
 export function createErrorResponse(message: string, status: 400 | 401 | 404 | 500 = 500) {
   return {error: message, status}
@@ -17,19 +20,6 @@ export function createTypeGuard<T>(schema: z.ZodSchema<T>) {
   }
 }
 
-// Type predicate for checking if response is ok
-export function isSuccessResponse(response: Response): response is Response & {ok: true} {
-  return response.ok
-}
-
-// HTTP Status type guard
-export function isValidHttpStatus(status: number): status is 200 | 201 | 400 | 401 | 404 | 500 {
-  return [200, 201, 400, 401, 404, 500].includes(status)
-}
-
-// Safe parse result type
-export type SafeParseResult<T> = {data: null; error: z.ZodError; success: false} | {data: T; error: null; success: true}
-
 // Format Zod error for logging/display
 export function formatZodError(error: z.ZodError): string {
   return error.errors
@@ -38,6 +28,16 @@ export function formatZodError(error: z.ZodError): string {
       return `${path ? `${path}: ` : ''}${err.message}`
     })
     .join(', ')
+}
+
+// Type predicate for checking if response is ok
+export function isSuccessResponse(response: Response): response is Response & {ok: true} {
+  return response.ok
+}
+
+// HTTP Status type guard
+export function isValidHttpStatus(status: number): status is 200 | 201 | 400 | 401 | 404 | 500 {
+  return [200, 201, 400, 401, 404, 500].includes(status)
 }
 
 // Safe parser that returns SafeParseResult with error details

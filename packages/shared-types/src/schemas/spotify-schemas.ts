@@ -18,8 +18,8 @@ export const SpotifyExternalUrlsSchema = z.object({
 })
 
 export const SpotifyExternalIdsSchema = z.object({
-  isrc: z.string().optional(),
   ean: z.string().optional(),
+  isrc: z.string().optional(),
   upc: z.string().optional(),
 })
 
@@ -199,7 +199,17 @@ export const SpotifyPlaylistFullSchema = SpotifyPlaylistSimpleSchema.extend({
 
 // ===== Paging Objects =====
 
-export const SpotifyPagingSchema = <T extends z.ZodTypeAny>(itemSchema: T) =>
+export const SpotifyPagingSchema = <T extends z.ZodTypeAny>(
+  itemSchema: T,
+): z.ZodObject<{
+  href: z.ZodString
+  items: z.ZodArray<T>
+  limit: z.ZodNumber
+  next: z.ZodNullable<z.ZodString>
+  offset: z.ZodNumber
+  previous: z.ZodNullable<z.ZodString>
+  total: z.ZodNumber
+}> =>
   z.object({
     href: z.string().url(),
     items: z.array(itemSchema),
@@ -309,18 +319,18 @@ export const SpotifyErrorSchema = z.object({
 
 // ===== Type Exports =====
 
-export type SpotifyImage = z.infer<typeof SpotifyImageSchema>
-export type SpotifyArtistSimple = z.infer<typeof SpotifyArtistSimpleSchema>
-export type SpotifyArtistFull = z.infer<typeof SpotifyArtistFullSchema>
-export type SpotifyAlbumSimple = z.infer<typeof SpotifyAlbumSimpleSchema>
 export type SpotifyAlbumFull = z.infer<typeof SpotifyAlbumFullSchema>
-export type SpotifyTrackSimple = z.infer<typeof SpotifyTrackSimpleSchema>
-export type SpotifyTrackFull = z.infer<typeof SpotifyTrackFullSchema>
+export type SpotifyAlbumSimple = z.infer<typeof SpotifyAlbumSimpleSchema>
+export type SpotifyArtistFull = z.infer<typeof SpotifyArtistFullSchema>
+export type SpotifyArtistSimple = z.infer<typeof SpotifyArtistSimpleSchema>
 export type SpotifyAudioFeatures = z.infer<typeof SpotifyAudioFeaturesSchema>
-export type SpotifyPlaylistSimple = z.infer<typeof SpotifyPlaylistSimpleSchema>
+export type SpotifyImage = z.infer<typeof SpotifyImageSchema>
 export type SpotifyPlaylistFull = z.infer<typeof SpotifyPlaylistFullSchema>
+export type SpotifyPlaylistSimple = z.infer<typeof SpotifyPlaylistSimpleSchema>
 export type SpotifyPlaylistTrack = z.infer<typeof SpotifyPlaylistTrackSchema>
-export type SpotifyUser = z.infer<typeof SpotifyUserSchema>
-export type SpotifySearchResponse = z.infer<typeof SpotifySearchResponseSchema>
 export type SpotifyRecommendationsResponse = z.infer<typeof SpotifyRecommendationsResponseSchema>
+export type SpotifySearchResponse = z.infer<typeof SpotifySearchResponseSchema>
 export type SpotifyTokenResponse = z.infer<typeof SpotifyTokenResponseSchema>
+export type SpotifyTrackFull = z.infer<typeof SpotifyTrackFullSchema>
+export type SpotifyTrackSimple = z.infer<typeof SpotifyTrackSimpleSchema>
+export type SpotifyUser = z.infer<typeof SpotifyUserSchema>

@@ -1,22 +1,21 @@
-// Spotify Tools for Anthropic Function Calling
-import {z} from 'zod'
-
 import {
   SpotifyAlbumFullSchema,
   SpotifyAudioFeaturesBatchSchema,
   SpotifyAudioFeaturesSchema,
   SpotifyCreatePlaylistResponseSchema,
+  SpotifyPagingSchema,
   SpotifyPlaylistFullSchema,
   SpotifyPlaylistTracksResponseSchema,
-  SpotifyPagingSchema,
   SpotifyRecommendationsResponseSchema,
   SpotifySearchResponseSchema,
   SpotifyTrackFullSchema,
   SpotifyUserSchema,
 } from '@dj/shared-types'
+// Spotify Tools for Anthropic Function Calling
+import {z} from 'zod'
 
-import {formatZodError, safeParse} from './guards'
 import {rateLimitedSpotifyCall} from '../utils/RateLimitedAPIClients'
+import {formatZodError, safeParse} from './guards'
 
 // Tool schemas
 export const SearchTracksSchema = z.object({
@@ -380,7 +379,7 @@ async function analyzePlaylist(args: any, token: string) {
   }
 
   // Get audio features
-  let audioFeatures: (z.infer<typeof SpotifyAudioFeaturesSchema> | null)[] = []
+  let audioFeatures: (null | z.infer<typeof SpotifyAudioFeaturesSchema>)[] = []
   if (trackIds.length > 0) {
     console.log(`[analyzePlaylist] Fetching audio features for ${trackIds.length} tracks...`)
     const featuresResponse = await rateLimitedSpotifyCall(
@@ -610,7 +609,7 @@ async function getAlbumInfo(args: any, token: string) {
   // Get track IDs for audio features
   const trackIds = album.tracks?.items?.map(t => t.id).filter(Boolean) ?? []
 
-  let audioFeatures: (z.infer<typeof SpotifyAudioFeaturesSchema> | null)[] = []
+  let audioFeatures: (null | z.infer<typeof SpotifyAudioFeaturesSchema>)[] = []
   if (trackIds.length > 0) {
     const featuresResponse = await rateLimitedSpotifyCall(
       () =>
@@ -996,6 +995,7 @@ async function searchSpotifyTracks(
     const features = await getAudioFeatures({track_ids: trackIds}, token)
 
     return tracks.filter((_track, index) => {
+      // eslint-disable-next-line security/detect-object-injection
       const feature = features[index]
       if (!feature) return true
 

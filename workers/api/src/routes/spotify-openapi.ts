@@ -6,7 +6,6 @@
 import type {OpenAPIHono} from '@hono/zod-openapi'
 
 import {exchangeSpotifyToken, getSpotifyAuthUrl, handleSpotifyCallback, searchSpotify} from '@dj/api-contracts'
-
 import {parse, SpotifySearchResponseSchema, SpotifyTokenResponseSchema} from '@dj/shared-types'
 
 import type {Env} from '../index'
@@ -17,61 +16,13 @@ const SPOTIFY_AUTH_URL = 'https://accounts.spotify.com/authorize'
 const SPOTIFY_TOKEN_URL = 'https://accounts.spotify.com/api/token'
 const REDIRECT_URI = 'https://dj.current.space/api/spotify/callback'
 
-// PKCE helper functions
-function generateCodeVerifier(): string {
-  const array = new Uint8Array(32)
-  crypto.getRandomValues(array)
-  return btoa(String.fromCharCode.apply(null, Array.from(array)))
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=/g, '')
-}
-
-async function generateCodeChallenge(verifier: string): Promise<string> {
-  const encoder = new TextEncoder()
-  const data = encoder.encode(verifier)
-  const digest = await crypto.subtle.digest('SHA-256', data)
-  return btoa(String.fromCharCode.apply(null, Array.from(new Uint8Array(digest))))
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=/g, '')
-}
-
-// Base64URL helpers (URL-safe encoding)
-function base64urlEncode(data: string): string {
-  return btoa(data).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
-}
-
-function base64urlDecode(data: string): string {
-  const pad = data.length % 4
-  const padded = data + '='.repeat(pad === 0 ? 0 : 4 - pad)
-  return atob(padded.replace(/-/g, '+').replace(/_/g, '/'))
-}
-
-// HMAC helper for cookie integrity
-async function hmacSign(data: string, key: string): Promise<string> {
-  const encoder = new TextEncoder()
-  const keyData = encoder.encode(key)
-  const dataBuffer = encoder.encode(data)
-
-  const cryptoKey = await crypto.subtle.importKey('raw', keyData, {hash: 'SHA-256', name: 'HMAC'}, false, ['sign'])
-
-  const signature = await crypto.subtle.sign('HMAC', cryptoKey, dataBuffer)
-  return base64urlEncode(String.fromCharCode(...new Uint8Array(signature)))
-}
-
-async function hmacVerify(data: string, signature: string, key: string): Promise<boolean> {
-  const expectedSignature = await hmacSign(data, key)
-  return expectedSignature === signature
-}
-
 /**
  * Register Spotify auth routes on the provided OpenAPI app
  */
 export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
   // GET /api/spotify/auth-url - Generate OAuth URL with PKCE
   app.openapi(getSpotifyAuthUrl, async c => {
-    const env = c.env as Env
+    const env = c.env
 
     const codeVerifier = generateCodeVerifier()
     const codeChallenge = await generateCodeChallenge(codeVerifier)
@@ -113,7 +64,7 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
 
   // GET /api/spotify/callback - OAuth callback handler
   app.openapi(handleSpotifyCallback, async c => {
-    const env = c.env as Env
+    const env = c.env
 
     try {
       // Query params automatically validated by contract
@@ -219,7 +170,7 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
 
   // POST /api/spotify/token - Exchange authorization code for token
   app.openapi(exchangeSpotifyToken, async c => {
-    const env = c.env as Env
+    const env = c.env
 
     try {
       // Request body automatically validated by contract
@@ -328,4 +279,52 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       return c.json({error: message}, 401)
     }
   })
+}
+
+function base64urlDecode(data: string): string {
+  const pad = data.length % 4
+  const padded = data + '='.repeat(pad === 0 ? 0 : 4 - pad)
+  return atob(padded.replace(/-/g, '+').replace(/_/g, '/'))
+}
+
+// Base64URL helpers (URL-safe encoding)
+function base64urlEncode(data: string): string {
+  return btoa(data).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
+}
+
+async function generateCodeChallenge(verifier: string): Promise<string> {
+  const encoder = new TextEncoder()
+  const data = encoder.encode(verifier)
+  const digest = await crypto.subtle.digest('SHA-256', data)
+  return btoa(String.fromCharCode.apply(null, Array.from(new Uint8Array(digest))))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '')
+}
+
+// PKCE helper functions
+function generateCodeVerifier(): string {
+  const array = new Uint8Array(32)
+  crypto.getRandomValues(array)
+  return btoa(String.fromCharCode.apply(null, Array.from(array)))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '')
+}
+
+// HMAC helper for cookie integrity
+async function hmacSign(data: string, key: string): Promise<string> {
+  const encoder = new TextEncoder()
+  const keyData = encoder.encode(key)
+  const dataBuffer = encoder.encode(data)
+
+  const cryptoKey = await crypto.subtle.importKey('raw', keyData, {hash: 'SHA-256', name: 'HMAC'}, false, ['sign'])
+
+  const signature = await crypto.subtle.sign('HMAC', cryptoKey, dataBuffer)
+  return base64urlEncode(String.fromCharCode(...new Uint8Array(signature)))
+}
+
+async function hmacVerify(data: string, signature: string, key: string): Promise<boolean> {
+  const expectedSignature = await hmacSign(data, key)
+  return expectedSignature === signature
 }

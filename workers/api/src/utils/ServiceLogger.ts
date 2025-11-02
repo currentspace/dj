@@ -13,7 +13,7 @@ type LogLevel = 'debug' | 'error' | 'info' | 'warn'
 
 // Simple interface for SSEWriter (to avoid circular dependency)
 interface SSEWriter {
-  write(event: {data: any; type: string}): Promise<void>
+  write(event: {data: unknown; type: string}): Promise<void>
 }
 
 export class ServiceLogger {
@@ -35,14 +35,14 @@ export class ServiceLogger {
   /**
    * Log a debug message (only in development)
    */
-  debug(message: string, data?: Record<string, any>): void {
+  debug(message: string, data?: Record<string, unknown>): void {
     this.log('debug', message, data)
   }
 
   /**
    * Log an error message
    */
-  error(message: string, error?: any | Error, data?: Record<string, any>): void {
+  error(message: string, error?: unknown, data?: Record<string, unknown>): void {
     const errorData =
       error instanceof Error ? {error: error.message, stack: error.stack, ...data} : {error: String(error), ...data}
     this.log('error', message, errorData)
@@ -51,21 +51,21 @@ export class ServiceLogger {
   /**
    * Log an info message
    */
-  info(message: string, data?: Record<string, any>): void {
+  info(message: string, data?: Record<string, unknown>): void {
     this.log('info', message, data)
   }
 
   /**
    * Log a warning message
    */
-  warn(message: string, data?: Record<string, any>): void {
+  warn(message: string, data?: Record<string, unknown>): void {
     this.log('warn', message, data)
   }
 
   /**
    * Core logging method
    */
-  private log(level: LogLevel, message: string, data?: Record<string, any>): void {
+  private log(level: LogLevel, message: string, data?: Record<string, unknown>): void {
     // Format message with service name
     const formattedMessage = `[${this.serviceName}] ${message}`
 

@@ -85,18 +85,18 @@ export const StreamEventSchema = z.discriminatedUnion('type', [
 
 // ===== Type Exports =====
 
-export type StreamDebugData = z.infer<typeof StreamDebugDataSchema>
-export type StreamLogData = z.infer<typeof StreamLogDataSchema>
-export type StreamToolData = z.infer<typeof StreamToolDataSchema>
-export type StreamToolResult = z.infer<typeof StreamToolResultSchema>
-
 export type StreamContentEvent = z.infer<typeof StreamContentEventSchema>
-export type StreamThinkingEvent = z.infer<typeof StreamThinkingEventSchema>
-export type StreamToolStartEvent = z.infer<typeof StreamToolStartEventSchema>
-export type StreamToolEndEvent = z.infer<typeof StreamToolEndEventSchema>
-export type StreamLogEvent = z.infer<typeof StreamLogEventSchema>
+export type StreamDebugData = z.infer<typeof StreamDebugDataSchema>
 export type StreamDebugEvent = z.infer<typeof StreamDebugEventSchema>
-export type StreamErrorEvent = z.infer<typeof StreamErrorEventSchema>
 export type StreamDoneEvent = z.infer<typeof StreamDoneEventSchema>
 
+export type StreamErrorEvent = z.infer<typeof StreamErrorEventSchema>
 export type StreamEvent = z.infer<typeof StreamEventSchema>
+export type StreamLogData = z.infer<typeof StreamLogDataSchema>
+export type StreamLogEvent = z.infer<typeof StreamLogEventSchema>
+export type StreamThinkingEvent = z.infer<typeof StreamThinkingEventSchema>
+export type StreamToolData = z.infer<typeof StreamToolDataSchema>
+export type StreamToolEndEvent = z.infer<typeof StreamToolEndEventSchema>
+export type StreamToolResult = z.infer<typeof StreamToolResultSchema>
+
+export type StreamToolStartEvent = z.infer<typeof StreamToolStartEventSchema>
