@@ -40,6 +40,12 @@ export function isValidHttpStatus(status: number): status is 200 | 201 | 400 | 4
   return [200, 201, 400, 401, 404, 500].includes(status)
 }
 
+// Parse data with Zod schema or throw detailed error
+// Use when you want to crash fast on invalid data
+export function parse<T>(schema: z.ZodSchema<T>, data: unknown): T {
+  return schema.parse(data)
+}
+
 // Safe parser that returns SafeParseResult with error details
 export function safeParse<T>(schema: z.ZodSchema<T>, data: unknown): SafeParseResult<T> {
   const result = schema.safeParse(data)
