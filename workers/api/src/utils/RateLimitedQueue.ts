@@ -106,6 +106,7 @@ export class RateLimitedQueue<T> {
       this.running++;
       try {
         const value = await task();
+        // eslint-disable-next-line security/detect-object-injection -- Safe: index is a controlled integer from task queue
         results[index] = value;
         // Guard the callback
         if (onResult) {
@@ -113,6 +114,7 @@ export class RateLimitedQueue<T> {
         }
       } catch (err) {
         // mirror your original: push null on failure
+        // eslint-disable-next-line security/detect-object-injection -- Safe: index is a controlled integer from task queue
         results[index] = null as T;
         if (onResult) {
           try { await onResult(null, index, total); } catch { /* swallow */ }
@@ -167,6 +169,7 @@ export class RateLimitedQueue<T> {
         this.tokens -= 1;
 
         // Pull next task and remember its enqueue order index
+        // eslint-disable-next-line security/detect-object-injection -- Safe: issued is a controlled counter for queue access
         const task = this.queue[issued]; // preserve order by index
         const index = issued;
         issued++;
