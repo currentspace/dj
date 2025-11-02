@@ -110,8 +110,8 @@ function convertPropertyToZod(propSchema: any): z.ZodSchema {
     case 'boolean':
       return z.boolean();
     case 'integer':
-
-    case 'number':
+      // falls through
+    case 'number': {
       let numberSchema = z.number();
       if (propSchema.type === 'integer') {
         numberSchema = numberSchema.int();
@@ -126,11 +126,12 @@ function convertPropertyToZod(propSchema: any): z.ZodSchema {
         numberSchema = numberSchema.describe(propSchema.description);
       }
       return numberSchema;
+    }
 
     case 'object':
       return convertJsonSchemaToZod(propSchema);
 
-    case 'string':
+    case 'string': {
       let stringSchema = z.string();
       if (propSchema.minLength) {
         stringSchema = stringSchema.min(propSchema.minLength);
@@ -149,6 +150,7 @@ function convertPropertyToZod(propSchema: any): z.ZodSchema {
         stringSchema = stringSchema.describe(propSchema.description);
       }
       return stringSchema;
+    }
 
     default:
       return z.any();

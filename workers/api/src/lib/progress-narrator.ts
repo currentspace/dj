@@ -200,13 +200,14 @@ export class ProgressNarrator {
 
     // Add specific details based on event type
     switch (context.eventType) {
-      case 'adding_tracks':
+      case 'adding_tracks': {
         const added = context.metadata?.addedTracks ?? 0;
         const totalTracks = context.metadata?.totalTracks ?? 0;
         parts.push(`\nAdding ${added} of ${totalTracks} tracks`);
         break;
+      }
 
-      case 'analyzing_audio':
+      case 'analyzing_audio': {
         const trackName = context.metadata?.trackName;
         const current = context.metadata?.currentTrack;
         const total = context.metadata?.trackCount;
@@ -217,6 +218,7 @@ export class ProgressNarrator {
           parts.push(`\nTrack: "${trackName}"`);
         }
         break;
+      }
 
       case 'analyzing_request':
         parts.push('\nUnderstanding what kind of music they want');
@@ -232,7 +234,7 @@ export class ProgressNarrator {
         }
         break;
 
-      case 'enriching_artists':
+      case 'enriching_artists': {
         const artistsEnriched = context.metadata?.enrichedCount ?? 0;
         const artistsTotal = context.metadata?.totalArtists ?? 0;
         const recentArtist = context.metadata?.recentArtistName;
@@ -243,8 +245,9 @@ export class ProgressNarrator {
           parts.push(`\nLearning about: ${recentArtist}`);
         }
         break;
+      }
 
-      case 'enriching_tracks':
+      case 'enriching_tracks': {
         const enriched = context.metadata?.enrichedCount ?? 0;
         const enrichTotal = context.metadata?.totalTracks ?? 0;
         const recentTags = context.metadata?.recentTags;
@@ -263,6 +266,7 @@ export class ProgressNarrator {
           parts.push(`\nJust analyzed: "${recentTrack}"`);
         }
         break;
+      }
 
       case 'searching_tracks':
         if (context.parameters?.query) {
