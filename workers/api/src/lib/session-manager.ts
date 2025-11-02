@@ -50,7 +50,7 @@ export class SessionManager {
       userId,
     };
 
-    console.log(`[Session] Creating session ${sessionToken.substring(0, 8)}... for user ${userId || 'unknown'}`);
+    console.log(`[Session] Creating session ${sessionToken.substring(0, 8)}... for user ${userId ?? 'unknown'}`);
 
     // Store in memory for fast access
     this.memory.set(sessionToken, session);

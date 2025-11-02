@@ -161,13 +161,13 @@ export class ChatStreamClient {
       }
 
       // Validate content-type
-      const contentType = response.headers.get('content-type') || '';
+      const contentType = response.headers.get('content-type') ?? '';
       if (!contentType.includes('text/event-stream')) {
         // Try to get error details if server sent JSON
         const errorText = await response.text().catch(() => '');
         try {
           const json = JSON.parse(errorText);
-          throw new Error(json.error || json.message || JSON.stringify(json));
+          throw new Error(json.error ?? json.message ?? JSON.stringify(json));
         } catch {
           throw new Error(`Unexpected content-type: ${contentType}${errorText ? `. Response: ${errorText.slice(0, 300)}` : ''}`);
         }
@@ -191,7 +191,7 @@ export class ChatStreamClient {
         const events = normalizedBuffer.split('\n\n');
 
         // Keep the last incomplete event in the buffer
-        buffer = events.pop() || '';
+        buffer = events.pop() ?? '';
 
         for (const eventBlock of events) {
           if (!eventBlock.trim()) continue;
