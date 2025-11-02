@@ -104,8 +104,8 @@ importers:
         specifier: workspace:*
         version: link:../shared-types
       hono:
-        specifier: ^4.9.8
-        version: 4.9.8
+        specifier: ^4.10.4
+        version: 4.10.4
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -124,10 +124,10 @@ importers:
         version: link:../shared-types
       '@hono/zod-openapi':
         specifier: ^1.1.4
-        version: 1.1.4(hono@4.9.8)(zod@3.25.76)
+        version: 1.1.4(hono@4.10.4)(zod@3.25.76)
       hono:
-        specifier: ^4.9.0
-        version: 4.9.8
+        specifier: ^4.10.4
+        version: 4.10.4
       zod:
         specifier: ^3.25.0
         version: 3.25.76
@@ -162,10 +162,10 @@ importers:
         version: link:../../packages/shared-types
       '@hono/swagger-ui':
         specifier: ^0.5.2
-        version: 0.5.2(hono@4.9.8)
+        version: 0.5.2(hono@4.10.4)
       '@hono/zod-openapi':
         specifier: ^1.1.4
-        version: 1.1.4(hono@4.9.8)(zod@3.25.76)
+        version: 1.1.4(hono@4.10.4)(zod@3.25.76)
       '@langchain/anthropic':
         specifier: ^0.3.30
         version: 0.3.30(@langchain/core@0.3.77(openai@5.12.2(ws@8.18.0)(zod@3.25.76)))(zod@3.25.76)
@@ -176,8 +176,8 @@ importers:
         specifier: ^0.6.0
         version: 0.6.0(@langchain/core@0.3.77(openai@5.12.2(ws@8.18.0)(zod@3.25.76)))
       hono:
-        specifier: ^4.9.8
-        version: 4.9.8
+        specifier: ^4.10.4
+        version: 4.10.4
       langchain:
         specifier: ^0.3.34
         version: 0.3.34(@langchain/anthropic@0.3.30(@langchain/core@0.3.77(openai@5.12.2(ws@8.18.0)(zod@3.25.76)))(zod@3.25.76))(@langchain/core@0.3.77(openai@5.12.2(ws@8.18.0)(zod@3.25.76)))(openai@5.12.2(ws@8.18.0)(zod@3.25.76))(ws@8.18.0)
@@ -207,8 +207,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/shared-types
       hono:
-        specifier: ^4.9.8
-        version: 4.9.8
+        specifier: ^4.10.4
+        version: 4.10.4
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -2397,8 +2397,8 @@ packages:
   hermes-parser@0.25.1:
     resolution: {integrity: sha512-6pEjquH3rqaI6cYAXYPcz9MS4rY6R4ngRgrgfDshRptUZIc3lw0MCIJIGDj9++mfySOuPTHB4nrSW99BCvOPIA==}
 
-  hono@4.9.8:
-    resolution: {integrity: sha512-JW8Bb4RFWD9iOKxg5PbUarBYGM99IcxFl2FPBo2gSJO11jjUDqlP1Bmfyqt8Z/dGhIQ63PMA9LdcLefXyIasyg==}
+  hono@4.10.4:
+    resolution: {integrity: sha512-YG/fo7zlU3KwrBL5vDpWKisLYiM+nVstBQqfr7gCPbSYURnNEP9BDxEMz8KfsDR9JX0lJWDRNc6nXX31v7ZEyg==}
     engines: {node: '>=16.9.0'}
 
   http-errors@2.0.0:
@@ -4322,21 +4322,21 @@ snapshots:
 
   '@floating-ui/utils@0.2.10': {}
 
-  '@hono/swagger-ui@0.5.2(hono@4.9.8)':
+  '@hono/swagger-ui@0.5.2(hono@4.10.4)':
     dependencies:
-      hono: 4.9.8
+      hono: 4.10.4
 
-  '@hono/zod-openapi@1.1.4(hono@4.9.8)(zod@3.25.76)':
+  '@hono/zod-openapi@1.1.4(hono@4.10.4)(zod@3.25.76)':
     dependencies:
       '@asteasolutions/zod-to-openapi': 8.1.0(zod@3.25.76)
-      '@hono/zod-validator': 0.7.4(hono@4.9.8)(zod@3.25.76)
-      hono: 4.9.8
+      '@hono/zod-validator': 0.7.4(hono@4.10.4)(zod@3.25.76)
+      hono: 4.10.4
       openapi3-ts: 4.5.0
       zod: 3.25.76
 
-  '@hono/zod-validator@0.7.4(hono@4.9.8)(zod@3.25.76)':
+  '@hono/zod-validator@0.7.4(hono@4.10.4)(zod@3.25.76)':
     dependencies:
-      hono: 4.9.8
+      hono: 4.10.4
       zod: 3.25.76
 
   '@humanfs/core@0.19.1': {}
@@ -6280,7 +6280,7 @@ snapshots:
     dependencies:
       hermes-estree: 0.25.1
 
-  hono@4.9.8: {}
+  hono@4.10.4: {}
 
   http-errors@2.0.0:
     dependencies:
