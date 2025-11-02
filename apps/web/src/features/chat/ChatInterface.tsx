@@ -1,63 +1,29 @@
-import { useState, useRef, useCallback, useTransition } from 'react'
-import { chatStreamClient } from '../../lib/streaming-client'
-import { flushSync } from 'react-dom'
 import type { ChatMessage, SpotifyPlaylist } from '@dj/shared-types'
+
+import { useCallback, useRef, useState, useTransition } from 'react'
+import { flushSync } from 'react-dom'
+
+import { chatStreamClient } from '../../lib/streaming-client'
 import '../../styles/streaming.css'
 import '../../styles/chat-interface.css'
 
 interface ChatInterfaceProps {
-  selectedPlaylist: SpotifyPlaylist | null;
+  selectedPlaylist: null | SpotifyPlaylist;
 }
 
 
 interface StreamingStatus {
-  isStreaming: boolean
   currentAction?: string
   currentTool?: string
+  isStreaming: boolean
   toolsUsed: string[]
 }
 
 
-// Tool status display component
-function StreamingStatusDisplay({ status }: { status: StreamingStatus }) {
-  if (!status.isStreaming && status.toolsUsed.length === 0) return null
-
-
-  return (
-    <div className="streaming-status">
-      {status.isStreaming && (
-        <div className="streaming-pulse">
-          <div className="pulse-ring"></div>
-          <div className="pulse-dot"></div>
-        </div>
-      )}
-      {status.currentAction && (
-        <div className="status-action">
-          <span className="status-icon">💭</span>
-          <span>{status.currentAction}</span>
-        </div>
-      )}
-      {status.currentTool && (
-        <div className="status-tool">
-          <span className="status-icon">🔧</span>
-          <span>Using: {status.currentTool}</span>
-        </div>
-      )}
-      {status.toolsUsed.length > 0 && (
-        <div className="status-tools-used">
-          <span className="status-icon">✅</span>
-          <span>Completed: {status.toolsUsed.join(', ')}</span>
-        </div>
-      )}
-
-    </div>
-  )
-}
-
 export function ChatInterface({ selectedPlaylist }: ChatInterfaceProps) {
   // Maintain separate conversation history per playlist
   const [conversationsByPlaylist, setConversationsByPlaylist] = useState<Map<string, ChatMessage[]>>(new Map())
-  const [currentPlaylistId, setCurrentPlaylistId] = useState<string | null>(null)
+  const [currentPlaylistId, setCurrentPlaylistId] = useState<null | string>(null)
   const [input, setInput] = useState('')
   const [mode, setMode] = useState<'analyze' | 'create' | 'edit'>('analyze')
   const [streamingStatus, setStreamingStatus] = useState<StreamingStatus>({
@@ -67,7 +33,7 @@ export function ChatInterface({ selectedPlaylist }: ChatInterfaceProps) {
   const [, setCurrentStreamContent] = useState('')
   const [isPending, startTransition] = useTransition()
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const streamHandleRef = useRef<{ close: () => void } | null>(null)
+  const streamHandleRef = useRef<null | { close: () => void }>(null)
 
   // Check if playlist changed - switch context immediately if so
   const playlistId = selectedPlaylist?.id || null
@@ -109,8 +75,8 @@ export function ChatInterface({ selectedPlaylist }: ChatInterfaceProps) {
     // Clear input and reset streaming state
     setInput('')
     setStreamingStatus({
-      isStreaming: true,
       currentAction: 'Processing your request...',
+      isStreaming: true,
       toolsUsed: []
     })
     setCurrentStreamContent('')
@@ -121,7 +87,7 @@ export function ChatInterface({ selectedPlaylist }: ChatInterfaceProps) {
         const newMap = new Map(prev)
         const playlistKey = playlistId || ''
         const currentMessages = newMap.get(playlistKey) || []
-        newMap.set(playlistKey, [...currentMessages, { role: 'user', content: displayMessage }])
+        newMap.set(playlistKey, [...currentMessages, { content: displayMessage, role: 'user' }])
         return newMap
       })
     })
@@ -133,31 +99,6 @@ export function ChatInterface({ selectedPlaylist }: ChatInterfaceProps) {
       messages,
       mode,
       {
-        onThinking: (message) => {
-          setStreamingStatus(prev => ({
-            ...prev,
-            currentAction: message,
-            currentTool: undefined
-          }))
-        },
-
-        onToolStart: (tool) => {
-          setStreamingStatus(prev => ({
-            ...prev,
-            currentTool: tool,
-            currentAction: `Running ${tool}...`
-          }))
-        },
-
-        onToolEnd: (tool, result) => {
-          setStreamingStatus(prev => ({
-            ...prev,
-            currentTool: undefined,
-            toolsUsed: [...prev.toolsUsed, tool],
-            currentAction: typeof result === 'string' ? result : `${tool} completed`
-          }))
-        },
-
         onContent: (content) => {
           setCurrentStreamContent(prev => {
             const newContent = prev + content
@@ -176,7 +117,7 @@ export function ChatInterface({ selectedPlaylist }: ChatInterfaceProps) {
                 ])
               } else {
                 // Add new assistant message
-                newMap.set(playlistKey, [...currentMessages, { role: 'assistant', content: newContent }])
+                newMap.set(playlistKey, [...currentMessages, { content: newContent, role: 'assistant' }])
               }
 
               return newMap
@@ -186,33 +127,58 @@ export function ChatInterface({ selectedPlaylist }: ChatInterfaceProps) {
           scrollToBottom()
         },
 
-        // onLog and onDebug are handled directly in streaming-client.ts
+        onDone: () => {
+          setStreamingStatus(prev => ({
+            ...prev,
+            currentAction: undefined,
+            currentTool: undefined,
+            isStreaming: false
+          }))
+          setCurrentStreamContent('')
+          scrollToBottom()
+        },
 
         onError: (error) => {
           setStreamingStatus(prev => ({
             ...prev,
-            isStreaming: false,
-            currentAction: undefined
+            currentAction: undefined,
+            isStreaming: false
           }))
           setConversationsByPlaylist(prevMap => {
             const newMap = new Map(prevMap)
             const playlistKey = playlistId || ''
             const currentMessages = newMap.get(playlistKey) || []
-            newMap.set(playlistKey, [...currentMessages, { role: 'assistant', content: `Error: ${error}` }])
+            newMap.set(playlistKey, [...currentMessages, { content: `Error: ${error}`, role: 'assistant' }])
             return newMap
           })
           scrollToBottom()
         },
 
-        onDone: () => {
+        onThinking: (message) => {
           setStreamingStatus(prev => ({
             ...prev,
-            isStreaming: false,
-            currentAction: undefined,
+            currentAction: message,
             currentTool: undefined
           }))
-          setCurrentStreamContent('')
-          scrollToBottom()
+        },
+
+        // onLog and onDebug are handled directly in streaming-client.ts
+
+        onToolEnd: (tool, result) => {
+          setStreamingStatus(prev => ({
+            ...prev,
+            currentAction: typeof result === 'string' ? result : `${tool} completed`,
+            currentTool: undefined,
+            toolsUsed: [...prev.toolsUsed, tool]
+          }))
+        },
+
+        onToolStart: (tool) => {
+          setStreamingStatus(prev => ({
+            ...prev,
+            currentAction: `Running ${tool}...`,
+            currentTool: tool
+          }))
         }
       }
     )
@@ -238,7 +204,7 @@ export function ChatInterface({ selectedPlaylist }: ChatInterfaceProps) {
         <div className="mode-selector">
           <label>
             Mode:
-            <select value={mode} onChange={(e) => handleModeChange(e.target.value as typeof mode)}>
+            <select onChange={(e) => handleModeChange(e.target.value as typeof mode)} value={mode}>
               <option value="analyze">Analyze Music</option>
               <option value="create">Create Playlist</option>
               <option value="edit">Edit Playlist</option>
@@ -270,7 +236,7 @@ export function ChatInterface({ selectedPlaylist }: ChatInterfaceProps) {
         )}
 
         {messages.map((message, index) => (
-          <div key={index} className={`message ${message.role}`}>
+          <div className={`message ${message.role}`} key={index}>
             <div className="message-role">
               {message.role === 'user' ? '👤' : '🎧'}
             </div>
@@ -294,10 +260,9 @@ export function ChatInterface({ selectedPlaylist }: ChatInterfaceProps) {
 
       <StreamingStatusDisplay status={streamingStatus} />
 
-      <form onSubmit={handleSubmit} className="chat-input-form">
+      <form className="chat-input-form" onSubmit={handleSubmit}>
         <input
-          type="text"
-          value={input}
+          disabled={streamingStatus.isStreaming || isPending}
           onChange={(e) => setInput(e.target.value)}
           placeholder={
             streamingStatus.isStreaming
@@ -308,12 +273,49 @@ export function ChatInterface({ selectedPlaylist }: ChatInterfaceProps) {
               ? "Ask me about any song, artist, or genre..."
               : "Tell me which playlist to edit and how..."
           }
-          disabled={streamingStatus.isStreaming || isPending}
+          type="text"
+          value={input}
         />
-        <button type="submit" disabled={streamingStatus.isStreaming || !input.trim()}>
+        <button disabled={streamingStatus.isStreaming || !input.trim()} type="submit">
           {streamingStatus.isStreaming ? 'Streaming...' : 'Send'}
         </button>
       </form>
+    </div>
+  )
+}
+
+// Tool status display component
+function StreamingStatusDisplay({ status }: { status: StreamingStatus }) {
+  if (!status.isStreaming && status.toolsUsed.length === 0) return null
+
+
+  return (
+    <div className="streaming-status">
+      {status.isStreaming && (
+        <div className="streaming-pulse">
+          <div className="pulse-ring"></div>
+          <div className="pulse-dot"></div>
+        </div>
+      )}
+      {status.currentAction && (
+        <div className="status-action">
+          <span className="status-icon">💭</span>
+          <span>{status.currentAction}</span>
+        </div>
+      )}
+      {status.currentTool && (
+        <div className="status-tool">
+          <span className="status-icon">🔧</span>
+          <span>Using: {status.currentTool}</span>
+        </div>
+      )}
+      {status.toolsUsed.length > 0 && (
+        <div className="status-tools-used">
+          <span className="status-icon">✅</span>
+          <span>Completed: {status.toolsUsed.join(', ')}</span>
+        </div>
+      )}
+
     </div>
   )
 }

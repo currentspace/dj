@@ -1,20 +1,14 @@
-import { startTransition } from 'react';
-import { apiClient } from '@dj/api-client';
-
 interface SpotifyAuthProps {
+  error: null | string;
+  isLoading: boolean;
+  onClearError: () => void;
   onLogin: () => void;
 }
 
-export function SpotifyAuth({ onLogin: _onLogin }: SpotifyAuthProps) {
-  const handleLogin = async () => {
-    try {
-      startTransition(async () => {
-        const authData = await apiClient.getSpotifyAuthUrl();
-        window.location.href = authData.url;
-      });
-    } catch (error) {
-      console.error('Failed to get auth URL:', error);
-    }
+export function SpotifyAuth({ onLogin, isLoading, error, onClearError }: SpotifyAuthProps) {
+  const handleLogin = (): void => {
+    onClearError();
+    onLogin();
   };
 
   return (
@@ -27,13 +21,34 @@ export function SpotifyAuth({ onLogin: _onLogin }: SpotifyAuthProps) {
           and save them directly to your library.
         </p>
 
+        {error && (
+          <div className="error-message" style={{ color: '#ff4444', marginBottom: '1rem' }}>
+            {error}
+            <button
+              onClick={onClearError}
+              style={{
+                marginLeft: '0.5rem',
+                background: 'transparent',
+                border: 'none',
+                color: '#ff4444',
+                cursor: 'pointer',
+                textDecoration: 'underline',
+              }}
+              type="button"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
+
         <button
-          onClick={handleLogin}
           className="spotify-login-btn"
+          onClick={handleLogin}
           type="button"
+          disabled={isLoading}
         >
           <span className="spotify-logo">♪</span>
-          Login with Spotify
+          {isLoading ? 'Connecting...' : 'Login with Spotify'}
         </button>
 
         <div className="auth-info">

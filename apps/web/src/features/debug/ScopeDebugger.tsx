@@ -1,35 +1,35 @@
 import { useEffect, useState } from 'react';
 
-interface ScopeTestResult {
-  accessible: boolean;
-  status: number;
-  note: string;
-}
-
 interface ScopeDebugData {
-  token_info: {
-    user_id: string;
-    display_name: string;
-    email: string;
-    product: string;
-    country: string;
-  };
-  scope_tests: {
-    'user-read-private': boolean;
-    'playlist-read-private': boolean;
-    'audio-features': ScopeTestResult;
-  };
-  required_scopes: string[];
   instructions: {
     if_audio_features_forbidden: string;
     logout_method: string;
   };
+  required_scopes: string[];
+  scope_tests: {
+    'audio-features': ScopeTestResult;
+    'playlist-read-private': boolean;
+    'user-read-private': boolean;
+  };
+  token_info: {
+    country: string;
+    display_name: string;
+    email: string;
+    product: string;
+    user_id: string;
+  };
+}
+
+interface ScopeTestResult {
+  accessible: boolean;
+  note: string;
+  status: number;
 }
 
 export function ScopeDebugger() {
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [data, setData] = useState<ScopeDebugData | null>(null);
+  const [error, setError] = useState<null | string>(null);
+  const [data, setData] = useState<null | ScopeDebugData>(null);
 
   useEffect(() => {
     fetchScopeDebugInfo();
@@ -79,7 +79,7 @@ export function ScopeDebugger() {
         <h2>🔍 Scope Debugger</h2>
         <div className="error">
           <p>❌ Error: {error}</p>
-          <button onClick={fetchScopeDebugInfo} className="retry-button">
+          <button className="retry-button" onClick={fetchScopeDebugInfo}>
             Retry
           </button>
         </div>
@@ -163,12 +163,12 @@ export function ScopeDebugger() {
         <h3>Required Scopes</h3>
         <div className="scopes-list">
           {data.required_scopes.map((scope) => (
-            <span key={scope} className="scope-badge">{scope}</span>
+            <span className="scope-badge" key={scope}>{scope}</span>
           ))}
         </div>
       </section>
 
-      <button onClick={fetchScopeDebugInfo} className="refresh-button">
+      <button className="refresh-button" onClick={fetchScopeDebugInfo}>
         🔄 Refresh
       </button>
 

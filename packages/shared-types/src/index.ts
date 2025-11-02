@@ -1,21 +1,25 @@
-export interface Playlist {
-  id?: string;
-  name: string;
-  description: string;
-  tracks: Track[];
-  spotifyId?: string;
-  externalUrl?: string;
+export interface ApiError {
+  details?: unknown;
+  error: string;
+  status?: number;
 }
 
-export interface Track {
-  id?: string;
-  name: string;
-  artist: string;
-  query: string;
-  spotifyId?: string;
-  spotifyUri?: string;
-  previewUrl?: string;
-  externalUrl?: string;
+// Chat interfaces
+export interface ChatMessage {
+  content: string;
+  role: 'assistant' | 'user';
+}
+
+export interface ChatRequest {
+  conversationHistory?: ChatMessage[];
+  message: string;
+}
+
+export interface ChatResponse {
+  conversationHistory: ChatMessage[];
+  message: string;
+  playlist?: Playlist;
+  playlistModified?: boolean;
 }
 
 export interface GeneratePlaylistRequest {
@@ -26,128 +30,122 @@ export interface GeneratePlaylistResponse {
   playlist: Playlist;
 }
 
+export interface Playlist {
+  description: string;
+  externalUrl?: string;
+  id?: string;
+  name: string;
+  spotifyId?: string;
+  tracks: Track[];
+}
+
 export interface SavePlaylistRequest {
   playlist: Playlist;
 }
 
 export interface SavePlaylistResponse {
-  success: boolean;
+  error?: string;
   playlistId?: string;
   playlistUrl?: string;
-  error?: string;
+  success: boolean;
+}
+
+export interface SpotifyAudioFeatures {
+  acousticness: number;
+  danceability: number;
+  energy: number;
+  id: string;
+  instrumentalness: number;
+  key: number;
+  liveness: number;
+  loudness: number;
+  mode: number;
+  speechiness: number;
+  tempo: number;
+  valence: number;
 }
 
 export interface SpotifyAuthResponse {
   url: string;
 }
 
+export interface SpotifyPlaylist {
+  description: string;
+  external_urls: { spotify: string };
+  id: string;
+  images: { height: number; url: string; width: number }[];
+  name: string;
+  owner: { display_name: string };
+  public: boolean;
+  tracks: { total: number };
+}
+
 export interface SpotifySearchRequest {
   query: string;
-  type?: 'track' | 'album' | 'artist';
-}
-
-export interface ApiError {
-  error: string;
-  status?: number;
-  details?: unknown;
-}
-
-export interface WebhookEvent {
-  type: string;
-  timestamp: number;
-  payload: unknown;
-  signature?: string;
-}
-
-export interface SpotifyWebhookPayload {
-  event: 'playlist.created' | 'playlist.updated' | 'playlist.deleted';
-  playlistId: string;
-  userId: string;
-  timestamp: string;
-}
-
-// Chat interfaces
-export interface ChatMessage {
-  role: 'user' | 'assistant';
-  content: string;
-}
-
-export interface ChatRequest {
-  message: string;
-  conversationHistory?: ChatMessage[];
-}
-
-export interface ChatResponse {
-  message: string;
-  playlist?: Playlist;
-  playlistModified?: boolean;
-  conversationHistory: ChatMessage[];
+  type?: 'album' | 'artist' | 'track';
 }
 
 // Spotify API response types
 export interface SpotifyTrack {
-  id: string;
-  name: string;
-  artists: Array<{ id: string; name: string }>;
   album: {
     id: string;
+    images: { height: number; url: string; width: number }[];
     name: string;
-    images: Array<{ url: string; height: number; width: number }>;
   };
-  preview_url: string | null;
+  artists: { id: string; name: string }[];
   external_urls: { spotify: string };
+  id: string;
+  name: string;
+  preview_url: null | string;
   uri: string;
 }
 
-export interface SpotifyPlaylist {
-  id: string;
-  name: string;
-  description: string;
-  external_urls: { spotify: string };
-  images: Array<{ url: string; height: number; width: number }>;
-  tracks: { total: number };
-  public: boolean;
-  owner: { display_name: string };
-}
-
-export interface SpotifyAudioFeatures {
-  id: string;
-  danceability: number;
-  energy: number;
-  valence: number;
-  tempo: number;
-  acousticness: number;
-  instrumentalness: number;
-  speechiness: number;
-  liveness: number;
-  loudness: number;
-  key: number;
-  mode: number;
-}
-
 export interface SpotifyUser {
-  id: string;
   display_name: string;
   email?: string;
-  images: Array<{ url: string; height: number; width: number }>;
+  id: string;
+  images: { height: number; url: string; width: number }[];
+}
+
+export interface SpotifyWebhookPayload {
+  event: 'playlist.created' | 'playlist.deleted' | 'playlist.updated';
+  playlistId: string;
+  timestamp: string;
+  userId: string;
+}
+
+export type StreamDebugData = Record<string, unknown>;
+
+export interface StreamLogData {
+  level: 'error' | 'info' | 'warn';
+  message: string;
 }
 
 // Streaming types
 export interface StreamToolData {
-  tool: string;
   args: Record<string, unknown>;
+  tool: string;
 }
 
 export interface StreamToolResult {
-  tool: string;
   result: unknown;
+  tool: string;
 }
 
-export interface StreamDebugData {
-  [key: string]: unknown;
+export interface Track {
+  artist: string;
+  externalUrl?: string;
+  id?: string;
+  name: string;
+  previewUrl?: string;
+  query: string;
+  spotifyId?: string;
+  spotifyUri?: string;
 }
 
-export interface StreamLogData {
-  level: 'info' | 'warn' | 'error';
-  message: string;
+export interface WebhookEvent {
+  payload: unknown;
+  signature?: string;
+  timestamp: number;
+  type: string;
 }

@@ -22,8 +22,16 @@
  * ```
  */
 
-import { globalOrchestrator } from './RequestOrchestrator';
 import type { ServiceLogger } from './ServiceLogger';
+
+import { globalOrchestrator } from './RequestOrchestrator';
+
+/**
+ * Get the global orchestrator instance
+ */
+export function getGlobalOrchestrator() {
+  return globalOrchestrator;
+}
 
 /**
  * Wrap an Anthropic API call with rate limiting and concurrency control
@@ -58,10 +66,10 @@ export async function rateLimitedAnthropicCall<T>(
 }
 
 /**
- * Wrap a Spotify API call with rate limiting and concurrency control
- * Lane: spotify (max 5 concurrent)
+ * Wrap a Deezer API call with rate limiting and concurrency control
+ * Lane: deezer (max 10 concurrent)
  */
-export async function rateLimitedSpotifyCall<T>(
+export async function rateLimitedDeezerCall<T>(
   call: () => Promise<T>,
   logger?: ServiceLogger,
   context?: string
@@ -69,17 +77,17 @@ export async function rateLimitedSpotifyCall<T>(
   return globalOrchestrator.execute(async () => {
     const start = performance.now();
     try {
-      logger?.debug(`Spotify API call starting${context ? `: ${context}` : ''}`);
+      logger?.debug(`Deezer API call starting${context ? `: ${context}` : ''}`);
       const result = await call();
       const duration = performance.now() - start;
-      logger?.debug(`Spotify API call completed in ${duration.toFixed(0)}ms${context ? `: ${context}` : ''}`);
+      logger?.debug(`Deezer API call completed in ${duration.toFixed(0)}ms${context ? `: ${context}` : ''}`);
       return result;
     } catch (error) {
       const duration = performance.now() - start;
-      logger?.error(`Spotify API call failed after ${duration.toFixed(0)}ms`, error, { context });
+      logger?.error(`Deezer API call failed after ${duration.toFixed(0)}ms`, error, { context });
       throw error;
     }
-  }, 'spotify');
+  }, 'deezer');
 }
 
 /**
@@ -108,10 +116,10 @@ export async function rateLimitedLastFmCall<T>(
 }
 
 /**
- * Wrap a Deezer API call with rate limiting and concurrency control
- * Lane: deezer (max 10 concurrent)
+ * Wrap a Spotify API call with rate limiting and concurrency control
+ * Lane: spotify (max 5 concurrent)
  */
-export async function rateLimitedDeezerCall<T>(
+export async function rateLimitedSpotifyCall<T>(
   call: () => Promise<T>,
   logger?: ServiceLogger,
   context?: string
@@ -119,22 +127,15 @@ export async function rateLimitedDeezerCall<T>(
   return globalOrchestrator.execute(async () => {
     const start = performance.now();
     try {
-      logger?.debug(`Deezer API call starting${context ? `: ${context}` : ''}`);
+      logger?.debug(`Spotify API call starting${context ? `: ${context}` : ''}`);
       const result = await call();
       const duration = performance.now() - start;
-      logger?.debug(`Deezer API call completed in ${duration.toFixed(0)}ms${context ? `: ${context}` : ''}`);
+      logger?.debug(`Spotify API call completed in ${duration.toFixed(0)}ms${context ? `: ${context}` : ''}`);
       return result;
     } catch (error) {
       const duration = performance.now() - start;
-      logger?.error(`Deezer API call failed after ${duration.toFixed(0)}ms`, error, { context });
+      logger?.error(`Spotify API call failed after ${duration.toFixed(0)}ms`, error, { context });
       throw error;
     }
-  }, 'deezer');
-}
-
-/**
- * Get the global orchestrator instance
- */
-export function getGlobalOrchestrator() {
-  return globalOrchestrator;
+  }, 'spotify');
 }

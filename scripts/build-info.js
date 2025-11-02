@@ -16,9 +16,9 @@ const branch = execSync('git rev-parse --abbrev-ref HEAD').toString().trim();
 const commitMessage = execSync('git log -1 --pretty=%B').toString().trim().split('\n')[0];
 
 const buildInfo = {
-  commitHash,
-  buildTime,
   branch,
+  buildTime,
+  commitHash,
   commitMessage,
   version: `${commitHash}-${Date.now()}`
 };

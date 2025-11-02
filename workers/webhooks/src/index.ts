@@ -1,35 +1,36 @@
+import type { SpotifyWebhookPayload } from '@dj/shared-types';
+
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { z } from 'zod';
-import type { SpotifyWebhookPayload } from '@dj/shared-types';
 
 // Validation schemas
 const SpotifyWebhookPayloadSchema = z.object({
   event: z.enum(['playlist.created', 'playlist.updated', 'playlist.deleted']),
   playlistId: z.string(),
-  userId: z.string(),
-  timestamp: z.string()
+  timestamp: z.string(),
+  userId: z.string()
 });
 
 const GenericWebhookSchema = z.object({
-  type: z.string(),
-  timestamp: z.number(),
   payload: z.unknown(),
-  signature: z.string().optional()
+  signature: z.string().optional(),
+  timestamp: z.number(),
+  type: z.string()
 });
 
 export interface Env {
-  WEBHOOK_SECRET: string;
-  SPOTIFY_WEBHOOK_SECRET: string;
   ENVIRONMENT: string;
   SESSIONS: KVNamespace;
+  SPOTIFY_WEBHOOK_SECRET: string;
+  WEBHOOK_SECRET: string;
 }
 
 const app = new Hono<{ Bindings: Env }>();
 
 app.use('*', cors({
-  origin: ['https://dj.current.space', 'https://api.spotify.com'],
-  credentials: true
+  credentials: true,
+  origin: ['https://dj.current.space', 'https://api.spotify.com']
 }));
 
 // Health check
@@ -76,7 +77,7 @@ app.post('/spotify', async (c) => {
     // Process webhook event
     await processSpotifyWebhook(payload.data, c.env);
 
-    return c.json({ success: true, processed: payload.data.event });
+    return c.json({ processed: payload.data.event, success: true });
   } catch (error) {
     console.error('Webhook processing error:', error);
     return c.json({ error: 'Failed to process webhook' }, 500);
@@ -96,16 +97,50 @@ app.post('/webhook/:service', async (c) => {
       return c.json({ error: 'Invalid webhook payload format' }, 400);
     }
 
-    console.log(`Received webhook from ${service}:`, body.data.type);
+    console.warn(`Received webhook from ${service}:`, body.data.type);
 
     // Add service-specific processing here
 
-    return c.json({ success: true, service, event: body.data.type });
+    return c.json({ event: body.data.type, service, success: true });
   } catch (error) {
     console.error(`Webhook processing error for ${service}:`, error);
     return c.json({ error: 'Failed to process webhook' }, 500);
   }
 });
+
+async function processSpotifyWebhook(
+  payload: SpotifyWebhookPayload,
+  env: Env
+): Promise<void> {
+  switch (payload.event) {
+    case 'playlist.created':
+      // Store playlist creation event
+      await env.SESSIONS.put(
+        `event:playlist:${payload.playlistId}`,
+        JSON.stringify({
+          createdAt: new Date().toISOString(),
+          event: payload.event,
+          timestamp: payload.timestamp,
+          userId: payload.userId
+        }),
+        { expirationTtl: 86400 * 30 } // 30 days
+      );
+      break;
+
+    case 'playlist.deleted':
+      // Clean up stored data
+      await env.SESSIONS.delete(`event:playlist:${payload.playlistId}`);
+      break;
+
+    case 'playlist.updated':
+      // Log playlist update
+      console.warn(`Playlist ${payload.playlistId} updated by ${payload.userId}`);
+      break;
+
+    default:
+      console.warn('Unknown Spotify event:', payload.event);
+  }
+}
 
 async function verifySpotifyWebhook(
   body: string,
@@ -118,7 +153,7 @@ async function verifySpotifyWebhook(
   const key = await crypto.subtle.importKey(
     'raw',
     encoder.encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
+    { hash: 'SHA-256', name: 'HMAC' },
     false,
     ['sign']
   );
@@ -130,40 +165,6 @@ async function verifySpotifyWebhook(
     .replace(/=/g, '');
 
   return signature === expectedSignature;
-}
-
-async function processSpotifyWebhook(
-  payload: SpotifyWebhookPayload,
-  env: Env
-): Promise<void> {
-  switch (payload.event) {
-    case 'playlist.created':
-      // Store playlist creation event
-      await env.SESSIONS.put(
-        `event:playlist:${payload.playlistId}`,
-        JSON.stringify({
-          event: payload.event,
-          userId: payload.userId,
-          timestamp: payload.timestamp,
-          createdAt: new Date().toISOString()
-        }),
-        { expirationTtl: 86400 * 30 } // 30 days
-      );
-      break;
-
-    case 'playlist.updated':
-      // Log playlist update
-      console.log(`Playlist ${payload.playlistId} updated by ${payload.userId}`);
-      break;
-
-    case 'playlist.deleted':
-      // Clean up stored data
-      await env.SESSIONS.delete(`event:playlist:${payload.playlistId}`);
-      break;
-
-    default:
-      console.warn('Unknown Spotify event:', payload.event);
-  }
 }
 
 export default app;

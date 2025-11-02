@@ -1,7 +1,8 @@
-import { Hono } from "hono";
-import type { Env } from "../index";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
+import { Hono } from "hono";
+
+import type { Env } from "../index";
 
 const chatTestRouter = new Hono<{ Bindings: Env }>();
 
@@ -19,10 +20,10 @@ chatTestRouter.post("/simple", async (c) => {
     // Initialize Claude WITHOUT tools
     const llm = new ChatAnthropic({
       apiKey: c.env.ANTHROPIC_API_KEY,
+      maxRetries: 1,
+      maxTokens: 500,
       model: "claude-sonnet-4-5-20250929",
       temperature: 0.2,
-      maxTokens: 500,
-      maxRetries: 1,
     });
 
     console.log(
@@ -38,12 +39,12 @@ chatTestRouter.post("/simple", async (c) => {
     console.log(`[Test:${requestId}] Success! Response received`);
 
     return c.json({
-      success: true,
       message:
         typeof response.content === "string"
           ? response.content
           : "Response received",
       requestId,
+      success: true,
       withTools: false,
     });
   } catch (error) {
@@ -55,9 +56,9 @@ chatTestRouter.post("/simple", async (c) => {
     if (errorMessage.includes("529") || errorMessage.includes("overloaded")) {
       return c.json(
         {
-          success: false,
           error: "Claude API is actually overloaded (529)",
           requestId,
+          success: false,
           withTools: false,
         },
         503
@@ -66,7 +67,6 @@ chatTestRouter.post("/simple", async (c) => {
 
     return c.json(
       {
-        success: false,
         error: errorMessage,
         errorDetails:
           error instanceof Error
@@ -76,6 +76,7 @@ chatTestRouter.post("/simple", async (c) => {
               }
             : null,
         requestId,
+        success: false,
         withTools: false,
       },
       500
@@ -97,22 +98,22 @@ chatTestRouter.post("/with-tools", async (c) => {
     // Initialize Claude
     const llm = new ChatAnthropic({
       apiKey: c.env.ANTHROPIC_API_KEY,
+      maxRetries: 1,
+      maxTokens: 500,
       model: "claude-sonnet-4-5-20250929",
       temperature: 0.2,
-      maxTokens: 500,
-      maxRetries: 1,
     });
 
     // Create a simple dummy tool
     const dummyTool = {
-      name: "dummy_tool",
       description: "A dummy tool for testing",
+      name: "dummy_tool",
       schema: {
-        type: "object",
         properties: {
-          input: { type: "string", description: "Any input" },
+          input: { description: "Any input", type: "string" },
         },
         required: ["input"],
+        type: "object",
       },
     };
 
@@ -136,13 +137,13 @@ chatTestRouter.post("/with-tools", async (c) => {
     console.log(`[Test:${requestId}] Success! Response received with tools`);
 
     return c.json({
-      success: true,
+      hadToolCalls: !!(response.tool_calls && response.tool_calls.length > 0),
       message:
         typeof response.content === "string"
           ? response.content
           : "Response received",
-      hadToolCalls: !!(response.tool_calls && response.tool_calls.length > 0),
       requestId,
+      success: true,
       withTools: true,
     });
   } catch (error) {
@@ -154,9 +155,9 @@ chatTestRouter.post("/with-tools", async (c) => {
     if (errorMessage.includes("529") || errorMessage.includes("overloaded")) {
       return c.json(
         {
-          success: false,
           error: "Claude API is actually overloaded (529) even with tools",
           requestId,
+          success: false,
           withTools: true,
         },
         503
@@ -165,7 +166,6 @@ chatTestRouter.post("/with-tools", async (c) => {
 
     return c.json(
       {
-        success: false,
         error: errorMessage,
         errorDetails:
           error instanceof Error
@@ -175,6 +175,7 @@ chatTestRouter.post("/with-tools", async (c) => {
               }
             : null,
         requestId,
+        success: false,
         withTools: true,
       },
       500

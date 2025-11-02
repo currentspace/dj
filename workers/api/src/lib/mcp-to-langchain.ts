@@ -22,9 +22,7 @@ export function convertMCPToolsToLangChain(mcpTools: any[], sessionToken: string
     const zodSchema = convertJsonSchemaToZod(tool.schema || tool.inputSchema || {});
 
     const langchainTool = new DynamicStructuredTool({
-      name: tool.name,
       description: tool.description || 'No description available',
-      schema: zodSchema,
       func: async (input: any) => {
         console.log(`[MCPTool:${tool.name}] Executing with input:`, input);
 
@@ -47,7 +45,9 @@ export function convertMCPToolsToLangChain(mcpTools: any[], sessionToken: string
         // Otherwise, throw an error
         throw new Error(`Tool ${tool.name} has no callable function. Available methods: ${Object.keys(tool).join(', ')}`);
       },
+      name: tool.name,
       returnDirect: false,
+      schema: zodSchema,
       verbose: false
     });
 
@@ -61,7 +61,7 @@ export function convertMCPToolsToLangChain(mcpTools: any[], sessionToken: string
  * This is a simplified converter that handles common cases
  */
 function convertJsonSchemaToZod(jsonSchema: any): z.ZodSchema {
-  if (!jsonSchema || !jsonSchema.type) {
+  if (!jsonSchema?.type) {
     return z.object({}).passthrough(); // Allow any object
   }
 
@@ -73,7 +73,7 @@ function convertJsonSchemaToZod(jsonSchema: any): z.ZodSchema {
         let zodType = convertPropertyToZod(propSchema as any);
 
         // Check if property is required
-        if (!jsonSchema.required || !jsonSchema.required.includes(key)) {
+        if (!jsonSchema.required?.includes(key)) {
           zodType = zodType.optional();
         }
 
@@ -96,11 +96,40 @@ function convertJsonSchemaToZod(jsonSchema: any): z.ZodSchema {
  * Convert a single JSON Schema property to Zod
  */
 function convertPropertyToZod(propSchema: any): z.ZodSchema {
-  if (!propSchema || !propSchema.type) {
+  if (!propSchema?.type) {
     return z.any();
   }
 
   switch (propSchema.type) {
+    case 'array':
+      if (propSchema.items) {
+        return z.array(convertPropertyToZod(propSchema.items));
+      }
+      return z.array(z.any());
+
+    case 'boolean':
+      return z.boolean();
+    case 'integer':
+
+    case 'number':
+      let numberSchema = z.number();
+      if (propSchema.type === 'integer') {
+        numberSchema = numberSchema.int();
+      }
+      if (propSchema.minimum !== undefined) {
+        numberSchema = numberSchema.min(propSchema.minimum);
+      }
+      if (propSchema.maximum !== undefined) {
+        numberSchema = numberSchema.max(propSchema.maximum);
+      }
+      if (propSchema.description) {
+        numberSchema = numberSchema.describe(propSchema.description);
+      }
+      return numberSchema;
+
+    case 'object':
+      return convertJsonSchemaToZod(propSchema);
+
     case 'string':
       let stringSchema = z.string();
       if (propSchema.minLength) {
@@ -120,35 +149,6 @@ function convertPropertyToZod(propSchema: any): z.ZodSchema {
         stringSchema = stringSchema.describe(propSchema.description);
       }
       return stringSchema;
-
-    case 'number':
-    case 'integer':
-      let numberSchema = z.number();
-      if (propSchema.type === 'integer') {
-        numberSchema = numberSchema.int();
-      }
-      if (propSchema.minimum !== undefined) {
-        numberSchema = numberSchema.min(propSchema.minimum);
-      }
-      if (propSchema.maximum !== undefined) {
-        numberSchema = numberSchema.max(propSchema.maximum);
-      }
-      if (propSchema.description) {
-        numberSchema = numberSchema.describe(propSchema.description);
-      }
-      return numberSchema;
-
-    case 'boolean':
-      return z.boolean();
-
-    case 'array':
-      if (propSchema.items) {
-        return z.array(convertPropertyToZod(propSchema.items));
-      }
-      return z.array(z.any());
-
-    case 'object':
-      return convertJsonSchemaToZod(propSchema);
 
     default:
       return z.any();

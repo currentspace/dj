@@ -1,10 +1,11 @@
-import { useState, useRef, useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
+
 import '../styles/sse-test.css'
 
 interface LogEntry {
-  timestamp: string
   message: string
-  type: 'info' | 'success' | 'warning' | 'error'
+  timestamp: string
+  type: 'error' | 'info' | 'success' | 'warning'
 }
 
 export function SSETestPage() {
@@ -28,7 +29,7 @@ export function SSETestPage() {
 
   const addLog = (message: string, type: LogEntry['type'] = 'info') => {
     const timestamp = new Date().toISOString().split('T')[1].slice(0, -1)
-    setLogs(prev => [...prev, { timestamp, message, type }])
+    setLogs(prev => [...prev, { message, timestamp, type }])
   }
 
   const clearLogs = () => {
@@ -93,12 +94,12 @@ export function SSETestPage() {
 
     try {
       const response = await fetch(`${apiBase}/sse-test/post-stream`, {
-        method: 'POST',
+        body: JSON.stringify({ test: 'data', timestamp: Date.now() }),
         headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'text/event-stream'
+          'Accept': 'text/event-stream',
+          'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ test: 'data', timestamp: Date.now() })
+        method: 'POST'
       })
 
       addLog(`Response status: ${response.status}`, response.ok ? 'success' : 'error')
@@ -150,16 +151,16 @@ export function SSETestPage() {
 
     try {
       const response = await fetch(`${apiBase}/chat-stream/message`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
         body: JSON.stringify({
-          message: 'test',
           conversationHistory: [],
+          message: 'test',
           mode: 'analyze'
-        })
+        }),
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        method: 'POST'
       })
 
       addLog(`Response status: ${response.status} ${response.statusText}`, response.ok ? 'success' : 'error')
@@ -198,17 +199,17 @@ export function SSETestPage() {
     try {
       addLog(`POST to ${apiBase}/chat-stream/message`, 'info')
       const response = await fetch(`${apiBase}/chat-stream/message`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'text/event-stream',
-          'Authorization': `Bearer ${token}`
-        },
         body: JSON.stringify({
-          message: finalMessage,
           conversationHistory: [],
+          message: finalMessage,
           mode
         }),
+        headers: {
+          'Accept': 'text/event-stream',
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        method: 'POST',
         signal: abortControllerRef.current.signal
       })
 
@@ -326,10 +327,10 @@ export function SSETestPage() {
           <label>
             Spotify Token:
             <input
-              type="text"
-              value={token}
               onChange={(e) => setToken(e.target.value)}
               placeholder="Your Spotify token"
+              type="text"
+              value={token}
             />
           </label>
           <button onClick={getTokenFromStorage}>Get from localStorage</button>
@@ -338,9 +339,9 @@ export function SSETestPage() {
           <label>
             API Base:
             <input
+              onChange={(e) => setApiBase(e.target.value)}
               type="text"
               value={apiBase}
-              onChange={(e) => setApiBase(e.target.value)}
             />
           </label>
         </div>
@@ -365,9 +366,9 @@ export function SSETestPage() {
           <label>
             Message:
             <input
+              onChange={(e) => setMessage(e.target.value)}
               type="text"
               value={message}
-              onChange={(e) => setMessage(e.target.value)}
             />
           </label>
         </div>
@@ -375,17 +376,17 @@ export function SSETestPage() {
           <label>
             Playlist ID:
             <input
-              type="text"
-              value={playlistId}
               onChange={(e) => setPlaylistId(e.target.value)}
               placeholder="Optional playlist ID"
+              type="text"
+              value={playlistId}
             />
           </label>
         </div>
         <div className="form-row">
           <label>
             Mode:
-            <select value={mode} onChange={(e) => setMode(e.target.value as typeof mode)}>
+            <select onChange={(e) => setMode(e.target.value as typeof mode)} value={mode}>
               <option value="analyze">Analyze</option>
               <option value="create">Create</option>
               <option value="edit">Edit</option>
@@ -393,7 +394,7 @@ export function SSETestPage() {
           </label>
         </div>
         <div className="button-group">
-          <button onClick={testSSEStream} disabled={isStreaming}>
+          <button disabled={isStreaming} onClick={testSSEStream}>
             {isStreaming ? 'Streaming...' : 'Start SSE Stream'}
           </button>
           <button onClick={stopStream}>Stop Stream</button>
@@ -410,7 +411,7 @@ export function SSETestPage() {
         <button onClick={clearLogs}>Clear Log</button>
         <div className="log-container">
           {logs.map((log, index) => (
-            <div key={index} className={`log-entry log-${log.type}`}>
+            <div className={`log-entry log-${log.type}`} key={index}>
               <span className="log-time">[{log.timestamp}]</span>
               <span className="log-message">{log.message}</span>
             </div>

@@ -1,6 +1,7 @@
-import { Hono } from 'hono';
 import { ChatAnthropic } from '@langchain/anthropic';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
+import { Hono } from 'hono';
+
 import type { Env } from '../index';
 
 const testRouter = new Hono<{ Bindings: Env }>();
@@ -176,11 +177,11 @@ testRouter.get('/', (c) => {
 // Environment check
 testRouter.get('/env', (c) => {
   return c.json({
+    anthropicKeyLength: c.env.ANTHROPIC_API_KEY?.length || 0,
+    environment: c.env.ENVIRONMENT || 'unknown',
     hasAnthropicKey: !!c.env.ANTHROPIC_API_KEY,
     hasSpotifyClientId: !!c.env.SPOTIFY_CLIENT_ID,
     hasSpotifyClientSecret: !!c.env.SPOTIFY_CLIENT_SECRET,
-    environment: c.env.ENVIRONMENT || 'unknown',
-    anthropicKeyLength: c.env.ANTHROPIC_API_KEY?.length || 0,
     spotifyClientIdLength: c.env.SPOTIFY_CLIENT_ID?.length || 0
   });
 });
@@ -194,9 +195,9 @@ testRouter.get('/anthropic', async (c) => {
 
     const chat = new ChatAnthropic({
       apiKey: c.env.ANTHROPIC_API_KEY,
+      maxTokens: 100,
       model: 'claude-3-haiku-20240307',
       temperature: 0.7,
-      maxTokens: 100,
     });
 
     const messages = [
@@ -207,9 +208,9 @@ testRouter.get('/anthropic', async (c) => {
     const response = await chat.invoke(messages);
 
     return c.json({
-      success: true,
       message: response.content,
       model: 'claude-3-haiku-20240307',
+      success: true,
       timestamp: new Date().toISOString()
     });
 
@@ -217,8 +218,8 @@ testRouter.get('/anthropic', async (c) => {
     console.error('Anthropic test error:', error);
     const message = error instanceof Error ? error.message : 'Unknown error';
     return c.json({
-      success: false,
       error: message,
+      success: false,
       timestamp: new Date().toISOString()
     }, 500);
   }
@@ -234,12 +235,12 @@ testRouter.post('/spotify-mock', async (c) => {
       tracks: {
         items: [
           {
+            artists: [{ name: 'Mock Artist' }],
+            external_urls: { spotify: 'https://open.spotify.com/track/mock1' },
             id: 'mock-track-1',
             name: `Mock Track for "${query}"`,
-            artists: [{ name: 'Mock Artist' }],
-            uri: 'spotify:track:mock1',
             preview_url: 'https://example.com/preview.mp3',
-            external_urls: { spotify: 'https://open.spotify.com/track/mock1' }
+            uri: 'spotify:track:mock1'
           }
         ]
       }

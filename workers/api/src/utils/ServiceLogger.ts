@@ -9,15 +9,44 @@
 
 import type { StreamLogData } from '@dj/shared-types';
 
-type LogLevel = 'info' | 'warn' | 'error' | 'debug';
+type LogLevel = 'debug' | 'error' | 'info' | 'warn';
+
+// Simple interface for SSEWriter (to avoid circular dependency)
+interface SSEWriter {
+  write(event: { data: any; type: string; }): Promise<void>;
+}
 
 export class ServiceLogger {
-  private sseWriter?: SSEWriter;
   private serviceName: string;
+  private sseWriter?: SSEWriter;
 
   constructor(serviceName: string, sseWriter?: SSEWriter) {
     this.serviceName = serviceName;
     this.sseWriter = sseWriter;
+  }
+
+  /**
+   * Create a child logger with a sub-context
+   */
+  child(subContext: string): ServiceLogger {
+    return new ServiceLogger(`${this.serviceName}:${subContext}`, this.sseWriter);
+  }
+
+  /**
+   * Log a debug message (only in development)
+   */
+  debug(message: string, data?: Record<string, any>): void {
+    this.log('debug', message, data);
+  }
+
+  /**
+   * Log an error message
+   */
+  error(message: string, error?: any | Error, data?: Record<string, any>): void {
+    const errorData = error instanceof Error
+      ? { error: error.message, stack: error.stack, ...data }
+      : { error: String(error), ...data };
+    this.log('error', message, errorData);
   }
 
   /**
@@ -32,23 +61,6 @@ export class ServiceLogger {
    */
   warn(message: string, data?: Record<string, any>): void {
     this.log('warn', message, data);
-  }
-
-  /**
-   * Log an error message
-   */
-  error(message: string, error?: Error | any, data?: Record<string, any>): void {
-    const errorData = error instanceof Error
-      ? { error: error.message, stack: error.stack, ...data }
-      : { error: String(error), ...data };
-    this.log('error', message, errorData);
-  }
-
-  /**
-   * Log a debug message (only in development)
-   */
-  debug(message: string, data?: Record<string, any>): void {
-    this.log('debug', message, data);
   }
 
   /**
@@ -76,23 +88,11 @@ export class ServiceLogger {
 
       // Fire and forget - don't await to avoid blocking
       this.sseWriter.write({
-        type: 'log',
-        data: logData
+        data: logData,
+        type: 'log'
       }).catch(err => {
         console.error('[ServiceLogger] Failed to send log via SSE:', err);
       });
     }
   }
-
-  /**
-   * Create a child logger with a sub-context
-   */
-  child(subContext: string): ServiceLogger {
-    return new ServiceLogger(`${this.serviceName}:${subContext}`, this.sseWriter);
-  }
-}
-
-// Simple interface for SSEWriter (to avoid circular dependency)
-interface SSEWriter {
-  write(event: { type: string; data: any }): Promise<void>;
 }

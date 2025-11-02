@@ -30,6 +30,20 @@ export class RateWindow {
   }
 
   /**
+   * Get the count of hits in the current window
+   */
+  count(): number {
+    const now = Date.now();
+
+    // Clean up old hits
+    while (this.hits.length && now - this.hits[0] > this.windowMs) {
+      this.hits.shift();
+    }
+
+    return this.hits.length;
+  }
+
+  /**
    * Mark that an event occurred at this moment
    */
   mark(): void {
@@ -40,6 +54,13 @@ export class RateWindow {
     while (this.hits.length && now - this.hits[0] > this.windowMs) {
       this.hits.shift();
     }
+  }
+
+  /**
+   * Reset the window, clearing all hits
+   */
+  reset(): void {
+    this.hits = [];
   }
 
   /**
@@ -62,27 +83,6 @@ export class RateWindow {
     // Rate = (number of intervals) / time span
     // We have (n-1) intervals between n hits
     return (n - 1) / spanSec;
-  }
-
-  /**
-   * Get the count of hits in the current window
-   */
-  count(): number {
-    const now = Date.now();
-
-    // Clean up old hits
-    while (this.hits.length && now - this.hits[0] > this.windowMs) {
-      this.hits.shift();
-    }
-
-    return this.hits.length;
-  }
-
-  /**
-   * Reset the window, clearing all hits
-   */
-  reset(): void {
-    this.hits = [];
   }
 
   /**

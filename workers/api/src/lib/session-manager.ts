@@ -5,15 +5,15 @@ import { customAlphabet } from 'nanoid';
 const nanoid = customAlphabet('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz', 32);
 
 export interface Session {
-  id: string;
-  spotifyToken: string;
-  userId?: string;
   createdAt: number;
   expiresAt: number;
+  id: string;
   metadata?: {
-    userEmail?: string;
     displayName?: string;
+    userEmail?: string;
   };
+  spotifyToken: string;
+  userId?: string;
 }
 
 export class SessionManager {
@@ -26,16 +26,28 @@ export class SessionManager {
   }
 
   /**
+   * Clean up expired sessions from memory
+   */
+  cleanupExpiredSessions(): void {
+    const now = Date.now();
+    for (const [token, session] of this.memory.entries()) {
+      if (session.expiresAt < now) {
+        this.memory.delete(token);
+      }
+    }
+  }
+
+  /**
    * Create a new session when user logs in
    */
   async createSession(spotifyToken: string, userId?: string): Promise<string> {
     const sessionToken = nanoid();
     const session: Session = {
+      createdAt: Date.now(),
+      expiresAt: Date.now() + (4 * 60 * 60 * 1000), // 4 hours
       id: sessionToken,
       spotifyToken,
       userId,
-      createdAt: Date.now(),
-      expiresAt: Date.now() + (4 * 60 * 60 * 1000), // 4 hours
     };
 
     console.log(`[Session] Creating session ${sessionToken.substring(0, 8)}... for user ${userId || 'unknown'}`);
@@ -61,36 +73,6 @@ export class SessionManager {
     }
 
     return sessionToken;
-  }
-
-  /**
-   * Validate session and return Spotify token
-   */
-  async validateSession(sessionToken: string): Promise<string | null> {
-    // Check memory first
-    let session = this.memory.get(sessionToken);
-
-    // Fall back to KV if not in memory
-    if (!session && this.kv) {
-      const stored = await this.kv.get(`session:${sessionToken}`);
-      if (stored) {
-        session = JSON.parse(stored) as Session;
-        // Cache in memory
-        this.memory.set(sessionToken, session);
-      }
-    }
-
-    if (!session) {
-      return null;
-    }
-
-    // Check expiration
-    if (session.expiresAt < Date.now()) {
-      await this.destroySession(sessionToken);
-      return null;
-    }
-
-    return session.spotifyToken;
   }
 
   /**
@@ -122,14 +104,32 @@ export class SessionManager {
   }
 
   /**
-   * Clean up expired sessions from memory
+   * Validate session and return Spotify token
    */
-  cleanupExpiredSessions(): void {
-    const now = Date.now();
-    for (const [token, session] of this.memory.entries()) {
-      if (session.expiresAt < now) {
-        this.memory.delete(token);
+  async validateSession(sessionToken: string): Promise<null | string> {
+    // Check memory first
+    let session = this.memory.get(sessionToken);
+
+    // Fall back to KV if not in memory
+    if (!session && this.kv) {
+      const stored = await this.kv.get(`session:${sessionToken}`);
+      if (stored) {
+        session = JSON.parse(stored) as Session;
+        // Cache in memory
+        this.memory.set(sessionToken, session);
       }
     }
+
+    if (!session) {
+      return null;
+    }
+
+    // Check expiration
+    if (session.expiresAt < Date.now()) {
+      await this.destroySession(sessionToken);
+      return null;
+    }
+
+    return session.spotifyToken;
   }
 }

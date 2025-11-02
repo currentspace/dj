@@ -10,7 +10,7 @@ export function PlaylistSkeleton() {
 
       <div className={styles.skeletonTracks}>
         {Array.from({ length: 10 }).map((_, index) => (
-          <div key={index} className={styles.skeletonTrack}>
+          <div className={styles.skeletonTrack} key={index}>
             <div className={styles.skeletonTrackNumber} />
             <div className={styles.skeletonTrackInfo}>
               <div className={styles.skeletonTrackName} />

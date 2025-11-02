@@ -1,18 +1,20 @@
 // MCP Server - Streamable HTTP Transport (2025-03-26)
 import { Hono } from 'hono';
+import { z } from 'zod';
+
 import type { Env } from '../index';
+
 import { SessionManager } from '../lib/session-manager';
 import { executeSpotifyTool, spotifyTools } from '../lib/spotify-tools';
-import { z } from 'zod';
 
 const mcpRouter = new Hono<{ Bindings: Env }>();
 
 // MCP Protocol Schemas
 const MCPRequestSchema = z.object({
+  id: z.union([z.string(), z.number()]).nullable().optional(), // Optional for notifications
   jsonrpc: z.literal('2.0'),
   method: z.string(),
-  params: z.any().optional(),
-  id: z.union([z.string(), z.number()]).nullable().optional() // Optional for notifications
+  params: z.any().optional()
 });
 
 // Check if method is a notification (no response expected)
@@ -89,8 +91,8 @@ mcpRouter.all('/', async (c) => {
     console.log(`[MCP:${requestId}] Available headers:`, dumpHeaders());
 
     return c.json({
-      error: 'Unauthorized',
       details: 'Missing or invalid Authorization header',
+      error: 'Unauthorized',
       expected: 'Authorization: Bearer <session-token>',
       received: authorization || 'none',
       requestId,
@@ -102,7 +104,7 @@ mcpRouter.all('/', async (c) => {
   console.log(`[MCP:${requestId}] Session token: ${sessionToken.substring(0, 8)}...${sessionToken.substring(-4)}`);
 
   console.log(`[MCP:${requestId}] Validating session with session manager...`);
-  let spotifyToken: string | null = null;
+  let spotifyToken: null | string = null;
 
   try {
     spotifyToken = await sessionManager.validateSession(sessionToken);
@@ -111,8 +113,8 @@ mcpRouter.all('/', async (c) => {
     const duration = Date.now() - startTime;
     console.error(`[MCP:${requestId}] SESSION VALIDATION ERROR after ${duration}ms:`, sessionError);
     return c.json({
-      error: 'Session validation failed',
       details: sessionError instanceof Error ? sessionError.message : 'Unknown session error',
+      error: 'Session validation failed',
       requestId
     }, 500);
   }
@@ -122,8 +124,8 @@ mcpRouter.all('/', async (c) => {
     console.warn(`[MCP:${requestId}] INVALID SESSION - Token not found or expired (${duration}ms)`);
     console.log(`[MCP:${requestId}] Session validation failed for: ${sessionToken.substring(0, 8)}...`);
     return c.json({
-      error: 'Invalid or expired session',
       details: 'Session token not found or has expired',
+      error: 'Invalid or expired session',
       requestId,
       timestamp: Date.now()
     }, 401);
@@ -155,10 +157,10 @@ mcpRouter.all('/', async (c) => {
     console.log(`[MCP:${requestId}] Initializing Worker-safe SSE stream (${duration}ms)`);
 
     const headers = {
-      'Content-Type': 'text/event-stream; charset=utf-8',
-      'Cache-Control': 'no-cache, no-transform',
+      'Access-Control-Allow-Headers': 'Authorization, Content-Type, MCP-Protocol-Version',
       'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Headers': 'Authorization, Content-Type, MCP-Protocol-Version'
+      'Cache-Control': 'no-cache, no-transform',
+      'Content-Type': 'text/event-stream; charset=utf-8'
     };
 
     const stream = new ReadableStream({
@@ -179,27 +181,27 @@ mcpRouter.all('/', async (c) => {
           jsonrpc: '2.0',
           method: 'notifications/initialized',
           params: {
+            capabilities: {
+              resources: {},
+              tools: {}
+            },
+            protocolVersion: '2025-06-18',
             serverInfo: {
               name: 'spotify-mcp-server',
               version: '2.0.0'
-            },
-            protocolVersion: '2025-06-18',
-            capabilities: {
-              tools: {},
-              resources: {}
             }
           }
         }, 'initialized');
 
         // Send ready event
-        send({ type: 'ready', timestamp: Date.now() }, 'ready');
+        send({ timestamp: Date.now(), type: 'ready' }, 'ready');
 
         console.log(`[MCP:${requestId}] SSE connection established, events sent`);
 
         // Heartbeat every 20 seconds to prevent 522s
         const heartbeat = setInterval(() => {
           try {
-            send({ type: 'heartbeat', timestamp: Date.now() }, 'ping');
+            send({ timestamp: Date.now(), type: 'heartbeat' }, 'ping');
           } catch (error) {
             console.log(`[MCP:${requestId}] Heartbeat failed, client likely disconnected`);
             clearInterval(heartbeat);
@@ -217,7 +219,7 @@ mcpRouter.all('/', async (c) => {
       }
     });
 
-    return new Response(stream, { status: 200, headers });
+    return new Response(stream, { headers, status: 200 });
   }
 
   if (method === 'POST') {
@@ -260,12 +262,12 @@ mcpRouter.all('/', async (c) => {
           if (mcpRequest.id === undefined || mcpRequest.id === null) {
             console.error(`[MCP:${requestId}] Non-notification ${mcpRequest.method} missing required id`);
             responses.push({
-              jsonrpc: '2.0',
               error: {
                 code: -32600,
                 message: 'Invalid Request: id required for non-notifications'
               },
-              id: null
+              id: null,
+              jsonrpc: '2.0'
             });
             continue;
           }
@@ -277,12 +279,12 @@ mcpRouter.all('/', async (c) => {
           console.error(`[MCP:${requestId}] Request ${i + 1} validation error:`, error);
           console.log(`[MCP:${requestId}] Invalid request data:`, JSON.stringify(request).substring(0, 200));
           responses.push({
-            jsonrpc: '2.0',
             error: {
               code: -32602,
               message: 'Invalid params'
             },
-            id: request?.id || null
+            id: request?.id || null,
+            jsonrpc: '2.0'
           });
         }
       }
@@ -309,18 +311,18 @@ mcpRouter.all('/', async (c) => {
       const duration = Date.now() - startTime;
       console.error(`[MCP:${requestId}] POST FATAL ERROR after ${duration}ms:`, error);
       console.log(`[MCP:${requestId}] Error details:`, {
-        name: error instanceof Error ? error.name : 'Unknown',
         message: error instanceof Error ? error.message : String(error),
+        name: error instanceof Error ? error.name : 'Unknown',
         stack: error instanceof Error ? error.stack?.substring(0, 500) : undefined
       });
 
       return c.json({
-        jsonrpc: '2.0',
         error: {
           code: -32603,
           message: 'Internal error'
         },
-        id: null
+        id: null,
+        jsonrpc: '2.0'
       }, 500);
     }
   }
@@ -363,19 +365,19 @@ async function handleMCPRequest(request: any, spotifyToken: string, requestId: s
     case 'initialize':
       console.log(`[MCP:${requestId}] INITIALIZE - Setting up MCP connection`);
       const initResult = {
+        id: request.id,
         jsonrpc: '2.0',
         result: {
-          protocolVersion: '2025-06-18',
           capabilities: {
-            tools: {},
-            resources: {}
+            resources: {},
+            tools: {}
           },
+          protocolVersion: '2025-06-18',
           serverInfo: {
             name: 'spotify-mcp-server',
             version: '2.0.0'
           }
-        },
-        id: request.id
+        }
       };
 
       const initDuration = Date.now() - methodStartTime;
@@ -389,15 +391,15 @@ async function handleMCPRequest(request: any, spotifyToken: string, requestId: s
       console.log(`[MCP:${requestId}] TOOLS/LIST - Fetching available tools`);
 
       const toolsResult = {
+        id: request.id,
         jsonrpc: '2.0',
         result: {
           tools: spotifyTools.map(tool => ({
-            name: tool.name,
             description: tool.description,
-            inputSchema: tool.input_schema
+            inputSchema: tool.input_schema,
+            name: tool.name
           }))
-        },
-        id: request.id
+        }
       };
 
       const listDuration = Date.now() - methodStartTime;
@@ -408,7 +410,7 @@ async function handleMCPRequest(request: any, spotifyToken: string, requestId: s
       return toolsResult;
 
     case 'tools/call':
-      const { name, arguments: args } = request.params || {};
+      const { arguments: args, name } = request.params || {};
 
       console.log(`[MCP:${requestId}] TOOLS/CALL - Executing: ${name}`);
       console.log(`[MCP:${requestId}] Tool arguments:`, JSON.stringify(args).substring(0, 200));
@@ -417,12 +419,12 @@ async function handleMCPRequest(request: any, spotifyToken: string, requestId: s
       if (!name) {
         console.error(`[MCP:${requestId}] TOOLS/CALL ERROR - No tool name provided`);
         return {
-          jsonrpc: '2.0',
           error: {
             code: -32602,
             message: 'Missing tool name'
           },
-          id: request.id
+          id: request.id,
+          jsonrpc: '2.0'
         };
       }
 
@@ -447,33 +449,33 @@ async function handleMCPRequest(request: any, spotifyToken: string, requestId: s
         console.log(`[MCP:${requestId}] Result preview:`, resultStr.substring(0, 200) + (resultStr.length > 200 ? '...' : ''));
 
         return {
+          id: request.id,
           jsonrpc: '2.0',
           result: {
             content: [
               {
-                type: 'text',
-                text: JSON.stringify(result, null, 2)
+                text: JSON.stringify(result, null, 2),
+                type: 'text'
               }
             ]
-          },
-          id: request.id
+          }
         };
       } catch (toolError) {
         const totalDuration = Date.now() - methodStartTime;
         console.error(`[MCP:${requestId}] TOOLS/CALL FAILED - ${name} error after ${totalDuration}ms:`, toolError);
         console.log(`[MCP:${requestId}] Tool error details:`, {
-          name: toolError instanceof Error ? toolError.name : 'Unknown',
           message: toolError instanceof Error ? toolError.message : String(toolError),
+          name: toolError instanceof Error ? toolError.name : 'Unknown',
           stack: toolError instanceof Error ? toolError.stack?.substring(0, 300) : undefined
         });
 
         return {
-          jsonrpc: '2.0',
           error: {
             code: -32603,
             message: toolError instanceof Error ? toolError.message : 'Tool execution failed'
           },
-          id: request.id
+          id: request.id,
+          jsonrpc: '2.0'
         };
       }
 
@@ -484,12 +486,12 @@ async function handleMCPRequest(request: any, spotifyToken: string, requestId: s
       console.log(`[MCP:${requestId}] Request data:`, JSON.stringify(request).substring(0, 200));
 
       return {
-        jsonrpc: '2.0',
         error: {
           code: -32601,
           message: 'Method not found'
         },
-        id: request.id
+        id: request.id,
+        jsonrpc: '2.0'
       };
   }
 }
@@ -563,18 +565,18 @@ mcpRouter.post('/session/create', async (c) => {
     console.log(`[MCP:${sessionRequestId}] MCP server URL: ${mcpServerUrl}`);
 
     return c.json({
-      sessionToken,
-      mcpServerUrl,
-      userId: userData.id,
       displayName: userData.display_name,
-      requestId: sessionRequestId
+      mcpServerUrl,
+      requestId: sessionRequestId,
+      sessionToken,
+      userId: userData.id
     });
   } catch (error) {
     const duration = Date.now() - startTime;
     console.error(`[MCP:${sessionRequestId}] SESSION CREATE ERROR after ${duration}ms:`, error);
     console.log(`[MCP:${sessionRequestId}] Error details:`, {
-      name: error instanceof Error ? error.name : 'Unknown',
       message: error instanceof Error ? error.message : String(error),
+      name: error instanceof Error ? error.name : 'Unknown',
       stack: error instanceof Error ? error.stack?.substring(0, 300) : undefined
     });
 
@@ -593,11 +595,11 @@ mcpRouter.get('/health', async (c) => {
   console.log(`[MCP-Health:${healthId}] Health check requested`);
 
   return c.json({
+    healthId,
+    server: 'spotify-mcp-server',
     status: 'healthy',
     timestamp: Date.now(),
-    server: 'spotify-mcp-server',
-    version: '2.0.0',
-    healthId
+    version: '2.0.0'
   });
 });
 
@@ -609,10 +611,10 @@ mcpRouter.get('/test-sse', async (c) => {
   console.log(`[SSE-Test:${testId}] === SSE TEST ENDPOINT ===`);
 
   const headers = {
-    'Content-Type': 'text/event-stream; charset=utf-8',
-    'Cache-Control': 'no-cache, no-transform',
+    'Access-Control-Allow-Headers': 'Authorization, Content-Type',
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Authorization, Content-Type'
+    'Cache-Control': 'no-cache, no-transform',
+    'Content-Type': 'text/event-stream; charset=utf-8'
   };
 
   const stream = new ReadableStream({
@@ -631,22 +633,22 @@ mcpRouter.get('/test-sse', async (c) => {
       };
 
       // Send immediate events
-      send({ type: 'connected', timestamp: Date.now(), testId }, 'connected');
-      send({ type: 'ready', message: 'SSE test endpoint ready' }, 'ready');
+      send({ testId, timestamp: Date.now(), type: 'connected' }, 'connected');
+      send({ message: 'SSE test endpoint ready', type: 'ready' }, 'ready');
 
       // Send periodic test events
       const interval = setInterval(() => {
         counter++;
         try {
           send({
-            type: 'test',
             counter,
+            message: `Test event #${counter}`,
             timestamp: Date.now(),
-            message: `Test event #${counter}`
+            type: 'test'
           }, 'test');
 
           if (counter >= 5) {
-            send({ type: 'complete', message: 'Test complete' }, 'complete');
+            send({ message: 'Test complete', type: 'complete' }, 'complete');
             clearInterval(interval);
             controller.close();
             console.log(`[SSE-Test:${testId}] Test completed, connection closed`);
@@ -669,7 +671,7 @@ mcpRouter.get('/test-sse', async (c) => {
     }
   });
 
-  return new Response(stream, { status: 200, headers });
+  return new Response(stream, { headers, status: 200 });
 });
 
 /**
@@ -698,8 +700,8 @@ mcpRouter.post('/session/destroy', async (c) => {
     console.log(`[MCP:${destroyRequestId}] === SESSION DESTROY SUCCESS (${duration}ms) ===`);
 
     return c.json({
-      success: true,
-      requestId: destroyRequestId
+      requestId: destroyRequestId,
+      success: true
     });
   } catch (error) {
     const duration = Date.now() - startTime;
