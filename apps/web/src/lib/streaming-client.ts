@@ -71,36 +71,40 @@ export class ChatStreamClient {
 
   private handleEvent(event: StreamEvent, callbacks: StreamCallbacks) {
     try {
+      // Log ALL events clearly
+      console.log(`%c[SSE Event] ${event.type}`, 'color: #00d4ff; font-weight: bold', event.data)
+
       switch (event.type) {
         case 'content':
           callbacks.onContent?.(event.data)
           break
         case 'debug':
-          // Log debug info in collapsed group for cleaner console
-          console.groupCollapsed('[Server Debug]')
-          console.warn(event.data)
-          console.groupEnd()
+          // Log debug info (now visible due to line 75)
+          console.log('[Server Debug]', event.data)
           break
         case 'done':
           callbacks.onDone?.()
           break
         case 'error':
+          console.error('[Server Error]', event.data)
           callbacks.onError?.(event.data)
           break
         case 'log': {
           // Log to browser console with better formatting
           const logColor =
             event.data.level === 'error' ? 'color: red' : event.data.level === 'warn' ? 'color: orange' : 'color: blue'
-          console.warn(`%c[Server ${event.data.level}]`, logColor, event.data.message)
+          console.log(`%c[Server ${event.data.level}]`, logColor, event.data.message)
           break
         }
         case 'thinking':
           callbacks.onThinking?.(event.data)
           break
         case 'tool_end':
+          console.log(`[Tool Complete] ${event.data.tool}`, event.data.result)
           callbacks.onToolEnd?.(event.data.tool, event.data.result)
           break
         case 'tool_start':
+          console.log(`[Tool Start] ${event.data.tool}`, event.data.args)
           callbacks.onToolStart?.(event.data.tool, event.data.args)
           break
       }
@@ -295,7 +299,12 @@ export class ChatStreamClient {
         }
 
         const chunk = decoder.decode(value, {stream: true})
-        console.log(`[ChatStream] Chunk #${chunkCount} received (${chunk.length} bytes):`, chunk.slice(0, 100))
+        console.log(
+          `%c[SSE Chunk #${chunkCount}]`,
+          'color: #888; font-size: 10px',
+          `${chunk.length} bytes:`,
+          chunk.slice(0, 200),
+        )
         buffer += chunk
 
         // Safety cap on buffer size to prevent memory issues
@@ -314,10 +323,10 @@ export class ChatStreamClient {
 
       // Call onDone if not already called
       if (!finished) {
-        console.log('[ChatStream] Stream complete, calling onDone')
+        console.log(`%c[ChatStream] ✅ Stream complete (${chunkCount} chunks)`, 'color: green; font-weight: bold')
         callbacks.onDone?.()
       } else {
-        console.log('[ChatStream] Stream already finished, skipping onDone')
+        console.log(`%c[ChatStream] ✅ Stream already finished (${chunkCount} chunks)`, 'color: green')
       }
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
