@@ -363,7 +363,7 @@ async function handleMCPRequest(request: any, spotifyToken: string, requestId: s
 
   switch (method) {
     case 'initialize':
-      console.log(`[MCP:${requestId}] INITIALIZE - Setting up MCP connection`);
+      { console.log(`[MCP:${requestId}] INITIALIZE - Setting up MCP connection`);
       const initResult = {
         id: request.id,
         jsonrpc: '2.0',
@@ -385,10 +385,10 @@ async function handleMCPRequest(request: any, spotifyToken: string, requestId: s
       console.log(`[MCP:${requestId}] Protocol version: ${initResult.result.protocolVersion}`);
       console.log(`[MCP:${requestId}] Server: ${initResult.result.serverInfo.name} v${initResult.result.serverInfo.version}`);
 
-      return initResult;
+      return initResult; }t; }
 
     case 'tools/list':
-      console.log(`[MCP:${requestId}] TOOLS/LIST - Fetching available tools`);
+      { console.log(`[MCP:${requestId}] TOOLS/LIST - Fetching available tools`);
 
       const toolsResult = {
         id: request.id,
@@ -407,10 +407,10 @@ async function handleMCPRequest(request: any, spotifyToken: string, requestId: s
       console.log(`[MCP:${requestId}] Available tools: ${toolsResult.result.tools.length}`);
       console.log(`[MCP:${requestId}] Tool names: [${toolsResult.result.tools.map(t => t.name).join(', ')}]`);
 
-      return toolsResult;
+      return toolsResult; }t; }
 
     case 'tools/call':
-      const { arguments: args, name } = request.params ?? {};
+      { const { arguments: args, name } = request.params ?? {};
 
       console.log(`[MCP:${requestId}] TOOLS/CALL - Executing: ${name}`);
       console.log(`[MCP:${requestId}] Tool arguments:`, JSON.stringify(args).substring(0, 200));
@@ -477,10 +477,10 @@ async function handleMCPRequest(request: any, spotifyToken: string, requestId: s
           id: request.id,
           jsonrpc: '2.0'
         };
-      }
+      } }
 
     default:
-      const duration = Date.now() - methodStartTime;
+      { const duration = Date.now() - methodStartTime;
       console.error(`[MCP:${requestId}] UNKNOWN METHOD: ${method} (${duration}ms)`);
       console.log(`[MCP:${requestId}] Available methods: initialize, tools/list, tools/call`);
       console.log(`[MCP:${requestId}] Request data:`, JSON.stringify(request).substring(0, 200));
@@ -492,7 +492,7 @@ async function handleMCPRequest(request: any, spotifyToken: string, requestId: s
         },
         id: request.id,
         jsonrpc: '2.0'
-      };
+      }; }
   }
 }
 
