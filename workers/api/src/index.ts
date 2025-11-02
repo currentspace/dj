@@ -49,7 +49,7 @@ app.get('*', async (c) => {
     // If the response is 404 and this is a navigation request,
     // serve index.html for client-side routing (SPA behavior)
     if (response.status === 404) {
-      const acceptHeader = c.req.header('Accept') || ''
+      const acceptHeader = c.req.header('Accept') ?? ''
       if (acceptHeader.includes('text/html')) {
         // Try to serve index.html for SPA routing
         const indexResponse = await c.env.ASSETS.fetch(new Request(new URL('/index.html', c.req.url)))
