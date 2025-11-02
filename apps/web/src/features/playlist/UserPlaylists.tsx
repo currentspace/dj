@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from "react";
 
-import { useSpotifyAuth } from '../../hooks/useSpotifyAuth';
+import { useSpotifyAuth } from "../../hooks/useSpotifyAuth";
 
 interface SpotifyPlaylist {
   description: string;
@@ -28,42 +28,44 @@ interface UserPlaylistsProps {
   selectedPlaylist?: null | SpotifyPlaylist;
 }
 
-function UserPlaylists({ onPlaylistSelect, selectedPlaylist }: UserPlaylistsProps) {
+function UserPlaylists({
+  onPlaylistSelect,
+  selectedPlaylist,
+}: UserPlaylistsProps) {
   const { token } = useSpotifyAuth();
   const [playlists, setPlaylists] = useState<SpotifyPlaylist[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<null | string>(null);
 
-  useEffect(() => {
-    if (token) {
-      loadPlaylists();
-    }
-  }, [token]);
-
-  const loadPlaylists = async () => {
+  const loadPlaylists = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
-      const response = await fetch('/api/spotify/playlists', {
+      const response = await fetch("/api/spotify/playlists", {
         headers: {
-          'Authorization': `Bearer ${token}`
-        }
+          Authorization: `Bearer ${token}`,
+        },
       });
 
       if (!response.ok) {
-        throw new Error('Failed to load playlists');
+        throw new Error("Failed to load playlists");
       }
 
-      const data = await response.json();
+      const data = (await response.json()) as { items?: SpotifyPlaylist[] };
       setPlaylists(data.items ?? []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load playlists');
+      setError(err instanceof Error ? err.message : "Failed to load playlists");
     } finally {
       setLoading(false);
     }
-  };
+  }, [token]);
 
+  useEffect(() => {
+    if (token) {
+      loadPlaylists();
+    }
+  }, [loadPlaylists, token]);
 
   if (loading) {
     return (
@@ -101,15 +103,27 @@ function UserPlaylists({ onPlaylistSelect, selectedPlaylist }: UserPlaylistsProp
     <div className="user-playlists">
       <div className="playlists-header">
         <h2>🎵 Your Playlists</h2>
-        <p>{playlists.length} playlist{playlists.length !== 1 ? 's' : ''}</p>
+        <p>
+          {playlists.length} playlist{playlists.length !== 1 ? "s" : ""}
+        </p>
       </div>
 
       <div className="playlists-grid">
         {playlists.map((playlist) => (
           <div
-            className={`playlist-card ${selectedPlaylist?.id === playlist.id ? 'selected' : ''}`}
+            className={`playlist-card ${
+              selectedPlaylist?.id === playlist.id ? "selected" : ""
+            }`}
             key={playlist.id}
             onClick={() => onPlaylistSelect?.(playlist)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onPlaylistSelect?.(playlist);
+              }
+            }}
+            role="button"
+            tabIndex={0}
           >
             <div className="playlist-image">
               {playlist.images && playlist.images.length > 0 ? (
@@ -126,8 +140,9 @@ function UserPlaylists({ onPlaylistSelect, selectedPlaylist }: UserPlaylistsProp
             <div className="playlist-info">
               <h3 className="playlist-name">{playlist.name}</h3>
               <p className="playlist-meta">
-                {playlist.tracks.total} track{playlist.tracks.total !== 1 ? 's' : ''} •
-                {playlist.public ? ' Public' : ' Private'}
+                {playlist.tracks.total} track
+                {playlist.tracks.total !== 1 ? "s" : ""} •
+                {playlist.public ? " Public" : " Private"}
               </p>
               {playlist.description && (
                 <p className="playlist-description">{playlist.description}</p>

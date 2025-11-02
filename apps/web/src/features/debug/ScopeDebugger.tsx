@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState } from "react";
 
 interface ScopeDebugData {
   instructions: {
@@ -7,9 +7,9 @@ interface ScopeDebugData {
   };
   required_scopes: string[];
   scope_tests: {
-    'audio-features': ScopeTestResult;
-    'playlist-read-private': boolean;
-    'user-read-private': boolean;
+    "audio-features": ScopeTestResult;
+    "playlist-read-private": boolean;
+    "user-read-private": boolean;
   };
   token_info: {
     country: string;
@@ -40,25 +40,27 @@ export function ScopeDebugger() {
       setLoading(true);
       setError(null);
 
-      const token = localStorage.getItem('spotify_token');
+      const token = localStorage.getItem("spotify_token");
       if (!token) {
-        throw new Error('No Spotify token found');
+        throw new Error("No Spotify token found");
       }
 
-      const response = await fetch('/api/spotify/debug/scopes', {
+      const response = await fetch("/api/spotify/debug/scopes", {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to fetch scope debug info: ${response.status} ${response.statusText}`);
+        throw new Error(
+          `Failed to fetch scope debug info: ${response.status} ${response.statusText}`
+        );
       }
 
-      const result = await response.json();
+      const result = (await response.json()) as ScopeDebugData;
       setData(result);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
+      setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
       setLoading(false);
     }
@@ -91,7 +93,7 @@ export function ScopeDebugger() {
     return null;
   }
 
-  const hasAudioFeaturesAccess = data.scope_tests['audio-features'].accessible;
+  const hasAudioFeaturesAccess = data.scope_tests["audio-features"].accessible;
 
   return (
     <div className="scope-debugger">
@@ -126,24 +128,47 @@ export function ScopeDebugger() {
       <section className="debug-section">
         <h3>Permission Tests</h3>
         <div className="scope-tests">
-          <div className={`scope-test ${data.scope_tests['user-read-private'] ? 'success' : 'failure'}`}>
-            <span className="scope-icon">{data.scope_tests['user-read-private'] ? '✅' : '❌'}</span>
+          <div
+            className={`scope-test ${
+              data.scope_tests["user-read-private"] ? "success" : "failure"
+            }`}
+          >
+            <span className="scope-icon">
+              {data.scope_tests["user-read-private"] ? "✅" : "❌"}
+            </span>
             <span className="scope-name">user-read-private</span>
-            <span className="scope-status">{data.scope_tests['user-read-private'] ? 'Working' : 'Failed'}</span>
+            <span className="scope-status">
+              {data.scope_tests["user-read-private"] ? "Working" : "Failed"}
+            </span>
           </div>
 
-          <div className={`scope-test ${data.scope_tests['playlist-read-private'] ? 'success' : 'failure'}`}>
-            <span className="scope-icon">{data.scope_tests['playlist-read-private'] ? '✅' : '❌'}</span>
+          <div
+            className={`scope-test ${
+              data.scope_tests["playlist-read-private"] ? "success" : "failure"
+            }`}
+          >
+            <span className="scope-icon">
+              {data.scope_tests["playlist-read-private"] ? "✅" : "❌"}
+            </span>
             <span className="scope-name">playlist-read-private</span>
-            <span className="scope-status">{data.scope_tests['playlist-read-private'] ? 'Working' : 'Failed'}</span>
+            <span className="scope-status">
+              {data.scope_tests["playlist-read-private"] ? "Working" : "Failed"}
+            </span>
           </div>
 
-          <div className={`scope-test ${hasAudioFeaturesAccess ? 'success' : 'failure'}`}>
-            <span className="scope-icon">{hasAudioFeaturesAccess ? '✅' : '❌'}</span>
+          <div
+            className={`scope-test ${
+              hasAudioFeaturesAccess ? "success" : "failure"
+            }`}
+          >
+            <span className="scope-icon">
+              {hasAudioFeaturesAccess ? "✅" : "❌"}
+            </span>
             <span className="scope-name">audio-features</span>
             <span className="scope-status">
-              {data.scope_tests['audio-features'].note}
-              {!hasAudioFeaturesAccess && ` (Status: ${data.scope_tests['audio-features'].status})`}
+              {data.scope_tests["audio-features"].note}
+              {!hasAudioFeaturesAccess &&
+                ` (Status: ${data.scope_tests["audio-features"].status})`}
             </span>
           </div>
         </div>
@@ -153,7 +178,9 @@ export function ScopeDebugger() {
         <section className="debug-section warning-section">
           <h3>⚠️ Action Required</h3>
           <div className="warning-content">
-            <p><strong>{data.instructions.if_audio_features_forbidden}</strong></p>
+            <p>
+              <strong>{data.instructions.if_audio_features_forbidden}</strong>
+            </p>
             <p>How to logout: {data.instructions.logout_method}</p>
           </div>
         </section>
@@ -163,7 +190,9 @@ export function ScopeDebugger() {
         <h3>Required Scopes</h3>
         <div className="scopes-list">
           {data.required_scopes.map((scope) => (
-            <span className="scope-badge" key={scope}>{scope}</span>
+            <span className="scope-badge" key={scope}>
+              {scope}
+            </span>
           ))}
         </div>
       </section>
