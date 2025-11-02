@@ -53,10 +53,10 @@ mcpRouter.all('/', async (c) => {
 
   try {
     const method = c.req.method;
-    const acceptHeader = c.req.header('Accept') || '';
+    const acceptHeader = c.req.header('Accept') ?? '';
     const sessionId = c.req.header('Mcp-Session-Id');
-    const userAgent = c.req.header('User-Agent') || '';
-    const origin = c.req.header('Origin') || '';
+    const userAgent = c.req.header('User-Agent') ?? '';
+    const origin = c.req.header('Origin') ?? '';
 
     console.log(`[MCP:${requestId}] === MCP ENDPOINT HIT ===`);
     console.log(`[MCP:${requestId}] URL: ${c.req.url}`);
@@ -64,7 +64,7 @@ mcpRouter.all('/', async (c) => {
     console.log(`[MCP:${requestId}] Accept: ${acceptHeader}`);
     console.log(`[MCP:${requestId}] User-Agent: ${userAgent.substring(0, 100)}${userAgent.length > 100 ? '...' : ''}`);
     console.log(`[MCP:${requestId}] Origin: ${origin}`);
-    console.log(`[MCP:${requestId}] Session-Id: ${sessionId?.substring(0, 8) || 'none'}`);
+    console.log(`[MCP:${requestId}] Session-Id: ${sessionId?.substring(0, 8) ?? 'none'}`);
 
   // Helper functions for safe header handling
   const getHeader = (name: string) => c.req.header(name) ?? c.req.raw.headers.get(name);
@@ -94,7 +94,7 @@ mcpRouter.all('/', async (c) => {
       details: 'Missing or invalid Authorization header',
       error: 'Unauthorized',
       expected: 'Authorization: Bearer <session-token>',
-      received: authorization || 'none',
+      received: authorization ?? 'none',
       requestId,
       timestamp: Date.now()
     }, 401);
@@ -246,7 +246,7 @@ mcpRouter.all('/', async (c) => {
 
       for (let i = 0; i < requests.length; i++) {
         const request = requests[i];
-        console.log(`[MCP:${requestId}] Processing request ${i + 1}/${requests.length}: ${request?.method || 'unknown'}`);
+        console.log(`[MCP:${requestId}] Processing request ${i + 1}/${requests.length}: ${request?.method ?? 'unknown'}`);
 
         try {
           const mcpRequest = MCPRequestSchema.parse(request);
@@ -283,7 +283,7 @@ mcpRouter.all('/', async (c) => {
               code: -32602,
               message: 'Invalid params'
             },
-            id: request?.id || null,
+            id: request?.id ?? null,
             jsonrpc: '2.0'
           });
         }
@@ -410,7 +410,7 @@ async function handleMCPRequest(request: any, spotifyToken: string, requestId: s
       return toolsResult;
 
     case 'tools/call':
-      const { arguments: args, name } = request.params || {};
+      const { arguments: args, name } = request.params ?? {};
 
       console.log(`[MCP:${requestId}] TOOLS/CALL - Executing: ${name}`);
       console.log(`[MCP:${requestId}] Tool arguments:`, JSON.stringify(args).substring(0, 200));
@@ -505,14 +505,14 @@ mcpRouter.post('/session/create', async (c) => {
 
   console.log(`[MCP:${sessionRequestId}] === SESSION CREATE REQUEST ===`);
   console.log(`[MCP:${sessionRequestId}] URL: ${c.req.url}`);
-  console.log(`[MCP:${sessionRequestId}] User-Agent: ${c.req.header('User-Agent')?.substring(0, 100) || 'unknown'}`);
+  console.log(`[MCP:${sessionRequestId}] User-Agent: ${c.req.header('User-Agent')?.substring(0, 100) ?? 'unknown'}`);
 
   try {
     const authorization = c.req.header('Authorization');
     const spotifyToken = authorization?.replace('Bearer ', '');
 
     console.log(`[MCP:${sessionRequestId}] Authorization header present: ${!!authorization}`);
-    console.log(`[MCP:${sessionRequestId}] Spotify token length: ${spotifyToken?.length || 0}`);
+    console.log(`[MCP:${sessionRequestId}] Spotify token length: ${spotifyToken?.length ?? 0}`);
 
     if (!spotifyToken) {
       const duration = Date.now() - startTime;
@@ -545,9 +545,9 @@ mcpRouter.post('/session/create', async (c) => {
 
     const userData = await testResponse.json();
     console.log(`[MCP:${sessionRequestId}] Spotify user validated: ${userData.id}`);
-    console.log(`[MCP:${sessionRequestId}] Display name: ${userData.display_name || 'none'}`);
-    console.log(`[MCP:${sessionRequestId}] Country: ${userData.country || 'unknown'}`);
-    console.log(`[MCP:${sessionRequestId}] Followers: ${userData.followers?.total || 0}`);
+    console.log(`[MCP:${sessionRequestId}] Display name: ${userData.display_name ?? 'none'}`);
+    console.log(`[MCP:${sessionRequestId}] Country: ${userData.country ?? 'unknown'}`);
+    console.log(`[MCP:${sessionRequestId}] Followers: ${userData.followers?.total ?? 0}`);
 
     // Create session
     console.log(`[MCP:${sessionRequestId}] Creating session...`);
@@ -629,7 +629,7 @@ mcpRouter.get('/test-sse', async (c) => {
         }
         message += `data: ${JSON.stringify(data)}\n\n`;
         controller.enqueue(enc.encode(message));
-        console.log(`[SSE-Test:${testId}] Sent: ${event || 'data'} - ${JSON.stringify(data).substring(0, 100)}`);
+        console.log(`[SSE-Test:${testId}] Sent: ${event ?? 'data'} - ${JSON.stringify(data).substring(0, 100)}`);
       };
 
       // Send immediate events
