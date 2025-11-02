@@ -1,26 +1,26 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState } from "react";
 
 // Default build info for development
 const defaultBuildInfo = {
-  branch: 'local',
+  branch: "local",
   buildTime: new Date().toISOString(),
-  commitHash: 'dev',
-  commitMessage: 'Development build',
-  version: 'dev-local'
-}
+  commitHash: "dev",
+  commitMessage: "Development build",
+  version: "dev-local",
+};
 
 export function BuildInfo() {
-  const [isOpen, setIsOpen] = useState(false)
-  const [buildInfo, setBuildInfo] = useState(defaultBuildInfo)
+  const [isOpen, setIsOpen] = useState(false);
+  const [buildInfo, setBuildInfo] = useState(defaultBuildInfo);
 
   useEffect(() => {
     // Try to load actual build info
-    import('../build-info.json')
-      .then(module => setBuildInfo(module.default))
+    import("../build-info.json")
+      .then((module) => setBuildInfo(module.default))
       .catch(() => {
-        console.log('Using default build info (dev mode)')
-      })
-  }, [])
+        console.log("Using default build info (dev mode)");
+      });
+  }, []);
 
   return (
     <>
@@ -36,7 +36,9 @@ export function BuildInfo() {
         <div className="build-info-modal">
           <div className="build-info-content">
             <h3>Build Information</h3>
-            <button className="close-btn" onClick={() => setIsOpen(false)}>×</button>
+            <button className="close-btn" onClick={() => setIsOpen(false)}>
+              ×
+            </button>
 
             <div className="build-details">
               <div className="build-row">
@@ -55,7 +57,9 @@ export function BuildInfo() {
               </div>
               <div className="build-row">
                 <span className="build-label">Message:</span>
-                <span className="build-value build-message">{buildInfo.commitMessage}</span>
+                <span className="build-value build-message">
+                  {buildInfo.commitMessage}
+                </span>
               </div>
               <div className="build-row">
                 <span className="build-label">Version:</span>
@@ -76,5 +80,5 @@ export function BuildInfo() {
         </div>
       )}
     </>
-  )
+  );
 }

@@ -3,8 +3,9 @@
  * Provides end-to-end type safety from server to client
  */
 
-import { hc } from 'hono/client';
-import type { AppType } from '@dj/api-contracts';
+import type { AppType } from "@dj/api-contracts";
+
+import { hc } from "hono/client";
 
 /**
  * Create a typed API client
@@ -29,7 +30,9 @@ export function createApiClient(baseUrl: string) {
  * Uses current origin (works in both dev and production)
  */
 export const apiClient = createApiClient(
-  typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8787'
+  typeof window !== "undefined"
+    ? window.location.origin
+    : "http://localhost:8787"
 );
 
 /**
@@ -45,10 +48,10 @@ export const apiClient = createApiClient(
  */
 export async function parseResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
-    const errorText = await response.text().catch(() => '');
+    const errorText = await response.text().catch(() => "");
     throw new Error(
       `API Error ${response.status}: ${response.statusText}${
-        errorText ? ` - ${errorText}` : ''
+        errorText ? ` - ${errorText}` : ""
       }`
     );
   }

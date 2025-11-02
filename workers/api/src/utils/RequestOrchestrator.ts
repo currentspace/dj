@@ -19,23 +19,23 @@
  * 2. Batch: await orchestrator.executeBatch('id', tasks, 'spotify')
  */
 
-import { RateLimitedQueue } from './RateLimitedQueue';
+import { RateLimitedQueue } from "./RateLimitedQueue";
 
 interface LaneConfig {
   maxConcurrency: number;
   queue: (() => void)[]; // Callbacks to run when slot available
   running: number;
 }
-type LaneKey = 'anthropic' | 'deezer' | 'default' | 'lastfm' | 'spotify';
+type LaneKey = "anthropic" | "deezer" | "default" | "lastfm" | "spotify";
 
 type Task<T> = () => Promise<T>;
 
 const LANE_LIMITS: Record<LaneKey, number> = {
-  anthropic: 2,   // Critical: Anthropic SDK can't handle >2 concurrent in Workers
+  anthropic: 2, // Critical: Anthropic SDK can't handle >2 concurrent in Workers
   deezer: 10,
   default: 3,
   lastfm: 10,
-  spotify: 5
+  spotify: 5,
 };
 
 export class RequestOrchestrator {
@@ -43,9 +43,9 @@ export class RequestOrchestrator {
   private rateLimiter: RateLimitedQueue<any>;
 
   constructor(options?: {
-    jitterMs?: number;    // Jitter in ms (default: 5)
-    minTickMs?: number;   // Minimum tick delay (default: 1-2ms)
-    rate?: number;        // Requests per second (default: 40)
+    jitterMs?: number; // Jitter in ms (default: 5)
+    minTickMs?: number; // Minimum tick delay (default: 1-2ms)
+    rate?: number; // Requests per second (default: 40)
   }) {
     // Initialize rate limiter (40 RPS global, no global concurrency limit)
     this.rateLimiter = new RateLimitedQueue({
@@ -60,13 +60,13 @@ export class RequestOrchestrator {
       this.lanes.set(lane as LaneKey, {
         maxConcurrency,
         queue: [],
-        running: 0
+        running: 0,
       });
     }
 
     // Start continuous processing
-    this.rateLimiter.processContinuously().catch(err => {
-      console.error('[RequestOrchestrator] Fatal error:', err);
+    this.rateLimiter.processContinuously().catch((err) => {
+      console.error("[RequestOrchestrator] Fatal error:", err);
     });
   }
 
@@ -80,7 +80,7 @@ export class RequestOrchestrator {
    * 4. Execute task
    * 5. Release lane slot
    */
-  async execute<T>(task: Task<T>, lane: LaneKey = 'default'): Promise<T> {
+  async execute<T>(task: Task<T>, lane: LaneKey = "default"): Promise<T> {
     const laneConfig = this.lanes.get(lane)!;
 
     // Wait for lane slot if needed
@@ -114,8 +114,11 @@ export class RequestOrchestrator {
    * All tasks go through the same lane and respect its concurrency limit
    * Returns results in same order as input tasks
    */
-  async executeBatch<T>(tasks: Task<T>[], lane: LaneKey = 'default'): Promise<T[]> {
-    const promises = tasks.map(task => this.execute(task, lane));
+  async executeBatch<T>(
+    tasks: Task<T>[],
+    lane: LaneKey = "default"
+  ): Promise<T[]> {
+    const promises = tasks.map((task) => this.execute(task, lane));
     return Promise.all(promises);
   }
 
@@ -158,6 +161,6 @@ export class RequestOrchestrator {
  * All API calls in the worker go through this
  */
 export const globalOrchestrator = new RequestOrchestrator({
-  jitterMs: 5,  // 0-5ms jitter
-  rate: 40,     // 40 RPS (Cloudflare Workers limit)
+  jitterMs: 5, // 0-5ms jitter
+  rate: 40, // 40 RPS (Cloudflare Workers limit)
 });

@@ -7,7 +7,7 @@ export interface ApiError {
 // Chat interfaces
 export interface ChatMessage {
   content: string;
-  role: 'assistant' | 'user';
+  role: "assistant" | "user";
 }
 
 export interface ChatRequest {
@@ -82,7 +82,7 @@ export interface SpotifyPlaylist {
 
 export interface SpotifySearchRequest {
   query: string;
-  type?: 'album' | 'artist' | 'track';
+  type?: "album" | "artist" | "track";
 }
 
 // Spotify API response types
@@ -108,7 +108,7 @@ export interface SpotifyUser {
 }
 
 export interface SpotifyWebhookPayload {
-  event: 'playlist.created' | 'playlist.deleted' | 'playlist.updated';
+  event: "playlist.created" | "playlist.deleted" | "playlist.updated";
   playlistId: string;
   timestamp: string;
   userId: string;
@@ -117,7 +117,7 @@ export interface SpotifyWebhookPayload {
 export type StreamDebugData = Record<string, unknown>;
 
 export interface StreamLogData {
-  level: 'error' | 'info' | 'warn';
+  level: "error" | "info" | "warn";
   message: string;
 }
 
@@ -153,8 +153,9 @@ export interface WebhookEvent {
 // ===== Zod Schemas and Validation =====
 // Export all Zod schemas for runtime validation
 
-export * from './validation';
-export * from './schemas/spotify-schemas';
-export * from './schemas/external-api-schemas';
-export * from './schemas/sse-schemas';
-export * from './schemas/api-schemas';
+export * from "./schemas/api-schemas";
+export * from "./schemas/external-api-schemas";
+export * from "./schemas/spotify-schemas";
+export * from "./schemas/sse-schemas";
+// Note: validation.ts contains runtime code, so it's not exported
+// Use guards.ts in workers/api for runtime validation utilities

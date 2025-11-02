@@ -2,8 +2,6 @@
 import { z } from 'zod';
 
 import {
-  formatZodError,
-  safeParse,
   SpotifyAlbumFullSchema,
   SpotifyAudioFeaturesBatchSchema,
   SpotifyAudioFeaturesSchema,
@@ -17,6 +15,7 @@ import {
   SpotifyUserSchema,
 } from '@dj/shared-types';
 
+import { formatZodError, safeParse } from './guards';
 import { rateLimitedSpotifyCall } from '../utils/RateLimitedAPIClients';
 
 // Tool schemas

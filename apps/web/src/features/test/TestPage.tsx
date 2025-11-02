@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState } from "react";
 
 interface TestResult {
   data: any;
@@ -8,74 +8,81 @@ interface TestResult {
 
 export function TestPage() {
   const [results, setResults] = useState<Record<string, TestResult>>({});
-  const [chatMessage, setChatMessage] = useState('Hi! Can you help me create a chill playlist?');
+  const [chatMessage, setChatMessage] = useState(
+    "Hi! Can you help me create a chill playlist?"
+  );
   const [loading, setLoading] = useState<Record<string, boolean>>({});
 
-  const apiBase = import.meta.env.DEV ? 'http://localhost:8787' : '';
+  const apiBase = import.meta.env.DEV ? "http://localhost:8787" : "";
 
   const runTest = async (testName: string, testFn: () => Promise<any>) => {
-    setLoading(prev => ({ ...prev, [testName]: true }));
+    setLoading((prev) => ({ ...prev, [testName]: true }));
 
     try {
       const data = await testFn();
-      setResults(prev => ({
+      setResults((prev) => ({
         ...prev,
-        [testName]: { data, success: true }
+        [testName]: { data, success: true },
       }));
     } catch (error) {
-      setResults(prev => ({
+      setResults((prev) => ({
         ...prev,
         [testName]: {
           data: null,
-          error: error instanceof Error ? error.message : 'Unknown error',
-          success: false
-        }
+          error: error instanceof Error ? error.message : "Unknown error",
+          success: false,
+        },
       }));
     } finally {
-      setLoading(prev => ({ ...prev, [testName]: false }));
+      setLoading((prev) => ({ ...prev, [testName]: false }));
     }
   };
 
-  const testHealth = () => runTest('health', async () => {
-    const response = await fetch(`${apiBase}/health`);
-    return response.json();
-  });
-
-  const testEnv = () => runTest('env', async () => {
-    const response = await fetch(`${apiBase}/api/test/env`);
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    return response.json();
-  });
-
-  const testAnthropicDirect = () => runTest('anthropic', async () => {
-    const response = await fetch(`${apiBase}/api/test/anthropic`);
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    return response.json();
-  });
-
-  const testChat = () => runTest('chat', async () => {
-    if (!chatMessage.trim()) throw new Error('Please enter a message');
-
-    const response = await fetch(`${apiBase}/api/chat/message`, {
-      body: JSON.stringify({
-        conversationHistory: [],
-        message: chatMessage.trim()
-      }),
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      method: 'POST'
+  const testHealth = () =>
+    runTest("health", async () => {
+      const response = await fetch(`${apiBase}/health`);
+      return response.json();
     });
 
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    return response.json();
-  });
+  const testEnv = () =>
+    runTest("env", async () => {
+      const response = await fetch(`${apiBase}/api/test/env`);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.json();
+    });
 
-  const testSpotifyAuthUrl = () => runTest('spotify-auth', async () => {
-    const response = await fetch(`${apiBase}/api/spotify/auth-url`);
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    return response.json();
-  });
+  const testAnthropicDirect = () =>
+    runTest("anthropic", async () => {
+      const response = await fetch(`${apiBase}/api/test/anthropic`);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.json();
+    });
+
+  const testChat = () =>
+    runTest("chat", async () => {
+      if (!chatMessage.trim()) throw new Error("Please enter a message");
+
+      const response = await fetch(`${apiBase}/api/chat/message`, {
+        body: JSON.stringify({
+          conversationHistory: [],
+          message: chatMessage.trim(),
+        }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      });
+
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.json();
+    });
+
+  const testSpotifyAuthUrl = () =>
+    runTest("spotify-auth", async () => {
+      const response = await fetch(`${apiBase}/api/spotify/auth-url`);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.json();
+    });
 
   const renderResult = (testName: string) => {
     const result = results[testName];
@@ -90,7 +97,7 @@ export function TestPage() {
     }
 
     return (
-      <div className={`result ${result.success ? 'success' : 'error'}`}>
+      <div className={`result ${result.success ? "success" : "error"}`}>
         {result.success ? (
           <pre>{JSON.stringify(result.data, null, 2)}</pre>
         ) : (
@@ -104,7 +111,9 @@ export function TestPage() {
     <div className="test-page">
       <div className="test-header">
         <h1>🧪 DJ Worker API Tests</h1>
-        <p>Test the worker functionality locally without Spotify authentication</p>
+        <p>
+          Test the worker functionality locally without Spotify authentication
+        </p>
       </div>
 
       <div className="test-section">
@@ -112,7 +121,7 @@ export function TestPage() {
         <button disabled={loading.health} onClick={testHealth}>
           Test Health Endpoint
         </button>
-        {renderResult('health')}
+        {renderResult("health")}
       </div>
 
       <div className="test-section">
@@ -120,7 +129,7 @@ export function TestPage() {
         <button disabled={loading.env} onClick={testEnv}>
           Check Environment
         </button>
-        {renderResult('env')}
+        {renderResult("env")}
       </div>
 
       <div className="test-section">
@@ -128,7 +137,7 @@ export function TestPage() {
         <button disabled={loading.anthropic} onClick={testAnthropicDirect}>
           Test Anthropic API
         </button>
-        {renderResult('anthropic')}
+        {renderResult("anthropic")}
       </div>
 
       <div className="test-section">
@@ -140,19 +149,22 @@ export function TestPage() {
             rows={3}
             value={chatMessage}
           />
-          <button disabled={loading.chat || !chatMessage.trim()} onClick={testChat}>
+          <button
+            disabled={loading.chat || !chatMessage.trim()}
+            onClick={testChat}
+          >
             Send Chat Message
           </button>
         </div>
-        {renderResult('chat')}
+        {renderResult("chat")}
       </div>
 
       <div className="test-section">
         <h2>Spotify Auth URL (No Auth Required)</h2>
-        <button disabled={loading['spotify-auth']} onClick={testSpotifyAuthUrl}>
+        <button disabled={loading["spotify-auth"]} onClick={testSpotifyAuthUrl}>
           Get Spotify Auth URL
         </button>
-        {renderResult('spotify-auth')}
+        {renderResult("spotify-auth")}
       </div>
 
       <style>{`

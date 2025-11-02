@@ -1,4 +1,4 @@
-import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { Component, type ErrorInfo, type ReactNode } from "react";
 
 interface Props {
   children: ReactNode;
@@ -21,15 +21,15 @@ export class ErrorBoundary extends Component<Props, State> {
   static getDerivedStateFromError(error: Error): State {
     return {
       error,
-      hasError: true
+      hasError: true,
     };
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('Error caught by boundary:', error, errorInfo);
+    console.error("Error caught by boundary:", error, errorInfo);
     this.setState({
       error,
-      errorInfo
+      errorInfo,
     });
   }
 
@@ -50,15 +50,12 @@ export class ErrorBoundary extends Component<Props, State> {
             <div className="error-icon">⚠️</div>
             <h2>Something went wrong</h2>
             <p>
-              We're sorry, but something unexpected happened.
-              You can try reloading the page or contact support if the problem persists.
+              We're sorry, but something unexpected happened. You can try
+              reloading the page or contact support if the problem persists.
             </p>
 
             <div className="error-actions">
-              <button
-                className="retry-button"
-                onClick={this.handleReset}
-              >
+              <button className="retry-button" onClick={this.handleReset}>
                 Try Again
               </button>
               <button
@@ -79,7 +76,6 @@ export class ErrorBoundary extends Component<Props, State> {
               </details>
             )}
           </div>
-
         </div>
       );
     }
@@ -95,12 +91,15 @@ export function PlaylistErrorBoundary({ children }: { children: ReactNode }) {
       fallback={
         <div className="playlist-error">
           <h3>Unable to load playlist</h3>
-          <p>There was an error generating or loading your playlist. Please try again.</p>
+          <p>
+            There was an error generating or loading your playlist. Please try
+            again.
+          </p>
         </div>
       }
       onReset={() => {
         // Clear any cached playlist data
-        localStorage.removeItem('current_playlist');
+        localStorage.removeItem("current_playlist");
       }}
     >
       {children}

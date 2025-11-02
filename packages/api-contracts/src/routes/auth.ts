@@ -1,57 +1,85 @@
 /**
  * Authentication API contracts
- * Spotify OAuth flow and token management
+ * Spotify OAuth flow with PKCE and token management
  */
 
-import { createRoute, z } from '@hono/zod-openapi';
-import { SpotifyAuthResponseSchema } from '@dj/shared-types';
+import { createRoute, z } from "@hono/zod-openapi";
 
 /**
- * GET /api/spotify/auth
- * Returns Spotify OAuth authorization URL
+ * GET /api/spotify/auth-url
+ * Returns Spotify OAuth authorization URL with PKCE
+ * Sets secure HttpOnly cookie with code_verifier
  */
 export const getSpotifyAuthUrl = createRoute({
-  description: 'Get Spotify OAuth authorization URL',
-  method: 'get',
-  path: '/api/spotify/auth',
+  description: "Get Spotify OAuth authorization URL (PKCE flow)",
+  method: "get",
+  path: "/api/spotify/auth-url",
   responses: {
     200: {
       content: {
-        'application/json': {
-          schema: SpotifyAuthResponseSchema,
+        "application/json": {
+          schema: z.object({
+            url: z.string().url(),
+          }),
         },
       },
-      description: 'OAuth URL generated successfully',
+      description:
+        "OAuth URL generated successfully. Code verifier stored in secure cookie.",
     },
     500: {
       content: {
-        'application/json': {
+        "application/json": {
           schema: z.object({
             error: z.string(),
           }),
         },
       },
-      description: 'Server error',
+      description: "Server error",
     },
   },
-  tags: ['Auth'],
+  tags: ["Auth"],
+});
+
+/**
+ * GET /api/spotify/callback
+ * OAuth callback handler - exchanges code for token
+ * Redirects back to frontend with token
+ */
+export const handleSpotifyCallback = createRoute({
+  description:
+    "Handle OAuth callback and exchange code for token (server-side)",
+  method: "get",
+  path: "/api/spotify/callback",
+  request: {
+    query: z.object({
+      code: z.string().optional(),
+      error: z.string().optional(),
+      state: z.string().optional(),
+    }),
+  },
+  responses: {
+    302: {
+      description: "Redirect to frontend with token or error",
+    },
+  },
+  tags: ["Auth"],
 });
 
 /**
  * POST /api/spotify/token
- * Exchange authorization code for access token
+ * Exchange authorization code for access token (alternative flow)
  */
 export const exchangeSpotifyToken = createRoute({
-  description: 'Exchange authorization code for Spotify access token',
-  method: 'post',
-  path: '/api/spotify/token',
+  description: "Exchange authorization code for Spotify access token",
+  method: "post",
+  path: "/api/spotify/token",
   request: {
     body: {
       content: {
-        'application/json': {
+        "application/json": {
           schema: z.object({
             code: z.string().min(1),
-            redirect_uri: z.string().url(),
+            codeVerifier: z.string().min(1),
           }),
         },
       },
@@ -60,42 +88,52 @@ export const exchangeSpotifyToken = createRoute({
   responses: {
     200: {
       content: {
-        'application/json': {
+        "application/json": {
           schema: z.object({
             access_token: z.string(),
             expires_in: z.number(),
             refresh_token: z.string().optional(),
             scope: z.string(),
-            token_type: z.literal('Bearer'),
+            token_type: z.literal("Bearer"),
           }),
         },
       },
-      description: 'Token exchanged successfully',
+      description: "Token exchanged successfully",
     },
     400: {
       content: {
-        'application/json': {
+        "application/json": {
           schema: z.object({
             error: z.string(),
             error_description: z.string().optional(),
           }),
         },
       },
-      description: 'Invalid authorization code',
+      description: "Invalid request",
     },
   },
-  tags: ['Auth'],
+  tags: ["Auth"],
 });
 
 /**
- * GET /api/spotify/me
- * Get current user profile (requires auth)
+ * POST /api/spotify/search
+ * Search Spotify catalog
  */
-export const getCurrentUser = createRoute({
-  description: 'Get current Spotify user profile',
-  method: 'get',
-  path: '/api/spotify/me',
+export const searchSpotify = createRoute({
+  description: "Search Spotify for tracks, albums, or artists",
+  method: "post",
+  path: "/api/spotify/search",
   request: {
+    body: {
+      content: {
+        "application/json": {
+          schema: z.object({
+            query: z.string().min(1),
+            type: z.enum(["track", "album", "artist"]).default("track"),
+          }),
+        },
+      },
+    },
     headers: z.object({
       authorization: z.string().regex(/^Bearer .+$/),
     }),
@@ -103,33 +141,38 @@ export const getCurrentUser = createRoute({
   responses: {
     200: {
       content: {
-        'application/json': {
+        "application/json": {
           schema: z.object({
-            country: z.string().optional(),
-            display_name: z.string().nullable(),
-            email: z.string().email().optional(),
-            id: z.string(),
-            images: z.array(z.object({
-              height: z.number().nullable(),
-              url: z.string().url(),
-              width: z.number().nullable(),
-            })),
-            product: z.string().optional(),
+            tracks: z
+              .object({
+                items: z.array(z.any()), // Use SpotifyTrackSchema from shared-types
+              })
+              .optional(),
           }),
         },
       },
-      description: 'User profile retrieved successfully',
+      description: "Search results",
     },
-    401: {
+    400: {
       content: {
-        'application/json': {
+        "application/json": {
           schema: z.object({
             error: z.string(),
           }),
         },
       },
-      description: 'Unauthorized - invalid or expired token',
+      description: "Invalid request",
+    },
+    401: {
+      content: {
+        "application/json": {
+          schema: z.object({
+            error: z.string(),
+          }),
+        },
+      },
+      description: "Unauthorized",
     },
   },
-  tags: ['Auth'],
+  tags: ["Spotify"],
 });

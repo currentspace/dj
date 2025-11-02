@@ -3,7 +3,7 @@
  * Provides type-safe parsing for real-time chat events
  */
 
-import { z } from 'zod';
+import { z } from "zod";
 
 // ===== Debug Data =====
 
@@ -12,7 +12,7 @@ export const StreamDebugDataSchema = z.record(z.unknown());
 // ===== Log Data =====
 
 export const StreamLogDataSchema = z.object({
-  level: z.enum(['error', 'info', 'warn']),
+  level: z.enum(["error", "info", "warn"]),
   message: z.string(),
 });
 
@@ -32,47 +32,47 @@ export const StreamToolResultSchema = z.object({
 
 export const StreamContentEventSchema = z.object({
   data: z.string(),
-  type: z.literal('content'),
+  type: z.literal("content"),
 });
 
 export const StreamThinkingEventSchema = z.object({
   data: z.string(),
-  type: z.literal('thinking'),
+  type: z.literal("thinking"),
 });
 
 export const StreamToolStartEventSchema = z.object({
   data: StreamToolDataSchema,
-  type: z.literal('tool_start'),
+  type: z.literal("tool_start"),
 });
 
 export const StreamToolEndEventSchema = z.object({
   data: StreamToolResultSchema,
-  type: z.literal('tool_end'),
+  type: z.literal("tool_end"),
 });
 
 export const StreamLogEventSchema = z.object({
   data: StreamLogDataSchema,
-  type: z.literal('log'),
+  type: z.literal("log"),
 });
 
 export const StreamDebugEventSchema = z.object({
   data: StreamDebugDataSchema,
-  type: z.literal('debug'),
+  type: z.literal("debug"),
 });
 
 export const StreamErrorEventSchema = z.object({
   data: z.string(),
-  type: z.literal('error'),
+  type: z.literal("error"),
 });
 
 export const StreamDoneEventSchema = z.object({
   data: z.null(),
-  type: z.literal('done'),
+  type: z.literal("done"),
 });
 
 // ===== Union of All Events =====
 
-export const StreamEventSchema = z.discriminatedUnion('type', [
+export const StreamEventSchema = z.discriminatedUnion("type", [
   StreamContentEventSchema,
   StreamThinkingEventSchema,
   StreamToolStartEventSchema,

@@ -1,4 +1,4 @@
-import styles from './PlaylistSkeleton.module.css';
+import styles from "./PlaylistSkeleton.module.css";
 
 export function PlaylistSkeleton() {
   return (

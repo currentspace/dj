@@ -9,11 +9,11 @@
  */
 
 export interface QueueOptions {
-  burst?: number;       // max tokens, default = rate
+  burst?: number; // max tokens, default = rate
   concurrency?: number; // parallel tasks, default 1
-  jitterMs?: number;    // 0..jitterMs added to wakeups, default 0
-  minTickMs?: number;   // minimum tick delay (Workers timers coalesce at 0ms), default 1
-  rate?: number;        // tokens per second, default 40
+  jitterMs?: number; // 0..jitterMs added to wakeups, default 0
+  minTickMs?: number; // minimum tick delay (Workers timers coalesce at 0ms), default 1
+  rate?: number; // tokens per second, default 40
 }
 
 type Task<T> = () => Promise<T>;
@@ -74,14 +74,18 @@ export class RateLimitedQueue<T> {
    * Optional onResult receives (resultOrNull, index, total). It is guarded.
    */
   async processAll(
-    onResult?: (result: null | T, index: number, total: number) => Promise<void> | void
+    onResult?: (
+      result: null | T,
+      index: number,
+      total: number
+    ) => Promise<void> | void
   ): Promise<(null | T)[]> {
     if (this.processing) throw new Error("Already processing");
     this.processing = true;
 
     const total = this.queue.length;
     const results: (null | T)[] = Array(total);
-    let issued = 0;   // number of tasks taken from queue & assigned an index
+    let issued = 0; // number of tasks taken from queue & assigned an index
     let finished = 0; // number of tasks completed
 
     // Internal: refill tokens from elapsed time
@@ -89,7 +93,10 @@ export class RateLimitedQueue<T> {
       const now = performance.now();
       const elapsed = now - this.lastRefill;
       if (elapsed > 0) {
-        this.tokens = Math.min(this.burst, this.tokens + (elapsed * this.rate) / 1000);
+        this.tokens = Math.min(
+          this.burst,
+          this.tokens + (elapsed * this.rate) / 1000
+        );
         this.lastRefill = now;
       }
     };
@@ -110,14 +117,22 @@ export class RateLimitedQueue<T> {
         results[index] = value;
         // Guard the callback
         if (onResult) {
-          try { await onResult(value, index, total); } catch { /* swallow */ }
+          try {
+            await onResult(value, index, total);
+          } catch {
+            /* swallow */
+          }
         }
       } catch (err) {
         // mirror your original: push null on failure
         // eslint-disable-next-line security/detect-object-injection -- Safe: index is a controlled integer from task queue
         results[index] = null as T;
         if (onResult) {
-          try { await onResult(null, index, total); } catch { /* swallow */ }
+          try {
+            await onResult(null, index, total);
+          } catch {
+            /* swallow */
+          }
         }
         // still log for observability (Workers console is fine)
         console.error("[RateLimitedQueue] task failed:", err);
@@ -137,8 +152,8 @@ export class RateLimitedQueue<T> {
       // Calculate precise next wake time based on token availability
       const nextWakeMs = (): number => {
         if (this.tokens >= 1) return this.minTickMs;
-        const deficit = 1 - this.tokens;              // tokens needed to reach a whole token
-        const wait = (deficit * 1000) / this.rate;    // ms until then at current fill
+        const deficit = 1 - this.tokens; // tokens needed to reach a whole token
+        const wait = (deficit * 1000) / this.rate; // ms until then at current fill
         const jitter = this.jitterMs ? Math.random() * this.jitterMs : 0;
         return Math.max(this.minTickMs, wait + jitter);
       };
@@ -203,7 +218,9 @@ export class RateLimitedQueue<T> {
 
     // Promise plumbing
     let resolveOuter!: (v: (null | T)[]) => void;
-    const done = new Promise<(null | T)[]>((resolve) => (resolveOuter = resolve));
+    const done = new Promise<(null | T)[]>(
+      (resolve) => (resolveOuter = resolve)
+    );
 
     // Start the scheduler
     // (We don't mutate this.queue during processing; we index into it for order.)
@@ -217,11 +234,11 @@ export class RateLimitedQueue<T> {
           maybeResolve(resolveOuter);
           break;
         }
-        await new Promise(r => setTimeout(r, 2)); // very light spin; Workers can handle this tiny sleep
+        await new Promise((r) => setTimeout(r, 2)); // very light spin; Workers can handle this tiny sleep
       }
     };
     // Fire and forget watcher
-     
+
     watcher();
 
     return done;
@@ -247,10 +264,10 @@ export class RateLimitedQueue<T> {
   async processContinuously(
     onResult?: (result: null | T) => Promise<void> | void
   ): Promise<void> {
-    console.log('[RateLimitedQueue] processContinuously() called');
+    console.log("[RateLimitedQueue] processContinuously() called");
     if (this.processing) throw new Error("Already processing");
     this.processing = true;
-    console.log('[RateLimitedQueue] Continuous processing started');
+    console.log("[RateLimitedQueue] Continuous processing started");
 
     const globalIndex = 0;
 
@@ -259,7 +276,10 @@ export class RateLimitedQueue<T> {
       const now = performance.now();
       const elapsed = now - this.lastRefill;
       if (elapsed > 0) {
-        this.tokens = Math.min(this.burst, this.tokens + (elapsed * this.rate) / 1000);
+        this.tokens = Math.min(
+          this.burst,
+          this.tokens + (elapsed * this.rate) / 1000
+        );
         this.lastRefill = now;
       }
     };
@@ -269,11 +289,19 @@ export class RateLimitedQueue<T> {
       try {
         const value = await task();
         if (onResult) {
-          try { await onResult(value); } catch { /* swallow */ }
+          try {
+            await onResult(value);
+          } catch {
+            /* swallow */
+          }
         }
       } catch (err) {
         if (onResult) {
-          try { await onResult(null); } catch { /* swallow */ }
+          try {
+            await onResult(null);
+          } catch {
+            /* swallow */
+          }
         }
         console.error("[RateLimitedQueue] task failed:", err);
       } finally {
@@ -312,7 +340,11 @@ export class RateLimitedQueue<T> {
 
       refill();
 
-      console.log(`[RateLimitedQueue] tick() - queue.length: ${this.queue.length}, running: ${this.running}, tokens: ${this.tokens.toFixed(2)}`);
+      console.log(
+        `[RateLimitedQueue] tick() - queue.length: ${
+          this.queue.length
+        }, running: ${this.running}, tokens: ${this.tokens.toFixed(2)}`
+      );
 
       // Launch as many as tokens & concurrency allow
       // IMPORTANT: Check this.queue.length dynamically (not a fixed 'total')
@@ -323,13 +355,19 @@ export class RateLimitedQueue<T> {
       ) {
         this.tokens -= 1;
         const task = this.queue.shift()!; // Take from front
-        console.log(`[RateLimitedQueue] Launching task - remaining queue: ${this.queue.length}, running: ${this.running + 1}`);
+        console.log(
+          `[RateLimitedQueue] Launching task - remaining queue: ${
+            this.queue.length
+          }, running: ${this.running + 1}`
+        );
         runOne(task);
       }
 
       // If there are still tasks, schedule next wakeup
       if (this.queue.length > 0) {
-        console.log(`[RateLimitedQueue] Scheduling next tick for ${this.queue.length} remaining tasks`);
+        console.log(
+          `[RateLimitedQueue] Scheduling next tick for ${this.queue.length} remaining tasks`
+        );
         scheduleNext();
       }
     };
@@ -358,6 +396,8 @@ export class RateLimitedQueue<T> {
   }
 
   // replaced at runtime by constructor; defined to satisfy TS
-   
-  private clearTimer(): void { /* empty */ }
+
+  private clearTimer(): void {
+    /* empty */
+  }
 }

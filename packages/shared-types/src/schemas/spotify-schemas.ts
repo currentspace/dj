@@ -3,7 +3,7 @@
  * Provides runtime validation and type inference for all Spotify data
  */
 
-import { z } from 'zod';
+import { z } from "zod";
 
 // ===== Base Types =====
 
@@ -30,15 +30,17 @@ export const SpotifyArtistSimpleSchema = z.object({
   href: z.string().url(),
   id: z.string(),
   name: z.string(),
-  type: z.literal('artist'),
+  type: z.literal("artist"),
   uri: z.string(),
 });
 
 export const SpotifyArtistFullSchema = SpotifyArtistSimpleSchema.extend({
-  followers: z.object({
-    href: z.string().url().nullable(),
-    total: z.number(),
-  }).optional(),
+  followers: z
+    .object({
+      href: z.string().url().nullable(),
+      total: z.number(),
+    })
+    .optional(),
   genres: z.array(z.string()),
   images: z.array(SpotifyImageSchema),
   popularity: z.number().min(0).max(100),
@@ -47,7 +49,7 @@ export const SpotifyArtistFullSchema = SpotifyArtistSimpleSchema.extend({
 // ===== Album =====
 
 export const SpotifyAlbumSimpleSchema = z.object({
-  album_type: z.enum(['album', 'single', 'compilation']),
+  album_type: z.enum(["album", "single", "compilation"]),
   artists: z.array(SpotifyArtistSimpleSchema),
   external_urls: SpotifyExternalUrlsSchema,
   href: z.string().url(),
@@ -55,17 +57,21 @@ export const SpotifyAlbumSimpleSchema = z.object({
   images: z.array(SpotifyImageSchema),
   name: z.string(),
   release_date: z.string(),
-  release_date_precision: z.enum(['year', 'month', 'day']),
+  release_date_precision: z.enum(["year", "month", "day"]),
   total_tracks: z.number(),
-  type: z.literal('album'),
+  type: z.literal("album"),
   uri: z.string(),
 });
 
 export const SpotifyAlbumFullSchema = SpotifyAlbumSimpleSchema.extend({
-  copyrights: z.array(z.object({
-    text: z.string(),
-    type: z.string(),
-  })).optional(),
+  copyrights: z
+    .array(
+      z.object({
+        text: z.string(),
+        type: z.string(),
+      })
+    )
+    .optional(),
   external_ids: SpotifyExternalIdsSchema.optional(),
   genres: z.array(z.string()),
   label: z.string().optional(),
@@ -95,7 +101,7 @@ export const SpotifyTrackSimpleSchema = z.object({
   name: z.string(),
   preview_url: z.string().url().nullable(),
   track_number: z.number(),
-  type: z.literal('track'),
+  type: z.literal("track"),
   uri: z.string(),
 });
 
@@ -123,7 +129,7 @@ export const SpotifyAudioFeaturesSchema = z.object({
   tempo: z.number().min(0),
   time_signature: z.number().min(0),
   track_href: z.string().url(),
-  type: z.literal('audio_features'),
+  type: z.literal("audio_features"),
   uri: z.string(),
   valence: z.number().min(0).max(1),
 });
@@ -139,7 +145,7 @@ export const SpotifyPlaylistOwnerSchema = z.object({
   external_urls: SpotifyExternalUrlsSchema,
   href: z.string().url(),
   id: z.string(),
-  type: z.literal('user'),
+  type: z.literal("user"),
   uri: z.string(),
 });
 
@@ -158,7 +164,7 @@ export const SpotifyPlaylistSimpleSchema = z.object({
     href: z.string().url(),
     total: z.number(),
   }),
-  type: z.literal('playlist'),
+  type: z.literal("playlist"),
   uri: z.string(),
 });
 
@@ -168,9 +174,11 @@ export const SpotifyPlaylistTrackSchema = z.object({
   is_local: z.boolean(),
   primary_color: z.string().nullable(),
   track: SpotifyTrackFullSchema.nullable(),
-  video_thumbnail: z.object({
-    url: z.string().url().nullable(),
-  }).nullable(),
+  video_thumbnail: z
+    .object({
+      url: z.string().url().nullable(),
+    })
+    .nullable(),
 });
 
 export const SpotifyPlaylistFullSchema = SpotifyPlaylistSimpleSchema.extend({
@@ -216,20 +224,24 @@ export const SpotifyUserSchema = z.object({
   country: z.string().optional(),
   display_name: z.string().nullable(),
   email: z.string().email().optional(),
-  explicit_content: z.object({
-    filter_enabled: z.boolean(),
-    filter_locked: z.boolean(),
-  }).optional(),
+  explicit_content: z
+    .object({
+      filter_enabled: z.boolean(),
+      filter_locked: z.boolean(),
+    })
+    .optional(),
   external_urls: SpotifyExternalUrlsSchema,
-  followers: z.object({
-    href: z.string().url().nullable(),
-    total: z.number(),
-  }).optional(),
+  followers: z
+    .object({
+      href: z.string().url().nullable(),
+      total: z.number(),
+    })
+    .optional(),
   href: z.string().url(),
   id: z.string(),
   images: z.array(SpotifyImageSchema),
   product: z.string().optional(),
-  type: z.literal('user'),
+  type: z.literal("user"),
   uri: z.string(),
 });
 
@@ -250,7 +262,7 @@ export const SpotifyRecommendationSeedSchema = z.object({
   href: z.string().url().nullable(),
   id: z.string(),
   initialPoolSize: z.number(),
-  type: z.enum(['artist', 'track', 'genre']),
+  type: z.enum(["artist", "track", "genre"]),
 });
 
 export const SpotifyRecommendationsResponseSchema = z.object({
@@ -280,6 +292,16 @@ export const SpotifyAddTracksResponseSchema = z.object({
   snapshot_id: z.string(),
 });
 
+// ===== Token Response =====
+
+export const SpotifyTokenResponseSchema = z.object({
+  access_token: z.string(),
+  expires_in: z.number(),
+  refresh_token: z.string().optional(),
+  scope: z.string(),
+  token_type: z.string(),
+});
+
 // ===== Error Response =====
 
 export const SpotifyErrorSchema = z.object({
@@ -304,4 +326,7 @@ export type SpotifyPlaylistFull = z.infer<typeof SpotifyPlaylistFullSchema>;
 export type SpotifyPlaylistTrack = z.infer<typeof SpotifyPlaylistTrackSchema>;
 export type SpotifyUser = z.infer<typeof SpotifyUserSchema>;
 export type SpotifySearchResponse = z.infer<typeof SpotifySearchResponseSchema>;
-export type SpotifyRecommendationsResponse = z.infer<typeof SpotifyRecommendationsResponseSchema>;
+export type SpotifyRecommendationsResponse = z.infer<
+  typeof SpotifyRecommendationsResponseSchema
+>;
+export type SpotifyTokenResponse = z.infer<typeof SpotifyTokenResponseSchema>;

@@ -5,9 +5,9 @@
  * Uses Cloudflare Workers' nodejs_compat AsyncLocalStorage support.
  */
 
-import { AsyncLocalStorage } from 'node:async_hooks';
+import { AsyncLocalStorage } from "node:async_hooks";
 
-import { ServiceLogger } from './ServiceLogger';
+import { ServiceLogger } from "./ServiceLogger";
 
 interface LoggerContext {
   logger: ServiceLogger;
@@ -23,7 +23,7 @@ const loggerStorage = new AsyncLocalStorage<LoggerContext>();
 export function getChildLogger(subContext: string): ServiceLogger {
   const logger = getLogger();
   if (!logger) {
-    throw new Error('getChildLogger called outside of logger context');
+    throw new Error("getChildLogger called outside of logger context");
   }
   return logger.child(subContext);
 }

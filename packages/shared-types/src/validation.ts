@@ -3,14 +3,71 @@
  * Uses Zod for runtime validation with TypeScript inference
  */
 
-import { z } from 'zod';
+import { z } from "zod";
 
 /**
  * Safe parse result that preserves type information
  */
 export type SafeParseResult<T> =
-  | { data: T; error: null; success: true }
-  | { data: null; error: z.ZodError; success: false };
+  | { data: null; error: z.ZodError; success: false }
+  | { data: T; error: null; success: true };
+
+/**
+ * Create a type guard from a Zod schema
+ */
+export function createTypeGuard<T extends z.ZodTypeAny>(
+  schema: T
+): (value: unknown) => value is z.infer<T> {
+  return (value: unknown): value is z.infer<T> => {
+    return schema.safeParse(value).success;
+  };
+}
+
+/**
+ * Format Zod error for logging/display
+ */
+export function formatZodError(error: z.ZodError): string {
+  return error.errors
+    .map((err) => {
+      const path = err.path.join(".");
+      return `${path ? `${path}: ` : ""}${err.message}`;
+    })
+    .join(", ");
+}
+
+/**
+ * Parse data with Zod schema or throw detailed error
+ * Use when you want to crash fast on invalid data
+ */
+export function parse<T extends z.ZodTypeAny>(
+  schema: T,
+  data: unknown
+): z.infer<T> {
+  return schema.parse(data);
+}
+
+/**
+ * Validate JSON response from fetch
+ * Returns typed data or throws ValidationError
+ *
+ * Note: Response type from Web API (available in browsers and workers)
+ */
+export async function parseJsonResponse<T extends z.ZodTypeAny>(
+  response: {
+    json(): Promise<unknown>;
+    ok: boolean;
+    status: number;
+    statusText: string;
+  },
+  schema: T
+): Promise<z.infer<T>> {
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+  }
+
+  const json = await response.json();
+  return parse(schema, json);
+}
 
 /**
  * Safely parse data with Zod schema
@@ -38,44 +95,18 @@ export function safeParse<T extends z.ZodTypeAny>(
 }
 
 /**
- * Parse data with Zod schema or throw detailed error
- * Use when you want to crash fast on invalid data
- */
-export function parse<T extends z.ZodTypeAny>(
-  schema: T,
-  data: unknown
-): z.infer<T> {
-  return schema.parse(data);
-}
-
-/**
- * Validate JSON response from fetch
- * Returns typed data or throws ValidationError
- *
- * Note: Response type from Web API (available in browsers and workers)
- */
-export async function parseJsonResponse<T extends z.ZodTypeAny>(
-  response: { json(): Promise<unknown>; ok: boolean; status: number; statusText: string },
-  schema: T
-): Promise<z.infer<T>> {
-  if (!response.ok) {
-    throw new Error(
-      `HTTP ${response.status}: ${response.statusText}`
-    );
-  }
-
-  const json = await response.json();
-  return parse(schema, json);
-}
-
-/**
  * Safely validate JSON response from fetch
  * Returns SafeParseResult with error details
  *
  * Note: Response type from Web API (available in browsers and workers)
  */
 export async function safeParseJsonResponse<T extends z.ZodTypeAny>(
-  response: { json(): Promise<unknown>; ok: boolean; status: number; statusText: string },
+  response: {
+    json(): Promise<unknown>;
+    ok: boolean;
+    status: number;
+    statusText: string;
+  },
   schema: T
 ): Promise<SafeParseResult<z.infer<T>>> {
   try {
@@ -84,7 +115,7 @@ export async function safeParseJsonResponse<T extends z.ZodTypeAny>(
         data: null,
         error: new z.ZodError([
           {
-            code: 'custom',
+            code: "custom",
             message: `HTTP ${response.status}: ${response.statusText}`,
             path: [],
           },
@@ -100,35 +131,12 @@ export async function safeParseJsonResponse<T extends z.ZodTypeAny>(
       data: null,
       error: new z.ZodError([
         {
-          code: 'custom',
-          message: error instanceof Error ? error.message : 'Unknown error',
+          code: "custom",
+          message: error instanceof Error ? error.message : "Unknown error",
           path: [],
         },
       ]),
       success: false,
     };
   }
-}
-
-/**
- * Create a type guard from a Zod schema
- */
-export function createTypeGuard<T extends z.ZodTypeAny>(
-  schema: T
-): (value: unknown) => value is z.infer<T> {
-  return (value: unknown): value is z.infer<T> => {
-    return schema.safeParse(value).success;
-  };
-}
-
-/**
- * Format Zod error for logging/display
- */
-export function formatZodError(error: z.ZodError): string {
-  return error.errors
-    .map((err) => {
-      const path = err.path.join('.');
-      return `${path ? `${path}: ` : ''}${err.message}`;
-    })
-    .join(', ');
 }

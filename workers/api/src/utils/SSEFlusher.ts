@@ -19,7 +19,7 @@
 
 export interface SSEFlusherOptions {
   everyMs?: number; // Flush after this time window in ms (default: 500)
-  everyN?: number;  // Flush every N messages (default: 20)
+  everyN?: number; // Flush every N messages (default: 20)
 }
 
 export interface SSEWriter {

@@ -151,9 +151,15 @@ importers:
 
   workers/api:
     dependencies:
+      '@dj/api-contracts':
+        specifier: workspace:*
+        version: link:../../packages/api-contracts
       '@dj/shared-types':
         specifier: workspace:*
         version: link:../../packages/shared-types
+      '@hono/swagger-ui':
+        specifier: ^0.5.2
+        version: 0.5.2(hono@4.9.8)
       '@hono/zod-openapi':
         specifier: ^1.1.4
         version: 1.1.4(hono@4.9.8)(zod@3.25.76)
@@ -948,6 +954,11 @@ packages:
 
   '@floating-ui/utils@0.2.10':
     resolution: {integrity: sha512-aGTxbpbg8/b5JfU1HXSrbH3wXZuLPJcNEcZQFMxLs3oSzgtVu6nFPkbbGGUvBcUjKV2YyB9Wxxabo+HEH9tcRQ==}
+
+  '@hono/swagger-ui@0.5.2':
+    resolution: {integrity: sha512-7wxLKdb8h7JTdZ+K8DJNE3KXQMIpJejkBTQjrYlUWF28Z1PGOKw6kUykARe5NTfueIN37jbyG/sBYsbzXzG53A==}
+    peerDependencies:
+      hono: '*'
 
   '@hono/zod-openapi@1.1.4':
     resolution: {integrity: sha512-4BbOtd6oKg20yo6HLluVbEycBLLIfdKX5o/gUSoKZ2uBmeP4Og/VDfIX3k9pbNEX5W3fRkuPeVjGA+zaQDVY1A==}
@@ -4302,6 +4313,10 @@ snapshots:
       '@floating-ui/utils': 0.2.10
 
   '@floating-ui/utils@0.2.10': {}
+
+  '@hono/swagger-ui@0.5.2(hono@4.9.8)':
+    dependencies:
+      hono: 4.9.8
 
   '@hono/zod-openapi@1.1.4(hono@4.9.8)(zod@3.25.76)':
     dependencies:

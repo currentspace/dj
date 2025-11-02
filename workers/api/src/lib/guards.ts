@@ -27,12 +27,39 @@ export function isValidHttpStatus(status: number): status is 200 | 201 | 400 | 4
   return [200, 201, 400, 401, 404, 500].includes(status);
 }
 
-// Safe parser that returns parsed data or null
-export function safeParse<T>(schema: z.ZodSchema<T>, data: unknown): null | T {
-  try {
-    return schema.parse(data);
-  } catch (error) {
-    console.warn('Schema validation failed:', error);
-    return null;
+// Safe parse result type
+export type SafeParseResult<T> =
+  | { data: null; error: z.ZodError; success: false }
+  | { data: T; error: null; success: true };
+
+// Format Zod error for logging/display
+export function formatZodError(error: z.ZodError): string {
+  return error.errors
+    .map((err) => {
+      const path = err.path.join(".");
+      return `${path ? `${path}: ` : ""}${err.message}`;
+    })
+    .join(", ");
+}
+
+// Safe parser that returns SafeParseResult with error details
+export function safeParse<T>(
+  schema: z.ZodSchema<T>,
+  data: unknown
+): SafeParseResult<T> {
+  const result = schema.safeParse(data);
+
+  if (result.success) {
+    return {
+      data: result.data,
+      error: null,
+      success: true,
+    };
+  } else {
+    return {
+      data: null,
+      error: result.error,
+      success: false,
+    };
   }
 }

@@ -11,7 +11,9 @@
     "test": "vitest"
   },
   "dependencies": {
+    "@dj/api-contracts": "workspace:*",
     "@dj/shared-types": "workspace:*",
+    "@hono/swagger-ui": "^0.5.2",
     "@hono/zod-openapi": "^1.1.4",
     "@langchain/anthropic": "^0.3.30",
     "@langchain/core": "^0.3.77",

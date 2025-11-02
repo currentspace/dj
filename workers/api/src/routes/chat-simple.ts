@@ -674,7 +674,9 @@ chatRouter.post("/message", async (c) => {
     // Extract playlist ID if present in message
     let playlistId: null | string = null;
     let actualMessage = request.message;
-    const playlistIdMatch = /^\[Playlist ID: ([^\]]+)\] (.+)$/.exec(request.message);
+    const playlistIdMatch = /^\[Playlist ID: ([^\]]+)\] (.+)$/.exec(
+      request.message
+    );
     if (playlistIdMatch) {
       playlistId = playlistIdMatch[1];
       actualMessage = playlistIdMatch[2];
@@ -925,7 +927,7 @@ Use tools to make informed decisions.`,
         if (initialResponse?.tool_calls) {
           console.log(
             `[Chat:${requestId}] Tool calls requested: ${initialResponse.tool_calls
-              .map((tc: any) => tc.name)
+              .map((tc) => tc.name)
               .join(", ")}`
           );
         }
@@ -952,44 +954,55 @@ Use tools to make informed decisions.`,
           );
 
           // Check response status if available
-          const errorAny = invokeError as any;
-          if (errorAny.response?.status) {
-            console.error(
-              `[Chat:${requestId}] HTTP Status: ${errorAny.response.status}`
-            );
-          }
-
-          // Check for rate limit info in error
           if (
-            errorMessage.includes("429") ||
-            errorAny.response?.status === 429
+            typeof invokeError === "object" &&
+            invokeError !== null &&
+            "response" in invokeError
           ) {
-            console.error(
-              `[Chat:${requestId}] 🚫 RATE LIMIT HIT - This is an account/API key level limit`
-            );
-            console.error(
-              `[Chat:${requestId}] This means YOUR account has exceeded its rate limits`
-            );
-          } else if (
-            errorMessage.includes("529") ||
-            errorAny.response?.status === 529
-          ) {
-            console.error(
-              `[Chat:${requestId}] 🌍 GLOBAL OVERLOAD - This affects ALL Anthropic users`
-            );
-            console.error(
-              `[Chat:${requestId}] This is not specific to your account`
-            );
+            const errorWithResponse = invokeError as {
+              response?: { status?: number };
+            };
+            if (errorWithResponse.response?.status) {
+              console.error(
+                `[Chat:${requestId}] HTTP Status: ${errorWithResponse.response.status}`
+              );
+            }
+
+            // Check for rate limit info in error
+            if (
+              errorMessage.includes("429") ||
+              errorWithResponse.response?.status === 429
+            ) {
+              console.error(
+                `[Chat:${requestId}] 🚫 RATE LIMIT HIT - This is an account/API key level limit`
+              );
+              console.error(
+                `[Chat:${requestId}] This means YOUR account has exceeded its rate limits`
+              );
+            } else if (
+              errorMessage.includes("529") ||
+              errorWithResponse.response?.status === 529
+            ) {
+              console.error(
+                `[Chat:${requestId}] 🌍 GLOBAL OVERLOAD - This affects ALL Anthropic users`
+              );
+              console.error(
+                `[Chat:${requestId}] This is not specific to your account`
+              );
+            }
           }
         }
 
         // Check if it's an overload error (real 529)
-        const errorAny = invokeError as any;
-        if (
+        const isOverloadError =
           errorMessage.includes("529") ||
           errorMessage.includes("overloaded") ||
-          errorAny.response?.status === 529
-        ) {
+          (typeof invokeError === "object" &&
+            invokeError !== null &&
+            "response" in invokeError &&
+            (invokeError as { response?: { status?: number } }).response
+              ?.status === 529);
+        if (isOverloadError) {
           retryCount++;
           if (retryCount < maxRetries) {
             const backoffTime = Math.min(1000 * Math.pow(2, retryCount), 5000); // Exponential backoff
@@ -1011,7 +1024,11 @@ Use tools to make informed decisions.`,
         } else if (
           errorMessage.includes("429") ||
           errorMessage.includes("rate_limit") ||
-          errorAny.response?.status === 429
+          (typeof invokeError === "object" &&
+            invokeError !== null &&
+            "response" in invokeError &&
+            (invokeError as { response?: { status?: number } }).response
+              ?.status === 429)
         ) {
           console.error(
             `[Chat:${requestId}] ⏳ Rate limit error detected, not retrying`

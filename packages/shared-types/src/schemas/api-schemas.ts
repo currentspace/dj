@@ -3,8 +3,8 @@
  * Provides validation for client-server communication
  */
 
-import { z } from 'zod';
-import { SpotifyPlaylistSimpleSchema } from './spotify-schemas';
+import { z } from "zod";
+import { SpotifyPlaylistSimpleSchema } from "./spotify-schemas";
 
 // ===== Error Response =====
 
@@ -18,13 +18,13 @@ export const ApiErrorSchema = z.object({
 
 export const ChatMessageSchema = z.object({
   content: z.string(),
-  role: z.enum(['assistant', 'user']),
+  role: z.enum(["assistant", "user"]),
 });
 
 export const ChatRequestSchema = z.object({
   conversationHistory: z.array(ChatMessageSchema).optional(),
   message: z.string().min(1),
-  mode: z.enum(['analyze', 'create', 'edit']).optional(),
+  mode: z.enum(["analyze", "create", "edit"]).optional(),
 });
 
 export const ChatResponseSchema = z.object({
@@ -85,7 +85,7 @@ export const SpotifyAuthResponseSchema = z.object({
 
 export const SpotifySearchRequestSchema = z.object({
   query: z.string().min(1),
-  type: z.enum(['album', 'artist', 'track']).optional(),
+  type: z.enum(["album", "artist", "track"]).optional(),
 });
 
 // ===== User Playlists Response =====
@@ -97,7 +97,7 @@ export const UserPlaylistsResponseSchema = z.object({
 // ===== Webhook Types =====
 
 export const SpotifyWebhookPayloadSchema = z.object({
-  event: z.enum(['playlist.created', 'playlist.deleted', 'playlist.updated']),
+  event: z.enum(["playlist.created", "playlist.deleted", "playlist.updated"]),
   playlistId: z.string(),
   timestamp: z.string(),
   userId: z.string(),
@@ -120,8 +120,12 @@ export type ChatResponse = z.infer<typeof ChatResponseSchema>;
 
 export type Track = z.infer<typeof TrackSchema>;
 export type Playlist = z.infer<typeof PlaylistSchema>;
-export type GeneratePlaylistRequest = z.infer<typeof GeneratePlaylistRequestSchema>;
-export type GeneratePlaylistResponse = z.infer<typeof GeneratePlaylistResponseSchema>;
+export type GeneratePlaylistRequest = z.infer<
+  typeof GeneratePlaylistRequestSchema
+>;
+export type GeneratePlaylistResponse = z.infer<
+  typeof GeneratePlaylistResponseSchema
+>;
 export type SavePlaylistRequest = z.infer<typeof SavePlaylistRequestSchema>;
 export type SavePlaylistResponse = z.infer<typeof SavePlaylistResponseSchema>;
 
