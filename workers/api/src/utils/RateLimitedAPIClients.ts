@@ -22,15 +22,15 @@
  * ```
  */
 
-import type { ServiceLogger } from "./ServiceLogger";
+import type { ServiceLogger } from './ServiceLogger'
 
-import { globalOrchestrator } from "./RequestOrchestrator";
+import { globalOrchestrator } from './RequestOrchestrator'
 
 /**
  * Get the global orchestrator instance
  */
 export function getGlobalOrchestrator() {
-  return globalOrchestrator;
+  return globalOrchestrator
 }
 
 /**
@@ -40,39 +40,31 @@ export function getGlobalOrchestrator() {
 export async function rateLimitedAnthropicCall<T>(
   call: () => Promise<T>,
   logger?: ServiceLogger,
-  context?: string
+  context?: string,
 ): Promise<T> {
   return globalOrchestrator.execute(async () => {
-    const start = performance.now();
+    const start = performance.now()
     try {
+      logger?.debug(`Anthropic API call starting${context ? `: ${context}` : ''}`)
+      const result = await call()
+      const duration = performance.now() - start
       logger?.debug(
-        `Anthropic API call starting${context ? `: ${context}` : ""}`
-      );
-      const result = await call();
-      const duration = performance.now() - start;
-      logger?.debug(
-        `Anthropic API call completed in ${duration.toFixed(0)}ms${
-          context ? `: ${context}` : ""
-        }`
-      );
-      return result;
+        `Anthropic API call completed in ${duration.toFixed(0)}ms${context ? `: ${context}` : ''}`,
+      )
+      return result
     } catch (error) {
-      const duration = performance.now() - start;
-      const errorDetails: any = { context };
+      const duration = performance.now() - start
+      const errorDetails: any = { context }
       if (error instanceof Error) {
-        errorDetails.message = error.message;
-        errorDetails.name = error.name;
-        if ("status" in error) errorDetails.status = (error as any).status;
-        if ("code" in error) errorDetails.code = (error as any).code;
+        errorDetails.message = error.message
+        errorDetails.name = error.name
+        if ('status' in error) errorDetails.status = (error as any).status
+        if ('code' in error) errorDetails.code = (error as any).code
       }
-      logger?.error(
-        `Anthropic API call failed after ${duration.toFixed(0)}ms`,
-        error,
-        errorDetails
-      );
-      throw error;
+      logger?.error(`Anthropic API call failed after ${duration.toFixed(0)}ms`, error, errorDetails)
+      throw error
     }
-  }, "anthropic");
+  }, 'anthropic')
 }
 
 /**
@@ -82,30 +74,24 @@ export async function rateLimitedAnthropicCall<T>(
 export async function rateLimitedDeezerCall<T>(
   call: () => Promise<T>,
   logger?: ServiceLogger,
-  context?: string
+  context?: string,
 ): Promise<T> {
   return globalOrchestrator.execute(async () => {
-    const start = performance.now();
+    const start = performance.now()
     try {
-      logger?.debug(`Deezer API call starting${context ? `: ${context}` : ""}`);
-      const result = await call();
-      const duration = performance.now() - start;
+      logger?.debug(`Deezer API call starting${context ? `: ${context}` : ''}`)
+      const result = await call()
+      const duration = performance.now() - start
       logger?.debug(
-        `Deezer API call completed in ${duration.toFixed(0)}ms${
-          context ? `: ${context}` : ""
-        }`
-      );
-      return result;
+        `Deezer API call completed in ${duration.toFixed(0)}ms${context ? `: ${context}` : ''}`,
+      )
+      return result
     } catch (error) {
-      const duration = performance.now() - start;
-      logger?.error(
-        `Deezer API call failed after ${duration.toFixed(0)}ms`,
-        error,
-        { context }
-      );
-      throw error;
+      const duration = performance.now() - start
+      logger?.error(`Deezer API call failed after ${duration.toFixed(0)}ms`, error, { context })
+      throw error
     }
-  }, "deezer");
+  }, 'deezer')
 }
 
 /**
@@ -115,32 +101,24 @@ export async function rateLimitedDeezerCall<T>(
 export async function rateLimitedLastFmCall<T>(
   call: () => Promise<T>,
   logger?: ServiceLogger,
-  context?: string
+  context?: string,
 ): Promise<T> {
   return globalOrchestrator.execute(async () => {
-    const start = performance.now();
+    const start = performance.now()
     try {
+      logger?.debug(`Last.fm API call starting${context ? `: ${context}` : ''}`)
+      const result = await call()
+      const duration = performance.now() - start
       logger?.debug(
-        `Last.fm API call starting${context ? `: ${context}` : ""}`
-      );
-      const result = await call();
-      const duration = performance.now() - start;
-      logger?.debug(
-        `Last.fm API call completed in ${duration.toFixed(0)}ms${
-          context ? `: ${context}` : ""
-        }`
-      );
-      return result;
+        `Last.fm API call completed in ${duration.toFixed(0)}ms${context ? `: ${context}` : ''}`,
+      )
+      return result
     } catch (error) {
-      const duration = performance.now() - start;
-      logger?.error(
-        `Last.fm API call failed after ${duration.toFixed(0)}ms`,
-        error,
-        { context }
-      );
-      throw error;
+      const duration = performance.now() - start
+      logger?.error(`Last.fm API call failed after ${duration.toFixed(0)}ms`, error, { context })
+      throw error
     }
-  }, "lastfm");
+  }, 'lastfm')
 }
 
 /**
@@ -150,30 +128,22 @@ export async function rateLimitedLastFmCall<T>(
 export async function rateLimitedSpotifyCall<T>(
   call: () => Promise<T>,
   logger?: ServiceLogger,
-  context?: string
+  context?: string,
 ): Promise<T> {
   return globalOrchestrator.execute(async () => {
-    const start = performance.now();
+    const start = performance.now()
     try {
+      logger?.debug(`Spotify API call starting${context ? `: ${context}` : ''}`)
+      const result = await call()
+      const duration = performance.now() - start
       logger?.debug(
-        `Spotify API call starting${context ? `: ${context}` : ""}`
-      );
-      const result = await call();
-      const duration = performance.now() - start;
-      logger?.debug(
-        `Spotify API call completed in ${duration.toFixed(0)}ms${
-          context ? `: ${context}` : ""
-        }`
-      );
-      return result;
+        `Spotify API call completed in ${duration.toFixed(0)}ms${context ? `: ${context}` : ''}`,
+      )
+      return result
     } catch (error) {
-      const duration = performance.now() - start;
-      logger?.error(
-        `Spotify API call failed after ${duration.toFixed(0)}ms`,
-        error,
-        { context }
-      );
-      throw error;
+      const duration = performance.now() - start
+      logger?.error(`Spotify API call failed after ${duration.toFixed(0)}ms`, error, { context })
+      throw error
     }
-  }, "spotify");
+  }, 'spotify')
 }

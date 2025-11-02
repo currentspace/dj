@@ -20,9 +20,9 @@ export default defineConfig({
     'http',
     'https',
     'process',
-    'timers'
+    'timers',
   ],
-  format: ['esm'],  // Workers use ESM only
+  format: ['esm'], // Workers use ESM only
   minify: true, // Recommended for production
   noExternal: [/.*/], // Bundle ALL dependencies for Workers
   platform: 'node', // Can use 'node' with nodejs_compat

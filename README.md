@@ -37,11 +37,13 @@ An AI-powered DJ app that creates Spotify playlists using Anthropic's Claude API
 ### Development
 
 1. Install dependencies:
+
 ```bash
 pnpm install
 ```
 
 2. Create `.dev.vars` file in `workers/api/` directory:
+
 ```
 ANTHROPIC_API_KEY=sk-ant-your_key_here
 SPOTIFY_CLIENT_ID=your_spotify_client_id
@@ -53,11 +55,13 @@ ENVIRONMENT=development
 **Important**: Never commit `.dev.vars` to git.
 
 **Optional**: To enable Last.fm enrichment (crowd-sourced tags, popularity, artist info):
+
 1. Get API key from [Last.fm API Account](https://www.last.fm/api/account/create)
 2. Add `LASTFM_API_KEY` to `.dev.vars`
 3. Note: Deezer and MusicBrainz require no API keys
 
-3. Run development servers:
+4. Run development servers:
+
 ```bash
 # Terminal 1: Start Cloudflare Worker API
 pnpm run dev:api
@@ -74,6 +78,7 @@ pnpm run dev
 #### Automatic Deployment (GitHub Actions)
 
 1. Push code to GitHub:
+
 ```bash
 git push origin main
 ```
@@ -90,6 +95,7 @@ git push origin main
 #### Manual Deployment
 
 1. Set production secrets:
+
 ```bash
 wrangler secret put ANTHROPIC_API_KEY
 wrangler secret put SPOTIFY_CLIENT_ID
@@ -97,6 +103,7 @@ wrangler secret put SPOTIFY_CLIENT_SECRET
 ```
 
 2. Deploy to Cloudflare:
+
 ```bash
 pnpm run deploy
 ```

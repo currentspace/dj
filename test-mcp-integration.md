@@ -1,10 +1,14 @@
 # MCP Integration Testing Guide
 
 ## Problem Identified
-LangChain's ChatAnthropic doesn't automatically connect to MCP servers. We need explicit tool calling integration.
+
+LangChain's ChatAnthropic doesn't automatically connect to MCP servers. We need explicit tool
+calling integration.
 
 ## Solution Implemented
+
 Created `/api/chat-mcp/message` endpoint that:
+
 1. Uses Anthropic SDK directly (not LangChain)
 2. Defines tools explicitly to Claude
 3. Executes tool calls through our internal MCP implementation
@@ -13,6 +17,7 @@ Created `/api/chat-mcp/message` endpoint that:
 ## Testing the Integration
 
 ### 1. Test Tool Execution Directly
+
 ```bash
 # First, test that our tools work
 curl -X POST https://dj.current.space/api/chat-mcp/test-tools \
@@ -21,6 +26,7 @@ curl -X POST https://dj.current.space/api/chat-mcp/test-tools \
 ```
 
 Expected logs:
+
 ```
 [Test:abc123] === TOOL TEST STARTED ===
 [Test:abc123] Testing search_spotify_tracks...
@@ -32,6 +38,7 @@ Expected logs:
 ```
 
 ### 2. Test Chat with Tool Calling
+
 ```bash
 curl -X POST https://dj.current.space/api/chat-mcp/message \
   -H "Authorization: Bearer YOUR_SPOTIFY_TOKEN" \
@@ -43,11 +50,13 @@ curl -X POST https://dj.current.space/api/chat-mcp/message \
 ```
 
 Expected behavior:
+
 1. Claude calls `search_spotify_tracks` with workout-related query
 2. Claude calls `get_audio_features` on returned tracks
 3. Claude provides analysis based on real data
 
 Expected logs:
+
 ```
 [Chat:def456] === NEW CHAT REQUEST ===
 [Chat:def456] Mode: analyze, Message: "Search for some upbeat workout tracks..."
@@ -64,6 +73,7 @@ Expected logs:
 ```
 
 ### 3. Test Playlist Creation
+
 ```bash
 curl -X POST https://dj.current.space/api/chat-mcp/message \
   -H "Authorization: Bearer YOUR_SPOTIFY_TOKEN" \
@@ -75,6 +85,7 @@ curl -X POST https://dj.current.space/api/chat-mcp/message \
 ```
 
 Expected behavior:
+
 1. Claude searches for chill tracks
 2. Claude checks audio features for low energy/high focus
 3. Claude creates actual Spotify playlist
@@ -83,11 +94,13 @@ Expected behavior:
 ## Monitoring Logs
 
 Run this while testing:
+
 ```bash
 pnpm exec wrangler tail dj --format pretty --search "[Chat:"
 ```
 
 Or filter by specific test:
+
 ```bash
 pnpm exec wrangler tail dj --format pretty --search "[Test:"
 ```
@@ -95,12 +108,14 @@ pnpm exec wrangler tail dj --format pretty --search "[Test:"
 ## Key Differences from Previous Approach
 
 ### Before (LangChain):
+
 - LangChain managed tool calling
 - No direct MCP server integration
 - Tools were separate from MCP server
 - No observable tool execution
 
 ### After (Direct Integration):
+
 - Anthropic SDK with explicit tool definitions
 - Tools execute through our MCP implementation
 - Full E2E logging and observability
@@ -109,6 +124,7 @@ pnpm exec wrangler tail dj --format pretty --search "[Test:"
 ## Expected Response Format
 
 Successful chat response:
+
 ```json
 {
   "message": "I found 10 upbeat workout tracks with an average energy of 0.82...",
@@ -122,6 +138,7 @@ Successful chat response:
 ## Troubleshooting
 
 If no tool calls appear:
+
 1. Check Claude is receiving tool definitions
 2. Verify system prompts encourage tool usage
 3. Ensure tool execution isn't failing silently

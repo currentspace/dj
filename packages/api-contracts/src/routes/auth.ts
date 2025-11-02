@@ -3,7 +3,7 @@
  * Spotify OAuth flow with PKCE and token management
  */
 
-import { createRoute, z } from "@hono/zod-openapi";
+import { createRoute, z } from '@hono/zod-openapi'
 
 /**
  * GET /api/spotify/auth-url
@@ -11,34 +11,33 @@ import { createRoute, z } from "@hono/zod-openapi";
  * Sets secure HttpOnly cookie with code_verifier
  */
 export const getSpotifyAuthUrl = createRoute({
-  description: "Get Spotify OAuth authorization URL (PKCE flow)",
-  method: "get",
-  path: "/api/spotify/auth-url",
+  description: 'Get Spotify OAuth authorization URL (PKCE flow)',
+  method: 'get',
+  path: '/api/spotify/auth-url',
   responses: {
     200: {
       content: {
-        "application/json": {
+        'application/json': {
           schema: z.object({
             url: z.string().url(),
           }),
         },
       },
-      description:
-        "OAuth URL generated successfully. Code verifier stored in secure cookie.",
+      description: 'OAuth URL generated successfully. Code verifier stored in secure cookie.',
     },
     500: {
       content: {
-        "application/json": {
+        'application/json': {
           schema: z.object({
             error: z.string(),
           }),
         },
       },
-      description: "Server error",
+      description: 'Server error',
     },
   },
-  tags: ["Auth"],
-});
+  tags: ['Auth'],
+})
 
 /**
  * GET /api/spotify/callback
@@ -46,10 +45,9 @@ export const getSpotifyAuthUrl = createRoute({
  * Redirects back to frontend with token
  */
 export const handleSpotifyCallback = createRoute({
-  description:
-    "Handle OAuth callback and exchange code for token (server-side)",
-  method: "get",
-  path: "/api/spotify/callback",
+  description: 'Handle OAuth callback and exchange code for token (server-side)',
+  method: 'get',
+  path: '/api/spotify/callback',
   request: {
     query: z.object({
       code: z.string().optional(),
@@ -59,24 +57,24 @@ export const handleSpotifyCallback = createRoute({
   },
   responses: {
     302: {
-      description: "Redirect to frontend with token or error",
+      description: 'Redirect to frontend with token or error',
     },
   },
-  tags: ["Auth"],
-});
+  tags: ['Auth'],
+})
 
 /**
  * POST /api/spotify/token
  * Exchange authorization code for access token (alternative flow)
  */
 export const exchangeSpotifyToken = createRoute({
-  description: "Exchange authorization code for Spotify access token",
-  method: "post",
-  path: "/api/spotify/token",
+  description: 'Exchange authorization code for Spotify access token',
+  method: 'post',
+  path: '/api/spotify/token',
   request: {
     body: {
       content: {
-        "application/json": {
+        'application/json': {
           schema: z.object({
             code: z.string().min(1),
             codeVerifier: z.string().min(1),
@@ -88,48 +86,48 @@ export const exchangeSpotifyToken = createRoute({
   responses: {
     200: {
       content: {
-        "application/json": {
+        'application/json': {
           schema: z.object({
             access_token: z.string(),
             expires_in: z.number(),
             refresh_token: z.string().optional(),
             scope: z.string(),
-            token_type: z.literal("Bearer"),
+            token_type: z.literal('Bearer'),
           }),
         },
       },
-      description: "Token exchanged successfully",
+      description: 'Token exchanged successfully',
     },
     400: {
       content: {
-        "application/json": {
+        'application/json': {
           schema: z.object({
             error: z.string(),
             error_description: z.string().optional(),
           }),
         },
       },
-      description: "Invalid request",
+      description: 'Invalid request',
     },
   },
-  tags: ["Auth"],
-});
+  tags: ['Auth'],
+})
 
 /**
  * POST /api/spotify/search
  * Search Spotify catalog
  */
 export const searchSpotify = createRoute({
-  description: "Search Spotify for tracks, albums, or artists",
-  method: "post",
-  path: "/api/spotify/search",
+  description: 'Search Spotify for tracks, albums, or artists',
+  method: 'post',
+  path: '/api/spotify/search',
   request: {
     body: {
       content: {
-        "application/json": {
+        'application/json': {
           schema: z.object({
             query: z.string().min(1),
-            type: z.enum(["track", "album", "artist"]).default("track"),
+            type: z.enum(['track', 'album', 'artist']).default('track'),
           }),
         },
       },
@@ -141,7 +139,7 @@ export const searchSpotify = createRoute({
   responses: {
     200: {
       content: {
-        "application/json": {
+        'application/json': {
           schema: z.object({
             tracks: z
               .object({
@@ -151,28 +149,28 @@ export const searchSpotify = createRoute({
           }),
         },
       },
-      description: "Search results",
+      description: 'Search results',
     },
     400: {
       content: {
-        "application/json": {
+        'application/json': {
           schema: z.object({
             error: z.string(),
           }),
         },
       },
-      description: "Invalid request",
+      description: 'Invalid request',
     },
     401: {
       content: {
-        "application/json": {
+        'application/json': {
           schema: z.object({
             error: z.string(),
           }),
         },
       },
-      description: "Unauthorized",
+      description: 'Unauthorized',
     },
   },
-  tags: ["Spotify"],
-});
+  tags: ['Spotify'],
+})

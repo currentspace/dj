@@ -3,6 +3,7 @@
 ## Issue
 
 When user selected a playlist and asked Claude to analyze it:
+
 - ✅ Tool executed successfully ("🎉 Analysis complete for 'Lover'!")
 - ❌ Claude responded: "I don't see any playlist analysis that was previously shared"
 - ❌ Audio features API returned 403 Forbidden
@@ -10,12 +11,16 @@ When user selected a playlist and asked Claude to analyze it:
 ## Root Causes
 
 ### 1. Missing Spotify OAuth Scopes
+
 The app was missing required scopes for reading playlist data and audio features:
+
 - `playlist-read-private` - Needed to read private playlists
 - `playlist-read-collaborative` - Needed for collaborative playlists
 
 ### 2. Oversized Tool Results
+
 When audio features failed, the code was still returning full Spotify track objects:
+
 - Full track object: ~2.5-3KB (includes album art URLs, markets, etc.)
 - 17 tracks × 2.5KB = ~42KB
 - This overwhelmed Claude's ability to process the tool result
@@ -27,11 +32,13 @@ When audio features failed, the code was still returning full Spotify track obje
 **File:** `workers/api/src/routes/spotify.ts:113`
 
 **Before:**
+
 ```typescript
 scope: 'playlist-modify-public playlist-modify-private user-read-private user-read-playback-state user-read-currently-playing user-read-recently-played user-top-read'
 ```
 
 **After:**
+
 ```typescript
 scope: 'playlist-modify-public playlist-modify-private user-read-private user-read-playback-state user-read-currently-playing user-read-recently-played user-top-read playlist-read-private playlist-read-collaborative'
 ```
@@ -41,6 +48,7 @@ scope: 'playlist-modify-public playlist-modify-private user-read-private user-re
 **File:** `workers/api/src/routes/chat-stream.ts:161-168`
 
 **Added track compaction:**
+
 ```typescript
 // Strip down tracks to only essential info (avoid 55KB payload issue)
 const compactTracks = tracks.slice(0, 20).map((track: any) => ({
@@ -48,8 +56,8 @@ const compactTracks = tracks.slice(0, 20).map((track: any) => ({
   artists: track.artists?.map((a: any) => a.name).join(', ') || 'Unknown',
   duration_ms: track.duration_ms,
   popularity: track.popularity,
-  uri: track.uri
-}));
+  uri: track.uri,
+}))
 ```
 
 This reduces payload from ~42KB → ~2KB (95% reduction).
@@ -59,10 +67,15 @@ This reduces payload from ~42KB → ~2KB (95% reduction).
 **File:** `workers/api/src/routes/chat-stream.ts:188-192`
 
 **Added size logging:**
+
 ```typescript
-const analysisJson = JSON.stringify(analysis);
-console.log(`[Tool] Analysis JSON size: ${analysisJson.length} bytes (${(analysisJson.length / 1024).toFixed(1)}KB)`);
-console.log(`[Tool] Returning ${analysis.tracks.length} compact tracks and ${analysis.audio_features?.length || 0} audio features`);
+const analysisJson = JSON.stringify(analysis)
+console.log(
+  `[Tool] Analysis JSON size: ${analysisJson.length} bytes (${(analysisJson.length / 1024).toFixed(1)}KB)`,
+)
+console.log(
+  `[Tool] Returning ${analysis.tracks.length} compact tracks and ${analysis.audio_features?.length || 0} audio features`,
+)
 ```
 
 This helps identify payload size issues in the future.
@@ -70,13 +83,14 @@ This helps identify payload size issues in the future.
 ## Testing Instructions
 
 1. **Clear existing auth:**
+
    ```javascript
    localStorage.removeItem('spotify_token')
    ```
+
    Refresh the page.
 
-2. **Re-authenticate:**
-   Click "Login with Spotify" - this will request the new scopes.
+2. **Re-authenticate:** Click "Login with Spotify" - this will request the new scopes.
 
 3. **Test playlist analysis:**
    - Select any playlist

@@ -3,11 +3,13 @@
 ## What Was Removed
 
 ### ✅ Deleted Files
+
 - **workers/api/src/routes/spotify.ts** (606 lines)
   - Legacy Spotify auth and playlist routes
   - Replaced by OpenAPI contracts
 
 ### ✅ Cleaned Up Code
+
 - Removed commented-out `spotifyRouter` import from index.ts
 - Removed commented-out route registration from index.ts
 - No dead code or unused imports remaining
@@ -15,6 +17,7 @@
 ## Current Clean State
 
 ### Route Files (workers/api/src/routes/)
+
 ```
 ✅ spotify-openapi.ts      - OpenAPI auth routes (356 lines)
 ✅ playlists-openapi.ts    - OpenAPI playlist routes (229 lines)
@@ -29,6 +32,7 @@
 ```
 
 ### Clean Imports (index.ts)
+
 ```typescript
 import { OpenAPIHono } from '@hono/zod-openapi'
 import { cors } from 'hono/cors'
@@ -47,6 +51,7 @@ import { testRouter } from './routes/test'
 ```
 
 ### Clean Route Registrations
+
 ```typescript
 // OpenAPI routes with automatic validation
 registerSpotifyAuthRoutes(app)
@@ -85,6 +90,7 @@ app.route('/api/sse-test', sseTestRouter)
 ## What Remains
 
 Only the code that's actively used:
+
 - ✅ OpenAPI routes for Spotify auth and playlists
 - ✅ Chat streaming routes (complex, working well)
 - ✅ Test and debugging utilities
@@ -94,4 +100,5 @@ Only the code that's actively used:
 
 **Status**: ✅ **CLEAN AND PRODUCTION-READY**
 
-All legacy code removed. Codebase is now cleaner, smaller, and fully type-safe with OpenAPI contracts.
+All legacy code removed. Codebase is now cleaner, smaller, and fully type-safe with OpenAPI
+contracts.

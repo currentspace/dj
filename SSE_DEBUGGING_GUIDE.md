@@ -32,10 +32,12 @@ Updates UI
 ## Routes and Endpoints
 
 ### Production Routes
+
 - **POST /api/chat-stream/message** - Main SSE streaming endpoint
 - **POST /api/chat/message** - Simple non-streaming endpoint
 
 ### Test Routes
+
 - **GET /api/sse-test/simple** - Basic SSE test (no auth required)
 - **POST /api/sse-test/post-stream** - POST SSE test
 
@@ -76,64 +78,69 @@ curl -N -X POST 'http://localhost:8787/api/chat-stream/message' \
 
 ```javascript
 // Get token
-const token = localStorage.getItem('spotify_token');
+const token = localStorage.getItem('spotify_token')
 
 // Test SSE
 const response = await fetch('http://localhost:8787/api/chat-stream/message', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
-    'Accept': 'text/event-stream',
-    'Authorization': `Bearer ${token}`
+    Accept: 'text/event-stream',
+    Authorization: `Bearer ${token}`,
   },
   body: JSON.stringify({
     message: 'What is the tempo?',
     conversationHistory: [],
-    mode: 'analyze'
-  })
-});
+    mode: 'analyze',
+  }),
+})
 
-const reader = response.body.getReader();
-const decoder = new TextDecoder();
+const reader = response.body.getReader()
+const decoder = new TextDecoder()
 
 while (true) {
-  const { done, value } = await reader.read();
-  if (done) break;
-  console.log(decoder.decode(value));
+  const { done, value } = await reader.read()
+  if (done) break
+  console.log(decoder.decode(value))
 }
 ```
 
 ## Common Issues and Solutions
 
 ### Issue 1: No SSE Events Received
-**Symptoms**: Connection established but no events
-**Check**:
+
+**Symptoms**: Connection established but no events **Check**:
+
 - Browser console for errors
 - Network tab shows 200 but no data
 - Server logs show processing
 
 **Solutions**:
+
 1. Check if Cloudflare is buffering (add headers)
 2. Ensure TransformStream is created properly
 3. Verify async processing isn't throwing errors
 
 ### Issue 2: 401 Unauthorized
-**Symptoms**: Request fails with 401
-**Solutions**:
+
+**Symptoms**: Request fails with 401 **Solutions**:
+
 1. Get fresh token from Spotify
 2. Check token in localStorage
 3. Verify Authorization header format: `Bearer {token}`
 
 ### Issue 3: SSE Events Not Parsing
-**Symptoms**: Raw text in console, events not recognized
-**Check**:
+
+**Symptoms**: Raw text in console, events not recognized **Check**:
+
 - Event format: `data: {JSON}\n\n`
 - Double newline between events
 - JSON is valid
 
 ### Issue 4: Stream Closes Immediately
-**Symptoms**: Connection opens and closes without events
-**Check**:
+
+**Symptoms**: Connection opens and closes without events **Check**:
+
 - Server error logs
 - Anthropic API key is set
 - Request body is valid JSON
@@ -141,7 +148,9 @@ while (true) {
 ## Debug Logging Locations
 
 ### Client Side
+
 Look for `[ChatStream]` prefixed logs:
+
 ```
 [ChatStream] Starting stream request to /api/chat-stream/message
 [ChatStream] Response status: 200 OK
@@ -150,7 +159,9 @@ Look for `[ChatStream]` prefixed logs:
 ```
 
 ### Server Side
+
 Look for `[Stream:{id}]` prefixed logs:
+
 ```
 [Stream:abc12345] ========== NEW STREAMING REQUEST ==========
 [Stream:abc12345] Request body parsed: {...}
@@ -162,6 +173,7 @@ Look for `[Stream:{id}]` prefixed logs:
 ## SSE Event Format
 
 ### Standard Events
+
 ```
 data: {"type": "thinking", "data": "Processing..."}
 
@@ -175,6 +187,7 @@ data: {"type": "done", "data": null}
 ```
 
 ### Heartbeats
+
 ```
 : heartbeat
 
@@ -183,31 +196,40 @@ data: {"type": "done", "data": null}
 ## Verifying Each Component
 
 ### 1. Verify Worker is Running
+
 ```bash
 pnpm run dev:api
 # Should show: ⎔ Starting local server...
 ```
 
 ### 2. Verify Routes are Registered
+
 Check `/workers/api/src/index.ts`:
+
 ```typescript
 app.route('/api/chat-stream', chatStreamRouter)
 ```
 
 ### 3. Verify SSE Headers
+
 Response should have:
+
 - `Content-Type: text/event-stream`
 - `Cache-Control: no-cache, no-transform`
 - `Content-Encoding: identity`
 
 ### 4. Verify TransformStream
+
 Server should:
+
 1. Create TransformStream
 2. Return Response(readable) immediately
 3. Process async and write to writable
 
 ### 5. Verify Client Parsing
+
 Client should:
+
 1. Read chunks from response.body
 2. Buffer until double newline
 3. Parse JSON from data: lines
@@ -216,6 +238,7 @@ Client should:
 ## Environment Variables
 
 Ensure these are set in `.dev.vars`:
+
 ```
 ANTHROPIC_API_KEY=your_key_here
 SPOTIFY_CLIENT_ID=your_id_here
@@ -234,6 +257,7 @@ SPOTIFY_CLIENT_SECRET=your_secret_here
 ## Contact for Help
 
 If SSE is still not working after following this guide:
+
 1. Check server logs for specific errors
 2. Use the test HTML page to capture detailed logs
 3. Try the curl commands to eliminate browser issues

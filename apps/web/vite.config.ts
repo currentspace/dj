@@ -1,27 +1,27 @@
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import path from "path";
-import { fileURLToPath } from "url";
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import path from 'path'
+import { fileURLToPath } from 'url'
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig({
   build: {
-    minify: "esbuild",
-    outDir: "dist",
+    minify: 'esbuild',
+    outDir: 'dist',
     rollupOptions: {
       output: {
         manualChunks: {
-          api: ["@dj/api-client", "@dj/shared-types"],
-          vendor: ["react", "react-dom"],
+          api: ['@dj/api-client', '@dj/shared-types'],
+          vendor: ['react', 'react-dom'],
         },
       },
     },
     sourcemap: true,
-    target: "esnext",
+    target: 'esnext',
   },
   optimizeDeps: {
-    include: ["react", "react-dom"],
+    include: ['react', 'react-dom'],
   },
   plugins: [
     react({
@@ -35,24 +35,18 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
-      "@dj/api-client": path.resolve(
-        __dirname,
-        "../../packages/api-client/src"
-      ),
-      "@dj/shared-types": path.resolve(
-        __dirname,
-        "../../packages/shared-types/src"
-      ),
+      '@': path.resolve(__dirname, './src'),
+      '@dj/api-client': path.resolve(__dirname, '../../packages/api-client/src'),
+      '@dj/shared-types': path.resolve(__dirname, '../../packages/shared-types/src'),
     },
   },
   server: {
     port: 3000,
     proxy: {
-      "/api": {
+      '/api': {
         changeOrigin: true,
-        target: "http://localhost:8787",
+        target: 'http://localhost:8787',
       },
     },
   },
-});
+})

@@ -1,6 +1,7 @@
 # Refactoring Example: analyze_playlist Tool
 
-This document shows a concrete example of refactoring the `analyze_playlist` tool to use the **RequestOrchestrator** and **pipelined SSE writes**.
+This document shows a concrete example of refactoring the `analyze_playlist` tool to use the
+**RequestOrchestrator** and **pipelined SSE writes**.
 
 ## Before: Sequential with Blocking Writes
 
@@ -71,6 +72,7 @@ async function executeSpotifyToolWithProgress(
 ```
 
 **Problems**:
+
 1. ❌ No rate limiting - can hit 40 RPS limit
 2. ❌ Sequential searches - could be parallel
 3. ❌ Sequential audio features - could be batched
@@ -226,6 +228,7 @@ async function executeSpotifyToolWithProgress(
 ```
 
 **Improvements**:
+
 1. ✅ All API calls rate-limited through orchestrator
 2. ✅ Parallel searches (5x 50-track searches concurrently)
 3. ✅ Batched audio features (50+ tracks processed in parallel with concurrency limit)
@@ -236,6 +239,7 @@ async function executeSpotifyToolWithProgress(
 ## Performance Comparison
 
 ### Before
+
 ```
 Search 1:  wait 200ms
 Search 2:  wait 200ms
@@ -254,6 +258,7 @@ TOTAL: ~6000ms+ with blocking writes
 ```
 
 ### After
+
 ```
 Searches:  5 parallel × 200ms = 200ms (pipelined)
 Audio:     50 batched, 10 concurrent × (50/10 × 100ms) = 500ms
@@ -270,69 +275,68 @@ TOTAL: ~1500ms with pipelined writes
 
 ```typescript
 // Phase 1: Do work
-orchestrator.enqueueBatch('phase1', tasks);
-sseWriter.writeAsync({ type: 'thinking', data: 'Phase 1...' });
-await orchestrator.awaitBatch('phase1');
+orchestrator.enqueueBatch('phase1', tasks)
+sseWriter.writeAsync({ type: 'thinking', data: 'Phase 1...' })
+await orchestrator.awaitBatch('phase1')
 
 // Flush checkpoint (ensures user saw progress)
-await sseWriter.flush();
+await sseWriter.flush()
 
 // Phase 2: Do work
-sseWriter.writeAsync({ type: 'thinking', data: 'Phase 2...' });
+sseWriter.writeAsync({ type: 'thinking', data: 'Phase 2...' })
 ```
 
 ### 2. Progress Updates During Batch
 
 ```typescript
 // Start batch
-orchestrator.enqueueBatch('work', tasks);
+orchestrator.enqueueBatch('work', tasks)
 
 // Poll for progress (non-blocking)
 const interval = setInterval(() => {
-  const pending = orchestrator.getPendingCount();
-  const done = total - pending;
+  const pending = orchestrator.getPendingCount()
+  const done = total - pending
   sseWriter.writeAsync({
     type: 'thinking',
-    data: `Progress: ${done}/${total}`
-  });
-}, 500);
+    data: `Progress: ${done}/${total}`,
+  })
+}, 500)
 
 // Await completion
-await orchestrator.awaitBatch('work');
-clearInterval(interval);
+await orchestrator.awaitBatch('work')
+clearInterval(interval)
 ```
 
 ### 3. Dependency Chains
 
 ```typescript
 // Step 1: Independent batch
-orchestrator.enqueueBatch('step1', step1Tasks);
-const step1Results = await orchestrator.awaitBatch('step1');
+orchestrator.enqueueBatch('step1', step1Tasks)
+const step1Results = await orchestrator.awaitBatch('step1')
 
 // Step 2: Depends on step 1
-const step2Tasks = step1Results
-  .filter(r => r !== null)
-  .map(r => () => processResult(r));
+const step2Tasks = step1Results.filter(r => r !== null).map(r => () => processResult(r))
 
-orchestrator.enqueueBatch('step2', step2Tasks);
-const step2Results = await orchestrator.awaitBatch('step2');
+orchestrator.enqueueBatch('step2', step2Tasks)
+const step2Results = await orchestrator.awaitBatch('step2')
 ```
 
 ### 4. Fire-and-Forget with Error Handling
 
 ```typescript
 // Optional enhancement: narrator messages
-orchestrator.execute(() =>
-  narrator.generateMessage({ eventType: 'enriching_tracks' })
-).then(message => {
-  sseWriter.writeAsync({ type: 'thinking', data: message });
-}).catch(error => {
-  // Fallback to static message
-  sseWriter.writeAsync({
-    type: 'thinking',
-    data: 'Enriching tracks...'
-  });
-});
+orchestrator
+  .execute(() => narrator.generateMessage({ eventType: 'enriching_tracks' }))
+  .then(message => {
+    sseWriter.writeAsync({ type: 'thinking', data: message })
+  })
+  .catch(error => {
+    // Fallback to static message
+    sseWriter.writeAsync({
+      type: 'thinking',
+      data: 'Enriching tracks...',
+    })
+  })
 ```
 
 ## Migration Checklist
@@ -353,20 +357,23 @@ Verify rate limiting compliance:
 
 ```typescript
 // Log all API calls during test
-const startTime = Date.now();
-const callTimes: number[] = [];
+const startTime = Date.now()
+const callTimes: number[] = []
 
-orchestrator.enqueueBatch('test',
-  Array(100).fill(0).map(() => () => {
-    callTimes.push(Date.now() - startTime);
-    return mockApiCall();
-  })
-);
+orchestrator.enqueueBatch(
+  'test',
+  Array(100)
+    .fill(0)
+    .map(() => () => {
+      callTimes.push(Date.now() - startTime)
+      return mockApiCall()
+    }),
+)
 
-await orchestrator.awaitBatch('test');
+await orchestrator.awaitBatch('test')
 
 // Verify rate: should be ~40 RPS
-const duration = (Date.now() - startTime) / 1000;
-const rps = callTimes.length / duration;
-console.log(`RPS: ${rps.toFixed(2)}`); // Should be ≤ 40
+const duration = (Date.now() - startTime) / 1000
+const rps = callTimes.length / duration
+console.log(`RPS: ${rps.toFixed(2)}`) // Should be ≤ 40
 ```

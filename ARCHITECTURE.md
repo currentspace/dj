@@ -2,7 +2,8 @@
 
 ## Overview
 
-This project follows a modern monorepo structure using pnpm workspaces, organizing code by architectural layers and deployment targets.
+This project follows a modern monorepo structure using pnpm workspaces, organizing code by
+architectural layers and deployment targets.
 
 ## Directory Structure
 
@@ -48,16 +49,19 @@ dj/
 ## Package Structure
 
 ### Applications (`apps/`)
+
 - **Purpose**: Deployable applications with their own build processes
 - **Naming**: `@dj/{app-name}`
 - **Dependencies**: Can import from `packages/` but not other `apps/`
 
 ### Packages (`packages/`)
+
 - **Purpose**: Shared code used across multiple apps/workers
 - **Naming**: `@dj/{package-name}`
 - **Dependencies**: Should not depend on `apps/` or `workers/`
 
 ### Workers (`workers/`)
+
 - **Purpose**: Cloudflare Workers for serverless functions
 - **Naming**: `@dj/{worker-name}-worker`
 - **Dependencies**: Can import from `packages/`
@@ -65,7 +69,9 @@ dj/
 ## Best Practices
 
 ### 1. Feature-Based Organization
+
 Within apps, organize code by feature rather than file type:
+
 ```
 features/
 ├── chat/
@@ -75,21 +81,25 @@ features/
 ```
 
 ### 2. Dependency Management
+
 - Use `workspace:*` for internal dependencies
 - Keep shared code in `packages/`
 - Avoid circular dependencies
 
 ### 3. Build Process
+
 - Each app/worker has its own build configuration
 - Shared build scripts in root `scripts/`
 - Build metadata generated automatically
 
 ### 4. Type Safety
+
 - Shared types in `@dj/shared-types`
 - Feature-specific types co-located with features
 - Strict TypeScript configuration
 
 ### 5. Styling
+
 - Global styles in `src/styles/`
 - Component-specific styles co-located
 - Use CSS modules for component isolation
@@ -123,18 +133,21 @@ pnpm deploy           # Build and deploy to Cloudflare
 ## Key Decisions
 
 ### Why Monorepo?
+
 - **Code Sharing**: Easy sharing of types, utilities, and components
 - **Atomic Changes**: Single commits can update multiple packages
 - **Consistent Tooling**: Shared ESLint, TypeScript, and build configs
 - **Simplified Dependencies**: Single lockfile, deduped dependencies
 
 ### Why pnpm?
+
 - **Efficient Storage**: Hard links save disk space
 - **Strict Dependencies**: Prevents phantom dependencies
 - **Fast**: Parallel installation and caching
 - **Workspace Support**: First-class monorepo support
 
 ### Why Feature-Based Structure?
+
 - **Scalability**: Easy to add/remove features
 - **Maintainability**: Related code stays together
 - **Team Collaboration**: Clear ownership boundaries
@@ -149,14 +162,10 @@ pnpm deploy           # Build and deploy to Cloudflare
 
 ## Common Pitfalls to Avoid
 
-❌ **Don't** create duplicate directories (e.g., `/web/` outside of `/apps/`)
-❌ **Don't** import from other apps directly
-❌ **Don't** put app-specific code in packages
-❌ **Don't** use relative imports across package boundaries
-❌ **Don't** bypass the workspace protocol for internal deps
+❌ **Don't** create duplicate directories (e.g., `/web/` outside of `/apps/`) ❌ **Don't** import
+from other apps directly ❌ **Don't** put app-specific code in packages ❌ **Don't** use relative
+imports across package boundaries ❌ **Don't** bypass the workspace protocol for internal deps
 
-✅ **Do** use the canonical `/apps/web/` location
-✅ **Do** extract shared code to `/packages/`
-✅ **Do** use `workspace:*` for internal dependencies
-✅ **Do** co-locate related code in features
-✅ **Do** maintain clear package boundaries
+✅ **Do** use the canonical `/apps/web/` location ✅ **Do** extract shared code to `/packages/` ✅
+**Do** use `workspace:*` for internal dependencies ✅ **Do** co-locate related code in features ✅
+**Do** maintain clear package boundaries

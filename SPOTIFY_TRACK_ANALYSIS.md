@@ -1,17 +1,21 @@
 # Spotify Track Object Size Analysis
 
 ## The Problem
-The playlist analysis tool was returning 55KB of data to Claude, which was too large for it to process effectively. The main culprit: Spotify track objects are MASSIVE.
+
+The playlist analysis tool was returning 55KB of data to Claude, which was too large for it to
+process effectively. The main culprit: Spotify track objects are MASSIVE.
 
 ## What's in a Spotify Track Object?
 
-A single Spotify track object from the API contains approximately **2,500-3,000 bytes** of data. When we were sending 20 tracks, that's 50-60KB just for tracks!
+A single Spotify track object from the API contains approximately **2,500-3,000 bytes** of data.
+When we were sending 20 tracks, that's 50-60KB just for tracks!
 
 ### Main Size Culprits in Each Track:
 
 1. **available_markets** (30-50% of size)
    - An array of 70+ country codes where the track is available
-   - Example: ["AR", "AU", "AT", "BE", "BO", "BR", "BG", "CA", "CL", "CO", "CR", "CY", "CZ", "DK"...]
+   - Example: ["AR", "AU", "AT", "BE", "BO", "BR", "BG", "CA", "CL", "CO", "CR", "CY", "CZ",
+     "DK"...]
    - Each track duplicates this massive array
 
 2. **album** object (20-30% of size)
@@ -38,6 +42,7 @@ A single Spotify track object from the API contains approximately **2,500-3,000 
    - 30-second preview MP3 URL (often null)
 
 ## Example Track Object Structure
+
 ```json
 {
   "album": {
@@ -96,6 +101,7 @@ A single Spotify track object from the API contains approximately **2,500-3,000 
 Instead of sending full track objects, we now send only what Claude needs:
 
 ### New Compact Format (per track):
+
 ```json
 {
   "name": "Song Name",
@@ -106,6 +112,7 @@ Instead of sending full track objects, we now send only what Claude needs:
 ```
 
 ### Size Comparison:
+
 - **Old format**: ~2,750 bytes per track × 20 tracks = 55,000 bytes
 - **New format**: ~100 bytes per track × 5 tracks = 500 bytes
 - **Reduction**: 99% smaller!
@@ -120,9 +127,11 @@ Instead of sending full track objects, we now send only what Claude needs:
 ## Key Takeaway
 
 When integrating with third-party APIs that return verbose data, always:
+
 1. Log the actual size of returned objects
 2. Strip unnecessary fields before sending to LLMs
 3. Focus on what the AI actually needs to answer the user's question
 4. Consider creating summary objects instead of passing raw API responses
 
-In this case, we reduced 55KB to ~1KB while maintaining all the information Claude needs to provide meaningful analysis about playlists!
+In this case, we reduced 55KB to ~1KB while maintaining all the information Claude needs to provide
+meaningful analysis about playlists!

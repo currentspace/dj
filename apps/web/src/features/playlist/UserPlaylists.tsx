@@ -1,71 +1,68 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from 'react'
 
-import { useSpotifyAuth } from "../../hooks/useSpotifyAuth";
+import { useSpotifyAuth } from '../../hooks/useSpotifyAuth'
 
 interface SpotifyPlaylist {
-  description: string;
+  description: string
   external_urls: {
-    spotify: string;
-  };
-  id: string;
+    spotify: string
+  }
+  id: string
   images: {
-    height: number;
-    url: string;
-    width: number;
-  }[];
-  name: string;
+    height: number
+    url: string
+    width: number
+  }[]
+  name: string
   owner: {
-    display_name: string;
-  };
-  public: boolean;
+    display_name: string
+  }
+  public: boolean
   tracks: {
-    total: number;
-  };
+    total: number
+  }
 }
 
 interface UserPlaylistsProps {
-  onPlaylistSelect?: (playlist: SpotifyPlaylist) => void;
-  selectedPlaylist?: null | SpotifyPlaylist;
+  onPlaylistSelect?: (playlist: SpotifyPlaylist) => void
+  selectedPlaylist?: null | SpotifyPlaylist
 }
 
-function UserPlaylists({
-  onPlaylistSelect,
-  selectedPlaylist,
-}: UserPlaylistsProps) {
-  const { token } = useSpotifyAuth();
-  const [playlists, setPlaylists] = useState<SpotifyPlaylist[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<null | string>(null);
+function UserPlaylists({ onPlaylistSelect, selectedPlaylist }: UserPlaylistsProps) {
+  const { token } = useSpotifyAuth()
+  const [playlists, setPlaylists] = useState<SpotifyPlaylist[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<null | string>(null)
 
   const loadPlaylists = useCallback(async () => {
     try {
-      setLoading(true);
-      setError(null);
+      setLoading(true)
+      setError(null)
 
-      const response = await fetch("/api/spotify/playlists", {
+      const response = await fetch('/api/spotify/playlists', {
         headers: {
           Authorization: `Bearer ${token}`,
         },
-      });
+      })
 
       if (!response.ok) {
-        throw new Error("Failed to load playlists");
+        throw new Error('Failed to load playlists')
       }
 
-      const data = (await response.json()) as { items?: SpotifyPlaylist[] };
-      setPlaylists(data.items ?? []);
+      const data = (await response.json()) as { items?: SpotifyPlaylist[] }
+      setPlaylists(data.items ?? [])
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load playlists");
+      setError(err instanceof Error ? err.message : 'Failed to load playlists')
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  }, [token]);
+  }, [token])
 
   useEffect(() => {
     if (token) {
-      loadPlaylists();
+      loadPlaylists()
     }
-  }, [loadPlaylists, token]);
+  }, [loadPlaylists, token])
 
   if (loading) {
     return (
@@ -79,7 +76,7 @@ function UserPlaylists({
         </div>
         <style>{playlistsStyles}</style>
       </div>
-    );
+    )
   }
 
   if (error) {
@@ -96,7 +93,7 @@ function UserPlaylists({
         </div>
         <style>{playlistsStyles}</style>
       </div>
-    );
+    )
   }
 
   return (
@@ -104,22 +101,20 @@ function UserPlaylists({
       <div className="playlists-header">
         <h2>🎵 Your Playlists</h2>
         <p>
-          {playlists.length} playlist{playlists.length !== 1 ? "s" : ""}
+          {playlists.length} playlist{playlists.length !== 1 ? 's' : ''}
         </p>
       </div>
 
       <div className="playlists-grid">
-        {playlists.map((playlist) => (
+        {playlists.map(playlist => (
           <div
-            className={`playlist-card ${
-              selectedPlaylist?.id === playlist.id ? "selected" : ""
-            }`}
+            className={`playlist-card ${selectedPlaylist?.id === playlist.id ? 'selected' : ''}`}
             key={playlist.id}
             onClick={() => onPlaylistSelect?.(playlist)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                onPlaylistSelect?.(playlist);
+            onKeyDown={e => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                onPlaylistSelect?.(playlist)
               }
             }}
             role="button"
@@ -127,11 +122,7 @@ function UserPlaylists({
           >
             <div className="playlist-image">
               {playlist.images && playlist.images.length > 0 ? (
-                <img
-                  alt={playlist.name}
-                  loading="lazy"
-                  src={playlist.images[0].url}
-                />
+                <img alt={playlist.name} loading="lazy" src={playlist.images[0].url} />
               ) : (
                 <div className="placeholder-image">🎵</div>
               )}
@@ -141,8 +132,7 @@ function UserPlaylists({
               <h3 className="playlist-name">{playlist.name}</h3>
               <p className="playlist-meta">
                 {playlist.tracks.total} track
-                {playlist.tracks.total !== 1 ? "s" : ""} •
-                {playlist.public ? " Public" : " Private"}
+                {playlist.tracks.total !== 1 ? 's' : ''} •{playlist.public ? ' Public' : ' Private'}
               </p>
               {playlist.description && (
                 <p className="playlist-description">{playlist.description}</p>
@@ -153,7 +143,7 @@ function UserPlaylists({
               <a
                 className="open-spotify-button"
                 href={playlist.external_urls.spotify}
-                onClick={(e) => e.stopPropagation()}
+                onClick={e => e.stopPropagation()}
                 rel="noopener noreferrer"
                 target="_blank"
               >
@@ -166,7 +156,7 @@ function UserPlaylists({
 
       <style>{playlistsStyles}</style>
     </div>
-  );
+  )
 }
 
 const playlistsStyles = `
@@ -367,6 +357,6 @@ const playlistsStyles = `
   .playlists-grid::-webkit-scrollbar-thumb:hover {
     background: #444;
   }
-`;
+`
 
-export { UserPlaylists };
+export { UserPlaylists }

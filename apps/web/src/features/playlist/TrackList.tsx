@@ -1,9 +1,9 @@
-import type { Track } from "@dj/shared-types";
+import type { Track } from '@dj/shared-types'
 
-import { memo } from "react";
+import { memo } from 'react'
 
 interface TrackListProps {
-  tracks: Track[];
+  tracks: Track[]
 }
 
 export const TrackList = memo(function TrackList({ tracks }: TrackListProps) {
@@ -13,12 +13,12 @@ export const TrackList = memo(function TrackList({ tracks }: TrackListProps) {
         <TrackItem key={track.id ?? index} number={index + 1} track={track} />
       ))}
     </div>
-  );
-});
+  )
+})
 
 interface TrackItemProps {
-  number: number;
-  track: Track;
+  number: number
+  track: Track
 }
 
 const TrackItem = memo(
@@ -51,7 +51,7 @@ const TrackItem = memo(
           </a>
         )}
       </div>
-    );
+    )
   },
   (prevProps, nextProps) => {
     // Only re-render if track ID or preview URL changes
@@ -59,15 +59,15 @@ const TrackItem = memo(
       prevProps.track.id === nextProps.track.id &&
       prevProps.track.previewUrl === nextProps.track.previewUrl &&
       prevProps.number === nextProps.number
-    );
-  }
-);
+    )
+  },
+)
 
 function playPreview(url: string) {
-  const audio = new Audio(url);
-  audio.volume = 0.5;
-  audio.play().catch(console.error);
+  const audio = new Audio(url)
+  audio.volume = 0.5
+  audio.play().catch(console.error)
 
   // Stop after 10 seconds
-  setTimeout(() => audio.pause(), 10000);
+  setTimeout(() => audio.pause(), 10000)
 }

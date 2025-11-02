@@ -3,48 +3,48 @@
  * Contract-first API definitions using Hono + Zod + OpenAPI
  */
 
-import { OpenAPIHono } from "@hono/zod-openapi";
+import { OpenAPIHono } from '@hono/zod-openapi'
 
 // Export route definitions
-export * from "./routes/auth";
-export * from "./routes/chat";
-export * from "./routes/playlists";
+export * from './routes/auth'
+export * from './routes/chat'
+export * from './routes/playlists'
 
 /**
  * App type for client-side type inference
  * Export this to use with hc<AppType>()
  */
-export type AppType = ReturnType<typeof buildApiApp>;
+export type AppType = ReturnType<typeof buildApiApp>
 
 /**
  * Build the OpenAPI-enabled Hono app
  * This is the contract that both server and client use
  */
 export function buildApiApp() {
-  const app = new OpenAPIHono();
+  const app = new OpenAPIHono()
 
   // Configure OpenAPI documentation
-  app.doc("/api/openapi.json", {
+  app.doc('/api/openapi.json', {
     info: {
-      description: "AI-powered Spotify playlist generator",
-      title: "DJ API",
-      version: "1.0.0",
+      description: 'AI-powered Spotify playlist generator',
+      title: 'DJ API',
+      version: '1.0.0',
     },
-    openapi: "3.0.0",
+    openapi: '3.0.0',
     servers: [
       {
-        description: "Production",
-        url: "https://dj.current.space",
+        description: 'Production',
+        url: 'https://dj.current.space',
       },
       {
-        description: "Local development",
-        url: "http://localhost:8787",
+        description: 'Local development',
+        url: 'http://localhost:8787',
       },
     ],
-  });
+  })
 
   // Serve Swagger UI at /api/docs
-  app.get("/api/docs", (c) => {
+  app.get('/api/docs', c => {
     const html = `
       <!DOCTYPE html>
       <html lang="en">
@@ -67,10 +67,10 @@ export function buildApiApp() {
           </script>
         </body>
       </html>
-    `;
+    `
     // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-    return c.html(html);
-  });
+    return c.html(html)
+  })
 
-  return app;
+  return app
 }

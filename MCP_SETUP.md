@@ -2,7 +2,8 @@
 
 ## Architecture Overview
 
-Your AI DJ now includes a Model Context Protocol (MCP) server running on Cloudflare Workers that enables Claude to make real-time Spotify API calls during conversations.
+Your AI DJ now includes a Model Context Protocol (MCP) server running on Cloudflare Workers that
+enables Claude to make real-time Spotify API calls during conversations.
 
 ## How It Works
 
@@ -39,10 +40,12 @@ Claude can now call these tools in real-time:
 ## MCP Endpoints
 
 ### Session Management
+
 - `POST /api/mcp/session/create` - Create session after Spotify login
 - `POST /api/mcp/session/destroy` - Destroy session on logout
 
 ### MCP Protocol
+
 - `POST /api/mcp/initialize` - Initialize MCP connection
 - `POST /api/mcp/tools/list` - List available tools
 - `POST /api/mcp/tools/call` - Execute a tool
@@ -56,11 +59,11 @@ Claude can now call these tools in real-time:
 const response = await fetch('/api/mcp/session/create', {
   method: 'POST',
   headers: {
-    'Authorization': `Bearer ${spotifyToken}`
-  }
-});
+    Authorization: `Bearer ${spotifyToken}`,
+  },
+})
 
-const { sessionToken, mcpServerUrl } = await response.json();
+const { sessionToken, mcpServerUrl } = await response.json()
 
 // Configure Claude with MCP
 const claudeConfig = {
@@ -69,11 +72,11 @@ const claudeConfig = {
     spotify: {
       url: mcpServerUrl,
       headers: {
-        'Authorization': `Bearer ${sessionToken}`
-      }
-    }
-  }
-};
+        Authorization: `Bearer ${sessionToken}`,
+      },
+    },
+  },
+}
 ```
 
 ## Security Features
@@ -98,6 +101,7 @@ pnpm run dev
 ## KV Namespaces
 
 Production and preview namespaces are already created:
+
 - Production ID: `c81455430c6d4aa2a5da4bf2c1fcd3a2`
 - Preview ID: `859d29ec06564975a30d67be3a960b89`
 
@@ -105,12 +109,14 @@ Production and preview namespaces are already created:
 
 1. Login with Spotify to get a token
 2. Create a session:
+
 ```bash
 curl -X POST https://dj.current.space/api/mcp/session/create \
   -H "Authorization: Bearer YOUR_SPOTIFY_TOKEN"
 ```
 
 3. Use the returned `sessionToken` to test MCP tools:
+
 ```bash
 curl -X POST https://dj.current.space/api/mcp/tools/list \
   -H "Authorization: Bearer SESSION_TOKEN"
@@ -127,6 +133,7 @@ curl -X POST https://dj.current.space/api/mcp/tools/list \
 ## What This Enables
 
 Now when chatting with Claude, it can:
+
 1. Search for tracks and immediately check their audio features
 2. Try multiple searches to find the perfect match
 3. Create playlists iteratively, adding tracks one by one
@@ -134,6 +141,7 @@ Now when chatting with Claude, it can:
 5. Make decisions based on real-time data
 
 Example conversation:
+
 ```
 User: "Create a workout playlist"
 Claude: [Searches for high-energy tracks]

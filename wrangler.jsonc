@@ -11,24 +11,24 @@
     {
       "binding": "SESSIONS",
       "id": "c81455430c6d4aa2a5da4bf2c1fcd3a2",
-      "preview_id": "859d29ec06564975a30d67be3a960b89"
+      "preview_id": "859d29ec06564975a30d67be3a960b89",
     },
     {
       "binding": "AUDIO_FEATURES_CACHE",
       "id": "eb3657a3d4f045edb31efba6567eca0f",
-      "preview_id": "96833dd43ab34769be127f648d29e116"
-    }
+      "preview_id": "96833dd43ab34769be127f648d29e116",
+    },
   ],
 
   // Enable logging and observability
   "observability": {
-    "enabled": true
+    "enabled": true,
   },
 
   // Production environment variables
   "vars": {
     "ENVIRONMENT": "production",
-    "FRONTEND_URL": "https://dj.current.space"
+    "FRONTEND_URL": "https://dj.current.space",
   },
 
   // Static assets configuration - serves React app from build output (modern approach)
@@ -37,12 +37,12 @@
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
     // CRITICAL: Run Worker first for API routes (otherwise static assets take precedence)
-    "run_worker_first": ["/api/*"]
+    "run_worker_first": ["/api/*"],
   },
 
   // Build configuration for deployment
   "build": {
-    "command": "pnpm run build:worker"
+    "command": "pnpm run build:worker",
   },
 
   // Development environment override
@@ -51,8 +51,8 @@
       "name": "dj-dev",
       "workers_dev": true,
       "vars": {
-        "ENVIRONMENT": "development"
-      }
-    }
-  }
+        "ENVIRONMENT": "development",
+      },
+    },
+  },
 }

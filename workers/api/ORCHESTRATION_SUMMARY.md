@@ -2,12 +2,14 @@
 
 ## Executive Summary
 
-The API worker implements a **unified rate-limited orchestration system** that manages all external API calls and SSE writes through two core mechanisms:
+The API worker implements a **unified rate-limited orchestration system** that manages all external
+API calls and SSE writes through two core mechanisms:
 
 1. **RequestOrchestrator**: Global rate limiter (40 RPS) with batch management
 2. **SSEWriter Pipeline**: Non-blocking writes with strategic flush points
 
 This architecture provides:
+
 - ✅ Compliance with Cloudflare Workers 40 RPS subrequest limit
 - ✅ 4x performance improvement through parallel batching
 - ✅ Better UX with non-blocking progress updates
@@ -136,16 +138,17 @@ All queued writes complete before proceeding
 
 **Problem**: Cloudflare Workers limit is **40 RPS across the entire worker**, not per API.
 
-**Solution**: Single `globalOrchestrator` instance ensures ALL external calls (Anthropic, Spotify, Last.fm, narrator) share the same rate limit budget.
+**Solution**: Single `globalOrchestrator` instance ensures ALL external calls (Anthropic, Spotify,
+Last.fm, narrator) share the same rate limit budget.
 
 ```typescript
 // ❌ BAD: Multiple separate queues
-const spotifyQueue = new RateLimitedQueue({ rate: 40 });
-const lastfmQueue = new RateLimitedQueue({ rate: 40 });
+const spotifyQueue = new RateLimitedQueue({ rate: 40 })
+const lastfmQueue = new RateLimitedQueue({ rate: 40 })
 // → Can hit 80 RPS total!
 
 // ✅ GOOD: Single global orchestrator
-const orchestrator = globalOrchestrator; // rate: 40 total
+const orchestrator = globalOrchestrator // rate: 40 total
 ```
 
 ### Why Token Bucket?
@@ -169,13 +172,14 @@ Remaining work: Processes at steady 40 RPS as tokens refill
 
 **Problem**: If we process immediately on each `execute()`, we lose batching opportunities.
 
-**Solution**: Small delay (setTimeout 0) allows multiple `execute()` calls to accumulate before processing.
+**Solution**: Small delay (setTimeout 0) allows multiple `execute()` calls to accumulate before
+processing.
 
 ```typescript
 // Calls arrive within same event loop tick
-orchestrator.execute(() => call1());
-orchestrator.execute(() => call2());
-orchestrator.execute(() => call3());
+orchestrator.execute(() => call1())
+orchestrator.execute(() => call2())
+orchestrator.execute(() => call3())
 
 // All three batched together in next tick
 // → More efficient than processing individually
@@ -190,15 +194,15 @@ orchestrator.execute(() => call3());
 ```typescript
 // ❌ BAD: Blocks for 30ms per write
 for (let i = 0; i < 10; i++) {
-  await sseWriter.write({ data: `Progress ${i}` }); // 30ms each
+  await sseWriter.write({ data: `Progress ${i}` }) // 30ms each
 }
 // Total: 300ms wasted
 
 // ✅ GOOD: Non-blocking, flush once
 for (let i = 0; i < 10; i++) {
-  sseWriter.writeAsync({ data: `Progress ${i}` }); // ~0ms
+  sseWriter.writeAsync({ data: `Progress ${i}` }) // ~0ms
 }
-await sseWriter.flush(); // 30ms total
+await sseWriter.flush() // 30ms total
 // Total: 30ms (10x faster!)
 ```
 
@@ -258,6 +262,7 @@ Total: ~13.6 seconds
 ## Component Responsibilities
 
 ### RateLimitedQueue
+
 - Token bucket algorithm
 - Monotonic timing (performance.now)
 - Concurrency bounds
@@ -265,6 +270,7 @@ Total: ~13.6 seconds
 - **Responsibility**: Low-level rate limiting mechanics
 
 ### RequestOrchestrator
+
 - Task promise management
 - Batch ID tracking
 - Micro-batching scheduler
@@ -272,12 +278,14 @@ Total: ~13.6 seconds
 - **Responsibility**: High-level orchestration API
 
 ### RateLimitedAPIClients
+
 - Convenience wrappers per API type
 - Logging integration
 - Error handling
 - **Responsibility**: Developer-friendly API
 
 ### SSEWriter
+
 - Promise chain for writes
 - writeAsync (fire-and-forget)
 - flush (await all)
@@ -288,43 +296,47 @@ Total: ~13.6 seconds
 ### When to use execute()
 
 Single API calls:
+
 ```typescript
-const playlist = await orchestrator.execute(() =>
-  spotify.createPlaylist(userId, { name })
-);
+const playlist = await orchestrator.execute(() => spotify.createPlaylist(userId, { name }))
 ```
 
 ### When to use enqueueBatch()
 
 Independent parallel work:
+
 ```typescript
-orchestrator.enqueueBatch('searches',
-  queries.map(q => () => spotify.search(q))
-);
-const results = await orchestrator.awaitBatch('searches');
+orchestrator.enqueueBatch(
+  'searches',
+  queries.map(q => () => spotify.search(q)),
+)
+const results = await orchestrator.awaitBatch('searches')
 ```
 
 ### When to use writeAsync()
 
 Progress updates, thinking messages:
+
 ```typescript
-sseWriter.writeAsync({ type: 'thinking', data: 'Working...' });
+sseWriter.writeAsync({ type: 'thinking', data: 'Working...' })
 ```
 
 ### When to use flush()
 
 Phase boundaries, before expensive work:
+
 ```typescript
-await sseWriter.flush(); // Ensure user sees progress
-await expensiveComputation();
+await sseWriter.flush() // Ensure user sees progress
+await expensiveComputation()
 ```
 
 ### When to use write()
 
 Critical messages that MUST arrive:
+
 ```typescript
-await sseWriter.write({ type: 'error', data: 'Failed!' });
-await sseWriter.write({ type: 'done', data: null });
+await sseWriter.write({ type: 'error', data: 'Failed!' })
+await sseWriter.write({ type: 'done', data: null })
 ```
 
 ## Performance Monitoring
@@ -332,17 +344,17 @@ await sseWriter.write({ type: 'done', data: null });
 ### Track orchestrator state
 
 ```typescript
-const orchestrator = getGlobalOrchestrator();
+const orchestrator = getGlobalOrchestrator()
 
-console.log(`Pending before: ${orchestrator.getPendingCount()}`);
+console.log(`Pending before: ${orchestrator.getPendingCount()}`)
 
-orchestrator.enqueueBatch('work', tasks);
+orchestrator.enqueueBatch('work', tasks)
 
-console.log(`Pending after enqueue: ${orchestrator.getPendingCount()}`);
+console.log(`Pending after enqueue: ${orchestrator.getPendingCount()}`)
 
-const results = await orchestrator.awaitBatch('work');
+const results = await orchestrator.awaitBatch('work')
 
-console.log(`Pending after complete: ${orchestrator.getPendingCount()}`);
+console.log(`Pending after complete: ${orchestrator.getPendingCount()}`)
 ```
 
 ### Expected values
@@ -356,22 +368,22 @@ console.log(`Pending after complete: ${orchestrator.getPendingCount()}`);
 All orchestrated tasks return `T | null`:
 
 ```typescript
-const results = await orchestrator.awaitBatch('work');
+const results = await orchestrator.awaitBatch('work')
 
 // Always check for null (failed tasks)
-const successfulResults = results.filter(r => r !== null);
+const successfulResults = results.filter(r => r !== null)
 
-console.log(`${successfulResults.length}/${results.length} tasks succeeded`);
+console.log(`${successfulResults.length}/${results.length} tasks succeeded`)
 ```
 
 Individual task errors are caught and logged:
 
 ```typescript
 orchestrator.execute(async () => {
-  throw new Error('Task failed!');
+  throw new Error('Task failed!')
   // → Logs error, returns null
   // → Does NOT crash entire batch
-});
+})
 ```
 
 ## Next Steps
@@ -388,13 +400,13 @@ See `REFACTORING_EXAMPLE.md` for concrete migration examples.
 
 The orchestration architecture provides:
 
-| Feature | Before | After |
-|---------|--------|-------|
-| Rate limiting | ❌ None | ✅ 40 RPS global |
-| Parallelism | ❌ Sequential | ✅ 10 concurrent |
-| Batching | ❌ Manual | ✅ Automatic |
-| SSE latency | ⚠️ Blocking writes | ✅ Pipelined |
-| UX | ⚠️ Slow progress | ✅ Responsive |
-| Compliance | ❌ Can exceed 40 RPS | ✅ Always compliant |
+| Feature       | Before               | After               |
+| ------------- | -------------------- | ------------------- |
+| Rate limiting | ❌ None              | ✅ 40 RPS global    |
+| Parallelism   | ❌ Sequential        | ✅ 10 concurrent    |
+| Batching      | ❌ Manual            | ✅ Automatic        |
+| SSE latency   | ⚠️ Blocking writes   | ✅ Pipelined        |
+| UX            | ⚠️ Slow progress     | ✅ Responsive       |
+| Compliance    | ❌ Can exceed 40 RPS | ✅ Always compliant |
 
 **Performance**: ~4-5x faster with better UX and guaranteed rate limit compliance.

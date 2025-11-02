@@ -1,0 +1,41 @@
+# Dependencies
+node_modules
+pnpm-lock.yaml
+
+# Build outputs
+dist
+build
+.next
+.turbo
+*.tsbuildinfo
+
+# Environment
+.env
+.env.*
+.dev.vars
+
+# Cache
+.cache
+.parcel-cache
+.eslintcache
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode
+.idea
+
+# Cloudflare
+.wrangler
+.mf
+
+# Coverage
+coverage
+
+# Generated
+*.generated.*

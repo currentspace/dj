@@ -1,50 +1,48 @@
-import { Suspense, useState } from "react";
+import { Suspense, useState } from 'react'
 
-import { ErrorBoundary, PlaylistErrorBoundary } from "./app/ErrorBoundary";
-import { BuildInfo } from "./components/BuildInfo";
-import { SpotifyAuth } from "./features/auth/SpotifyAuth";
-import { ChatInterface } from "./features/chat/ChatInterface";
-import { ScopeDebugger } from "./features/debug/ScopeDebugger";
-import { UserPlaylists } from "./features/playlist/UserPlaylists";
-import { TestPage } from "./features/test/TestPage";
-import { useSpotifyAuth } from "./hooks/useSpotifyAuth";
-import { SSETestPage } from "./pages/SSETestPage";
-import "./styles/build-info.css";
+import { ErrorBoundary, PlaylistErrorBoundary } from './app/ErrorBoundary'
+import { BuildInfo } from './components/BuildInfo'
+import { SpotifyAuth } from './features/auth/SpotifyAuth'
+import { ChatInterface } from './features/chat/ChatInterface'
+import { ScopeDebugger } from './features/debug/ScopeDebugger'
+import { UserPlaylists } from './features/playlist/UserPlaylists'
+import { TestPage } from './features/test/TestPage'
+import { useSpotifyAuth } from './hooks/useSpotifyAuth'
+import { SSETestPage } from './pages/SSETestPage'
+import './styles/build-info.css'
 
 interface SpotifyPlaylist {
-  description: string;
+  description: string
   external_urls: {
-    spotify: string;
-  };
-  id: string;
+    spotify: string
+  }
+  id: string
   images: {
-    height: number;
-    url: string;
-    width: number;
-  }[];
-  name: string;
+    height: number
+    url: string
+    width: number
+  }[]
+  name: string
   owner: {
-    display_name: string;
-  };
-  public: boolean;
+    display_name: string
+  }
+  public: boolean
   tracks: {
-    total: number;
-  };
+    total: number
+  }
 }
 
 function App() {
-  const { clearError, error, isAuthenticated, isLoading, login, logout } =
-    useSpotifyAuth();
+  const { clearError, error, isAuthenticated, isLoading, login, logout } = useSpotifyAuth()
 
-  const [selectedPlaylist, setSelectedPlaylist] =
-    useState<null | SpotifyPlaylist>(null);
-  const [showTestPage, setShowTestPage] = useState(false);
-  const [showSSETest, setShowSSETest] = useState(false);
-  const [showScopeDebug, setShowScopeDebug] = useState(false);
+  const [selectedPlaylist, setSelectedPlaylist] = useState<null | SpotifyPlaylist>(null)
+  const [showTestPage, setShowTestPage] = useState(false)
+  const [showSSETest, setShowSSETest] = useState(false)
+  const [showScopeDebug, setShowScopeDebug] = useState(false)
 
   const handlePlaylistSelect = (playlist: SpotifyPlaylist) => {
-    setSelectedPlaylist(playlist);
-  };
+    setSelectedPlaylist(playlist)
+  }
 
   return (
     <ErrorBoundary>
@@ -58,32 +56,32 @@ function App() {
                 <button
                   className="test-button"
                   onClick={() => {
-                    setShowScopeDebug(!showScopeDebug);
-                    setShowSSETest(false);
-                    setShowTestPage(false);
+                    setShowScopeDebug(!showScopeDebug)
+                    setShowSSETest(false)
+                    setShowTestPage(false)
                   }}
                 >
-                  {showScopeDebug ? "🎵 Back to Chat" : "🔍 Scope Debug"}
+                  {showScopeDebug ? '🎵 Back to Chat' : '🔍 Scope Debug'}
                 </button>
                 <button
                   className="test-button"
                   onClick={() => {
-                    setShowSSETest(!showSSETest);
-                    setShowTestPage(false);
-                    setShowScopeDebug(false);
+                    setShowSSETest(!showSSETest)
+                    setShowTestPage(false)
+                    setShowScopeDebug(false)
                   }}
                 >
-                  {showSSETest ? "🎵 Back to Chat" : "🔧 SSE Debug"}
+                  {showSSETest ? '🎵 Back to Chat' : '🔧 SSE Debug'}
                 </button>
                 <button
                   className="test-button"
                   onClick={() => {
-                    setShowTestPage(!showTestPage);
-                    setShowSSETest(false);
-                    setShowScopeDebug(false);
+                    setShowTestPage(!showTestPage)
+                    setShowSSETest(false)
+                    setShowScopeDebug(false)
                   }}
                 >
-                  {showTestPage ? "🎵 Back to Chat" : "🧪 Test Mode"}
+                  {showTestPage ? '🎵 Back to Chat' : '🧪 Test Mode'}
                 </button>
                 <button className="logout-button" onClick={logout}>
                   Logout from Spotify
@@ -95,23 +93,15 @@ function App() {
 
         <main className="app-main">
           {showScopeDebug && isAuthenticated ? (
-            <Suspense
-              fallback={
-                <div className="loading">Loading scope debugger...</div>
-              }
-            >
+            <Suspense fallback={<div className="loading">Loading scope debugger...</div>}>
               <ScopeDebugger />
             </Suspense>
           ) : showSSETest && isAuthenticated ? (
-            <Suspense
-              fallback={<div className="loading">Loading SSE test page...</div>}
-            >
+            <Suspense fallback={<div className="loading">Loading SSE test page...</div>}>
               <SSETestPage />
             </Suspense>
           ) : showTestPage && isAuthenticated ? (
-            <Suspense
-              fallback={<div className="loading">Loading test page...</div>}
-            >
+            <Suspense fallback={<div className="loading">Loading test page...</div>}>
               <TestPage />
             </Suspense>
           ) : !isAuthenticated ? (
@@ -127,11 +117,7 @@ function App() {
             <PlaylistErrorBoundary>
               <div className="main-content">
                 <div className="playlists-section">
-                  <Suspense
-                    fallback={
-                      <div className="loading">Loading playlists...</div>
-                    }
-                  >
+                  <Suspense fallback={<div className="loading">Loading playlists...</div>}>
                     <UserPlaylists
                       onPlaylistSelect={handlePlaylistSelect}
                       selectedPlaylist={selectedPlaylist}
@@ -141,19 +127,14 @@ function App() {
 
                 <div className="chat-section">
                   {selectedPlaylist ? (
-                    <Suspense
-                      fallback={
-                        <div className="loading">Loading chat interface...</div>
-                      }
-                    >
+                    <Suspense fallback={<div className="loading">Loading chat interface...</div>}>
                       <ChatInterface selectedPlaylist={selectedPlaylist} />
                     </Suspense>
                   ) : (
                     <div className="no-playlist-selected">
                       <h2>🎵 Select a Playlist</h2>
                       <p>
-                        Choose a playlist from the left to start chatting with
-                        your AI DJ assistant!
+                        Choose a playlist from the left to start chatting with your AI DJ assistant!
                       </p>
                     </div>
                   )}
@@ -165,20 +146,12 @@ function App() {
 
         <footer className="app-footer">
           <p>
-            Powered by{" "}
-            <a
-              href="https://www.anthropic.com"
-              rel="noopener noreferrer"
-              target="_blank"
-            >
+            Powered by{' '}
+            <a href="https://www.anthropic.com" rel="noopener noreferrer" target="_blank">
               Anthropic Claude
-            </a>{" "}
-            &{" "}
-            <a
-              href="https://www.spotify.com"
-              rel="noopener noreferrer"
-              target="_blank"
-            >
+            </a>{' '}
+            &{' '}
+            <a href="https://www.spotify.com" rel="noopener noreferrer" target="_blank">
               Spotify
             </a>
           </p>
@@ -255,7 +228,7 @@ function App() {
         <BuildInfo />
       </div>
     </ErrorBoundary>
-  );
+  )
 }
 
-export default App;
+export default App

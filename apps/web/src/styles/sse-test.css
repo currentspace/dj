@@ -44,7 +44,7 @@
   font-size: 0.9rem;
 }
 
-.form-row input[type="text"],
+.form-row input[type='text'],
 .form-row select {
   background: #2a2a2a;
   color: #e0e0e0;
@@ -56,7 +56,7 @@
   min-width: 300px;
 }
 
-.form-row input[type="text"]:focus,
+.form-row input[type='text']:focus,
 .form-row select:focus {
   outline: none;
   border-color: #1db954;

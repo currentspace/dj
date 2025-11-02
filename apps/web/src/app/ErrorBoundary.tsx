@@ -1,47 +1,47 @@
-import { Component, type ErrorInfo, type ReactNode } from "react";
+import { Component, type ErrorInfo, type ReactNode } from 'react'
 
 interface Props {
-  children: ReactNode;
-  fallback?: ReactNode;
-  onReset?: () => void;
+  children: ReactNode
+  fallback?: ReactNode
+  onReset?: () => void
 }
 
 interface State {
-  error?: Error;
-  errorInfo?: ErrorInfo;
-  hasError: boolean;
+  error?: Error
+  errorInfo?: ErrorInfo
+  hasError: boolean
 }
 
 export class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
-    super(props);
-    this.state = { hasError: false };
+    super(props)
+    this.state = { hasError: false }
   }
 
   static getDerivedStateFromError(error: Error): State {
     return {
       error,
       hasError: true,
-    };
+    }
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error("Error caught by boundary:", error, errorInfo);
+    console.error('Error caught by boundary:', error, errorInfo)
     this.setState({
       error,
       errorInfo,
-    });
+    })
   }
 
   handleReset = () => {
-    this.setState({ error: undefined, errorInfo: undefined, hasError: false });
-    this.props.onReset?.();
-  };
+    this.setState({ error: undefined, errorInfo: undefined, hasError: false })
+    this.props.onReset?.()
+  }
 
   render() {
     if (this.state.hasError) {
       if (this.props.fallback) {
-        return this.props.fallback;
+        return this.props.fallback
       }
 
       return (
@@ -50,18 +50,15 @@ export class ErrorBoundary extends Component<Props, State> {
             <div className="error-icon">⚠️</div>
             <h2>Something went wrong</h2>
             <p>
-              We're sorry, but something unexpected happened. You can try
-              reloading the page or contact support if the problem persists.
+              We're sorry, but something unexpected happened. You can try reloading the page or
+              contact support if the problem persists.
             </p>
 
             <div className="error-actions">
               <button className="retry-button" onClick={this.handleReset}>
                 Try Again
               </button>
-              <button
-                className="reload-button"
-                onClick={() => window.location.reload()}
-              >
+              <button className="reload-button" onClick={() => window.location.reload()}>
                 Reload Page
               </button>
             </div>
@@ -70,17 +67,15 @@ export class ErrorBoundary extends Component<Props, State> {
               <details className="error-details">
                 <summary>Error Details (Development)</summary>
                 <pre>{this.state.error.stack}</pre>
-                {this.state.errorInfo && (
-                  <pre>{this.state.errorInfo.componentStack}</pre>
-                )}
+                {this.state.errorInfo && <pre>{this.state.errorInfo.componentStack}</pre>}
               </details>
             )}
           </div>
         </div>
-      );
+      )
     }
 
-    return this.props.children;
+    return this.props.children
   }
 }
 
@@ -91,18 +86,15 @@ export function PlaylistErrorBoundary({ children }: { children: ReactNode }) {
       fallback={
         <div className="playlist-error">
           <h3>Unable to load playlist</h3>
-          <p>
-            There was an error generating or loading your playlist. Please try
-            again.
-          </p>
+          <p>There was an error generating or loading your playlist. Please try again.</p>
         </div>
       }
       onReset={() => {
         // Clear any cached playlist data
-        localStorage.removeItem("current_playlist");
+        localStorage.removeItem('current_playlist')
       }}
     >
       {children}
     </ErrorBoundary>
-  );
+  )
 }

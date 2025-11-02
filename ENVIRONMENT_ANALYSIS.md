@@ -1,13 +1,17 @@
 # DJ Codebase: Runtime Environment Analysis
 
 ## Summary
-This is a well-structured pnpm monorepo with clear separation between Browser, Cloudflare Workers, and shared layers. The architecture has excellent environment isolation with minimal cross-environment concerns.
+
+This is a well-structured pnpm monorepo with clear separation between Browser, Cloudflare Workers,
+and shared layers. The architecture has excellent environment isolation with minimal
+cross-environment concerns.
 
 ---
 
 ## 1. Directory Structure and Runtime Environments
 
 ### Apps/
+
 ```
 apps/web/                           # BROWSER (React 19.1)
 ├── src/
@@ -23,6 +27,7 @@ apps/web/                           # BROWSER (React 19.1)
 ```
 
 ### Workers/
+
 ```
 workers/api/                        # CLOUDFLARE WORKERS (Hono + Langchain)
 ├── src/
@@ -41,6 +46,7 @@ workers/webhooks/                   # CLOUDFLARE WORKERS (Hono)
 ```
 
 ### Packages/
+
 ```
 packages/shared-types/              # ENVIRONMENT-AGNOSTIC (Pure TypeScript interfaces)
 ├── src/index.ts                    # Types only, zero dependencies
@@ -66,6 +72,7 @@ packages/api-client/                # BROWSER + WORKERS (Fetch-based HTTP client
 **Target:** React 19.1 in browser via Vite
 
 **Dependencies:**
+
 - `react`, `react-dom`
 - `@ark-ui/react` (UI components)
 - `@dj/api-client` (custom HTTP client)
@@ -73,6 +80,7 @@ packages/api-client/                # BROWSER + WORKERS (Fetch-based HTTP client
 - `zod` (validation)
 
 **Key Characteristics:**
+
 - TypeScript config includes: `lib: ["ES2022", "DOM", "DOM.Iterable"]`, `jsx: "react-jsx"`
 - Uses `localStorage` for Spotify token storage (lines in streaming-client.ts, api-client.ts)
 - Uses `fetch` API for HTTP requests
@@ -80,6 +88,7 @@ packages/api-client/                # BROWSER + WORKERS (Fetch-based HTTP client
 - Uses `document`, `window`, `AbortController` (browser APIs)
 
 **Restricted - Does NOT Import:**
+
 - No `@langchain/*` dependencies (worker-specific)
 - No `hono` (worker framework)
 - No `wrangler` (worker CLI)
@@ -92,6 +101,7 @@ packages/api-client/                # BROWSER + WORKERS (Fetch-based HTTP client
 **Target:** Cloudflare Workers runtime (V8 + nodejs_compat flag)
 
 **Dependencies:**
+
 - `hono` (web framework)
 - `@langchain/anthropic`, `@langchain/core`, `langchain`
 - `@langchain/mcp-adapters` (MCP server integration)
@@ -99,6 +109,7 @@ packages/api-client/                # BROWSER + WORKERS (Fetch-based HTTP client
 - `nanoid`, `zod`
 
 **Key Characteristics:**
+
 - TypeScript config includes: `lib: ["ES2022"]`, `types: ["@cloudflare/workers-types"]`
 - Uses Hono for routing
 - Uses Langchain for Claude AI integration and tool execution
@@ -107,6 +118,7 @@ packages/api-client/                # BROWSER + WORKERS (Fetch-based HTTP client
 - Rate-limited queue for API throttling
 
 **Restricted - Does NOT Import:**
+
 - No React or JSX
 - No browser-specific code
 - No localStorage (uses KV instead)
@@ -118,11 +130,13 @@ packages/api-client/                # BROWSER + WORKERS (Fetch-based HTTP client
 **Target:** Cloudflare Workers runtime
 
 **Dependencies:**
+
 - `hono` (web framework)
 - `@dj/shared-types` (types)
 - `zod` (validation)
 
 **Key Characteristics:**
+
 - Minimal implementation compared to API worker
 - Only webhook verification and basic routing
 - No AI/ML dependencies
@@ -137,6 +151,7 @@ packages/api-client/                # BROWSER + WORKERS (Fetch-based HTTP client
 **Dependencies:** None (zero dependencies)
 
 **Content (Pure TypeScript Interfaces):**
+
 - `Playlist`, `Track`
 - `ChatMessage`, `ChatRequest`, `ChatResponse`
 - `SpotifyTrack`, `SpotifyPlaylist`, `SpotifyAudioFeatures`, `SpotifyUser`
@@ -153,9 +168,11 @@ packages/api-client/                # BROWSER + WORKERS (Fetch-based HTTP client
 **Target:** Browser (with potential for server-side usage via fetch polyfill)
 
 **Dependencies:**
+
 - `@dj/shared-types`
 
 **Exports:**
+
 ```typescript
 DJApiClient class:
   - constructor(baseUrl: string)
@@ -174,6 +191,7 @@ apiClient singleton:
 ```
 
 **Key Characteristics:**
+
 - Uses `localStorage.getItem('spotify_token')`
 - Uses `fetch` API
 - Detection: `typeof window !== 'undefined' && window.location.hostname`
@@ -193,7 +211,7 @@ Shared Layer:
          ↑           ↑
     ┌────┴───┐    ┌──┴────┐
     │         │    │       │
-    
+
 Browser Layer:
 ┌─────────────────────────────────┐     └─────────────────────────────────┐
 │   @dj/api-client                │     │   @dj/web (React app)           │
@@ -223,6 +241,7 @@ Worker Layer (Cloudflare):
 ### ✅ Verified Safe Imports
 
 **Web App (@dj/web) Imports:**
+
 - ✅ `@dj/shared-types` - Pure types, no runtime concerns
 - ✅ `@dj/api-client` - Browser HTTP client, uses fetch + localStorage
 - ✅ `react`, `react-dom` - React 19.1
@@ -231,12 +250,14 @@ Worker Layer (Cloudflare):
 - ✅ `vite`, `vitest`, TypeScript - Build tools only
 
 **API Worker (@dj/api-worker) Imports:**
+
 - ✅ `@dj/shared-types` - Pure types, no runtime concerns
 - ✅ `hono` - Worker web framework
 - ✅ `@langchain/*` - AI/LLM libraries (Node.js-compatible)
 - ✅ `zod` - Validation (environment-agnostic)
 
 **Webhook Worker (@dj/webhook-worker) Imports:**
+
 - ✅ `@dj/shared-types` - Pure types
 - ✅ `hono` - Worker web framework
 - ✅ `zod` - Validation
@@ -244,6 +265,7 @@ Worker Layer (Cloudflare):
 ### ✅ No Cross-Environment Pollution Detected
 
 **Web does NOT import:**
+
 - ❌ No `hono` (worker framework)
 - ❌ No `@langchain/*` (worker AI libraries)
 - ❌ No `wrangler` (worker CLI)
@@ -251,12 +273,14 @@ Worker Layer (Cloudflare):
 - ❌ No worker-specific code
 
 **Workers do NOT import:**
+
 - ❌ No React or JSX
 - ❌ No `@ark-ui/react` or other UI libraries
 - ❌ No `vite`, `vitest` (browser dev tools)
 - ❌ No browser-specific code
 
 **Shared Packages contain:**
+
 - ✅ Pure TypeScript interfaces only
 - ✅ Zero external dependencies
 - ✅ No environment-specific code
@@ -270,6 +294,7 @@ Worker Layer (Cloudflare):
 **Current Approach:** Single monorepo-wide ESLint config
 
 **Features:**
+
 - Single config file in root
 - Defines globals for ALL environments simultaneously:
   - Browser: `window`, `document`, `localStorage`, `fetch`, DOM APIs
@@ -283,14 +308,18 @@ Worker Layer (Cloudflare):
   - `eslint-plugin-react-hooks` (warns even in worker code)
 
 **Potential Issues:**
+
 1. **React Hooks Rules Applied Everywhere** (line 113-114):
+
    ```javascript
    'react-hooks/rules-of-hooks': 'error',
    'react-hooks/exhaustive-deps': 'warn',
    ```
+
    These error/warn in worker code where hooks don't apply
 
 2. **React Plugin Active Everywhere** (line 128-130):
+
    ```javascript
    settings: {
      react: {
@@ -298,13 +327,13 @@ Worker Layer (Cloudflare):
      }
    }
    ```
+
    Runs React detection/analysis in all files
 
-3. **React Refresh Warning** (line 117-120):
-   Applied even to non-React code in workers
+3. **React Refresh Warning** (line 117-120): Applied even to non-React code in workers
 
-4. **All Globals Defined** (lines 32-87):
-   Makes it hard to catch accidental use of browser-specific globals in worker code
+4. **All Globals Defined** (lines 32-87): Makes it hard to catch accidental use of browser-specific
+   globals in worker code
 
 ---
 
@@ -313,6 +342,7 @@ Worker Layer (Cloudflare):
 ### Current State: HEALTHY ✅
 
 The codebase has **excellent environment isolation**:
+
 - Sharp boundaries between web and workers
 - Shared types have zero dependencies
 - API client is focused and browser-safe
@@ -372,11 +402,13 @@ dj/
 ### Implementation Priority
 
 **Low Priority** (works fine as-is):
+
 - Current config successfully prevents cross-environment pollution
 - No major architectural issues
 - Developers are likely aware of environment boundaries
 
 **High Priority if:**
+
 - Team is growing and onboarding needs to be clearer
 - Developers frequently build wrong code in wrong environment
 - Want to enforce environment boundaries at lint-time
@@ -387,6 +419,7 @@ dj/
 ## 7. TypeScript Configuration Summary
 
 ### Web (apps/web/tsconfig.json)
+
 ```
 lib: [ES2022, DOM, DOM.Iterable]     ← Browser globals
 jsx: react-jsx                        ← React JSX
@@ -394,6 +427,7 @@ moduleResolution: bundler             ← Vite bundler
 ```
 
 ### Workers (workers/api/tsconfig.json)
+
 ```
 lib: [ES2022]                         ← No DOM
 types: @cloudflare/workers-types      ← Worker types
@@ -401,6 +435,7 @@ moduleResolution: bundler             ← Standard resolution
 ```
 
 ### Shared (packages/shared-types/tsconfig.json)
+
 ```
 lib: [ES2022]                         ← Minimal
 No DOM, no react, no worker types     ← Pure TS
@@ -413,16 +448,19 @@ Each TypeScript config correctly reflects its environment.
 ## 8. Build Tool Configuration
 
 ### Web (Vite)
+
 - Entry: `apps/web/vite.config.ts`
 - Output: SPA bundle served from root
 - Dev: port 3000
 
 ### Workers (Wrangler + tsup)
+
 - Entry: `workers/api/src/index.ts`
 - Output: Single file for Cloudflare Workers
 - Dev: port 8787 (wrangler dev)
 
 ### Shared Packages (tsup)
+
 - No special configuration
 - Output: ESM modules for consumption by web/workers
 
@@ -430,13 +468,13 @@ Each TypeScript config correctly reflects its environment.
 
 ## 9. Package Exports Summary
 
-| Package | Target | Exports | Key Files |
-|---------|--------|---------|-----------|
-| @dj/shared-types | Both | Types only | interfaces, enums |
-| @dj/api-client | Browser | DJApiClient class, singleton | fetch-based HTTP client |
-| @dj/web | Browser | React app | React 19.1 components |
-| @dj/api-worker | Workers | Hono app, routes | Langchain + Claude integration |
-| @dj/webhook-worker | Workers | Hono app, webhook routes | Minimal webhook handling |
+| Package            | Target  | Exports                      | Key Files                      |
+| ------------------ | ------- | ---------------------------- | ------------------------------ |
+| @dj/shared-types   | Both    | Types only                   | interfaces, enums              |
+| @dj/api-client     | Browser | DJApiClient class, singleton | fetch-based HTTP client        |
+| @dj/web            | Browser | React app                    | React 19.1 components          |
+| @dj/api-worker     | Workers | Hono app, routes             | Langchain + Claude integration |
+| @dj/webhook-worker | Workers | Hono app, webhook routes     | Minimal webhook handling       |
 
 ---
 
@@ -445,22 +483,27 @@ Each TypeScript config correctly reflects its environment.
 This is a **well-architected monorepo** with:
 
 ✅ **Excellent Environment Isolation**
+
 - No cross-environment imports
 - Clear shared layer
 - Type-safe boundaries
 
 ✅ **Good TypeScript Configuration**
+
 - Each environment has appropriate types
 - DOM types in browser, Worker types in workers
 - Shared has minimal, pure TS
 
 ✅ **Current ESLint Works**
+
 - Prevents major mistakes
 - Applies globally safely
 
 ⚠️ **ESLint Could Be Improved**
+
 - Separate configs would catch more subtle issues
 - Current approach doesn't prevent all cross-environment mistakes
 - Worth doing if scaling team or strictness requirements increase
 
-**Recommendation: SEPARATE ESLint CONFIGS for better developer experience and bug prevention, but current setup is functionally adequate.**
+**Recommendation: SEPARATE ESLint CONFIGS for better developer experience and bug prevention, but
+current setup is functionally adequate.**

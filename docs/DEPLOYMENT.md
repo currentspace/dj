@@ -2,7 +2,8 @@
 
 ## GitHub Secrets Required
 
-To enable automatic deployment via GitHub Actions, you need to configure the following secrets in your GitHub repository settings:
+To enable automatic deployment via GitHub Actions, you need to configure the following secrets in
+your GitHub repository settings:
 
 ### Required Secrets
 
@@ -33,6 +34,7 @@ Go to **Settings → Secrets and variables → Actions** in your GitHub reposito
 ### Spotify App Configuration
 
 In your Spotify app settings, add the redirect URI:
+
 ```
 https://dj.current.space/callback
 ```
@@ -54,6 +56,7 @@ pnpm run deploy
 ## Deployment Workflow
 
 The GitHub Action will automatically:
+
 1. Run on every push to `main`
 2. Install dependencies
 3. Run type checking
@@ -76,7 +79,9 @@ If deployment fails:
 - **Development**: Use `.dev.vars` file in `workers/api/` directory (never commit this)
 
 ### Development .dev.vars
+
 Create `workers/api/.dev.vars`:
+
 ```
 ANTHROPIC_API_KEY=sk-ant-...
 SPOTIFY_CLIENT_ID=your_id
@@ -87,6 +92,7 @@ ENVIRONMENT=development
 ## Deployment Configuration
 
 The project uses the root `wrangler.jsonc` file for production deployment:
+
 - **Main entry**: `workers/api/dist/index.js`
 - **Static assets**: `apps/web/dist` (React build)
 - **KV namespace**: `SESSIONS` binding for session storage
@@ -94,4 +100,6 @@ The project uses the root `wrangler.jsonc` file for production deployment:
 - **Worker-first routing**: API routes (`/api/*`) handled by worker before static assets
 
 ### Important Routing Configuration
-The `run_worker_first: ["/api/*"]` setting is critical - it ensures API routes are handled by the worker before attempting to serve static files.
+
+The `run_worker_first: ["/api/*"]` setting is critical - it ensures API routes are handled by the
+worker before attempting to serve static files.

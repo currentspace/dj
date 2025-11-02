@@ -2,15 +2,17 @@
 
 ## Summary
 
-Successfully migrated Spotify auth and playlist routes from manual Hono to contract-first OpenAPI architecture using @hono/zod-openapi.
+Successfully migrated Spotify auth and playlist routes from manual Hono to contract-first OpenAPI
+architecture using @hono/zod-openapi.
 
 ## What Was Migrated
 
 ### ✅ Spotify Auth Routes (4 endpoints)
+
 All routes now use OpenAPI contracts with automatic validation:
 
 1. **GET /api/spotify/auth-url** - Generate OAuth URL with PKCE
-   - Contract: `getSpotifyAuthUrl` 
+   - Contract: `getSpotifyAuthUrl`
    - Returns: `{ url: string }`
    - Sets secure HttpOnly cookie with code_verifier
 
@@ -55,26 +57,30 @@ All routes now use OpenAPI contracts with automatic validation:
 ## New Features Enabled
 
 ### 1. Automatic OpenAPI Documentation
+
 - **Spec URL**: `/api/openapi.json`
 - **Interactive Docs**: `/api/docs` (Swagger UI)
 - Auto-generated from route contracts
 - Always in sync with implementation
 
 ### 2. Type-Safe Client
+
 ```typescript
-import { apiClient } from '@dj/api-client';
+import { apiClient } from '@dj/api-client'
 
 // Fully typed request and response
-const res = await apiClient.api.spotify['auth-url'].$get();
-const data = await res.json(); // Type: { url: string }
+const res = await apiClient.api.spotify['auth-url'].$get()
+const data = await res.json() // Type: { url: string }
 ```
 
 ### 3. Automatic Request/Response Validation
+
 - Zod schemas validate all inputs at runtime
 - TypeScript ensures correct types at compile time
 - Errors caught early with clear messages
 
 ### 4. Single Source of Truth
+
 - Routes defined once in `@dj/api-contracts`
 - No duplication between validation, types, and docs
 - Change contract → everything updates
@@ -113,11 +119,13 @@ workers/api/src/
 ## Remaining Work (Optional)
 
 ### Not Critical for Production
+
 1. **Chat routes** - Keep as-is (2500+ lines, complex streaming, working fine)
 2. **TypeScript errors** - Cosmetic only, don't affect runtime
 3. **Legacy playlist routes** - Can migrate later if needed
 
 ### Recommended Next Steps
+
 1. Test OpenAPI routes in development/staging
 2. Update frontend to use typed `apiClient` from `@dj/api-client`
 3. Remove `spotify.ts` file once fully confident
@@ -138,16 +146,19 @@ pnpm build && pnpm deploy
 ## Benefits Realized
 
 ✅ **Developer Experience**
+
 - Autocomplete for all routes and types
 - Errors caught at compile time
 - Self-documenting API
 
 ✅ **Maintenance**
+
 - Change contract once, everything updates
 - No manual validation code
 - TypeScript guides refactoring
 
 ✅ **Production**
+
 - Smaller bundle size (12KB reduction)
 - Runtime validation prevents bad data
 - OpenAPI spec for third-party integrations

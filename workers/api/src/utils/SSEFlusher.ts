@@ -18,13 +18,13 @@
  */
 
 export interface SSEFlusherOptions {
-  everyMs?: number; // Flush after this time window in ms (default: 500)
-  everyN?: number; // Flush every N messages (default: 20)
+  everyMs?: number // Flush after this time window in ms (default: 500)
+  everyN?: number // Flush every N messages (default: 20)
 }
 
 export interface SSEWriter {
-  flush: () => Promise<void>;
-  writeAsync: (data: any) => Promise<void>;
+  flush: () => Promise<void>
+  writeAsync: (data: any) => Promise<void>
 }
 
 /**
@@ -32,48 +32,48 @@ export interface SSEWriter {
  */
 export function makeControlledSSEFlusher(
   flush: () => Promise<void>,
-  options: SSEFlusherOptions = {}
+  options: SSEFlusherOptions = {},
 ): {
-  forceFlush: () => Promise<void>;
-  mark: () => void;
-  maybeFlush: () => Promise<void>;
+  forceFlush: () => Promise<void>
+  mark: () => void
+  maybeFlush: () => Promise<void>
 } {
-  const { everyMs = 500, everyN = 20 } = options;
+  const { everyMs = 500, everyN = 20 } = options
 
-  let sinceLastFlush = 0;
-  let lastFlushTime = Date.now();
+  let sinceLastFlush = 0
+  let lastFlushTime = Date.now()
 
   return {
     /**
      * Force an immediate flush regardless of counters
      */
     forceFlush: async () => {
-      await flush();
-      sinceLastFlush = 0;
-      lastFlushTime = Date.now();
+      await flush()
+      sinceLastFlush = 0
+      lastFlushTime = Date.now()
     },
 
     /**
      * Mark that a message was written (increments counter)
      */
     mark: () => {
-      sinceLastFlush++;
+      sinceLastFlush++
     },
 
     /**
      * Check if flush is needed and flush if so
      */
     maybeFlush: async () => {
-      const now = Date.now();
-      const elapsed = now - lastFlushTime;
+      const now = Date.now()
+      const elapsed = now - lastFlushTime
 
       if (sinceLastFlush >= everyN || elapsed >= everyMs) {
-        await flush();
-        sinceLastFlush = 0;
-        lastFlushTime = now;
+        await flush()
+        sinceLastFlush = 0
+        lastFlushTime = now
       }
     },
-  };
+  }
 }
 
 /**
@@ -82,22 +82,22 @@ export function makeControlledSSEFlusher(
 export function makeSSEFlusher(
   writeAsync: (data: any) => Promise<void>,
   flush: () => Promise<void>,
-  options: SSEFlusherOptions = {}
+  options: SSEFlusherOptions = {},
 ): () => Promise<void> {
-  const { everyMs = 500, everyN = 20 } = options;
+  const { everyMs = 500, everyN = 20 } = options
 
-  let sinceLastFlush = 0;
-  let lastFlushTime = Date.now();
+  let sinceLastFlush = 0
+  let lastFlushTime = Date.now()
 
   return async function maybeFlush(): Promise<void> {
-    sinceLastFlush++;
-    const now = Date.now();
-    const elapsed = now - lastFlushTime;
+    sinceLastFlush++
+    const now = Date.now()
+    const elapsed = now - lastFlushTime
 
     if (sinceLastFlush >= everyN || elapsed >= everyMs) {
-      await flush();
-      sinceLastFlush = 0;
-      lastFlushTime = now;
+      await flush()
+      sinceLastFlush = 0
+      lastFlushTime = now
     }
-  };
+  }
 }

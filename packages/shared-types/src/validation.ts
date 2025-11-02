@@ -3,24 +3,24 @@
  * Uses Zod for runtime validation with TypeScript inference
  */
 
-import { z } from "zod";
+import { z } from 'zod'
 
 /**
  * Safe parse result that preserves type information
  */
 export type SafeParseResult<T> =
   | { data: null; error: z.ZodError; success: false }
-  | { data: T; error: null; success: true };
+  | { data: T; error: null; success: true }
 
 /**
  * Create a type guard from a Zod schema
  */
 export function createTypeGuard<T extends z.ZodTypeAny>(
-  schema: T
+  schema: T,
 ): (value: unknown) => value is z.infer<T> {
   return (value: unknown): value is z.infer<T> => {
-    return schema.safeParse(value).success;
-  };
+    return schema.safeParse(value).success
+  }
 }
 
 /**
@@ -28,22 +28,19 @@ export function createTypeGuard<T extends z.ZodTypeAny>(
  */
 export function formatZodError(error: z.ZodError): string {
   return error.errors
-    .map((err) => {
-      const path = err.path.join(".");
-      return `${path ? `${path}: ` : ""}${err.message}`;
+    .map(err => {
+      const path = err.path.join('.')
+      return `${path ? `${path}: ` : ''}${err.message}`
     })
-    .join(", ");
+    .join(', ')
 }
 
 /**
  * Parse data with Zod schema or throw detailed error
  * Use when you want to crash fast on invalid data
  */
-export function parse<T extends z.ZodTypeAny>(
-  schema: T,
-  data: unknown
-): z.infer<T> {
-  return schema.parse(data);
+export function parse<T extends z.ZodTypeAny>(schema: T, data: unknown): z.infer<T> {
+  return schema.parse(data)
 }
 
 /**
@@ -54,19 +51,19 @@ export function parse<T extends z.ZodTypeAny>(
  */
 export async function parseJsonResponse<T extends z.ZodTypeAny>(
   response: {
-    json(): Promise<unknown>;
-    ok: boolean;
-    status: number;
-    statusText: string;
+    json(): Promise<unknown>
+    ok: boolean
+    status: number
+    statusText: string
   },
-  schema: T
+  schema: T,
 ): Promise<z.infer<T>> {
   if (!response.ok) {
-    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    throw new Error(`HTTP ${response.status}: ${response.statusText}`)
   }
 
-  const json = await response.json();
-  return parse(schema, json);
+  const json = await response.json()
+  return parse(schema, json)
 }
 
 /**
@@ -75,22 +72,22 @@ export async function parseJsonResponse<T extends z.ZodTypeAny>(
  */
 export function safeParse<T extends z.ZodTypeAny>(
   schema: T,
-  data: unknown
+  data: unknown,
 ): SafeParseResult<z.infer<T>> {
-  const result = schema.safeParse(data);
+  const result = schema.safeParse(data)
 
   if (result.success) {
     return {
       data: result.data,
       error: null,
       success: true,
-    };
+    }
   } else {
     return {
       data: null,
       error: result.error,
       success: false,
-    };
+    }
   }
 }
 
@@ -102,12 +99,12 @@ export function safeParse<T extends z.ZodTypeAny>(
  */
 export async function safeParseJsonResponse<T extends z.ZodTypeAny>(
   response: {
-    json(): Promise<unknown>;
-    ok: boolean;
-    status: number;
-    statusText: string;
+    json(): Promise<unknown>
+    ok: boolean
+    status: number
+    statusText: string
   },
-  schema: T
+  schema: T,
 ): Promise<SafeParseResult<z.infer<T>>> {
   try {
     if (!response.ok) {
@@ -115,28 +112,28 @@ export async function safeParseJsonResponse<T extends z.ZodTypeAny>(
         data: null,
         error: new z.ZodError([
           {
-            code: "custom",
+            code: 'custom',
             message: `HTTP ${response.status}: ${response.statusText}`,
             path: [],
           },
         ]),
         success: false,
-      };
+      }
     }
 
-    const json = await response.json();
-    return safeParse(schema, json);
+    const json = await response.json()
+    return safeParse(schema, json)
   } catch (error) {
     return {
       data: null,
       error: new z.ZodError([
         {
-          code: "custom",
-          message: error instanceof Error ? error.message : "Unknown error",
+          code: 'custom',
+          message: error instanceof Error ? error.message : 'Unknown error',
           path: [],
         },
       ]),
       success: false,
-    };
+    }
   }
 }

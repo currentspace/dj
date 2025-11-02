@@ -165,7 +165,7 @@
   align-items: flex-end;
 }
 
-.chat-input-form input[type="text"] {
+.chat-input-form input[type='text'] {
   flex: 1;
   padding: 0.75rem 1rem;
   border: 1px solid #444;
@@ -180,12 +180,12 @@
   max-height: 120px;
 }
 
-.chat-input-form input[type="text"]:focus {
+.chat-input-form input[type='text']:focus {
   border-color: #667eea;
   box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
 }
 
-.chat-input-form input[type="text"]::placeholder {
+.chat-input-form input[type='text']::placeholder {
   color: #888;
 }
 

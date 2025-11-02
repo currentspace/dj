@@ -2,7 +2,10 @@
 
 ## Executive Summary
 
-The DJ application is a sophisticated AI-powered playlist generator that demonstrates advanced full-stack architecture with real-time streaming, secure OAuth flows, and intelligent tool integration. The system uses React 19.1 on the frontend and Cloudflare Workers on the backend, with Claude AI providing conversational intelligence.
+The DJ application is a sophisticated AI-powered playlist generator that demonstrates advanced
+full-stack architecture with real-time streaming, secure OAuth flows, and intelligent tool
+integration. The system uses React 19.1 on the frontend and Cloudflare Workers on the backend, with
+Claude AI providing conversational intelligence.
 
 **Key Technical Achievements:**
 
@@ -236,14 +239,14 @@ processSSEEvents() {
 
 ```typescript
 type StreamEvent =
-  | { type: "thinking"; data: string }
-  | { type: "tool_start"; data: { tool: string; args: object } }
-  | { type: "tool_end"; data: { tool: string; result: unknown } }
-  | { type: "content"; data: string }
-  | { type: "error"; data: string }
-  | { type: "done"; data: null }
-  | { type: "log"; data: { level: "info" | "warn" | "error"; message: string } }
-  | { type: "debug"; data: object };
+  | { type: 'thinking'; data: string }
+  | { type: 'tool_start'; data: { tool: string; args: object } }
+  | { type: 'tool_end'; data: { tool: string; result: unknown } }
+  | { type: 'content'; data: string }
+  | { type: 'error'; data: string }
+  | { type: 'done'; data: null }
+  | { type: 'log'; data: { level: 'info' | 'warn' | 'error'; message: string } }
+  | { type: 'debug'; data: object }
 ```
 
 ### Playlist Selection (UserPlaylists.tsx)
@@ -304,12 +307,12 @@ app.get('*', async (c) => {
 
 ```typescript
 interface Env {
-  ANTHROPIC_API_KEY: string;
-  SPOTIFY_CLIENT_ID: string;
-  SPOTIFY_CLIENT_SECRET: string;
-  SESSIONS?: KVNamespace; // Session storage
-  ENVIRONMENT: string;
-  ASSETS: Fetcher; // Static file serving
+  ANTHROPIC_API_KEY: string
+  SPOTIFY_CLIENT_ID: string
+  SPOTIFY_CLIENT_SECRET: string
+  SESSIONS?: KVNamespace // Session storage
+  ENVIRONMENT: string
+  ASSETS: Fetcher // Static file serving
 }
 ```
 
@@ -319,29 +322,31 @@ interface Env {
 
 #### PKCE (Proof Key for Code Exchange) Implementation
 
-**Why PKCE?** Traditional OAuth with client_secret is unsafe for public clients (browsers, mobile apps) because the secret can be extracted. PKCE eliminates the need for client_secret by using dynamic code challenges.
+**Why PKCE?** Traditional OAuth with client_secret is unsafe for public clients (browsers, mobile
+apps) because the secret can be extracted. PKCE eliminates the need for client_secret by using
+dynamic code challenges.
 
 **Implementation:**
 
 ```typescript
 // 1. Generate code_verifier (random 32-byte string, base64url encoded)
 function generateCodeVerifier(): string {
-  const array = new Uint8Array(32);
-  crypto.getRandomValues(array);
+  const array = new Uint8Array(32)
+  crypto.getRandomValues(array)
   return btoa(String.fromCharCode(...array))
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=/g, "");
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '')
 }
 
 // 2. Generate code_challenge (SHA-256 hash of verifier)
 async function generateCodeChallenge(verifier: string): Promise<string> {
-  const data = new TextEncoder().encode(verifier);
-  const digest = await crypto.subtle.digest("SHA-256", data);
+  const data = new TextEncoder().encode(verifier)
+  const digest = await crypto.subtle.digest('SHA-256', data)
   return btoa(String.fromCharCode(...new Uint8Array(digest)))
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=/g, "");
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '')
 }
 ```
 
@@ -435,7 +440,8 @@ Validates OAuth response and exchanges code for token:
 
 **Location:** `workers/api/src/routes/chat-stream.ts`
 
-This is the most complex part of the backend, handling real-time AI conversations with tool execution.
+This is the most complex part of the backend, handling real-time AI conversations with tool
+execution.
 
 #### SSEWriter Class
 
@@ -443,18 +449,18 @@ Thread-safe writer for Server-Sent Events:
 
 ```typescript
 class SSEWriter {
-  private writer: WritableStreamDefaultWriter;
-  private encoder: TextEncoder;
-  private writeQueue: Promise<void> = Promise.resolve();
-  private closed = false;
+  private writer: WritableStreamDefaultWriter
+  private encoder: TextEncoder
+  private writeQueue: Promise<void> = Promise.resolve()
+  private closed = false
 
   // Queue writes to prevent race conditions
   async write(event: StreamEvent): Promise<void> {
     this.writeQueue = this.writeQueue.then(async () => {
-      const message = `data: ${JSON.stringify(event)}\n\n`;
-      await this.writer.write(this.encoder.encode(message));
-    });
-    return this.writeQueue;
+      const message = `data: ${JSON.stringify(event)}\n\n`
+      await this.writer.write(this.encoder.encode(message))
+    })
+    return this.writeQueue
   }
 
   // Send heartbeat every 15s to keep connection alive
@@ -464,7 +470,8 @@ class SSEWriter {
 }
 ```
 
-**Why Queued Writes?** Concurrent writes to WritableStream can cause race conditions and corrupt SSE events. The queue ensures sequential writes.
+**Why Queued Writes?** Concurrent writes to WritableStream can cause race conditions and corrupt SSE
+events. The queue ensures sequential writes.
 
 #### POST /api/chat-stream/message
 
@@ -509,7 +516,9 @@ Main streaming endpoint with TransformStream architecture:
    }
 ```
 
-**TransformStream Pattern:** This is critical for Cloudflare Workers. The Response is returned immediately with the readable end, while processing happens asynchronously writing to the writable end.
+**TransformStream Pattern:** This is critical for Cloudflare Workers. The Response is returned
+immediately with the readable end, while processing happens asynchronously writing to the writable
+end.
 
 #### Creating Streaming Spotify Tools
 
@@ -519,8 +528,8 @@ function createStreamingSpotifyTools(
   sseWriter: SSEWriter,
   contextPlaylistId?: string, // ← Injected from message
   mode?: string,
-  abortSignal?: AbortSignal
-): DynamicStructuredTool[];
+  abortSignal?: AbortSignal,
+): DynamicStructuredTool[]
 ```
 
 **Tools Created:**
@@ -537,25 +546,25 @@ Each tool has logic to auto-inject context when missing:
 
 ```typescript
 // Example: analyze_playlist tool
-func: async (args) => {
-  let finalArgs = { ...args };
+func: async args => {
+  let finalArgs = { ...args }
 
   // If no playlist_id provided BUT we have context
   if (!args.playlist_id && contextPlaylistId) {
-    console.log("Auto-injecting playlist_id:", contextPlaylistId);
-    finalArgs.playlist_id = contextPlaylistId;
+    console.log('Auto-injecting playlist_id:', contextPlaylistId)
+    finalArgs.playlist_id = contextPlaylistId
   }
 
   // Execute tool
   const result = await executeSpotifyToolWithProgress(
-    "analyze_playlist",
+    'analyze_playlist',
     finalArgs,
     spotifyToken,
-    sseWriter // ← Send progress updates
-  );
+    sseWriter, // ← Send progress updates
+  )
 
-  return result;
-};
+  return result
+}
 ```
 
 This prevents Claude from calling tools with empty arguments.
@@ -569,69 +578,67 @@ async function executeSpotifyToolWithProgress(
   toolName: string,
   args: object,
   token: string,
-  sseWriter: SSEWriter
+  sseWriter: SSEWriter,
 ): Promise<unknown> {
-  if (toolName === "analyze_playlist") {
-    const { playlist_id } = args;
+  if (toolName === 'analyze_playlist') {
+    const { playlist_id } = args
 
     // Step 1: Get playlist details
     await sseWriter.write({
-      type: "thinking",
-      data: "🔍 Fetching playlist information...",
-    });
-    const playlist = await fetch(`/v1/playlists/${playlist_id}`);
+      type: 'thinking',
+      data: '🔍 Fetching playlist information...',
+    })
+    const playlist = await fetch(`/v1/playlists/${playlist_id}`)
 
     await sseWriter.write({
-      type: "thinking",
+      type: 'thinking',
       data: `🎼 Found "${playlist.name}" with ${playlist.tracks.total} tracks`,
-    });
+    })
 
     // Step 2: Get tracks
     await sseWriter.write({
-      type: "thinking",
-      data: "🎵 Fetching track details...",
-    });
-    const tracks = await fetch(`/v1/playlists/${playlist_id}/tracks`);
+      type: 'thinking',
+      data: '🎵 Fetching track details...',
+    })
+    const tracks = await fetch(`/v1/playlists/${playlist_id}/tracks`)
 
     // Step 3: Get audio features
     await sseWriter.write({
-      type: "thinking",
+      type: 'thinking',
       data: `🎚️ Analyzing audio characteristics...`,
-    });
-    const features = await fetch(
-      `/v1/audio-features?ids=${trackIds.join(",")}`
-    );
+    })
+    const features = await fetch(`/v1/audio-features?ids=${trackIds.join(',')}`)
 
     // Step 4: Calculate analysis
     await sseWriter.write({
-      type: "thinking",
-      data: "🧮 Computing musical insights...",
-    });
+      type: 'thinking',
+      data: '🧮 Computing musical insights...',
+    })
 
     const analysis = {
       playlist_name: playlist.name,
       total_tracks: tracks.length,
       audio_analysis: {
-        avg_energy: calculateAverage(features, "energy"),
-        avg_danceability: calculateAverage(features, "danceability"),
-        avg_valence: calculateAverage(features, "valence"),
-        avg_tempo: calculateAverage(features, "tempo"),
+        avg_energy: calculateAverage(features, 'energy'),
+        avg_danceability: calculateAverage(features, 'danceability'),
+        avg_valence: calculateAverage(features, 'valence'),
+        avg_tempo: calculateAverage(features, 'tempo'),
         // ... more metrics
       },
       tracks: tracks.slice(0, 20), // Limit to 20 for Claude
       audio_features: features.slice(0, 20),
-    };
+    }
 
     await sseWriter.write({
-      type: "thinking",
+      type: 'thinking',
       data: `🎉 Analysis complete!`,
-    });
+    })
 
-    return analysis;
+    return analysis
   }
 
   // Fall back to standard executor for other tools
-  return await executeSpotifyTool(toolName, args, token);
+  return await executeSpotifyTool(toolName, args, token)
 }
 ```
 
@@ -650,15 +657,15 @@ The stripped version includes only: name, artists (string), duration_ms, popular
 // Initialize Claude
 const llm = new ChatAnthropic({
   apiKey: env.ANTHROPIC_API_KEY,
-  model: "claude-sonnet-4-5-20250929",
+  model: 'claude-sonnet-4-5-20250929',
   temperature: 0.2,
   maxTokens: 2000,
   streaming: true,
   maxRetries: 0,
-});
+})
 
 // Bind Spotify tools
-const modelWithTools = llm.bindTools(tools);
+const modelWithTools = llm.bindTools(tools)
 
 // Build system prompt with context
 const systemPrompt = `You are an AI DJ assistant with access to Spotify.
@@ -678,18 +685,18 @@ TOOL USAGE EXAMPLES:
 - search_spotify_tracks: {"query": "chill jazz", "limit": 10}
 - get_audio_features: {"track_ids": ["id1", "id2"]}
 `
-    : ""
+    : ''
 }
-Be concise and helpful. Use tools to get real data.`;
+Be concise and helpful. Use tools to get real data.`
 
 // Build message history
 const messages = [
   new SystemMessage(systemPrompt),
-  ...conversationHistory.map((m) =>
-    m.role === "user" ? new HumanMessage(m.content) : new AIMessage(m.content)
+  ...conversationHistory.map(m =>
+    m.role === 'user' ? new HumanMessage(m.content) : new AIMessage(m.content),
   ),
   new HumanMessage(actualMessage),
-];
+]
 ```
 
 #### Streaming Response Loop
@@ -698,41 +705,41 @@ const messages = [
 // Stream initial response
 const response = await modelWithTools.stream(messages, {
   signal: abortController.signal,
-});
+})
 
-let fullResponse = "";
-let toolCalls = [];
+let fullResponse = ''
+let toolCalls = []
 
 for await (const chunk of response) {
   // Handle content chunks
-  if (typeof chunk.content === "string" && chunk.content) {
-    fullResponse += chunk.content;
+  if (typeof chunk.content === 'string' && chunk.content) {
+    fullResponse += chunk.content
     await sseWriter.write({
-      type: "content",
+      type: 'content',
       data: chunk.content,
-    });
+    })
   }
 
   // Handle tool calls
   if (chunk.tool_calls && chunk.tool_calls.length > 0) {
-    toolCalls = chunk.tool_calls;
+    toolCalls = chunk.tool_calls
   }
 }
 
 // If Claude requested tools, execute them
 if (toolCalls.length > 0) {
-  const toolMessages = [];
+  const toolMessages = []
 
   for (const toolCall of toolCalls) {
-    const tool = tools.find((t) => t.name === toolCall.name);
-    const result = await tool.func(toolCall.args);
+    const tool = tools.find(t => t.name === toolCall.name)
+    const result = await tool.func(toolCall.args)
 
     toolMessages.push(
       new ToolMessage({
         content: JSON.stringify(result),
         tool_call_id: toolCall.id,
-      })
-    );
+      }),
+    )
   }
 
   // Send tool results back to Claude for final response
@@ -743,22 +750,22 @@ if (toolCalls.length > 0) {
       tool_calls: toolCalls,
     }),
     ...toolMessages,
-  ];
+  ]
 
-  const finalResponse = await modelWithTools.stream(finalMessages);
+  const finalResponse = await modelWithTools.stream(finalMessages)
 
   for await (const chunk of finalResponse) {
-    if (typeof chunk.content === "string" && chunk.content) {
+    if (typeof chunk.content === 'string' && chunk.content) {
       await sseWriter.write({
-        type: "content",
+        type: 'content',
         data: chunk.content,
-      });
+      })
     }
   }
 }
 
 // Send completion event
-await sseWriter.write({ type: "done", data: null });
+await sseWriter.write({ type: 'done', data: null })
 ```
 
 **Tool Execution Flow:**
@@ -782,66 +789,60 @@ Defines tool schemas and executors for Spotify API:
 export async function executeSpotifyTool(
   toolName: string,
   args: Record<string, unknown>,
-  token: string
+  token: string,
 ): Promise<unknown> {
   switch (toolName) {
-    case "search_spotify_tracks": {
-      const { query, limit = 10 } = args;
+    case 'search_spotify_tracks': {
+      const { query, limit = 10 } = args
       const response = await fetch(
         `https://api.spotify.com/v1/search?q=${encodeURIComponent(
-          query
+          query,
         )}&type=track&limit=${limit}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      const data = await response.json();
+        { headers: { Authorization: `Bearer ${token}` } },
+      )
+      const data = await response.json()
 
       // Strip down tracks to essentials
-      return data.tracks.items.map((track) => ({
+      return data.tracks.items.map(track => ({
         name: track.name,
-        artists: track.artists.map((a) => a.name).join(", "),
+        artists: track.artists.map(a => a.name).join(', '),
         duration_ms: track.duration_ms,
         popularity: track.popularity,
         uri: track.uri,
-      }));
+      }))
     }
 
-    case "create_playlist": {
-      const { name, description, track_uris } = args;
+    case 'create_playlist': {
+      const { name, description, track_uris } = args
 
       // 1. Get user ID
-      const meResponse = await fetch("https://api.spotify.com/v1/me", {
+      const meResponse = await fetch('https://api.spotify.com/v1/me', {
         headers: { Authorization: `Bearer ${token}` },
-      });
-      const user = await meResponse.json();
+      })
+      const user = await meResponse.json()
 
       // 2. Create playlist
-      const createResponse = await fetch(
-        `https://api.spotify.com/v1/users/${user.id}/playlists`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ name, description, public: false }),
-        }
-      );
-      const playlist = await createResponse.json();
+      const createResponse = await fetch(`https://api.spotify.com/v1/users/${user.id}/playlists`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ name, description, public: false }),
+      })
+      const playlist = await createResponse.json()
 
       // 3. Add tracks
-      await fetch(
-        `https://api.spotify.com/v1/playlists/${playlist.id}/tracks`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ uris: track_uris }),
-        }
-      );
+      await fetch(`https://api.spotify.com/v1/playlists/${playlist.id}/tracks`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ uris: track_uris }),
+      })
 
-      return { id: playlist.id, name, url: playlist.external_urls.spotify };
+      return { id: playlist.id, name, url: playlist.external_urls.spotify }
     }
 
     // ... more tools
@@ -864,18 +865,18 @@ class SessionManager {
   constructor(private kv: KVNamespace) {}
 
   async createSession(spotifyToken: string): Promise<string> {
-    const sessionToken = crypto.randomUUID();
+    const sessionToken = crypto.randomUUID()
 
     // Store mapping in KV with 4-hour TTL
     await this.kv.put(`session:${sessionToken}`, spotifyToken, {
       expirationTtl: 4 * 60 * 60,
-    });
+    })
 
-    return sessionToken;
+    return sessionToken
   }
 
   async validateSession(sessionToken: string): Promise<string | null> {
-    return await this.kv.get(`session:${sessionToken}`);
+    return await this.kv.get(`session:${sessionToken}`)
   }
 }
 ```
@@ -891,27 +892,27 @@ class SessionManager {
 #### MCP Endpoint
 
 ```typescript
-mcpRouter.all("/", async (c) => {
-  const method = c.req.method;
-  const sessionToken = c.req.header("Authorization")?.replace("Bearer ", "");
+mcpRouter.all('/', async c => {
+  const method = c.req.method
+  const sessionToken = c.req.header('Authorization')?.replace('Bearer ', '')
 
   // Validate session
-  const spotifyToken = await sessionManager.validateSession(sessionToken);
+  const spotifyToken = await sessionManager.validateSession(sessionToken)
   if (!spotifyToken) {
-    return c.json({ error: "Invalid session" }, 401);
+    return c.json({ error: 'Invalid session' }, 401)
   }
 
-  if (method === "GET") {
+  if (method === 'GET') {
     // SSE endpoint for real-time updates
-    return streamSSE();
+    return streamSSE()
   }
 
-  if (method === "POST") {
+  if (method === 'POST') {
     // JSON-RPC endpoint for tool calls
-    const request = await c.req.json();
-    return handleMCPRequest(request, spotifyToken);
+    const request = await c.req.json()
+    return handleMCPRequest(request, spotifyToken)
   }
-});
+})
 ```
 
 ---
@@ -1067,17 +1068,14 @@ User clicks "Login with Spotify"
 ### Frontend
 
 1. **React 19.1 Transitions**
-
    - Uses `useTransition` for non-urgent state updates
    - Keeps UI responsive during heavy operations
 
 2. **Lazy Loading**
-
    - `Suspense` boundaries for code splitting
    - Playlist images use `loading="lazy"`
 
 3. **Efficient Rendering**
-
    - `useCallback` to memoize event handlers
    - `flushSync` for critical DOM updates (scroll position)
 
@@ -1088,18 +1086,15 @@ User clicks "Login with Spotify"
 ### Backend
 
 1. **Edge Deployment**
-
    - Cloudflare Workers run globally (low latency)
    - No cold starts (unlike Lambda)
 
 2. **Streaming Responses**
-
    - TransformStream for immediate response
    - SSE enables partial content delivery
    - User sees progress before completion
 
 3. **Data Size Reduction**
-
    - 99% size reduction on Spotify track objects
    - Only 20 tracks sent to Claude (even for 1000+ track playlists)
    - Audio features averaged (not every track sent)
@@ -1115,13 +1110,11 @@ User clicks "Login with Spotify"
 ### Frontend
 
 1. **ErrorBoundary Components**
-
    - `<ErrorBoundary>` wraps entire app
    - `<PlaylistErrorBoundary>` for playlist-specific errors
    - Prevents full app crashes
 
 2. **SSE Error Recovery**
-
    - 401 errors clear token and show re-login prompt
    - Timeout errors suggest retry
    - AbortController for clean cancellation
@@ -1134,13 +1127,11 @@ User clicks "Login with Spotify"
 ### Backend
 
 1. **Request Validation**
-
    - Zod schemas validate all inputs
    - Reject invalid requests with 400
    - Type-safe throughout
 
 2. **Stream Error Handling**
-
    - Try-catch around all async operations
    - Error events sent via SSE (not HTTP errors)
    - Cleanup in finally blocks
@@ -1157,14 +1148,12 @@ User clicks "Login with Spotify"
 ### Current Test Infrastructure
 
 1. **SSE Test Page** (`/pages/SSETestPage`)
-
    - Tests basic SSE connectivity
    - Tests POST SSE with auth
    - Tests chat streaming end-to-end
    - Debug logging and event inspection
 
 2. **Test Mode** (`/features/test/TestPage`)
-
    - Manual testing of individual tools
    - Spotify API connectivity check
    - Token validation
@@ -1177,13 +1166,11 @@ User clicks "Login with Spotify"
 ### Recommendations for Expansion
 
 1. **Unit Tests**
-
    - Test SSE parsing logic
    - Test OAuth PKCE generation
    - Test playlist ID extraction
 
 2. **Integration Tests**
-
    - Test full OAuth flow
    - Test Claude → Tool → Response flow
    - Test error scenarios
@@ -1247,7 +1234,8 @@ GitHub Actions (CI/CD)
 
 ### 1. Context Injection Pattern
 
-**Problem:** Claude needs to know which playlist to analyze, but tools shouldn't require users to manually specify IDs.
+**Problem:** Claude needs to know which playlist to analyze, but tools shouldn't require users to
+manually specify IDs.
 
 **Solution:** Frontend injects playlist ID as hidden prefix in message:
 
@@ -1260,7 +1248,7 @@ Tools have fallback logic to auto-inject when missing:
 
 ```typescript
 if (!args.playlist_id && contextPlaylistId) {
-  args.playlist_id = contextPlaylistId;
+  args.playlist_id = contextPlaylistId
 }
 ```
 
@@ -1268,19 +1256,20 @@ if (!args.playlist_id && contextPlaylistId) {
 
 ### 2. TransformStream SSE Pattern
 
-**Problem:** Cloudflare Workers need to return Response immediately, but SSE requires async processing.
+**Problem:** Cloudflare Workers need to return Response immediately, but SSE requires async
+processing.
 
 **Solution:** Create TransformStream, return readable immediately, write to writable async:
 
 ```typescript
-const { readable, writable } = new TransformStream();
-const writer = writable.getWriter();
+const { readable, writable } = new TransformStream()
+const writer = writable.getWriter()
 
 // Return immediately
-return new Response(readable, { headers });
+return new Response(readable, { headers })
 
 // Process async (doesn't block)
-processStream(writer);
+processStream(writer)
 ```
 
 **Result:** Fast initial response + streaming updates.
@@ -1293,8 +1282,8 @@ processStream(writer);
 
 ```typescript
 this.writeQueue = this.writeQueue.then(async () => {
-  await this.writer.write(data);
-});
+  await this.writer.write(data)
+})
 ```
 
 **Result:** Thread-safe SSE events.
@@ -1318,14 +1307,14 @@ this.writeQueue = this.writeQueue.then(async () => {
 **Solution:** Stream progress updates via SSE:
 
 ```typescript
-await sseWriter.write({ type: "thinking", data: "🔍 Fetching playlist..." });
+await sseWriter.write({ type: 'thinking', data: '🔍 Fetching playlist...' })
 // ... fetch playlist
 await sseWriter.write({
-  type: "thinking",
+  type: 'thinking',
   data: '🎵 Found "Lover" (17 tracks)',
-});
+})
 // ... get tracks
-await sseWriter.write({ type: "thinking", data: "🎚️ Analyzing audio..." });
+await sseWriter.write({ type: 'thinking', data: '🎚️ Analyzing audio...' })
 ```
 
 **Result:** Users stay engaged, understand what's happening.
@@ -1344,8 +1333,10 @@ await sseWriter.write({ type: "thinking", data: "🎚️ Analyzing audio..." });
 
 **Root Causes:**
 
-1. **Tool result too large** - Spotify track objects are 2.5-3KB each. 20 full tracks = 55KB overwhelming Claude
-2. **Missing audio features** - 403 error on `/audio-features` endpoint due to missing Spotify scopes
+1. **Tool result too large** - Spotify track objects are 2.5-3KB each. 20 full tracks = 55KB
+   overwhelming Claude
+2. **Missing audio features** - 403 error on `/audio-features` endpoint due to missing Spotify
+   scopes
 
 **Solutions:**
 
@@ -1355,36 +1346,36 @@ await sseWriter.write({ type: "thinking", data: "🎚️ Analyzing audio..." });
 // ❌ BAD - Sends full track objects
 return {
   tracks: tracks.slice(0, 20), // 55KB!
-};
+}
 
 // ✅ GOOD - Sends compact track objects
 return {
-  tracks: tracks.slice(0, 20).map((track) => ({
+  tracks: tracks.slice(0, 20).map(track => ({
     name: track.name,
-    artists: track.artists.map((a) => a.name).join(", "),
+    artists: track.artists.map(a => a.name).join(', '),
     duration_ms: track.duration_ms,
     popularity: track.popularity,
     uri: track.uri,
   })), // ~2KB!
-};
+}
 ```
 
 2. **Add all required Spotify scopes:**
 
 ```typescript
-scope: "playlist-modify-public playlist-modify-private user-read-private " +
-  "playlist-read-private playlist-read-collaborative " +
-  "user-read-playback-state user-read-currently-playing " +
-  "user-read-recently-played user-top-read";
+scope: 'playlist-modify-public playlist-modify-private user-read-private ' +
+  'playlist-read-private playlist-read-collaborative ' +
+  'user-read-playback-state user-read-currently-playing ' +
+  'user-read-recently-played user-top-read'
 ```
 
 3. **Add size logging to debug:**
 
 ```typescript
-const analysisJson = JSON.stringify(analysis);
-console.log(`Analysis JSON size: ${analysisJson.length} bytes`);
+const analysisJson = JSON.stringify(analysis)
+console.log(`Analysis JSON size: ${analysisJson.length} bytes`)
 if (analysisJson.length > 10000) {
-  console.warn("WARNING: Tool result may be too large for Claude!");
+  console.warn('WARNING: Tool result may be too large for Claude!')
 }
 ```
 
@@ -1437,4 +1428,5 @@ The DJ application demonstrates production-grade full-stack architecture with:
 - **Intelligent context management** for seamless UX
 - **Progressive enhancement** with streaming status updates
 
-The codebase is well-structured, type-safe, and follows modern best practices for React 19.1 and Cloudflare Workers development.
+The codebase is well-structured, type-safe, and follows modern best practices for React 19.1 and
+Cloudflare Workers development.

@@ -19,16 +19,16 @@
  * 2. Batch: await orchestrator.executeBatch('id', tasks, 'spotify')
  */
 
-import { RateLimitedQueue } from "./RateLimitedQueue";
+import { RateLimitedQueue } from './RateLimitedQueue'
 
 interface LaneConfig {
-  maxConcurrency: number;
-  queue: (() => void)[]; // Callbacks to run when slot available
-  running: number;
+  maxConcurrency: number
+  queue: (() => void)[] // Callbacks to run when slot available
+  running: number
 }
-type LaneKey = "anthropic" | "deezer" | "default" | "lastfm" | "spotify";
+type LaneKey = 'anthropic' | 'deezer' | 'default' | 'lastfm' | 'spotify'
 
-type Task<T> = () => Promise<T>;
+type Task<T> = () => Promise<T>
 
 const LANE_LIMITS: Record<LaneKey, number> = {
   anthropic: 2, // Critical: Anthropic SDK can't handle >2 concurrent in Workers
@@ -36,16 +36,16 @@ const LANE_LIMITS: Record<LaneKey, number> = {
   default: 3,
   lastfm: 10,
   spotify: 5,
-};
+}
 
 export class RequestOrchestrator {
-  private lanes = new Map<LaneKey, LaneConfig>();
-  private rateLimiter: RateLimitedQueue<any>;
+  private lanes = new Map<LaneKey, LaneConfig>()
+  private rateLimiter: RateLimitedQueue<any>
 
   constructor(options?: {
-    jitterMs?: number; // Jitter in ms (default: 5)
-    minTickMs?: number; // Minimum tick delay (default: 1-2ms)
-    rate?: number; // Requests per second (default: 40)
+    jitterMs?: number // Jitter in ms (default: 5)
+    minTickMs?: number // Minimum tick delay (default: 1-2ms)
+    rate?: number // Requests per second (default: 40)
   }) {
     // Initialize rate limiter (40 RPS global, no global concurrency limit)
     this.rateLimiter = new RateLimitedQueue({
@@ -53,7 +53,7 @@ export class RequestOrchestrator {
       jitterMs: options?.jitterMs ?? 5,
       minTickMs: options?.minTickMs ?? 2,
       rate: options?.rate ?? 40,
-    });
+    })
 
     // Initialize lane configurations
     for (const [lane, maxConcurrency] of Object.entries(LANE_LIMITS)) {
@@ -61,13 +61,13 @@ export class RequestOrchestrator {
         maxConcurrency,
         queue: [],
         running: 0,
-      });
+      })
     }
 
     // Start continuous processing
-    this.rateLimiter.processContinuously().catch((err) => {
-      console.error("[RequestOrchestrator] Fatal error:", err);
-    });
+    this.rateLimiter.processContinuously().catch(err => {
+      console.error('[RequestOrchestrator] Fatal error:', err)
+    })
   }
 
   /**
@@ -80,31 +80,31 @@ export class RequestOrchestrator {
    * 4. Execute task
    * 5. Release lane slot
    */
-  async execute<T>(task: Task<T>, lane: LaneKey = "default"): Promise<T> {
-    const laneConfig = this.lanes.get(lane)!;
+  async execute<T>(task: Task<T>, lane: LaneKey = 'default'): Promise<T> {
+    const laneConfig = this.lanes.get(lane)!
 
     // Wait for lane slot if needed
-    await this.acquireLaneSlot(lane);
+    await this.acquireLaneSlot(lane)
 
     try {
       // Enqueue in rate limiter and execute
       const result = await new Promise<T>((resolve, reject) => {
         this.rateLimiter.enqueue(async () => {
           try {
-            const value = await task();
-            resolve(value);
-            return value;
+            const value = await task()
+            resolve(value)
+            return value
           } catch (error) {
-            reject(error);
-            return null;
+            reject(error)
+            return null
           }
-        });
-      });
+        })
+      })
 
-      return result;
+      return result
     } finally {
       // Always release lane slot
-      this.releaseLaneSlot(lane);
+      this.releaseLaneSlot(lane)
     }
   }
 
@@ -114,44 +114,41 @@ export class RequestOrchestrator {
    * All tasks go through the same lane and respect its concurrency limit
    * Returns results in same order as input tasks
    */
-  async executeBatch<T>(
-    tasks: Task<T>[],
-    lane: LaneKey = "default"
-  ): Promise<T[]> {
-    const promises = tasks.map((task) => this.execute(task, lane));
-    return Promise.all(promises);
+  async executeBatch<T>(tasks: Task<T>[], lane: LaneKey = 'default'): Promise<T[]> {
+    const promises = tasks.map(task => this.execute(task, lane))
+    return Promise.all(promises)
   }
 
   /**
    * Wait for a slot in the specified lane to become available
    */
   private async acquireLaneSlot(lane: LaneKey): Promise<void> {
-    const config = this.lanes.get(lane)!;
+    const config = this.lanes.get(lane)!
 
     if (config.running < config.maxConcurrency) {
       // Slot available immediately
-      config.running++;
-      return;
+      config.running++
+      return
     }
 
     // Wait for slot
-    return new Promise<void>((resolve) => {
-      config.queue.push(resolve);
-    });
+    return new Promise<void>(resolve => {
+      config.queue.push(resolve)
+    })
   }
 
   /**
    * Release a slot in the specified lane
    */
   private releaseLaneSlot(lane: LaneKey): void {
-    const config = this.lanes.get(lane)!;
-    config.running--;
+    const config = this.lanes.get(lane)!
+    config.running--
 
     // Wake up next waiting task
-    const next = config.queue.shift();
+    const next = config.queue.shift()
     if (next) {
-      config.running++;
-      next();
+      config.running++
+      next()
     }
   }
 }
@@ -163,4 +160,4 @@ export class RequestOrchestrator {
 export const globalOrchestrator = new RequestOrchestrator({
   jitterMs: 5, // 0-5ms jitter
   rate: 40, // 40 RPS (Cloudflare Workers limit)
-});
+})
