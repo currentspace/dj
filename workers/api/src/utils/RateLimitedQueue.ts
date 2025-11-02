@@ -356,5 +356,5 @@ export class RateLimitedQueue<T> {
 
   // replaced at runtime by constructor; defined to satisfy TS
    
-  private clearTimer(): void {}
+  private clearTimer(): void { /* empty */ }
 }

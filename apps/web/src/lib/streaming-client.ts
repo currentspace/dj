@@ -44,7 +44,7 @@ export class ChatStreamClient {
     const token = localStorage.getItem('spotify_token');
     if (!token) {
       callbacks.onError?.('Not authenticated');
-      return { close: () => {} }; // Return no-op handle
+      return { close: () => { /* empty */ } }; // Return no-op handle
     }
 
     // Close any existing connection
