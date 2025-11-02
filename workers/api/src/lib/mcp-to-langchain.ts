@@ -19,10 +19,10 @@ export function convertMCPToolsToLangChain(mcpTools: any[], sessionToken: string
     console.log(`[MCPConverter] Tool properties:`, Object.keys(tool));
 
     // Convert MCP inputSchema to Zod schema
-    const zodSchema = convertJsonSchemaToZod(tool.schema || tool.inputSchema || {});
+    const zodSchema = convertJsonSchemaToZod((tool.schema ?? tool.inputSchema) ?? {});
 
     const langchainTool = new DynamicStructuredTool({
-      description: tool.description || 'No description available',
+      description: tool.description ?? 'No description available',
       func: async (input: any) => {
         console.log(`[MCPTool:${tool.name}] Executing with input:`, input);
 

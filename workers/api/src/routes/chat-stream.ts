@@ -259,7 +259,7 @@ function createStreamingSpotifyTools(
         // Return compact track info
         const compactTracks = tracks.map((track: any) => ({
           album: track.album?.name,
-          artists: track.artists?.map((a: any) => a.name).join(', ') || 'Unknown',
+          artists: track.artists?.map((a: any) => a.name).join(', ') ?? 'Unknown',
           duration_ms: track.duration_ms,
           id: track.id,
           name: track.name,
@@ -406,7 +406,7 @@ function createStreamingSpotifyTools(
               const trackIds = playlistData.items
                 ?.map((item: any) => item.track?.id)
                 .filter((id: string) => id)
-                .slice(0, 5) || []; // Use up to 5 tracks as seeds
+                .slice(0, 5) ?? []; // Use up to 5 tracks as seeds
 
               if (trackIds.length > 0) {
                 finalArgs.seed_tracks = trackIds;
@@ -499,13 +499,13 @@ function createStreamingSpotifyTools(
         const vibePrompt = `You are a music critic analyzing a playlist's vibe. Extract SUBTLE signals that algorithms miss.
 
 METADATA ANALYSIS:
-${JSON.stringify(args.analysis_data.metadata_analysis || {}, null, 2)}
+${JSON.stringify(args.analysis_data.metadata_analysis ?? {}, null, 2)}
 
 DEEZER ANALYSIS (BPM, rank, gain):
-${JSON.stringify(args.analysis_data.deezer_analysis || {}, null, 2)}
+${JSON.stringify(args.analysis_data.deezer_analysis ?? {}, null, 2)}
 
 LAST.FM ANALYSIS (crowd tags, similar tracks):
-${JSON.stringify(args.analysis_data.lastfm_analysis || {}, null, 2)}
+${JSON.stringify(args.analysis_data.lastfm_analysis ?? {}, null, 2)}
 
 ${args.sample_tracks?.length ? `SAMPLE TRACKS:\n${args.sample_tracks.map(t => `- "${t.name}" by ${t.artists}`).join('\n')}` : ''}
 
@@ -573,7 +573,7 @@ Return ONLY valid JSON:
           console.error('[extract_playlist_vibe] AI analysis failed:', error);
 
           // Fallback: Basic analysis from tags
-          const tags = args.analysis_data.lastfm_analysis?.crowd_tags?.slice(0, 5).map((t: any) => t.tag) || [];
+          const tags = args.analysis_data.lastfm_analysis?.crowd_tags?.slice(0, 5).map((t: any) => t.tag) ?? [];
           const fallbackVibe = {
             discovery_hints: {
               artist_archetypes: [],
@@ -708,7 +708,7 @@ Return ONLY valid JSON:
 
           await sseWriter.write({
             data: {
-              result: `Created ${strategy.tag_searches?.length || 0} tag searches, ${strategy.spotify_searches?.length || 0} custom queries`,
+              result: `Created ${strategy.tag_searches?.length ?? 0} tag searches, ${strategy.spotify_searches?.length ?? 0} custom queries`,
               tool: 'plan_discovery_strategy'
             },
             type: 'tool_end'
@@ -721,7 +721,7 @@ Return ONLY valid JSON:
           // Fallback: Basic strategy
           const fallbackStrategy = {
             avoid: [],
-            lastfm_similar_priority: args.similar_tracks_available?.slice(0, 5) || [],
+            lastfm_similar_priority: args.similar_tracks_available?.slice(0, 5) ?? [],
             recommendation_seeds: {
               approach: 'Use top tracks as seeds',
               parameters: { target_danceability: 0.5, target_energy: 0.5, target_valence: 0.5 }
@@ -800,7 +800,7 @@ Return ONLY valid JSON:
 
             if (response && response.ok) {
               const data = await response.json() as any;
-              const tracks = data.tracks?.items || [];
+              const tracks = data.tracks?.items ?? [];
 
               for (const spotifyTrack of tracks) {
                 recommendations.push({
@@ -899,7 +899,7 @@ Return ONLY valid JSON:
         }
 
         const data = await response.json() as any;
-        const tracks = data.tracks?.items || [];
+        const tracks = data.tracks?.items ?? [];
 
         const recommendations = tracks.map((track: any) => ({
           album: track.album?.name,
@@ -973,7 +973,7 @@ ${args.playlist_context.era ? `Era: ${args.playlist_context.era}` : ''}
 
 CANDIDATE TRACKS (${args.candidate_tracks.length} total):
 ${args.candidate_tracks.slice(0, 50).map((t, i) =>
-  `${i + 1}. "${t.name}" by ${t.artists} (popularity: ${t.popularity || 'unknown'}, source: ${t.source || 'unknown'})`
+  `${i + 1}. "${t.name}" by ${t.artists} (popularity: ${t.popularity ?? 'unknown'}, source: ${t.source ?? 'unknown'})`
 ).join('\n')}
 ${args.candidate_tracks.length > 50 ? `\n... and ${args.candidate_tracks.length - 50} more` : ''}
 
@@ -1002,8 +1002,8 @@ Return ONLY a JSON object with this structure:
           }
 
           const curation = JSON.parse(jsonMatch[0]);
-          const selectedIds = curation.selected_track_ids || [];
-          const reasoning = curation.reasoning || 'AI curation complete';
+          const selectedIds = curation.selected_track_ids ?? [];
+          const reasoning = curation.reasoning ?? 'AI curation complete';
 
           // Filter candidate tracks to only selected ones
           const curatedTracks = args.candidate_tracks.filter(t => selectedIds.includes(t.id));
@@ -1037,7 +1037,7 @@ Return ONLY a JSON object with this structure:
 
           // Fallback: Sort by popularity and return top N
           const fallbackTracks = args.candidate_tracks
-            .sort((a, b) => (b.popularity || 0) - (a.popularity || 0))
+            .sort((a, b) => (b.popularity ?? 0) - (a.popularity ?? 0))
             .slice(0, args.top_n);
 
           await sseWriter.write({
@@ -1151,18 +1151,18 @@ async function executeSpotifyToolWithProgress(
       const foundMessage = narrator
         ? await narrator.generateMessage({
             eventType: 'searching_tracks',
-            parameters: { name: playlist.name, trackCount: playlist.tracks?.total || 0 },
+            parameters: { name: playlist.name, trackCount: playlist.tracks?.total ?? 0 },
             previousMessages: recentMessages,
             userRequest,
           })
-        : `🎼 Found "${playlist.name}" with ${playlist.tracks?.total || 0} tracks`;
+        : `🎼 Found "${playlist.name}" with ${playlist.tracks?.total ?? 0} tracks`;
       sseWriter.writeAsync({ data: foundMessage, type: 'thinking' });
 
       // Step 2: Get tracks
       const tracksMessage = narrator
         ? await narrator.generateMessage({
             eventType: 'analyzing_audio',
-            metadata: { trackCount: playlist.tracks?.total || 0 },
+            metadata: { trackCount: playlist.tracks?.total ?? 0 },
             previousMessages: recentMessages,
             userRequest,
           })
@@ -1200,7 +1200,7 @@ async function executeSpotifyToolWithProgress(
           console.log(`[SpotifyAPI]   - ID: ${track.id}`);
           console.log(`[SpotifyAPI]   - has external_ids: ${!!track.external_ids}`);
           console.log(`[SpotifyAPI]   - external_ids value:`, track.external_ids);
-          console.log(`[SpotifyAPI]   - ISRC: ${track.external_ids?.isrc || 'NOT PRESENT'}`);
+          console.log(`[SpotifyAPI]   - ISRC: ${track.external_ids?.isrc ?? 'NOT PRESENT'}`);
           console.log(`[SpotifyAPI]   - Available fields:`, Object.keys(track).join(', '));
         });
         console.log(`[SpotifyAPI] ========== END TRACK STRUCTURE DEBUG ==========`);
@@ -1218,7 +1218,7 @@ async function executeSpotifyToolWithProgress(
         : 0;
 
       const avgDuration = validTracks.length > 0
-        ? validTracks.reduce((sum: number, t: any) => sum + (t.duration_ms || 0), 0) / validTracks.length
+        ? validTracks.reduce((sum: number, t: any) => sum + (t.duration_ms ?? 0), 0) / validTracks.length
         : 0;
 
       const explicitCount = validTracks.filter((t: any) => t.explicit).length;
@@ -1256,7 +1256,7 @@ async function executeSpotifyToolWithProgress(
           artistsData.artists.forEach((artist: any) => {
             if (artist?.genres) {
               artist.genres.forEach((genre: string) => {
-                genreMap.set(genre, (genreMap.get(genre) || 0) + 1);
+                genreMap.set(genre, (genreMap.get(genre) ?? 0) + 1);
               });
             }
           });
@@ -1322,7 +1322,7 @@ async function executeSpotifyToolWithProgress(
               console.log(`[BPMEnrichment]   - has external_ids: ${!!track.external_ids}`);
               console.log(`[BPMEnrichment]   - external_ids type: ${typeof track.external_ids}`);
               console.log(`[BPMEnrichment]   - external_ids value:`, JSON.stringify(track.external_ids));
-              console.log(`[BPMEnrichment]   - ISRC: ${track.external_ids?.isrc || 'NOT PRESENT'}`);
+              console.log(`[BPMEnrichment]   - ISRC: ${track.external_ids?.isrc ?? 'NOT PRESENT'}`);
               console.log(`[BPMEnrichment]   - Track object keys:`, Object.keys(track).join(', '));
             });
             console.log(`[BPMEnrichment] ========== END ENRICHMENT TRACK STRUCTURE DEBUG ==========`);
@@ -1346,7 +1346,7 @@ async function executeSpotifyToolWithProgress(
 
             try {
               const spotifyTrack = {
-                artists: track.artists || [],
+                artists: track.artists ?? [],
                 duration_ms: track.duration_ms,
                 external_ids: track.external_ids,
                 id: track.id,
@@ -1358,7 +1358,7 @@ async function executeSpotifyToolWithProgress(
                 console.log(`[BPMEnrichment] Calling enrichTrack with:`, {
                   has_external_ids: !!spotifyTrack.external_ids,
                   id: spotifyTrack.id,
-                  isrc: spotifyTrack.external_ids?.isrc || 'NONE',
+                  isrc: spotifyTrack.external_ids?.isrc ?? 'NONE',
                   name: spotifyTrack.name
                 });
               }
@@ -1483,7 +1483,7 @@ async function executeSpotifyToolWithProgress(
 
             try {
               const lastfmTrack = {
-                artist: track.artists?.[0]?.name || 'Unknown',
+                artist: track.artists?.[0]?.name ?? 'Unknown',
                 duration_ms: track.duration_ms,
                 name: track.name
               };
@@ -1809,7 +1809,7 @@ chatStreamRouter.post('/message', async (c) => {
       const tools = createStreamingSpotifyTools(
         spotifyToken,
         sseWriter,
-        playlistId || undefined,
+        playlistId ?? undefined,
         request.mode,
         abortController.signal,
         env,
@@ -2080,7 +2080,7 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
         // Detect loops: if same tool with same args called 3+ times in a row, break
         // Include args in signature to allow multiple calls with different parameters
         const toolSignature = currentToolCalls.map(tc => {
-          const argsStr = JSON.stringify(tc.args || {});
+          const argsStr = JSON.stringify(tc.args ?? {});
           return `${tc.name}(${argsStr})`;
         }).join(',');
         recentToolCalls.push(toolSignature);
@@ -2112,7 +2112,7 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
               const result = await tool.func(toolCall.args);
               console.log(`[Stream:${requestId}] Tool ${toolCall.name} completed successfully`);
               console.log(`[Stream:${requestId}] Tool result type: ${typeof result}`);
-              console.log(`[Stream:${requestId}] Tool result keys: ${typeof result === 'object' ? Object.keys(result || {}).join(', ') : 'N/A'}`);
+              console.log(`[Stream:${requestId}] Tool result keys: ${typeof result === 'object' ? Object.keys(result ?? {}).join(', ') : 'N/A'}`);
 
               const toolContent = JSON.stringify(result);
               console.log(`[Stream:${requestId}] Tool result JSON length: ${toolContent.length}`);

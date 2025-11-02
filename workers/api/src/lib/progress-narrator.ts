@@ -34,7 +34,7 @@ export class ProgressNarrator {
   constructor(apiKey: string, logger?: ServiceLogger) {
     this.apiKey = apiKey;
     this.systemPrompt = this.buildSystemPrompt();
-    this.logger = logger || new ServiceLogger('ProgressNarrator');
+    this.logger = logger ?? new ServiceLogger('ProgressNarrator');
   }
 
   /**
@@ -201,8 +201,8 @@ export class ProgressNarrator {
     // Add specific details based on event type
     switch (context.eventType) {
       case 'adding_tracks':
-        const added = context.metadata?.addedTracks || 0;
-        const totalTracks = context.metadata?.totalTracks || 0;
+        const added = context.metadata?.addedTracks ?? 0;
+        const totalTracks = context.metadata?.totalTracks ?? 0;
         parts.push(`\nAdding ${added} of ${totalTracks} tracks`);
         break;
 
@@ -233,8 +233,8 @@ export class ProgressNarrator {
         break;
 
       case 'enriching_artists':
-        const artistsEnriched = context.metadata?.enrichedCount || 0;
-        const artistsTotal = context.metadata?.totalArtists || 0;
+        const artistsEnriched = context.metadata?.enrichedCount ?? 0;
+        const artistsTotal = context.metadata?.totalArtists ?? 0;
         const recentArtist = context.metadata?.recentArtistName;
         if (artistsEnriched && artistsTotal) {
           parts.push(`\nFetching info for ${artistsEnriched} of ${artistsTotal} artists`);
@@ -245,8 +245,8 @@ export class ProgressNarrator {
         break;
 
       case 'enriching_tracks':
-        const enriched = context.metadata?.enrichedCount || 0;
-        const enrichTotal = context.metadata?.totalTracks || 0;
+        const enriched = context.metadata?.enrichedCount ?? 0;
+        const enrichTotal = context.metadata?.totalTracks ?? 0;
         const recentTags = context.metadata?.recentTags;
         const recentTrack = context.metadata?.recentTrackName;
         const recentTrackNames = context.metadata?.recentTrackNames;

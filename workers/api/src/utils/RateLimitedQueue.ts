@@ -194,9 +194,7 @@ export class RateLimitedQueue<T> {
       }
       // If there are still tasks to issue and we have capacity/tokens, tick with minTickMs
       if (this.running < this.concurrency && issued < total) {
-        if (this.timer === null) {
-          this.timer = setTimeout(tick, this.minTickMs) as unknown as number;
-        }
+        this.timer ??= setTimeout(tick, this.minTickMs) as unknown as number;
       }
     };
 
@@ -336,9 +334,7 @@ export class RateLimitedQueue<T> {
     const kick = () => {
       // If there are tasks and we have capacity, tick immediately
       if (this.running < this.concurrency && this.queue.length > 0) {
-        if (this.timer === null) {
-          this.timer = setTimeout(tick, this.minTickMs) as unknown as number;
-        }
+        this.timer ??= setTimeout(tick, this.minTickMs) as unknown as number;
       }
     };
 

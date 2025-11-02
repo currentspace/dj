@@ -145,7 +145,7 @@ function createSpotifyTools(spotifyToken: string): DynamicStructuredTool[] {
         const startTime = Date.now();
         console.log(
           `[Tool:get_recommendations] Getting ${
-            args.limit || 20
+            args.limit ?? 20
           } recommendations`
         );
         const seedInfo = [];
@@ -253,7 +253,7 @@ function createSpotifyTools(spotifyToken: string): DynamicStructuredTool[] {
             console.log(`[Tool:create_playlist] Playlist ID: ${result.id}`);
             console.log(
               `[Tool:create_playlist] Playlist URL: ${
-                result.external_urls?.spotify || "N/A"
+                result.external_urls?.spotify ?? "N/A"
               }`
             );
           }
@@ -341,7 +341,7 @@ function createSpotifyTools(spotifyToken: string): DynamicStructuredTool[] {
         );
         console.log(
           `[Tool:analyze_playlist] Include recommendations: ${
-            args.include_recommendations || false
+            args.include_recommendations ?? false
           }`
         );
         try {
@@ -354,8 +354,8 @@ function createSpotifyTools(spotifyToken: string): DynamicStructuredTool[] {
           if (result && typeof result === "object") {
             console.log(
               `[Tool:analyze_playlist] Success: Analyzed "${
-                result.playlist_name || "Unknown"
-              }" with ${result.total_tracks || 0} tracks in ${duration}ms`
+                result.playlist_name ?? "Unknown"
+              }" with ${result.total_tracks ?? 0} tracks in ${duration}ms`
             );
             if (result.audio_analysis) {
               console.log(
@@ -657,7 +657,7 @@ chatRouter.post("/message", async (c) => {
   console.log(`[Chat:${requestId}] Request ID: ${requestId}`);
   console.log(`[Chat:${requestId}] Timestamp: ${new Date().toISOString()}`);
   console.log(
-    `[Chat:${requestId}] Origin: ${c.req.header("origin") || "unknown"}`
+    `[Chat:${requestId}] Origin: ${c.req.header("origin") ?? "unknown"}`
   );
 
   try {
@@ -860,7 +860,7 @@ When editing playlists:
 2. Search for new tracks that fit the vibe
 3. Check audio compatibility with get_audio_features
 4. Use modify_playlist to make changes to playlist ID: ${
-        playlistId || "[needs ID]"
+        playlistId ?? "[needs ID]"
       }
 5. Explain your changes based on the analysis
 

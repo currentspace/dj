@@ -419,7 +419,7 @@ async function analyzePlaylist(args: any, token: string) {
 
     if (featuresResponse.ok) {
       const featuresData = await featuresResponse.json() as any;
-      audioFeatures = featuresData.audio_features || [];
+      audioFeatures = featuresData.audio_features ?? [];
       console.log(`[analyzePlaylist] Got audio features for ${audioFeatures.filter(f => f).length} tracks`);
     } else {
       const errorText = await featuresResponse.text();
@@ -445,12 +445,12 @@ async function analyzePlaylist(args: any, token: string) {
       avg_valence: validFeatures.reduce((sum: number, f: any) => sum + f.valence, 0) / validFeatures.length,
     } : null,
     // Add genre analysis if available
-    genres: Array.from(new Set(tracks.flatMap((t: any) => t.genres || []))).slice(0, 5),
-    playlist_description: playlist.description || 'No description',
+    genres: Array.from(new Set(tracks.flatMap((t: any) => t.genres ?? []))).slice(0, 5),
+    playlist_description: playlist.description ?? 'No description',
     playlist_name: playlist.name,
     // Only include a sample of tracks with minimal data (not full track objects)
     sample_tracks: tracks.slice(0, 5).map((track: any) => ({
-      artists: track.artists?.map((a: any) => a.name).join(', ') || 'Unknown',
+      artists: track.artists?.map((a: any) => a.name).join(', ') ?? 'Unknown',
       duration_ms: track.duration_ms,
       name: track.name,
       popularity: track.popularity
@@ -459,7 +459,7 @@ async function analyzePlaylist(args: any, token: string) {
     top_artists: Object.entries(
       tracks.reduce((acc: any, track: any) => {
         track.artists?.forEach((artist: any) => {
-          acc[artist.name] = (acc[artist.name] || 0) + 1;
+          acc[artist.name] = (acc[artist.name] ?? 0) + 1;
         });
         return acc;
       }, {})
@@ -521,9 +521,9 @@ async function createPlaylist(args: any, token: string) {
       `https://api.spotify.com/v1/users/${userId}/playlists`,
       {
         body: JSON.stringify({
-          description: args.description || '',
+          description: args.description ?? '',
           name: args.name,
-          public: args.public || false
+          public: args.public ?? false
         }),
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -593,7 +593,7 @@ async function getAlbumInfo(args: any, token: string) {
   const album = await response.json() as any;
 
   // Get track IDs for audio features
-  const trackIds = album.tracks?.items?.map((t: any) => t.id).filter(Boolean) || [];
+  const trackIds = album.tracks?.items?.map((t: any) => t.id).filter(Boolean) ?? [];
 
   let audioFeatures = [];
   if (trackIds.length > 0) {
@@ -610,7 +610,7 @@ async function getAlbumInfo(args: any, token: string) {
 
     if (featuresResponse.ok) {
       const featuresData = await featuresResponse.json() as any;
-      audioFeatures = featuresData.audio_features || [];
+      audioFeatures = featuresData.audio_features ?? [];
     }
   }
 
@@ -660,7 +660,7 @@ async function getArtistTopTracks(args: any, token: string) {
   }
 
   const data = await response.json() as any;
-  return data.tracks || [];
+  return data.tracks ?? [];
 }
 
 async function getAudioFeatures(args: any, token: string) {
@@ -695,7 +695,7 @@ async function getAudioFeatures(args: any, token: string) {
   }
 
   const data = await response.json() as any;
-  const features = data.audio_features || [];
+  const features = data.audio_features ?? [];
   console.log(`[getAudioFeatures] Retrieved ${features.length} audio features`);
   return features;
 }
@@ -717,7 +717,7 @@ async function getAvailableGenres(token: string) {
   }
 
   const data = await response.json() as any;
-  return data.genres || [];
+  return data.genres ?? [];
 }
 
 async function getRecommendations(args: any, token: string) {
@@ -729,7 +729,7 @@ async function getRecommendations(args: any, token: string) {
   if (args.target_energy !== undefined) params.append('target_energy', args.target_energy.toString());
   if (args.target_danceability !== undefined) params.append('target_danceability', args.target_danceability.toString());
   if (args.target_valence !== undefined) params.append('target_valence', args.target_valence.toString());
-  params.append('limit', (args.limit || 20).toString());
+  params.append('limit', (args.limit ?? 20).toString());
 
   const response = await rateLimitedSpotifyCall(
     () => fetch(
@@ -747,7 +747,7 @@ async function getRecommendations(args: any, token: string) {
   }
 
   const data = await response.json() as any;
-  return data.tracks || [];
+  return data.tracks ?? [];
 }
 
 async function getRelatedArtists(args: any, token: string) {
@@ -769,7 +769,7 @@ async function getRelatedArtists(args: any, token: string) {
   }
 
   const data = await response.json() as any;
-  return data.artists || [];
+  return data.artists ?? [];
 }
 
 async function getTrackDetails(args: any, token: string) {
@@ -893,7 +893,7 @@ async function searchArtists(args: any, token: string) {
   }
 
   const data = await response.json() as any;
-  return data.artists?.items || [];
+  return data.artists?.items ?? [];
 }
 
 // Implementation functions

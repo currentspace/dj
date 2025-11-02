@@ -255,7 +255,7 @@ export function SSETestPage() {
 
         // Parse SSE events
         const lines = buffer.split('\n')
-        buffer = lines.pop() || ''
+        buffer = lines.pop() ?? ''
 
         for (const line of lines) {
           if (line.startsWith('data: ')) {

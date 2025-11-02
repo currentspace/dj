@@ -136,11 +136,11 @@ anthropicStatusRouter.get('/usage', async (c) => {
     const now = new Date();
 
     // Parse rate limit headers
-    const requestsLimit = parseInt(response.headers.get('anthropic-ratelimit-requests-limit') || '0');
-    const requestsRemaining = parseInt(response.headers.get('anthropic-ratelimit-requests-remaining') || '0');
+    const requestsLimit = parseInt(response.headers.get('anthropic-ratelimit-requests-limit') ?? '0');
+    const requestsRemaining = parseInt(response.headers.get('anthropic-ratelimit-requests-remaining') ?? '0');
     const requestsReset = response.headers.get('anthropic-ratelimit-requests-reset');
-    const tokensLimit = parseInt(response.headers.get('anthropic-ratelimit-tokens-limit') || '0');
-    const tokensRemaining = parseInt(response.headers.get('anthropic-ratelimit-tokens-remaining') || '0');
+    const tokensLimit = parseInt(response.headers.get('anthropic-ratelimit-tokens-limit') ?? '0');
+    const tokensRemaining = parseInt(response.headers.get('anthropic-ratelimit-tokens-remaining') ?? '0');
     const tokensReset = response.headers.get('anthropic-ratelimit-tokens-reset');
 
     const requestsUsed = requestsLimit - requestsRemaining;

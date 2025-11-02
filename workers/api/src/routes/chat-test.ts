@@ -15,7 +15,7 @@ chatTestRouter.post("/simple", async (c) => {
 
   try {
     const body = await c.req.json();
-    const message = body.message || "Hello, can you respond?";
+    const message = body.message ?? "Hello, can you respond?";
 
     // Initialize Claude WITHOUT tools
     const llm = new ChatAnthropic({
@@ -93,7 +93,7 @@ chatTestRouter.post("/with-tools", async (c) => {
 
   try {
     const body = await c.req.json();
-    const message = body.message || "Hello, can you respond?";
+    const message = body.message ?? "Hello, can you respond?";
 
     // Initialize Claude
     const llm = new ChatAnthropic({

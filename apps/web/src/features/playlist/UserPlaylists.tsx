@@ -56,7 +56,7 @@ function UserPlaylists({ onPlaylistSelect, selectedPlaylist }: UserPlaylistsProp
       }
 
       const data = await response.json();
-      setPlaylists(data.items || []);
+      setPlaylists(data.items ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load playlists');
     } finally {

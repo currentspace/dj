@@ -123,7 +123,7 @@ export class AudioEnrichmentService {
     // Get ISRC from Spotify track
     const isrc = track.external_ids?.isrc;
 
-    console.log(`[BPMEnrichment] Track "${track.name}" ISRC: ${isrc || 'NOT FOUND'}`);
+    console.log(`[BPMEnrichment] Track "${track.name}" ISRC: ${isrc ?? 'NOT FOUND'}`);
 
     let enrichment: BPMEnrichment;
 
