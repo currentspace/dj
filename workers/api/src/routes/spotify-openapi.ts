@@ -7,13 +7,11 @@ import type {OpenAPIHono} from '@hono/zod-openapi'
 
 import {exchangeSpotifyToken, getSpotifyAuthUrl, handleSpotifyCallback, searchSpotify} from '@dj/api-contracts'
 
-import {SpotifyTokenResponseSchema} from '@dj/shared-types'
+import {parse, SpotifySearchResponseSchema, SpotifyTokenResponseSchema} from '@dj/shared-types'
 
 import type {Env} from '../index'
 
 import {isSuccessResponse, safeParse} from '../lib/guards'
-import {SpotifySearchResponseSchema} from '../lib/schemas'
-import {parse} from '@dj/shared-types'
 
 const SPOTIFY_AUTH_URL = 'https://accounts.spotify.com/authorize'
 const SPOTIFY_TOKEN_URL = 'https://accounts.spotify.com/api/token'
