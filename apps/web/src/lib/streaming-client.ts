@@ -40,15 +40,28 @@ export class ChatStreamClient {
     callbacks: StreamCallbacks,
     options?: {signal?: AbortSignal},
   ): Promise<{close: () => void}> {
-    // Get auth token
-    const token = localStorage.getItem('spotify_token')
-    if (!token) {
+    // Get auth token from new storage format
+    const tokenDataStr = localStorage.getItem('spotify_token_data')
+    if (!tokenDataStr) {
       callbacks.onError?.('Not authenticated')
       return {
         close: () => {
           /* empty */
         },
       } // Return no-op handle
+    }
+
+    let token: string
+    try {
+      const tokenData = JSON.parse(tokenDataStr) as {token: string; expiresAt: null | number}
+      token = tokenData.token
+    } catch {
+      callbacks.onError?.('Invalid token data')
+      return {
+        close: () => {
+          /* empty */
+        },
+      }
     }
 
     // Close any existing connection
