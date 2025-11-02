@@ -70,7 +70,7 @@ export function SSETestPage() {
 
         buffer += decoder.decode(value, { stream: true })
         const lines = buffer.split('\n')
-        buffer = lines.pop() || ''
+        buffer = lines.pop() ?? ''
 
         for (const line of lines) {
           if (line.startsWith('data: ')) {
@@ -120,7 +120,7 @@ export function SSETestPage() {
 
         buffer += decoder.decode(value, { stream: true })
         const lines = buffer.split('\n')
-        buffer = lines.pop() || ''
+        buffer = lines.pop() ?? ''
 
         for (const line of lines) {
           if (line.startsWith('data: ')) {
@@ -215,7 +215,7 @@ export function SSETestPage() {
 
       addLog(`Response status: ${response.status}`, response.ok ? 'success' : 'error')
 
-      const contentType = response.headers.get('content-type') || ''
+      const contentType = response.headers.get('content-type') ?? ''
       addLog(`Content-Type: ${contentType}`, contentType.includes('text/event-stream') ? 'success' : 'warning')
 
       if (!response.ok) {
