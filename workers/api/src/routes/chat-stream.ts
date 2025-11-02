@@ -2077,7 +2077,7 @@ chatStreamRouter.post('/message', async c => {
           return
         }
         getLogger()?.info(`[Stream:${requestId}] Sending heartbeat`)
-        await sseWriter.writeHeartbeat()
+        void sseWriter.writeHeartbeat()
       }, 15000)
 
       try {
@@ -2942,7 +2942,7 @@ chatStreamRouter.get('/events', async c => {
         return
       }
       try {
-        await writer.write(encoder.encode(': heartbeat\n\n'))
+        void writer.write(encoder.encode(': heartbeat\n\n'))
       } catch {
         clearInterval(heartbeatInterval)
       }
