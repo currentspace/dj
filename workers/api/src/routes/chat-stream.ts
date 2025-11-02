@@ -401,7 +401,7 @@ function createStreamingSpotifyTools(
               `get seed tracks for playlist ${contextPlaylistId}`
             );
 
-            if (playlistResponse && playlistResponse.ok) {
+            if (playlistResponse?.ok) {
               const playlistData = await playlistResponse.json() as any;
               const trackIds = playlistData.items
                 ?.map((item: any) => item.track?.id)
@@ -798,7 +798,7 @@ Return ONLY valid JSON:
               `search similar: ${artist} - ${track}`
             );
 
-            if (response && response.ok) {
+            if (response?.ok) {
               const data = await response.json() as any;
               const tracks = data.tracks?.items ?? [];
 
@@ -1249,7 +1249,7 @@ async function executeSpotifyToolWithProgress(
           `get ${artistIdsArray.length} artists`
         );
 
-        if (artistsResponse && artistsResponse.ok) {
+        if (artistsResponse?.ok) {
           const artistsData = await artistsResponse.json() as any;
           const genreMap = new Map<string, number>();
 
