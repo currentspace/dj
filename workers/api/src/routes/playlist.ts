@@ -115,7 +115,7 @@ playlistRouter.post('/generate', async (c) => {
 
                 // Validate the enhanced track
                 const validatedTrack = safeParse(PlaylistTrackSchema, enhancedTrack)
-                return validatedTrack || track
+                return validatedTrack ?? track
               }
             }
           } catch (err) {
