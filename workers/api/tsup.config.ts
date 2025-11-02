@@ -11,7 +11,7 @@ export default defineConfig({
     options.treeShaking = true;
     // If the lib checks process.env, prevent inlining Node shims
     options.define = {
-      ...(options.define || {}),
+      ...(options.define ?? {}),
       'process.env.DEBUG': 'false',
       'process.env.NODE_DEBUG': 'false',
     };

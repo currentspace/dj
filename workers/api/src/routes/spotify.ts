@@ -134,12 +134,12 @@ spotifyRouter.get('/callback', async (c) => {
 
     if (error) {
       console.error('OAuth error:', error)
-      return c.redirect(`${c.env.FRONTEND_URL || 'https://dj.current.space'}?error=${encodeURIComponent(error)}`)
+      return c.redirect(`${c.env.FRONTEND_URL ?? 'https://dj.current.space'}?error=${encodeURIComponent(error)}`)
     }
 
     if (!code || !state) {
       console.error('Missing code or state parameter')
-      return c.redirect(`${c.env.FRONTEND_URL || 'https://dj.current.space'}?error=missing_parameters`)
+      return c.redirect(`${c.env.FRONTEND_URL ?? 'https://dj.current.space'}?error=missing_parameters`)
     }
 
     // Retrieve and verify the signed cookie
@@ -149,20 +149,20 @@ spotifyRouter.get('/callback', async (c) => {
 
     if (!cookieValue) {
       console.error('Missing OAuth cookie')
-      return c.redirect(`${c.env.FRONTEND_URL || 'https://dj.current.space'}?error=missing_cookie`)
+      return c.redirect(`${c.env.FRONTEND_URL ?? 'https://dj.current.space'}?error=missing_cookie`)
     }
 
     const [payload, signature] = cookieValue.split('.')
     if (!payload || !signature) {
       console.error('Invalid cookie format')
-      return c.redirect(`${c.env.FRONTEND_URL || 'https://dj.current.space'}?error=invalid_cookie`)
+      return c.redirect(`${c.env.FRONTEND_URL ?? 'https://dj.current.space'}?error=invalid_cookie`)
     }
 
     // Verify HMAC signature
     const isValidSignature = await hmacVerify(payload, signature, c.env.SPOTIFY_CLIENT_SECRET)
     if (!isValidSignature) {
       console.error('Invalid cookie signature')
-      return c.redirect(`${c.env.FRONTEND_URL || 'https://dj.current.space'}?error=tampered_cookie`)
+      return c.redirect(`${c.env.FRONTEND_URL ?? 'https://dj.current.space'}?error=tampered_cookie`)
     }
 
     // Decode and validate cookie data
@@ -172,14 +172,14 @@ spotifyRouter.get('/callback', async (c) => {
     // Validate state matches (CSRF protection)
     if (state !== cookieState) {
       console.error('State mismatch - possible CSRF attack')
-      return c.redirect(`${c.env.FRONTEND_URL || 'https://dj.current.space'}?error=state_mismatch`)
+      return c.redirect(`${c.env.FRONTEND_URL ?? 'https://dj.current.space'}?error=state_mismatch`)
     }
 
     // Check cookie age (15 minutes max)
     const maxAge = 15 * 60 * 1000
     if (Date.now() - timestamp > maxAge) {
       console.error('OAuth cookie expired')
-      return c.redirect(`${c.env.FRONTEND_URL || 'https://dj.current.space'}?error=expired_auth`)
+      return c.redirect(`${c.env.FRONTEND_URL ?? 'https://dj.current.space'}?error=expired_auth`)
     }
 
     // Exchange code for tokens server-side
@@ -201,21 +201,21 @@ spotifyRouter.get('/callback', async (c) => {
     if (!tokenResponse.ok) {
       const errorText = await tokenResponse.text()
       console.error('Token exchange failed:', tokenResponse.status, errorText)
-      return c.redirect(`${c.env.FRONTEND_URL || 'https://dj.current.space'}?error=token_exchange_failed`)
+      return c.redirect(`${c.env.FRONTEND_URL ?? 'https://dj.current.space'}?error=token_exchange_failed`)
     }
 
     const tokenData = await tokenResponse.json()
 
     if (!tokenData.access_token) {
       console.error('No access token in response')
-      return c.redirect(`${c.env.FRONTEND_URL || 'https://dj.current.space'}?error=no_access_token`)
+      return c.redirect(`${c.env.FRONTEND_URL ?? 'https://dj.current.space'}?error=no_access_token`)
     }
 
     // Clear the OAuth cookie
     c.header('Set-Cookie', `spotify_oauth=; Max-Age=0; Secure; SameSite=Lax; Path=/; HttpOnly`)
 
     // Redirect back to SPA with success and token
-    const redirectUrl = new URL(c.env.FRONTEND_URL || 'https://dj.current.space')
+    const redirectUrl = new URL(c.env.FRONTEND_URL ?? 'https://dj.current.space')
     redirectUrl.searchParams.set('spotify_token', tokenData.access_token)
     redirectUrl.searchParams.set('auth_success', 'true')
 
@@ -223,7 +223,7 @@ spotifyRouter.get('/callback', async (c) => {
 
   } catch (error) {
     console.error('Callback error:', error)
-    return c.redirect(`${c.env.FRONTEND_URL || 'https://dj.current.space'}?error=callback_failed`)
+    return c.redirect(`${c.env.FRONTEND_URL ?? 'https://dj.current.space'}?error=callback_failed`)
   }
 })
 
