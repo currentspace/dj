@@ -144,7 +144,7 @@ class SSEWriter {
         const message = `data: ${JSON.stringify(event)}\n\n`
         await this.writer.write(this.encoder.encode(message))
       } catch (error) {
-        console.error('SSE write error:', error)
+        getLogger()?.error('SSE write error:', error)
         this.closed = true
       }
     })
@@ -165,7 +165,7 @@ class SSEWriter {
         const message = `data: ${JSON.stringify(event)}\n\n`
         await this.writer.write(this.encoder.encode(message))
       } catch (error) {
-        console.error('SSE write error:', error)
+        getLogger()?.error('SSE write error:', error)
         this.closed = true
       }
     })
@@ -179,7 +179,7 @@ class SSEWriter {
       try {
         await this.writer.write(this.encoder.encode(': heartbeat\n\n'))
       } catch (error) {
-        console.error('Heartbeat write error:', error)
+        getLogger()?.error('Heartbeat write error:', error)
         this.closed = true
       }
     })
@@ -241,7 +241,7 @@ function createStreamingSpotifyTools(
         // Auto-inject playlist ID if missing or empty
         const finalArgs = {...args}
         if (!args.playlist_id && contextPlaylistId) {
-          console.log(`[analyze_playlist] Auto-injecting playlist_id: ${contextPlaylistId}`)
+          getLogger()?.info(`[analyze_playlist] Auto-injecting playlist_id: ${contextPlaylistId}`)
           finalArgs.playlist_id = contextPlaylistId
         }
 
@@ -293,7 +293,7 @@ function createStreamingSpotifyTools(
         }
 
         if (!finalArgs.playlist_id && contextPlaylistId) {
-          console.log(`[get_playlist_tracks] Auto-injecting playlist_id: ${contextPlaylistId}`)
+          getLogger()?.info(`[get_playlist_tracks] Auto-injecting playlist_id: ${contextPlaylistId}`)
           finalArgs.playlist_id = contextPlaylistId
         }
 
@@ -470,7 +470,7 @@ function createStreamingSpotifyTools(
           contextPlaylistId &&
           (mode === 'analyze' || mode === 'create')
         ) {
-          console.log(`[get_recommendations] Auto-fetching seed tracks from playlist: ${contextPlaylistId}`)
+          getLogger()?.info(`[get_recommendations] Auto-fetching seed tracks from playlist: ${contextPlaylistId}`)
 
           try {
             // Fetch playlist tracks to use as seeds
@@ -493,13 +493,13 @@ function createStreamingSpotifyTools(
 
               if (trackIds.length > 0) {
                 finalArgs.seed_tracks = trackIds
-                console.log(
+                getLogger()?.info(
                   `[get_recommendations] Auto-injected ${finalArgs.seed_tracks.length} seed tracks from playlist`,
                 )
               }
             }
           } catch (error) {
-            console.error(`[get_recommendations] Failed to auto-fetch seed tracks:`, error)
+            getLogger()?.error(`[get_recommendations] Failed to auto-fetch seed tracks:`, error)
           }
         }
 
@@ -669,7 +669,7 @@ Return ONLY valid JSON:
 
           return vibeAnalysis
         } catch (error) {
-          console.error('[extract_playlist_vibe] AI analysis failed:', error)
+          getLogger()?.error('[extract_playlist_vibe] AI analysis failed:', error)
 
           // Fallback: Basic analysis from tags
           const tags =
@@ -894,7 +894,7 @@ Return ONLY valid JSON:
 
           return strategy
         } catch (error) {
-          console.error('[plan_discovery_strategy] AI planning failed:', error)
+          getLogger()?.error('[plan_discovery_strategy] AI planning failed:', error)
 
           // Fallback: Basic strategy
           const fallbackStrategy = {
@@ -976,7 +976,7 @@ Return ONLY valid JSON:
             // Parse "Artist - Track" format
             const parts = trackString.split(' - ')
             if (parts.length < 2) {
-              console.warn(`[recommend_from_similar] Invalid format: "${trackString}"`)
+              getLogger()?.warn(`[recommend_from_similar] Invalid format: "${trackString}"`)
               continue
             }
 
@@ -1020,7 +1020,7 @@ Return ONLY valid JSON:
             // Rate limiting: 25ms between requests
             await new Promise(resolve => setTimeout(resolve, 25))
           } catch (error) {
-            console.error(`[recommend_from_similar] Error searching "${trackString}":`, error)
+            getLogger()?.error(`[recommend_from_similar] Error searching "${trackString}":`, error)
           }
         }
 
@@ -1103,7 +1103,7 @@ Return ONLY valid JSON:
           query += otherTags.join(' ')
         }
 
-        console.log(`[recommend_from_tags] Search query: ${query}`)
+        getLogger()?.info(`[recommend_from_tags] Search query: ${query}`)
 
         const response = await rateLimitedSpotifyCall(
           () =>
@@ -1243,7 +1243,7 @@ Return ONLY a JSON object with this structure:
             new HumanMessage(curationPrompt),
           ])
 
-          console.log(`[curate_recommendations] Claude response:`, response.content)
+          getLogger()?.info(`[curate_recommendations] Claude response:`, response.content)
 
           // Parse JSON from response
           const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content)
@@ -1287,7 +1287,7 @@ Return ONLY a JSON object with this structure:
             total_curated: orderedTracks.length,
           }
         } catch (error) {
-          console.error('[curate_recommendations] AI curation failed:', error)
+          getLogger()?.error('[curate_recommendations] AI curation failed:', error)
 
           // Fallback: Sort by popularity and return top N
           const fallbackTracks = args.candidate_tracks
@@ -1363,7 +1363,7 @@ async function executeSpotifyToolWithProgress(
   if (!logger) {
     throw new Error('executeSpotifyToolWithProgress called outside logger context')
   }
-  console.log(`[Tool] Executing ${toolName} with args:`, JSON.stringify(args).substring(0, 200))
+  getLogger()?.info(`[Tool] Executing ${toolName} with args:`, JSON.stringify(args).substring(0, 200))
 
   if (toolName === 'analyze_playlist') {
     const {playlist_id} = args
@@ -1392,7 +1392,7 @@ async function executeSpotifyToolWithProgress(
         : '🔍 Fetching playlist information...'
       sseWriter.writeAsync({data: fetchMessage, type: 'thinking'})
 
-      console.log(`[SpotifyAPI] Fetching playlist details: ${playlist_id}`)
+      getLogger()?.info(`[SpotifyAPI] Fetching playlist details: ${playlist_id}`)
       const playlistResponse = await rateLimitedSpotifyCall(
         () =>
           fetch(`https://api.spotify.com/v1/playlists/${playlist_id}`, {
@@ -1402,14 +1402,14 @@ async function executeSpotifyToolWithProgress(
         `get playlist ${playlist_id}`,
       )
 
-      console.log(`[SpotifyAPI] Playlist response status: ${playlistResponse?.status}`)
+      getLogger()?.info(`[SpotifyAPI] Playlist response status: ${playlistResponse?.status}`)
       if (!playlistResponse?.ok) {
         throw new Error(`Failed to get playlist: ${playlistResponse?.status || 'null response'}`)
       }
 
       const rawPlaylist = await playlistResponse.json()
       const playlist = SpotifyPlaylistFullSchema.parse(rawPlaylist)
-      console.log(`[SpotifyAPI] Playlist loaded: "${playlist.name}" with ${playlist.tracks.total} tracks`)
+      getLogger()?.info(`[SpotifyAPI] Playlist loaded: "${playlist.name}" with ${playlist.tracks.total} tracks`)
 
       const foundMessage = narrator
         ? await narrator.generateMessage({
@@ -1435,7 +1435,7 @@ async function executeSpotifyToolWithProgress(
         : '🎵 Fetching track details...'
       sseWriter.writeAsync({data: tracksMessage, type: 'thinking'})
 
-      console.log(`[SpotifyAPI] Fetching tracks from playlist: ${playlist_id}`)
+      getLogger()?.info(`[SpotifyAPI] Fetching tracks from playlist: ${playlist_id}`)
       const tracksResponse = await rateLimitedSpotifyCall(
         () =>
           fetch(`https://api.spotify.com/v1/playlists/${playlist_id}/tracks?limit=100`, {
@@ -1445,10 +1445,10 @@ async function executeSpotifyToolWithProgress(
         `get tracks for playlist ${playlist_id}`,
       )
 
-      console.log(`[SpotifyAPI] Tracks response status: ${tracksResponse?.status}`)
+      getLogger()?.info(`[SpotifyAPI] Tracks response status: ${tracksResponse?.status}`)
       if (!tracksResponse?.ok) {
         const errorBody = tracksResponse ? await tracksResponse.text() : 'null response'
-        console.error(`[SpotifyAPI] Tracks fetch failed: ${tracksResponse?.status || 'null'} - ${errorBody}`)
+        getLogger()?.error(`[SpotifyAPI] Tracks fetch failed: ${tracksResponse?.status || 'null'} - ${errorBody}`)
         throw new Error(`Failed to get tracks: ${tracksResponse?.status || 'null response'}`)
       }
 
@@ -1459,20 +1459,20 @@ async function executeSpotifyToolWithProgress(
         .filter((track): track is SpotifyTrackFull => track !== null)
       const trackIds = tracks.map(t => t.id)
 
-      console.log(`[SpotifyAPI] Loaded ${tracks.length} tracks from playlist`)
+      getLogger()?.info(`[SpotifyAPI] Loaded ${tracks.length} tracks from playlist`)
 
       // Debug: Log first 3 tracks' structure to see what fields Spotify returns
       if (tracks.length > 0) {
-        console.log(`[SpotifyAPI] ========== TRACK STRUCTURE DEBUG ==========`)
+        getLogger()?.info(`[SpotifyAPI] ========== TRACK STRUCTURE DEBUG ==========`)
         tracks.slice(0, 3).forEach((track, idx) => {
-          console.log(`[SpotifyAPI] Track ${idx + 1}: "${track.name}" by ${track.artists[0]?.name}`)
-          console.log(`[SpotifyAPI]   - ID: ${track.id}`)
-          console.log(`[SpotifyAPI]   - has external_ids: ${!!track.external_ids}`)
-          console.log(`[SpotifyAPI]   - external_ids value:`, track.external_ids)
-          console.log(`[SpotifyAPI]   - ISRC: ${track.external_ids.isrc ?? 'NOT PRESENT'}`)
-          console.log(`[SpotifyAPI]   - Available fields:`, Object.keys(track).join(', '))
+          getLogger()?.info(`[SpotifyAPI] Track ${idx + 1}: "${track.name}" by ${track.artists[0]?.name}`)
+          getLogger()?.info(`[SpotifyAPI]   - ID: ${track.id}`)
+          getLogger()?.info(`[SpotifyAPI]   - has external_ids: ${!!track.external_ids}`)
+          getLogger()?.info(`[SpotifyAPI]   - external_ids value:`, track.external_ids)
+          getLogger()?.info(`[SpotifyAPI]   - ISRC: ${track.external_ids.isrc ?? 'NOT PRESENT'}`)
+          getLogger()?.info(`[SpotifyAPI]   - Available fields:`, Object.keys(track).join(', '))
         })
-        console.log(`[SpotifyAPI] ========== END TRACK STRUCTURE DEBUG ==========`)
+        getLogger()?.info(`[SpotifyAPI] ========== END TRACK STRUCTURE DEBUG ==========`)
       }
 
       sseWriter.writeAsync({
@@ -1601,8 +1601,8 @@ async function executeSpotifyToolWithProgress(
       } = null
       if (env?.AUDIO_FEATURES_CACHE) {
         try {
-          console.log(`[DeezerEnrichment] ========== STARTING DEEZER ENRICHMENT ==========`)
-          console.log(`[DeezerEnrichment] KV Cache available: YES`)
+          getLogger()?.info(`[DeezerEnrichment] ========== STARTING DEEZER ENRICHMENT ==========`)
+          getLogger()?.info(`[DeezerEnrichment] KV Cache available: YES`)
           const enrichmentService = new AudioEnrichmentService(env.AUDIO_FEATURES_CACHE)
 
           // Process tracks sequentially with rate limiting at 40 TPS
@@ -1612,7 +1612,7 @@ async function executeSpotifyToolWithProgress(
           const gainResults: number[] = []
           let enrichedCount = 0
 
-          console.log(`[DeezerEnrichment] Will attempt to enrich ${tracksToEnrich.length} tracks`)
+          getLogger()?.info(`[DeezerEnrichment] Will attempt to enrich ${tracksToEnrich.length} tracks`)
           sseWriter.writeAsync({
             data: `🎵 Enriching ${tracksToEnrich.length} tracks with Deezer data (BPM, rank, gain)...`,
             type: 'thinking',
@@ -1620,35 +1620,35 @@ async function executeSpotifyToolWithProgress(
 
           // Debug: Check if tracks have external_ids
           const tracksWithISRC = tracksToEnrich.filter(t => t.external_ids?.isrc).length
-          console.log(
+          getLogger()?.info(
             `[BPMEnrichment] Pre-enrichment ISRC check: ${tracksWithISRC}/${tracksToEnrich.length} tracks have ISRC`,
           )
 
           // Debug: Log first 3 tracks to see their structure in detail
           if (tracksToEnrich.length > 0) {
-            console.log(`[BPMEnrichment] ========== ENRICHMENT TRACK STRUCTURE DEBUG ==========`)
+            getLogger()?.info(`[BPMEnrichment] ========== ENRICHMENT TRACK STRUCTURE DEBUG ==========`)
             tracksToEnrich.slice(0, 3).forEach((track, idx) => {
-              console.log(`[BPMEnrichment] Track ${idx + 1}: "${track.name}" by ${track.artists?.[0]?.name}`)
-              console.log(`[BPMEnrichment]   - ID: ${track.id}`)
-              console.log(`[BPMEnrichment]   - Duration: ${track.duration_ms}ms`)
-              console.log(`[BPMEnrichment]   - has external_ids: ${!!track.external_ids}`)
-              console.log(`[BPMEnrichment]   - external_ids type: ${typeof track.external_ids}`)
-              console.log(`[BPMEnrichment]   - external_ids value:`, JSON.stringify(track.external_ids))
-              console.log(`[BPMEnrichment]   - ISRC: ${track.external_ids?.isrc ?? 'NOT PRESENT'}`)
-              console.log(`[BPMEnrichment]   - Track object keys:`, Object.keys(track).join(', '))
+              getLogger()?.info(`[BPMEnrichment] Track ${idx + 1}: "${track.name}" by ${track.artists?.[0]?.name}`)
+              getLogger()?.info(`[BPMEnrichment]   - ID: ${track.id}`)
+              getLogger()?.info(`[BPMEnrichment]   - Duration: ${track.duration_ms}ms`)
+              getLogger()?.info(`[BPMEnrichment]   - has external_ids: ${!!track.external_ids}`)
+              getLogger()?.info(`[BPMEnrichment]   - external_ids type: ${typeof track.external_ids}`)
+              getLogger()?.info(`[BPMEnrichment]   - external_ids value:`, JSON.stringify(track.external_ids))
+              getLogger()?.info(`[BPMEnrichment]   - ISRC: ${track.external_ids?.isrc ?? 'NOT PRESENT'}`)
+              getLogger()?.info(`[BPMEnrichment]   - Track object keys:`, Object.keys(track).join(', '))
             })
-            console.log(`[BPMEnrichment] ========== END ENRICHMENT TRACK STRUCTURE DEBUG ==========`)
+            getLogger()?.info(`[BPMEnrichment] ========== END ENRICHMENT TRACK STRUCTURE DEBUG ==========`)
           }
 
           if (tracksWithISRC === 0) {
-            console.warn(`[BPMEnrichment] ⚠️ CRITICAL: No tracks have ISRC in external_ids`)
-            console.warn(`[BPMEnrichment] Will need to fetch full track details from Spotify /tracks API`)
+            getLogger()?.warn(`[BPMEnrichment] ⚠️ CRITICAL: No tracks have ISRC in external_ids`)
+            getLogger()?.warn(`[BPMEnrichment] Will need to fetch full track details from Spotify /tracks API`)
             sseWriter.writeAsync({
               data: '⚠️ Tracks missing ISRC data - fetching from Spotify API...',
               type: 'thinking',
             })
           } else {
-            console.log(`[BPMEnrichment] ✅ Found ${tracksWithISRC} tracks with ISRC, proceeding with enrichment`)
+            getLogger()?.info(`[BPMEnrichment] ✅ Found ${tracksWithISRC} tracks with ISRC, proceeding with enrichment`)
           }
 
           for (let i = 0; i < tracksToEnrich.length; i++) {
@@ -1657,7 +1657,7 @@ async function executeSpotifyToolWithProgress(
 
             // Log every track attempt for first 5 tracks, then every 10th
             if (i < 5 || i % 10 === 0) {
-              console.log(`[BPMEnrichment] Processing track ${i + 1}/${tracksToEnrich.length}: "${track.name}"`)
+              getLogger()?.info(`[BPMEnrichment] Processing track ${i + 1}/${tracksToEnrich.length}: "${track.name}"`)
             }
 
             try {
@@ -1671,7 +1671,7 @@ async function executeSpotifyToolWithProgress(
 
               // Log the track being sent to enrichment service
               if (i < 3) {
-                console.log(`[BPMEnrichment] Calling enrichTrack with:`, {
+                getLogger()?.info(`[BPMEnrichment] Calling enrichTrack with:`, {
                   has_external_ids: !!spotifyTrack.external_ids,
                   id: spotifyTrack.id,
                   isrc: spotifyTrack.external_ids?.isrc ?? 'NONE',
@@ -1683,7 +1683,7 @@ async function executeSpotifyToolWithProgress(
 
               // Log the result for first few tracks
               if (i < 3) {
-                console.log(`[DeezerEnrichment] Result for "${track.name}":`, {
+                getLogger()?.info(`[DeezerEnrichment] Result for "${track.name}":`, {
                   bpm: deezerResult.bpm,
                   gain: deezerResult.gain,
                   rank: deezerResult.rank,
@@ -1722,12 +1722,12 @@ async function executeSpotifyToolWithProgress(
             }
           }
 
-          console.log(`[DeezerEnrichment] ========== ENRICHMENT COMPLETE ==========`)
-          console.log(`[DeezerEnrichment] Total tracks processed: ${tracksToEnrich.length}`)
-          console.log(`[DeezerEnrichment] Tracks with Deezer match: ${enrichedCount}`)
-          console.log(`[DeezerEnrichment] BPM results: ${bpmResults.length}`)
-          console.log(`[DeezerEnrichment] Rank results: ${rankResults.length}`)
-          console.log(`[DeezerEnrichment] Gain results: ${gainResults.length}`)
+          getLogger()?.info(`[DeezerEnrichment] ========== ENRICHMENT COMPLETE ==========`)
+          getLogger()?.info(`[DeezerEnrichment] Total tracks processed: ${tracksToEnrich.length}`)
+          getLogger()?.info(`[DeezerEnrichment] Tracks with Deezer match: ${enrichedCount}`)
+          getLogger()?.info(`[DeezerEnrichment] BPM results: ${bpmResults.length}`)
+          getLogger()?.info(`[DeezerEnrichment] Rank results: ${rankResults.length}`)
+          getLogger()?.info(`[DeezerEnrichment] Gain results: ${gainResults.length}`)
 
           if (enrichedCount > 0) {
             deezerData = {
@@ -1983,11 +1983,11 @@ async function executeSpotifyToolWithProgress(
 
       // Log data size for debugging
       const analysisJson = JSON.stringify(analysis)
-      console.log(`[Tool] analyze_playlist completed successfully`)
-      console.log(
+      getLogger()?.info(`[Tool] analyze_playlist completed successfully`)
+      getLogger()?.info(
         `[Tool] Analysis JSON size: ${analysisJson.length} bytes (${(analysisJson.length / 1024).toFixed(1)}KB)`,
       )
-      console.log(`[Tool] Returning metadata analysis with ${trackIds.length} track IDs`)
+      getLogger()?.info(`[Tool] Returning metadata analysis with ${trackIds.length} track IDs`)
 
       return analysis
     } catch (error) {
@@ -2014,15 +2014,15 @@ async function executeSpotifyToolWithProgress(
  */
 chatStreamRouter.post('/message', async c => {
   const requestId = crypto.randomUUID().substring(0, 8)
-  console.log(`[Stream:${requestId}] ========== NEW STREAMING REQUEST ==========`)
-  console.log(`[Stream:${requestId}] Method: ${c.req.method}`)
-  console.log(`[Stream:${requestId}] URL: ${c.req.url}`)
-  console.log(`[Stream:${requestId}] Headers:`, Object.fromEntries(c.req.raw.headers.entries()))
+  getLogger()?.info(`[Stream:${requestId}] ========== NEW STREAMING REQUEST ==========`)
+  getLogger()?.info(`[Stream:${requestId}] Method: ${c.req.method}`)
+  getLogger()?.info(`[Stream:${requestId}] URL: ${c.req.url}`)
+  getLogger()?.info(`[Stream:${requestId}] Headers:`, Object.fromEntries(c.req.raw.headers.entries()))
 
   // Create abort controller for client disconnect handling
   const abortController = new AbortController()
   const onAbort = () => {
-    console.log(`[Stream:${requestId}] Client disconnected, aborting...`)
+    getLogger()?.info(`[Stream:${requestId}] Client disconnected, aborting...`)
     abortController.abort()
   }
 
@@ -2047,9 +2047,9 @@ chatStreamRouter.post('/message', async c => {
   let requestBody
   try {
     requestBody = await c.req.json()
-    console.log(`[Stream:${requestId}] Request body parsed:`, JSON.stringify(requestBody).slice(0, 200))
+    getLogger()?.info(`[Stream:${requestId}] Request body parsed:`, JSON.stringify(requestBody).slice(0, 200))
   } catch (error) {
-    console.error(`[Stream:${requestId}] Failed to parse request body:`, error)
+    getLogger()?.error(`[Stream:${requestId}] Failed to parse request body:`, error)
     return c.text('Invalid JSON', 400)
   }
 
@@ -2057,8 +2057,8 @@ chatStreamRouter.post('/message', async c => {
   const authorization = c.req.header('Authorization')
   const env = c.env
 
-  console.log(`[Stream:${requestId}] Auth header present: ${!!authorization}`)
-  console.log(`[Stream:${requestId}] Env keys:`, Object.keys(env))
+  getLogger()?.info(`[Stream:${requestId}] Auth header present: ${!!authorization}`)
+  getLogger()?.info(`[Stream:${requestId}] Env keys:`, Object.keys(env))
 
   // Initialize logger for this request
   const streamLogger = new ServiceLogger(`Stream:${requestId}`, sseWriter)
@@ -2076,7 +2076,7 @@ chatStreamRouter.post('/message', async c => {
           clearInterval(heartbeatInterval)
           return
         }
-        console.log(`[Stream:${requestId}] Sending heartbeat`)
+        getLogger()?.info(`[Stream:${requestId}] Sending heartbeat`)
         await sseWriter.writeHeartbeat()
       }, 15000)
 
@@ -2086,7 +2086,7 @@ chatStreamRouter.post('/message', async c => {
           throw new Error('Request aborted')
         }
 
-        console.log(`[Stream:${requestId}] Sending initial debug event`)
+        getLogger()?.info(`[Stream:${requestId}] Sending initial debug event`)
         // Send debug info as first event
         await sseWriter.write({
           data: {
@@ -2196,11 +2196,11 @@ chatStreamRouter.post('/message', async c => {
 
         // Initialize Claude with streaming
         if (!env.ANTHROPIC_API_KEY) {
-          console.error(`[Stream:${requestId}] CRITICAL: ANTHROPIC_API_KEY is not set`)
+          getLogger()?.error(`[Stream:${requestId}] CRITICAL: ANTHROPIC_API_KEY is not set`)
           throw new Error('Anthropic API key is not configured')
         }
 
-        console.log(`[Stream:${requestId}] Initializing Claude with API key`)
+        getLogger()?.info(`[Stream:${requestId}] Initializing Claude with API key`)
 
         // Helper function to create fresh ChatAnthropic instance
         // CRITICAL: Must create new instance for each .stream() call in Workers
@@ -2371,7 +2371,7 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
           },
           type: 'log',
         })
-        console.log(`[Stream:${requestId}] User message: "${actualMessage}"`)
+        getLogger()?.info(`[Stream:${requestId}] User message: "${actualMessage}"`)
 
         // Stream the response
         interface ToolCall {
@@ -2382,7 +2382,7 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
         let fullResponse = ''
         let toolCalls: ToolCall[] = []
 
-        console.log(`[Stream:${requestId}] Starting Claude streaming...`)
+        getLogger()?.info(`[Stream:${requestId}] Starting Claude streaming...`)
         sseWriter.writeAsync({
           data: 'Analyzing your request...',
           type: 'thinking',
@@ -2395,7 +2395,7 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
 
         let response
         try {
-          console.log(`[Stream:${requestId}] Calling createModelWithTools().stream() with ${messages.length} messages`)
+          getLogger()?.info(`[Stream:${requestId}] Calling createModelWithTools().stream() with ${messages.length} messages`)
           // Wrap stream call in orchestrator to respect anthropic lane limits (max 2 concurrent)
           response = await rateLimitedAnthropicCall(
             () =>
@@ -2405,14 +2405,14 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
             getLogger(),
             `main chat stream (initial, ${messages.length} messages)`,
           )
-          console.log(`[Stream:${requestId}] Claude stream initialized`)
+          getLogger()?.info(`[Stream:${requestId}] Claude stream initialized`)
         } catch (apiError) {
           if (abortController.signal.aborted) {
             throw new Error('Request aborted')
           }
-          console.error(`[Stream:${requestId}] Anthropic API call failed:`, apiError)
+          getLogger()?.error(`[Stream:${requestId}] Anthropic API call failed:`, apiError)
           if (apiError instanceof Error) {
-            console.error(`[Stream:${requestId}] Error details:`, {
+            getLogger()?.error(`[Stream:${requestId}] Error details:`, {
               message: apiError.message,
               name: apiError.name,
               stack: apiError.stack?.substring(0, 500),
@@ -2445,17 +2445,17 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
           if (textContent) {
             fullResponse += textContent
             await sseWriter.write({data: textContent, type: 'content'})
-            console.log(`[Stream:${requestId}] Content chunk ${chunkCount}: ${textContent.substring(0, 50)}...`)
+            getLogger()?.info(`[Stream:${requestId}] Content chunk ${chunkCount}: ${textContent.substring(0, 50)}...`)
           }
 
           // Handle tool calls
           if (chunk.tool_calls && chunk.tool_calls.length > 0) {
             toolCalls = chunk.tool_calls
-            console.log(`[Stream:${requestId}] Tool calls received: ${chunk.tool_calls.map(tc => tc.name).join(', ')}`)
+            getLogger()?.info(`[Stream:${requestId}] Tool calls received: ${chunk.tool_calls.map(tc => tc.name).join(', ')}`)
           }
         }
 
-        console.log(
+        getLogger()?.info(
           `[Stream:${requestId}] Initial streaming complete. Chunks: ${chunkCount}, Tool calls: ${toolCalls.length}, Content length: ${fullResponse.length}`,
         )
 
@@ -2482,8 +2482,8 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
           if (recentToolCalls.length >= 3) {
             const lastThree = recentToolCalls.slice(-3)
             if (lastThree[0] === lastThree[1] && lastThree[1] === lastThree[2]) {
-              console.warn(`[Stream:${requestId}] ⚠️ Loop detected: identical tool calls 3 times in a row. Breaking.`)
-              console.warn(`[Stream:${requestId}] Tool signature: ${lastThree[0]}`)
+              getLogger()?.warn(`[Stream:${requestId}] ⚠️ Loop detected: identical tool calls 3 times in a row. Breaking.`)
+              getLogger()?.warn(`[Stream:${requestId}] Tool signature: ${lastThree[0]}`)
               sseWriter.writeAsync({
                 data: 'Detected repetitive tool calls, wrapping up...',
                 type: 'thinking',
@@ -2492,7 +2492,7 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
             }
           }
 
-          console.log(
+          getLogger()?.info(
             `[Stream:${requestId}] 🔄 Agentic loop turn ${turnCount}: Executing ${currentToolCalls.length} tool calls...`,
           )
           sseWriter.writeAsync({
@@ -2507,26 +2507,26 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
               throw new Error('Request aborted')
             }
 
-            console.log(`[Stream:${requestId}] Looking for tool: ${toolCall.name}`)
+            getLogger()?.info(`[Stream:${requestId}] Looking for tool: ${toolCall.name}`)
             const tool = tools.find(t => t.name === toolCall.name)
             if (tool) {
-              console.log(
+              getLogger()?.info(
                 `[Stream:${requestId}] Executing tool: ${toolCall.name} with args:`,
                 JSON.stringify(toolCall.args).substring(0, 200),
               )
               try {
                 const result = await tool.func(toolCall.args)
-                console.log(`[Stream:${requestId}] Tool ${toolCall.name} completed successfully`)
-                console.log(`[Stream:${requestId}] Tool result type: ${typeof result}`)
-                console.log(
+                getLogger()?.info(`[Stream:${requestId}] Tool ${toolCall.name} completed successfully`)
+                getLogger()?.info(`[Stream:${requestId}] Tool result type: ${typeof result}`)
+                getLogger()?.info(
                   `[Stream:${requestId}] Tool result keys: ${
                     typeof result === 'object' ? Object.keys(result ?? {}).join(', ') : 'N/A'
                   }`,
                 )
 
                 const toolContent = JSON.stringify(result)
-                console.log(`[Stream:${requestId}] Tool result JSON length: ${toolContent.length}`)
-                console.log(`[Stream:${requestId}] Tool result preview: ${toolContent.substring(0, 500)}...`)
+                getLogger()?.info(`[Stream:${requestId}] Tool result JSON length: ${toolContent.length}`)
+                getLogger()?.info(`[Stream:${requestId}] Tool result preview: ${toolContent.substring(0, 500)}...`)
 
                 // Create the tool message
                 const toolMsg = new ToolMessage({
@@ -2536,17 +2536,17 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
 
                 toolMessages.push(toolMsg)
 
-                console.log(`[Stream:${requestId}] Created ToolMessage with:`)
-                console.log(`[Stream:${requestId}]   - call_id: ${toolCall.id}`)
-                console.log(`[Stream:${requestId}]   - content length: ${toolContent.length}`)
-                console.log(
+                getLogger()?.info(`[Stream:${requestId}] Created ToolMessage with:`)
+                getLogger()?.info(`[Stream:${requestId}]   - call_id: ${toolCall.id}`)
+                getLogger()?.info(`[Stream:${requestId}]   - content length: ${toolContent.length}`)
+                getLogger()?.info(
                   `[Stream:${requestId}]   - content has playlist_name: ${toolContent.includes('playlist_name')}`,
                 )
               } catch (error) {
                 if (abortController.signal.aborted) {
                   throw new Error('Request aborted')
                 }
-                console.error(`[Stream:${requestId}] Tool ${toolCall.name} failed:`, error)
+                getLogger()?.error(`[Stream:${requestId}] Tool ${toolCall.name} failed:`, error)
                 toolMessages.push(
                   new ToolMessage({
                     content: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -2555,7 +2555,7 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
                 )
               }
             } else {
-              console.warn(`[Stream:${requestId}] Tool not found: ${toolCall.name}`)
+              getLogger()?.warn(`[Stream:${requestId}] Tool not found: ${toolCall.name}`)
               toolMessages.push(
                 new ToolMessage({
                   content: `Error: Tool ${toolCall.name} not found`,
@@ -2564,21 +2564,21 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
               )
             }
           }
-          console.log(`[Stream:${requestId}] All tools executed. Results: ${toolMessages.length}`)
+          getLogger()?.info(`[Stream:${requestId}] All tools executed. Results: ${toolMessages.length}`)
 
           // Get next response with tool results
-          console.log(`[Stream:${requestId}] Getting next response from Claude (turn ${turnCount})...`)
+          getLogger()?.info(`[Stream:${requestId}] Getting next response from Claude (turn ${turnCount})...`)
           sseWriter.writeAsync({
             data: 'Preparing response...',
             type: 'thinking',
           })
 
-          console.log(`[Stream:${requestId}] Sending tool results back to Claude...`)
-          console.log(`[Stream:${requestId}] Full response so far: "${fullResponse.substring(0, 100)}"`)
+          getLogger()?.info(`[Stream:${requestId}] Sending tool results back to Claude...`)
+          getLogger()?.info(`[Stream:${requestId}] Full response so far: "${fullResponse.substring(0, 100)}"`)
 
           // Build the conversation including tool results
           const aiMessageContent = fullResponse || ''
-          console.log(
+          getLogger()?.info(
             `[Stream:${requestId}] Creating AIMessage with content length: ${aiMessageContent.length}, tool calls: ${currentToolCalls.length}`,
           )
 
@@ -2592,21 +2592,21 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
           // Add the tool results
           conversationMessages.push(...toolMessages)
 
-          console.log(`[Stream:${requestId}] Conversation now has ${conversationMessages.length} messages`)
+          getLogger()?.info(`[Stream:${requestId}] Conversation now has ${conversationMessages.length} messages`)
 
-          console.log(`[Stream:${requestId}] Attempting to get next response from Claude...`)
-          console.log(`[Stream:${requestId}] Message structure (last 5):`)
+          getLogger()?.info(`[Stream:${requestId}] Attempting to get next response from Claude...`)
+          getLogger()?.info(`[Stream:${requestId}] Message structure (last 5):`)
           conversationMessages.slice(-5).forEach((msg, i) => {
             const msgType = msg.constructor.name
             const contentPreview = msg.content?.toString().slice(0, 200) || 'no content'
-            console.log(
+            getLogger()?.info(
               `[Stream:${requestId}]   ${conversationMessages.length - 5 + i}: ${msgType} - ${contentPreview}`,
             )
             if (msgType === 'ToolMessage' && 'tool_call_id' in msg) {
-              console.log(`[Stream:${requestId}]     Tool call ID: ${msg.tool_call_id}`)
-              console.log(`[Stream:${requestId}]     Content length: ${msg.content?.toString().length || 0}`)
+              getLogger()?.info(`[Stream:${requestId}]     Tool call ID: ${msg.tool_call_id}`)
+              getLogger()?.info(`[Stream:${requestId}]     Content length: ${msg.content?.toString().length || 0}`)
             } else if (msgType === 'AIMessage' && 'tool_calls' in msg && msg.tool_calls) {
-              console.log(
+              getLogger()?.info(
                 `[Stream:${requestId}]     Tool calls: ${msg.tool_calls
                   .map((tc: ToolCall) => `${tc.name}(id:${tc.id})`)
                   .join(', ')}`,
@@ -2657,7 +2657,7 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
           fullResponse = ''
           let nextChunkCount = 0
           let nextToolCalls: ToolCall[] = []
-          console.log(`[Stream:${requestId}] Streaming response from Claude (turn ${turnCount})...`)
+          getLogger()?.info(`[Stream:${requestId}] Streaming response from Claude (turn ${turnCount})...`)
           let contentStarted = false
 
           try {
@@ -2677,7 +2677,7 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
                       ? String(chunk.content).substring(0, 100)
                       : 'no content'
 
-              console.log(`[Stream:${requestId}] Turn ${turnCount} chunk ${nextChunkCount}:`, {
+              getLogger()?.info(`[Stream:${requestId}] Turn ${turnCount} chunk ${nextChunkCount}:`, {
                 chunkContent: contentPreview,
                 chunkKeys: Object.keys(chunk),
                 contentLength: typeof chunk.content === 'string' ? chunk.content.length : 0,
@@ -2700,7 +2700,7 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
 
               if (textContent) {
                 if (!contentStarted) {
-                  console.log(
+                  getLogger()?.info(
                     `[Stream:${requestId}] CONTENT STARTED at turn ${turnCount} chunk ${nextChunkCount}: ${textContent.substring(
                       0,
                       100,
@@ -2716,7 +2716,7 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
               // Check for MORE tool calls in the response
               if (chunk.tool_calls && chunk.tool_calls.length > 0) {
                 nextToolCalls = chunk.tool_calls as ToolCall[]
-                console.log(
+                getLogger()?.info(
                   `[Stream:${requestId}] ⚠️ Additional tool calls detected (turn ${turnCount}): ${chunk.tool_calls
                     .map(tc => tc.name)
                     .join(', ')}`,
@@ -2740,7 +2740,7 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
             }
           }
 
-          console.log(
+          getLogger()?.info(
             `[Stream:${requestId}] Turn ${turnCount} complete. Chunks: ${nextChunkCount}, Content: ${fullResponse.length} chars, Next tool calls: ${nextToolCalls.length}`,
           )
 
@@ -2750,7 +2750,7 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
 
         // Check if we hit the max turns limit or loop detection
         if (turnCount >= MAX_TURNS || fullResponse.length === 0) {
-          console.warn(
+          getLogger()?.warn(
             `[Stream:${requestId}] ⚠️ Hit limit (${turnCount} turns). Requesting final response from Claude...`,
           )
 
@@ -2791,7 +2791,7 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
               type: 'content',
             })
             fullResponse = 'Task completed despite connection error.'
-            console.warn(`[Stream:${requestId}] Final response skipped due to streaming error`)
+            getLogger()?.warn(`[Stream:${requestId}] Final response skipped due to streaming error`)
             // Skip the rest of this block
           }
 
@@ -2837,15 +2837,15 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
               }
             }
 
-            console.log(`[Stream:${requestId}] Final response after limit: ${fullResponse.length} chars`)
+            getLogger()?.info(`[Stream:${requestId}] Final response after limit: ${fullResponse.length} chars`)
           }
         }
 
-        console.log(`[Stream:${requestId}] Agentic loop complete after ${turnCount} turns`)
+        getLogger()?.info(`[Stream:${requestId}] Agentic loop complete after ${turnCount} turns`)
 
         // If still no response after everything, provide fallback
         if (fullResponse.length === 0) {
-          console.error(`[Stream:${requestId}] WARNING: No content received from Claude!`)
+          getLogger()?.error(`[Stream:${requestId}] WARNING: No content received from Claude!`)
           await sseWriter.write({
             data: 'I apologize, but I encountered an issue generating a response. Please try again.',
             type: 'content',
@@ -2853,9 +2853,9 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
         }
 
         // Send completion
-        console.log(`[Stream:${requestId}] Sending done event`)
+        getLogger()?.info(`[Stream:${requestId}] Sending done event`)
         await sseWriter.write({data: null, type: 'done'})
-        console.log(`[Stream:${requestId}] Stream complete - all events sent`)
+        getLogger()?.info(`[Stream:${requestId}] Stream complete - all events sent`)
       } catch (error) {
         const logger = getLogger()!
         if (error instanceof Error && error.message === 'Request aborted') {
@@ -2888,9 +2888,9 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
   })
 
   // Return the SSE response immediately
-  console.log(`[Stream:${requestId}] Returning Response with SSE headers`)
+  getLogger()?.info(`[Stream:${requestId}] Returning Response with SSE headers`)
   const response = new Response(readable, {headers})
-  console.log(`[Stream:${requestId}] Response created, headers:`, Object.fromEntries(headers.entries()))
+  getLogger()?.info(`[Stream:${requestId}] Response created, headers:`, Object.fromEntries(headers.entries()))
   return response
 })
 
@@ -2909,12 +2909,12 @@ chatStreamRouter.get('/events', async c => {
   // For now, we'll just check it exists
 
   const requestId = crypto.randomUUID().substring(0, 8)
-  console.log(`[SSE:${requestId}] EventSource connection established`)
+  getLogger()?.info(`[SSE:${requestId}] EventSource connection established`)
 
   // Create abort controller for client disconnect
   const abortController = new AbortController()
   const onAbort = () => {
-    console.log(`[SSE:${requestId}] Client disconnected`)
+    getLogger()?.info(`[SSE:${requestId}] Client disconnected`)
     abortController.abort()
   }
 
