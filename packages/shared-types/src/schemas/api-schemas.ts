@@ -3,8 +3,8 @@
  * Provides validation for client-server communication
  */
 
-import { z } from 'zod'
-import { SpotifyPlaylistSimpleSchema } from './spotify-schemas'
+import {z} from 'zod'
+import {SpotifyPlaylistSimpleSchema} from './spotify-schemas'
 
 // ===== Error Response =====
 

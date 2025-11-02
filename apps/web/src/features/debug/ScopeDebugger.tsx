@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import {useEffect, useState} from 'react'
 
 interface ScopeDebugData {
   instructions: {
@@ -52,9 +52,7 @@ export function ScopeDebugger() {
       })
 
       if (!response.ok) {
-        throw new Error(
-          `Failed to fetch scope debug info: ${response.status} ${response.statusText}`,
-        )
+        throw new Error(`Failed to fetch scope debug info: ${response.status} ${response.statusText}`)
       }
 
       const result = (await response.json()) as ScopeDebugData
@@ -128,32 +126,16 @@ export function ScopeDebugger() {
       <section className="debug-section">
         <h3>Permission Tests</h3>
         <div className="scope-tests">
-          <div
-            className={`scope-test ${
-              data.scope_tests['user-read-private'] ? 'success' : 'failure'
-            }`}
-          >
-            <span className="scope-icon">
-              {data.scope_tests['user-read-private'] ? '✅' : '❌'}
-            </span>
+          <div className={`scope-test ${data.scope_tests['user-read-private'] ? 'success' : 'failure'}`}>
+            <span className="scope-icon">{data.scope_tests['user-read-private'] ? '✅' : '❌'}</span>
             <span className="scope-name">user-read-private</span>
-            <span className="scope-status">
-              {data.scope_tests['user-read-private'] ? 'Working' : 'Failed'}
-            </span>
+            <span className="scope-status">{data.scope_tests['user-read-private'] ? 'Working' : 'Failed'}</span>
           </div>
 
-          <div
-            className={`scope-test ${
-              data.scope_tests['playlist-read-private'] ? 'success' : 'failure'
-            }`}
-          >
-            <span className="scope-icon">
-              {data.scope_tests['playlist-read-private'] ? '✅' : '❌'}
-            </span>
+          <div className={`scope-test ${data.scope_tests['playlist-read-private'] ? 'success' : 'failure'}`}>
+            <span className="scope-icon">{data.scope_tests['playlist-read-private'] ? '✅' : '❌'}</span>
             <span className="scope-name">playlist-read-private</span>
-            <span className="scope-status">
-              {data.scope_tests['playlist-read-private'] ? 'Working' : 'Failed'}
-            </span>
+            <span className="scope-status">{data.scope_tests['playlist-read-private'] ? 'Working' : 'Failed'}</span>
           </div>
 
           <div className={`scope-test ${hasAudioFeaturesAccess ? 'success' : 'failure'}`}>

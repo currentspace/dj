@@ -9,7 +9,7 @@ export function PlaylistSkeleton() {
       </div>
 
       <div className={styles.skeletonTracks}>
-        {Array.from({ length: 10 }).map((_, index) => (
+        {Array.from({length: 10}).map((_, index) => (
           <div className={styles.skeletonTrack} key={index}>
             <div className={styles.skeletonTrackNumber} />
             <div className={styles.skeletonTrackInfo}>

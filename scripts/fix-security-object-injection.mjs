@@ -7,11 +7,11 @@
  * The fix: Either validate the key or use a Map instead
  */
 
-import { readFileSync, writeFileSync } from 'fs'
-import { execSync } from 'child_process'
+import {readFileSync, writeFileSync} from 'fs'
+import {execSync} from 'child_process'
 
 // Get files with object injection errors
-const lintOutput = execSync('pnpm run lint 2>&1 || true', { encoding: 'utf-8' })
+const lintOutput = execSync('pnpm run lint 2>&1 || true', {encoding: 'utf-8'})
 
 const pattern = /^(.+\.tsx?):(\d+):(\d+)\s+error.*security\/detect-object-injection/gm
 const violations = []
@@ -19,7 +19,7 @@ const violations = []
 let match
 while ((match = pattern.exec(lintOutput)) !== null) {
   const [, filePath, line] = match
-  violations.push({ file: filePath, line: parseInt(line) })
+  violations.push({file: filePath, line: parseInt(line)})
 }
 
 console.log(`Found ${violations.length} security/detect-object-injection violations\n`)

@@ -70,9 +70,7 @@ This reduces payload from ~42KB → ~2KB (95% reduction).
 
 ```typescript
 const analysisJson = JSON.stringify(analysis)
-console.log(
-  `[Tool] Analysis JSON size: ${analysisJson.length} bytes (${(analysisJson.length / 1024).toFixed(1)}KB)`,
-)
+console.log(`[Tool] Analysis JSON size: ${analysisJson.length} bytes (${(analysisJson.length / 1024).toFixed(1)}KB)`)
 console.log(
   `[Tool] Returning ${analysis.tracks.length} compact tracks and ${analysis.audio_features?.length || 0} audio features`,
 )

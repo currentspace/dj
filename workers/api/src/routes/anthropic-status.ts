@@ -1,8 +1,8 @@
-import { Hono } from 'hono'
+import {Hono} from 'hono'
 
-import type { Env } from '../index'
+import type {Env} from '../index'
 
-const anthropicStatusRouter = new Hono<{ Bindings: Env }>()
+const anthropicStatusRouter = new Hono<{Bindings: Env}>()
 
 /**
  * Check Anthropic API rate limits and account status
@@ -17,7 +17,7 @@ anthropicStatusRouter.get('/limits', async c => {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       body: JSON.stringify({
         max_tokens: 1,
-        messages: [{ content: 'Hi', role: 'user' }],
+        messages: [{content: 'Hi', role: 'user'}],
         model: 'claude-3-haiku-20240307', // Use cheapest model for testing
       }),
       headers: {
@@ -66,9 +66,7 @@ anthropicStatusRouter.get('/limits', async c => {
       details = {
         ...rateLimitHeaders,
         error: errorData,
-        retryAfter: rateLimitHeaders['retry-after']
-          ? `${rateLimitHeaders['retry-after']} seconds`
-          : 'Unknown',
+        retryAfter: rateLimitHeaders['retry-after'] ? `${rateLimitHeaders['retry-after']} seconds` : 'Unknown',
       }
     } else if (response.status === 529) {
       status = 'overloaded'
@@ -81,9 +79,7 @@ anthropicStatusRouter.get('/limits', async c => {
       status = 'invalid_api_key'
       message = 'Invalid API key'
       details = {
-        apiKeyPrefix: c.env.ANTHROPIC_API_KEY
-          ? c.env.ANTHROPIC_API_KEY.substring(0, 10) + '...'
-          : 'Not set',
+        apiKeyPrefix: c.env.ANTHROPIC_API_KEY ? c.env.ANTHROPIC_API_KEY.substring(0, 10) + '...' : 'Not set',
       }
     } else {
       const errorData = await response.json().catch(() => ({}))
@@ -131,7 +127,7 @@ anthropicStatusRouter.get('/usage', async c => {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       body: JSON.stringify({
         max_tokens: 1,
-        messages: [{ content: 'test', role: 'user' }],
+        messages: [{content: 'test', role: 'user'}],
         model: 'claude-3-haiku-20240307',
       }),
       headers: {
@@ -145,17 +141,11 @@ anthropicStatusRouter.get('/usage', async c => {
     const now = new Date()
 
     // Parse rate limit headers
-    const requestsLimit = parseInt(
-      response.headers.get('anthropic-ratelimit-requests-limit') ?? '0',
-    )
-    const requestsRemaining = parseInt(
-      response.headers.get('anthropic-ratelimit-requests-remaining') ?? '0',
-    )
+    const requestsLimit = parseInt(response.headers.get('anthropic-ratelimit-requests-limit') ?? '0')
+    const requestsRemaining = parseInt(response.headers.get('anthropic-ratelimit-requests-remaining') ?? '0')
     const requestsReset = response.headers.get('anthropic-ratelimit-requests-reset')
     const tokensLimit = parseInt(response.headers.get('anthropic-ratelimit-tokens-limit') ?? '0')
-    const tokensRemaining = parseInt(
-      response.headers.get('anthropic-ratelimit-tokens-remaining') ?? '0',
-    )
+    const tokensRemaining = parseInt(response.headers.get('anthropic-ratelimit-tokens-remaining') ?? '0')
     const tokensReset = response.headers.get('anthropic-ratelimit-tokens-reset')
 
     const requestsUsed = requestsLimit - requestsRemaining
@@ -221,4 +211,4 @@ anthropicStatusRouter.get('/usage', async c => {
   }
 })
 
-export { anthropicStatusRouter }
+export {anthropicStatusRouter}

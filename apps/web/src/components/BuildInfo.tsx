@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import {useEffect, useState} from 'react'
 
 // Default build info for development
 const defaultBuildInfo = {
@@ -24,11 +24,7 @@ export function BuildInfo() {
 
   return (
     <>
-      <button
-        className="build-info-toggle"
-        onClick={() => setIsOpen(!isOpen)}
-        title="Build Information"
-      >
+      <button className="build-info-toggle" onClick={() => setIsOpen(!isOpen)} title="Build Information">
         <span className="build-version">v{buildInfo.commitHash}</span>
       </button>
 
@@ -51,9 +47,7 @@ export function BuildInfo() {
               </div>
               <div className="build-row">
                 <span className="build-label">Built:</span>
-                <span className="build-value">
-                  {new Date(buildInfo.buildTime).toLocaleString()}
-                </span>
+                <span className="build-value">{new Date(buildInfo.buildTime).toLocaleString()}</span>
               </div>
               <div className="build-row">
                 <span className="build-label">Message:</span>
@@ -69,8 +63,7 @@ export function BuildInfo() {
               <a
                 href={`https://github.com/currentspace/dj/commit/${buildInfo.commitHash}`}
                 rel="noopener noreferrer"
-                target="_blank"
-              >
+                target="_blank">
                 View on GitHub →
               </a>
             </div>

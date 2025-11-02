@@ -3,7 +3,7 @@
  * Provides type-safe parsing for real-time chat events
  */
 
-import { z } from 'zod'
+import {z} from 'zod'
 
 // ===== Debug Data =====
 

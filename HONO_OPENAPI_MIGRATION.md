@@ -41,8 +41,8 @@ packages/api-contracts/
 Updated `packages/api-client/src/client.ts`:
 
 ```typescript
-import { hc } from 'hono/client'
-import type { AppType } from '@dj/api-contracts'
+import {hc} from 'hono/client'
+import type {AppType} from '@dj/api-contracts'
 
 export function createApiClient(baseUrl: string) {
   return hc<AppType>(baseUrl)
@@ -103,28 +103,28 @@ const data = await res.json() // Type: { url: string }
 **Before:**
 
 ```typescript
-import { Hono } from 'hono'
+import {Hono} from 'hono'
 
 const app = new Hono()
 
 app.get('/api/spotify/auth', async c => {
   // Manual validation
   const authUrl = `...`
-  return c.json({ url: authUrl })
+  return c.json({url: authUrl})
 })
 ```
 
 **After:**
 
 ```typescript
-import { buildApiApp, getSpotifyAuthUrl } from '@dj/api-contracts'
+import {buildApiApp, getSpotifyAuthUrl} from '@dj/api-contracts'
 
 const app = buildApiApp()
 
 app.openapi(getSpotifyAuthUrl, async c => {
   // Validation automatic from contract
   const authUrl = `...`
-  return c.json({ url: authUrl }) // Type-checked against schema!
+  return c.json({url: authUrl}) // Type-checked against schema!
 })
 ```
 
@@ -168,8 +168,8 @@ app.openapi(getSpotifyAuthUrl, async c => {
 **Before:**
 
 ```typescript
-import { Hono } from 'hono'
-import { spotifyRoutes } from './routes/spotify'
+import {Hono} from 'hono'
+import {spotifyRoutes} from './routes/spotify'
 
 const app = new Hono()
 app.route('/api/spotify', spotifyRoutes)
@@ -178,8 +178,8 @@ app.route('/api/spotify', spotifyRoutes)
 **After:**
 
 ```typescript
-import { buildApiApp } from '@dj/api-contracts'
-import { spotifyRoutes } from './routes/spotify'
+import {buildApiApp} from '@dj/api-contracts'
+import {spotifyRoutes} from './routes/spotify'
 
 const app = buildApiApp() // Already has contracts
 // Add remaining non-contract routes if needed
@@ -195,7 +195,7 @@ app.route('/health', healthRoutes)
 ```typescript
 // OLD: Manual fetch with no type safety
 const response = await fetch('/api/spotify/playlists', {
-  headers: { Authorization: `Bearer ${token}` },
+  headers: {Authorization: `Bearer ${token}`},
 })
 const data = (await response.json()) as any // ❌ No validation
 ```
@@ -204,10 +204,10 @@ const data = (await response.json()) as any // ❌ No validation
 
 ```typescript
 // NEW: Typed client with automatic validation
-import { apiClient, parseResponse } from '@dj/api-client'
+import {apiClient, parseResponse} from '@dj/api-client'
 
 const res = await apiClient.api.spotify.playlists.$get({
-  header: { authorization: `Bearer ${token}` },
+  header: {authorization: `Bearer ${token}`},
 })
 const data = await parseResponse(res) // ✅ Fully typed!
 ```
@@ -218,7 +218,7 @@ const data = await parseResponse(res) // ✅ Fully typed!
 
 ```typescript
 // workers/api/src/routes/spotify.ts (BEFORE)
-import { Hono } from 'hono'
+import {Hono} from 'hono'
 
 const app = new Hono()
 
@@ -226,7 +226,7 @@ app.get('/api/spotify/auth', async c => {
   const env = c.env as Env
 
   if (!env.SPOTIFY_CLIENT_ID) {
-    return c.json({ error: 'Spotify not configured' }, 500)
+    return c.json({error: 'Spotify not configured'}, 500)
   }
 
   const scopes = [
@@ -244,7 +244,7 @@ app.get('/api/spotify/auth', async c => {
 
   const authUrl = `https://accounts.spotify.com/authorize?${params}`
 
-  return c.json({ url: authUrl })
+  return c.json({url: authUrl})
 })
 
 export default app
@@ -254,7 +254,7 @@ export default app
 
 ```typescript
 // workers/api/src/routes/spotify.ts (AFTER)
-import { buildApiApp, getSpotifyAuthUrl } from '@dj/api-contracts'
+import {buildApiApp, getSpotifyAuthUrl} from '@dj/api-contracts'
 
 const app = buildApiApp()
 
@@ -264,7 +264,7 @@ app.openapi(getSpotifyAuthUrl, async c => {
 
   // Same logic, but response is type-checked!
   if (!env.SPOTIFY_CLIENT_ID) {
-    return c.json({ error: 'Spotify not configured' }, 500)
+    return c.json({error: 'Spotify not configured'}, 500)
   }
 
   const scopes = [
@@ -283,7 +283,7 @@ app.openapi(getSpotifyAuthUrl, async c => {
   const authUrl = `https://accounts.spotify.com/authorize?${params}`
 
   // TypeScript enforces this matches SpotifyAuthResponseSchema!
-  return c.json({ url: authUrl })
+  return c.json({url: authUrl})
 })
 
 export default app
@@ -303,7 +303,7 @@ export default app
 ```typescript
 // apps/web/src/hooks/useSpotifyAuth.ts (BEFORE)
 const response = await fetch('/api/spotify/auth')
-const data = (await response.json()) as { url?: string } // ❌ Manual typing
+const data = (await response.json()) as {url?: string} // ❌ Manual typing
 
 if (data.url) {
   window.location.href = data.url
@@ -314,7 +314,7 @@ if (data.url) {
 
 ```typescript
 // apps/web/src/hooks/useSpotifyAuth.ts (AFTER)
-import { apiClient, parseResponse } from '@dj/api-client'
+import {apiClient, parseResponse} from '@dj/api-client'
 
 const res = await apiClient.api.spotify.auth.$get()
 const data = await parseResponse(res) // ✅ Type: { url: string }

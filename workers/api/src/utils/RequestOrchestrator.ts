@@ -19,7 +19,7 @@
  * 2. Batch: await orchestrator.executeBatch('id', tasks, 'spotify')
  */
 
-import { RateLimitedQueue } from './RateLimitedQueue'
+import {RateLimitedQueue} from './RateLimitedQueue'
 
 interface LaneConfig {
   maxConcurrency: number

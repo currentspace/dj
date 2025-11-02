@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import {useCallback, useEffect, useState} from 'react'
 
-import { useSpotifyAuth } from '../../hooks/useSpotifyAuth'
+import {useSpotifyAuth} from '../../hooks/useSpotifyAuth'
 
 interface SpotifyPlaylist {
   description: string
@@ -28,8 +28,8 @@ interface UserPlaylistsProps {
   selectedPlaylist?: null | SpotifyPlaylist
 }
 
-function UserPlaylists({ onPlaylistSelect, selectedPlaylist }: UserPlaylistsProps) {
-  const { token } = useSpotifyAuth()
+function UserPlaylists({onPlaylistSelect, selectedPlaylist}: UserPlaylistsProps) {
+  const {token} = useSpotifyAuth()
   const [playlists, setPlaylists] = useState<SpotifyPlaylist[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<null | string>(null)
@@ -49,7 +49,7 @@ function UserPlaylists({ onPlaylistSelect, selectedPlaylist }: UserPlaylistsProp
         throw new Error('Failed to load playlists')
       }
 
-      const data = (await response.json()) as { items?: SpotifyPlaylist[] }
+      const data = (await response.json()) as {items?: SpotifyPlaylist[]}
       setPlaylists(data.items ?? [])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load playlists')
@@ -118,8 +118,7 @@ function UserPlaylists({ onPlaylistSelect, selectedPlaylist }: UserPlaylistsProp
               }
             }}
             role="button"
-            tabIndex={0}
-          >
+            tabIndex={0}>
             <div className="playlist-image">
               {playlist.images && playlist.images.length > 0 ? (
                 <img alt={playlist.name} loading="lazy" src={playlist.images[0].url} />
@@ -134,9 +133,7 @@ function UserPlaylists({ onPlaylistSelect, selectedPlaylist }: UserPlaylistsProp
                 {playlist.tracks.total} track
                 {playlist.tracks.total !== 1 ? 's' : ''} •{playlist.public ? ' Public' : ' Private'}
               </p>
-              {playlist.description && (
-                <p className="playlist-description">{playlist.description}</p>
-              )}
+              {playlist.description && <p className="playlist-description">{playlist.description}</p>}
             </div>
 
             <div className="playlist-actions">
@@ -145,8 +142,7 @@ function UserPlaylists({ onPlaylistSelect, selectedPlaylist }: UserPlaylistsProp
                 href={playlist.external_urls.spotify}
                 onClick={e => e.stopPropagation()}
                 rel="noopener noreferrer"
-                target="_blank"
-              >
+                target="_blank">
                 Open in Spotify
               </a>
             </div>
@@ -359,4 +355,4 @@ const playlistsStyles = `
   }
 `
 
-export { UserPlaylists }
+export {UserPlaylists}

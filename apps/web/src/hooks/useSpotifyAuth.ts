@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react'
+import {useCallback, useEffect, useRef, useSyncExternalStore} from 'react'
 
 type AuthListener = () => void
 
@@ -37,18 +37,18 @@ function createSpotifyAuthStore() {
   // Private helpers
   function getInitialState(): AuthState {
     if (typeof window === 'undefined') {
-      return { isAuthenticated: false, token: null }
+      return {isAuthenticated: false, token: null}
     }
 
     const tokenData = loadTokenData()
     if (!tokenData) {
-      return { isAuthenticated: false, token: null }
+      return {isAuthenticated: false, token: null}
     }
 
     // Check expiry
     if (isTokenExpired(tokenData)) {
       clearTokenData()
-      return { isAuthenticated: false, token: null }
+      return {isAuthenticated: false, token: null}
     }
 
     return {
@@ -279,22 +279,22 @@ function createAsyncStateManager() {
         abortController.abort()
         abortController = null
       }
-      state = { error: null, isLoading: false, isValidating: false }
+      state = {error: null, isLoading: false, isValidating: false}
       notifyListeners()
     },
 
     setError(error: null | string): void {
-      state = { ...state, error }
+      state = {...state, error}
       notifyListeners()
     },
 
     setLoading(isLoading: boolean): void {
-      state = { ...state, isLoading }
+      state = {...state, isLoading}
       notifyListeners()
     },
 
     setValidating(isValidating: boolean): void {
-      state = { ...state, isValidating }
+      state = {...state, isValidating}
       notifyListeners()
     },
 
@@ -321,15 +321,15 @@ let tokenValidationInProgress = false
 // ============================================================================
 
 const performLogin = async (signal: AbortSignal): Promise<void> => {
-  const response = await fetch('/api/spotify/auth-url', { signal })
+  const response = await fetch('/api/spotify/auth-url', {signal})
 
   if (!response.ok) {
     const errorText = await response.text()
     throw new Error(`Failed to get auth URL: ${response.status} ${errorText}`)
   }
 
-  const data = (await response.json()) as { url?: string }
-  const { url } = data
+  const data = (await response.json()) as {url?: string}
+  const {url} = data
 
   if (!url) {
     throw new Error('No auth URL received from server')
@@ -387,7 +387,7 @@ export function useSpotifyAuth(): UseSpotifyAuthReturn {
   const authState = useSyncExternalStore(
     authStore.subscribe.bind(authStore),
     authStore.getState.bind(authStore),
-    () => ({ isAuthenticated: false, token: null }), // SSR fallback
+    () => ({isAuthenticated: false, token: null}), // SSR fallback
   )
 
   // Subscribe to external async state store (loading/error state)
@@ -395,7 +395,7 @@ export function useSpotifyAuth(): UseSpotifyAuthReturn {
   const asyncState = useSyncExternalStore(
     asyncStateManager.subscribe.bind(asyncStateManager),
     asyncStateManager.getState.bind(asyncStateManager),
-    () => ({ error: null, isLoading: false, isValidating: false }), // SSR fallback
+    () => ({error: null, isLoading: false, isValidating: false}), // SSR fallback
   )
 
   // Handle OAuth callback from URL (only once globally, not per component)
@@ -495,9 +495,7 @@ export function useSpotifyAuth(): UseSpotifyAuthReturn {
 
     performLogin(signal).catch((err: unknown) => {
       if (isMountedRef.current && !asyncStateManager.isAborted()) {
-        asyncStateManager.setError(
-          err instanceof Error ? err.message : 'Failed to start authentication',
-        )
+        asyncStateManager.setError(err instanceof Error ? err.message : 'Failed to start authentication')
         asyncStateManager.setLoading(false)
       }
     })

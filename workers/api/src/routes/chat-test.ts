@@ -1,10 +1,10 @@
-import { ChatAnthropic } from '@langchain/anthropic'
-import { HumanMessage, SystemMessage } from '@langchain/core/messages'
-import { Hono } from 'hono'
+import {ChatAnthropic} from '@langchain/anthropic'
+import {HumanMessage, SystemMessage} from '@langchain/core/messages'
+import {Hono} from 'hono'
 
-import type { Env } from '../index'
+import type {Env} from '../index'
 
-const chatTestRouter = new Hono<{ Bindings: Env }>()
+const chatTestRouter = new Hono<{Bindings: Env}>()
 
 /**
  * Simple test endpoint without tools to verify Claude connectivity
@@ -105,7 +105,7 @@ chatTestRouter.post('/with-tools', async c => {
       name: 'dummy_tool',
       schema: {
         properties: {
-          input: { description: 'Any input', type: 'string' },
+          input: {description: 'Any input', type: 'string'},
         },
         required: ['input'],
         type: 'object',
@@ -173,4 +173,4 @@ chatTestRouter.post('/with-tools', async c => {
   }
 })
 
-export { chatTestRouter }
+export {chatTestRouter}

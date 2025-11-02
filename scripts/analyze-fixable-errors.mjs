@@ -5,7 +5,7 @@
  * Helps prioritize which rules to fix first
  */
 
-import { ESLint } from 'eslint'
+import {ESLint} from 'eslint'
 
 async function analyzeFixableErrors() {
   const eslint = new ESLint({
@@ -51,9 +51,7 @@ async function analyzeFixableErrors() {
   const sorted = Array.from(errorStats.entries()).sort((a, b) => b[1].count - a[1].count)
 
   console.log('=== ERROR ANALYSIS ===\n')
-  console.log(
-    'Rule ID                                      | Total | Auto-Fix | Suggestions | Files',
-  )
+  console.log('Rule ID                                      | Total | Auto-Fix | Suggestions | Files')
   console.log('─'.repeat(100))
 
   for (const [ruleId, stats] of sorted) {
@@ -67,10 +65,7 @@ async function analyzeFixableErrors() {
 
   const totalErrors = Array.from(errorStats.values()).reduce((sum, s) => sum + s.count, 0)
   const totalFixable = Array.from(errorStats.values()).reduce((sum, s) => sum + s.fixable, 0)
-  const totalSuggestions = Array.from(errorStats.values()).reduce(
-    (sum, s) => sum + s.hasSuggestions,
-    0,
-  )
+  const totalSuggestions = Array.from(errorStats.values()).reduce((sum, s) => sum + s.hasSuggestions, 0)
 
   console.log('\n=== SUMMARY ===')
   console.log(`Total errors: ${totalErrors}`)

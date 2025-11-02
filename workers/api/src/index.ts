@@ -1,17 +1,17 @@
-import { swaggerUI } from '@hono/swagger-ui'
-import { OpenAPIHono } from '@hono/zod-openapi'
-import { cors } from 'hono/cors'
+import {swaggerUI} from '@hono/swagger-ui'
+import {OpenAPIHono} from '@hono/zod-openapi'
+import {cors} from 'hono/cors'
 
-import { anthropicStatusRouter } from './routes/anthropic-status'
-import { chatRouter } from './routes/chat-simple'
-import { chatStreamRouter } from './routes/chat-stream'
-import { chatTestRouter } from './routes/chat-test'
-import { mcpRouter } from './routes/mcp'
-import { playlistRouter } from './routes/playlist'
-import { registerPlaylistRoutes } from './routes/playlists-openapi'
-import { registerSpotifyAuthRoutes } from './routes/spotify-openapi'
-import { sseTestRouter } from './routes/sse-test'
-import { testRouter } from './routes/test'
+import {anthropicStatusRouter} from './routes/anthropic-status'
+import {chatRouter} from './routes/chat-simple'
+import {chatStreamRouter} from './routes/chat-stream'
+import {chatTestRouter} from './routes/chat-test'
+import {mcpRouter} from './routes/mcp'
+import {playlistRouter} from './routes/playlist'
+import {registerPlaylistRoutes} from './routes/playlists-openapi'
+import {registerSpotifyAuthRoutes} from './routes/spotify-openapi'
+import {sseTestRouter} from './routes/sse-test'
+import {testRouter} from './routes/test'
 
 export interface Env {
   ANTHROPIC_API_KEY: string
@@ -25,12 +25,12 @@ export interface Env {
   SPOTIFY_CLIENT_SECRET: string
 }
 
-const app = new OpenAPIHono<{ Bindings: Env }>()
+const app = new OpenAPIHono<{Bindings: Env}>()
 
 app.use('*', cors())
 
 // Health check
-app.get('/health', c => c.json({ status: 'healthy' }))
+app.get('/health', c => c.json({status: 'healthy'}))
 
 // Register OpenAPI routes
 registerSpotifyAuthRoutes(app)
@@ -57,7 +57,7 @@ app.doc('/api/openapi.json', {
 })
 
 // Serve Swagger UI at /api/docs
-app.get('/api/docs', swaggerUI({ url: '/api/openapi.json' }))
+app.get('/api/docs', swaggerUI({url: '/api/openapi.json'}))
 
 // Legacy routes (non-OpenAPI) - will be migrated gradually
 app.route('/api/playlist', playlistRouter) // Legacy - will migrate later
@@ -81,9 +81,7 @@ app.get('*', async c => {
       const acceptHeader = c.req.header('Accept') ?? ''
       if (acceptHeader.includes('text/html')) {
         // Try to serve index.html for SPA routing
-        const indexResponse = await c.env.ASSETS.fetch(
-          new Request(new URL('/index.html', c.req.url)),
-        )
+        const indexResponse = await c.env.ASSETS.fetch(new Request(new URL('/index.html', c.req.url)))
         if (indexResponse.status === 200) {
           return new Response(indexResponse.body, {
             headers: {

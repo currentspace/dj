@@ -3,8 +3,8 @@
  * AI-powered playlist generation and analysis
  */
 
-import { ChatMessageSchema, ChatRequestSchema } from '@dj/shared-types'
-import { createRoute, z } from '@hono/zod-openapi'
+import {ChatMessageSchema, ChatRequestSchema} from '@dj/shared-types'
+import {createRoute, z} from '@hono/zod-openapi'
 
 /**
  * POST /api/chat-stream/message

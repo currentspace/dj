@@ -20,9 +20,9 @@ import {
   LastFmTrackSimilarResponseSchema,
   LastFmTrackTopTagsResponseSchema,
 } from '@dj/shared-types'
-import { z } from 'zod'
+import {z} from 'zod'
 
-import { getGlobalOrchestrator, rateLimitedLastFmCall } from '../utils/RateLimitedAPIClients'
+import {getGlobalOrchestrator, rateLimitedLastFmCall} from '../utils/RateLimitedAPIClients'
 
 export interface LastFmCache {
   fetched_at: string
@@ -53,7 +53,7 @@ export interface LastFmSignals {
     }
     listeners: number
     playcount: number
-    similar: { name: string; url: string }[]
+    similar: {name: string; url: string}[]
     tags: string[]
   }
   // Track identifiers
@@ -67,7 +67,7 @@ export interface LastFmSignals {
   playcount: number
 
   // Similar tracks (for transitions/recommendations)
-  similar: { artist: string; match: number; name: string }[]
+  similar: {artist: string; match: number; name: string}[]
 
   // Tags/genres
   topTags: string[]
@@ -105,7 +105,7 @@ export class LastFmService {
   /**
    * Aggregate tags from multiple tracks to get playlist-level tags
    */
-  static aggregateTags(signalsMap: Map<string, LastFmSignals>): { count: number; tag: string }[] {
+  static aggregateTags(signalsMap: Map<string, LastFmSignals>): {count: number; tag: string}[] {
     const tagCounts = new Map<string, number>()
 
     for (const signals of signalsMap.values()) {
@@ -115,7 +115,7 @@ export class LastFmService {
     }
 
     return Array.from(tagCounts.entries())
-      .map(([tag, count]) => ({ count, tag }))
+      .map(([tag, count]) => ({count, tag}))
       .sort((a, b) => b.count - a.count)
       .slice(0, 15)
   }
@@ -129,7 +129,7 @@ export class LastFmService {
   } {
     const signals = Array.from(signalsMap.values())
     if (signals.length === 0) {
-      return { avgListeners: 0, avgPlaycount: 0 }
+      return {avgListeners: 0, avgPlaycount: 0}
     }
 
     const totalListeners = signals.reduce((sum, s) => sum + s.listeners, 0)
@@ -151,7 +151,7 @@ export class LastFmService {
     Map<
       string,
       {
-        bio: null | { content: string; summary: string }
+        bio: null | {content: string; summary: string}
         images: {
           large: null | string
           medium: null | string
@@ -159,7 +159,7 @@ export class LastFmService {
         }
         listeners: number
         playcount: number
-        similar: { name: string; url: string }[]
+        similar: {name: string; url: string}[]
         tags: string[]
       }
     >
@@ -167,7 +167,7 @@ export class LastFmService {
     const results = new Map<
       string,
       {
-        bio: null | { content: string; summary: string }
+        bio: null | {content: string; summary: string}
         images: {
           large: null | string
           medium: null | string
@@ -175,15 +175,13 @@ export class LastFmService {
         }
         listeners: number
         playcount: number
-        similar: { name: string; url: string }[]
+        similar: {name: string; url: string}[]
         tags: string[]
       }
     >()
     const uniqueArtists = [...new Set(artists)] // Deduplicate
 
-    console.log(
-      `[LastFm] Fetching artist info for ${uniqueArtists.length} unique artists (orchestrated)...`,
-    )
+    console.log(`[LastFm] Fetching artist info for ${uniqueArtists.length} unique artists (orchestrated)...`)
 
     const orchestrator = getGlobalOrchestrator()
 
@@ -194,7 +192,7 @@ export class LastFmService {
       try {
         // Check cache first
         let artistInfo: null | {
-          bio: null | { content: string; summary: string }
+          bio: null | {content: string; summary: string}
           images: {
             large: null | string
             medium: null | string
@@ -202,7 +200,7 @@ export class LastFmService {
           }
           listeners: number
           playcount: number
-          similar: { name: string; url: string }[]
+          similar: {name: string; url: string}[]
           tags: string[]
         } = null
         if (this.cache) {
@@ -210,7 +208,7 @@ export class LastFmService {
           if (cached) {
             // Validate cached data structure
             artistInfo = cached as {
-              bio: null | { content: string; summary: string }
+              bio: null | {content: string; summary: string}
               images: {
                 large: null | string
                 medium: null | string
@@ -218,20 +216,16 @@ export class LastFmService {
               }
               listeners: number
               playcount: number
-              similar: { name: string; url: string }[]
+              similar: {name: string; url: string}[]
               tags: string[]
             }
             console.log(`[LastFm] Artist cache hit: ${artist}`)
-            return { artist, info: artistInfo }
+            return {artist, info: artistInfo}
           }
         }
 
         // Fetch via rate-limited orchestrator (not cached)
-        artistInfo = await rateLimitedLastFmCall(
-          () => this.getArtistInfo(artist),
-          undefined,
-          `artist:${artist}`,
-        )
+        artistInfo = await rateLimitedLastFmCall(() => this.getArtistInfo(artist), undefined, `artist:${artist}`)
 
         // Cache the result
         if (artistInfo && this.cache) {
@@ -240,10 +234,10 @@ export class LastFmService {
           })
         }
 
-        return { artist, info: artistInfo }
+        return {artist, info: artistInfo}
       } catch (error) {
         console.error(`[LastFm] Failed to get artist info for ${artist}:`, error)
-        return { artist, info: null }
+        return {artist, info: null}
       }
     })
 
@@ -280,10 +274,7 @@ export class LastFmService {
    * Batch get signals for multiple tracks (skips artist info by default for performance)
    * Rate limiting is handled by the orchestrator via continuous queue processing
    */
-  async batchGetSignals(
-    tracks: LastFmTrack[],
-    skipArtistInfo = true,
-  ): Promise<Map<string, LastFmSignals>> {
+  async batchGetSignals(tracks: LastFmTrack[], skipArtistInfo = true): Promise<Map<string, LastFmSignals>> {
     const results = new Map<string, LastFmSignals>()
 
     // Process all tracks in parallel - orchestrator controls concurrency and rate
@@ -332,9 +323,7 @@ export class LastFmService {
         const age = Date.now() - new Date(cached.fetched_at).getTime()
         if (cached.is_miss && age < this.missCacheTTL * 1000) {
           console.log(
-            `[LastFm] 🔄 Recent miss cached for ${track.artist} - ${
-              track.name
-            }, age: ${Math.round(age / 1000 / 60)}m`,
+            `[LastFm] 🔄 Recent miss cached for ${track.artist} - ${track.name}, age: ${Math.round(age / 1000 / 60)}m`,
           )
           return cached.signals
         }
@@ -419,9 +408,7 @@ export class LastFmService {
       if (this.cache) {
         const isMiss = signals.topTags.length === 0 && signals.listeners === 0
         await this.setCached(cacheKey, signals, isMiss)
-        console.log(
-          `[LastFm] Cached ${isMiss ? 'miss' : 'hit'} for ${track.artist} - ${track.name}`,
-        )
+        console.log(`[LastFm] Cached ${isMiss ? 'miss' : 'hit'} for ${track.artist} - ${track.name}`)
       }
 
       return signals
@@ -487,7 +474,7 @@ export class LastFmService {
    * Get artist info (bio, tags, similar artists, stats)
    */
   private async getArtistInfo(artist: string): Promise<null | {
-    bio: null | { content: string; summary: string }
+    bio: null | {content: string; summary: string}
     images: {
       large: null | string
       medium: null | string
@@ -495,7 +482,7 @@ export class LastFmService {
     }
     listeners: number
     playcount: number
-    similar: { name: string; url: string }[]
+    similar: {name: string; url: string}[]
     tags: string[]
   }> {
     try {
@@ -589,10 +576,7 @@ export class LastFmService {
   /**
    * Get track correction (canonical names)
    */
-  private async getCorrection(
-    artist: string,
-    track: string,
-  ): Promise<null | { artist: string; track: string }> {
+  private async getCorrection(artist: string, track: string): Promise<null | {artist: string; track: string}> {
     try {
       const data = await this.callApi(
         'track.getCorrection',
@@ -624,7 +608,7 @@ export class LastFmService {
   private async getSimilarTracks(
     artist: string,
     track: string,
-  ): Promise<{ artist: string; match: number; name: string }[]> {
+  ): Promise<{artist: string; match: number; name: string}[]> {
     try {
       const data = await this.callApi(
         'track.getSimilar',

@@ -1,14 +1,14 @@
-import { ChatAnthropic } from '@langchain/anthropic'
-import { AIMessage, HumanMessage, SystemMessage } from '@langchain/core/messages'
-import { DynamicStructuredTool } from '@langchain/core/tools'
-import { Hono } from 'hono'
-import { z } from 'zod'
+import {ChatAnthropic} from '@langchain/anthropic'
+import {AIMessage, HumanMessage, SystemMessage} from '@langchain/core/messages'
+import {DynamicStructuredTool} from '@langchain/core/tools'
+import {Hono} from 'hono'
+import {z} from 'zod'
 
-import type { Env } from '../index'
+import type {Env} from '../index'
 
-import { executeSpotifyTool } from '../lib/spotify-tools'
+import {executeSpotifyTool} from '../lib/spotify-tools'
 
-const chatRouter = new Hono<{ Bindings: Env }>()
+const chatRouter = new Hono<{Bindings: Env}>()
 
 // Request schema
 const ChatRequestSchema = z.object({
@@ -34,14 +34,9 @@ function createSpotifyTools(spotifyToken: string): DynamicStructuredTool[] {
       description: 'Search for tracks on Spotify with optional audio feature filters',
       func: async args => {
         const startTime = Date.now()
-        console.log(
-          `[Tool:search_spotify_tracks] Starting search for: "${args.query}" with limit=${args.limit}`,
-        )
+        console.log(`[Tool:search_spotify_tracks] Starting search for: "${args.query}" with limit=${args.limit}`)
         if (args.filters) {
-          console.log(
-            `[Tool:search_spotify_tracks] Applying filters:`,
-            JSON.stringify(args.filters),
-          )
+          console.log(`[Tool:search_spotify_tracks] Applying filters:`, JSON.stringify(args.filters))
         }
         try {
           const result = await executeSpotifyTool('search_spotify_tracks', args, spotifyToken)
@@ -81,9 +76,7 @@ function createSpotifyTools(spotifyToken: string): DynamicStructuredTool[] {
       description: 'Get detailed audio features for tracks (energy, danceability, tempo, etc.)',
       func: async args => {
         const startTime = Date.now()
-        console.log(
-          `[Tool:get_audio_features] Getting features for ${args.track_ids.length} track(s)`,
-        )
+        console.log(`[Tool:get_audio_features] Getting features for ${args.track_ids.length} track(s)`)
         console.log(
           `[Tool:get_audio_features] Track IDs: ${args.track_ids
             .slice(0, 5)
@@ -126,8 +119,7 @@ function createSpotifyTools(spotifyToken: string): DynamicStructuredTool[] {
         }
         const targets = []
         if (args.target_energy !== undefined) targets.push(`energy=${args.target_energy}`)
-        if (args.target_danceability !== undefined)
-          targets.push(`danceability=${args.target_danceability}`)
+        if (args.target_danceability !== undefined) targets.push(`danceability=${args.target_danceability}`)
         if (args.target_valence !== undefined) targets.push(`valence=${args.target_valence}`)
         if (targets.length > 0) {
           console.log(`[Tool:get_recommendations] Targets: ${targets.join(', ')}`)
@@ -183,9 +175,7 @@ function createSpotifyTools(spotifyToken: string): DynamicStructuredTool[] {
           console.log(`[Tool:create_playlist] Success: Playlist created in ${duration}ms`)
           if (result && typeof result === 'object' && 'id' in result) {
             console.log(`[Tool:create_playlist] Playlist ID: ${result.id}`)
-            console.log(
-              `[Tool:create_playlist] Playlist URL: ${result.external_urls?.spotify ?? 'N/A'}`,
-            )
+            console.log(`[Tool:create_playlist] Playlist URL: ${result.external_urls?.spotify ?? 'N/A'}`)
           }
           return result
         } catch (error) {
@@ -243,11 +233,7 @@ function createSpotifyTools(spotifyToken: string): DynamicStructuredTool[] {
       func: async args => {
         const startTime = Date.now()
         console.log(`[Tool:analyze_playlist] Analyzing playlist ${args.playlist_id}`)
-        console.log(
-          `[Tool:analyze_playlist] Include recommendations: ${
-            args.include_recommendations ?? false
-          }`,
-        )
+        console.log(`[Tool:analyze_playlist] Include recommendations: ${args.include_recommendations ?? false}`)
         try {
           const result = await executeSpotifyTool('analyze_playlist', args, spotifyToken)
           const duration = Date.now() - startTime
@@ -285,8 +271,7 @@ function createSpotifyTools(spotifyToken: string): DynamicStructuredTool[] {
     }),
 
     new DynamicStructuredTool({
-      description:
-        'Get detailed information about a specific track including artist, album, popularity',
+      description: 'Get detailed information about a specific track including artist, album, popularity',
       func: async args => {
         const startTime = Date.now()
         console.log(`[Tool:get_track_details] Getting details for track ${args.track_id}`)
@@ -311,8 +296,7 @@ function createSpotifyTools(spotifyToken: string): DynamicStructuredTool[] {
     }),
 
     new DynamicStructuredTool({
-      description:
-        'Get detailed information about an artist including genres, popularity, and follower count',
+      description: 'Get detailed information about an artist including genres, popularity, and follower count',
       func: async args => {
         const startTime = Date.now()
         console.log(`[Tool:get_artist_info] Getting info for artist ${args.artist_id}`)
@@ -517,31 +501,20 @@ chatRouter.post('/message', async c => {
 
     console.log(`[Chat:${requestId}] Mode: ${request.mode}`)
     console.log(
-      `[Chat:${requestId}] Message: "${actualMessage.substring(0, 100)}${
-        actualMessage.length > 100 ? '...' : ''
-      }"`,
+      `[Chat:${requestId}] Message: "${actualMessage.substring(0, 100)}${actualMessage.length > 100 ? '...' : ''}"`,
     )
-    console.log(
-      `[Chat:${requestId}] Conversation history: ${request.conversationHistory.length} messages`,
-    )
-    console.log(
-      `[Chat:${requestId}] Playlist context: ${playlistId ? `Yes (${playlistId})` : 'No'}`,
-    )
+    console.log(`[Chat:${requestId}] Conversation history: ${request.conversationHistory.length} messages`)
+    console.log(`[Chat:${requestId}] Playlist context: ${playlistId ? `Yes (${playlistId})` : 'No'}`)
 
     // Get Spotify token from Authorization header
     const authorization = c.req.header('Authorization')
     if (!authorization) {
       console.error(`[Chat:${requestId}] No Authorization header provided`)
-      return c.json({ error: 'Unauthorized - Missing Authorization header' }, 401)
+      return c.json({error: 'Unauthorized - Missing Authorization header'}, 401)
     }
     if (!authorization.startsWith('Bearer ')) {
-      console.error(
-        `[Chat:${requestId}] Invalid Authorization header format: ${authorization.substring(
-          0,
-          20,
-        )}...`,
-      )
-      return c.json({ error: 'Unauthorized - Invalid Authorization format' }, 401)
+      console.error(`[Chat:${requestId}] Invalid Authorization header format: ${authorization.substring(0, 20)}...`)
+      return c.json({error: 'Unauthorized - Invalid Authorization format'}, 401)
     }
 
     const spotifyToken = authorization.replace('Bearer ', '')
@@ -555,9 +528,7 @@ chatRouter.post('/message', async c => {
     console.log(`[Chat:${requestId}] === INITIALIZING CLAUDE CLIENT ===`)
     console.log(
       `[Chat:${requestId}] API Key: ${
-        c.env.ANTHROPIC_API_KEY
-          ? 'Present (' + c.env.ANTHROPIC_API_KEY.substring(0, 10) + '...)'
-          : 'MISSING!'
+        c.env.ANTHROPIC_API_KEY ? 'Present (' + c.env.ANTHROPIC_API_KEY.substring(0, 10) + '...)' : 'MISSING!'
       }`,
     )
 
@@ -569,17 +540,13 @@ chatRouter.post('/message', async c => {
       temperature: 0.2,
     })
 
-    console.log(
-      `[Chat:${requestId}] Claude client initialized with maxRetries: 0 (manual retry enabled)`,
-    )
+    console.log(`[Chat:${requestId}] Claude client initialized with maxRetries: 0 (manual retry enabled)`)
 
     // Start with tools enabled, but can fallback if needed
     let useTools = true
     let modelWithTools = llm.bindTools(tools)
 
-    console.log(
-      `[Chat:${requestId}] Tools bound to model: ${useTools ? 'Yes' : 'No (fallback mode)'}`,
-    )
+    console.log(`[Chat:${requestId}] Tools bound to model: ${useTools ? 'Yes' : 'No (fallback mode)'}`)
 
     // System prompts based on mode
     const systemPrompts = {
@@ -687,9 +654,7 @@ Use tools to make informed decisions.`,
 
     console.log(`[Chat:${requestId}] === PREPARING CLAUDE INVOCATION ===`)
     console.log(`[Chat:${requestId}] Total messages: ${messages.length}`)
-    console.log(
-      `[Chat:${requestId}] System prompt length: ${systemPrompts[request.mode].length} chars`,
-    )
+    console.log(`[Chat:${requestId}] System prompt length: ${systemPrompts[request.mode].length} chars`)
     console.log(`[Chat:${requestId}] Available tools: ${tools.map(t => t.name).join(', ')}`)
     console.log(`[Chat:${requestId}] Model: claude-sonnet-4-5-20250929`)
     console.log(`[Chat:${requestId}] Temperature: 0.2, Max tokens: 2000`)
@@ -702,9 +667,7 @@ Use tools to make informed decisions.`,
     while (retryCount < maxRetries) {
       try {
         const invokeStartTime = Date.now()
-        console.log(
-          `[Chat:${requestId}] Attempt ${retryCount + 1}/${maxRetries}: Invoking Claude...`,
-        )
+        console.log(`[Chat:${requestId}] Attempt ${retryCount + 1}/${maxRetries}: Invoking Claude...`)
 
         // First invocation - Claude may call tools
         initialResponse = await modelWithTools.invoke(messages)
@@ -719,35 +682,23 @@ Use tools to make informed decisions.`,
         )
         if (initialResponse?.tool_calls) {
           console.log(
-            `[Chat:${requestId}] Tool calls requested: ${initialResponse.tool_calls
-              .map(tc => tc.name)
-              .join(', ')}`,
+            `[Chat:${requestId}] Tool calls requested: ${initialResponse.tool_calls.map(tc => tc.name).join(', ')}`,
           )
         }
         break // Success, exit retry loop
       } catch (invokeError) {
-        const errorMessage =
-          invokeError instanceof Error ? invokeError.message : String(invokeError)
+        const errorMessage = invokeError instanceof Error ? invokeError.message : String(invokeError)
         console.error(`[Chat:${requestId}] ❌ Attempt ${retryCount + 1} failed: ${errorMessage}`)
 
         // Log error details
         if (invokeError instanceof Error) {
           console.error(`[Chat:${requestId}] Error name: ${invokeError.name}`)
-          console.error(
-            `[Chat:${requestId}] Error stack: ${invokeError.stack
-              ?.split('\n')
-              .slice(0, 3)
-              .join('\n')}`,
-          )
+          console.error(`[Chat:${requestId}] Error stack: ${invokeError.stack?.split('\n').slice(0, 3).join('\n')}`)
 
           // Check response status if available
-          if (
-            typeof invokeError === 'object' &&
-            invokeError !== null &&
-            'response' in invokeError
-          ) {
+          if (typeof invokeError === 'object' && invokeError !== null && 'response' in invokeError) {
             const errorWithResponse = invokeError as {
-              response?: { status?: number }
+              response?: {status?: number}
             }
             if (errorWithResponse.response?.status) {
               console.error(`[Chat:${requestId}] HTTP Status: ${errorWithResponse.response.status}`)
@@ -755,16 +706,10 @@ Use tools to make informed decisions.`,
 
             // Check for rate limit info in error
             if (errorMessage.includes('429') || errorWithResponse.response?.status === 429) {
-              console.error(
-                `[Chat:${requestId}] 🚫 RATE LIMIT HIT - This is an account/API key level limit`,
-              )
-              console.error(
-                `[Chat:${requestId}] This means YOUR account has exceeded its rate limits`,
-              )
+              console.error(`[Chat:${requestId}] 🚫 RATE LIMIT HIT - This is an account/API key level limit`)
+              console.error(`[Chat:${requestId}] This means YOUR account has exceeded its rate limits`)
             } else if (errorMessage.includes('529') || errorWithResponse.response?.status === 529) {
-              console.error(
-                `[Chat:${requestId}] 🌍 GLOBAL OVERLOAD - This affects ALL Anthropic users`,
-              )
+              console.error(`[Chat:${requestId}] 🌍 GLOBAL OVERLOAD - This affects ALL Anthropic users`)
               console.error(`[Chat:${requestId}] This is not specific to your account`)
             }
           }
@@ -777,7 +722,7 @@ Use tools to make informed decisions.`,
           (typeof invokeError === 'object' &&
             invokeError !== null &&
             'response' in invokeError &&
-            (invokeError as { response?: { status?: number } }).response?.status === 529)
+            (invokeError as {response?: {status?: number}}).response?.status === 529)
         if (isOverloadError) {
           retryCount++
           if (retryCount < maxRetries) {
@@ -790,9 +735,7 @@ Use tools to make informed decisions.`,
             await new Promise(resolve => setTimeout(resolve, backoffTime))
             console.log(`[Chat:${requestId}] Resuming after backoff, attempting retry...`)
           } else {
-            console.error(
-              `[Chat:${requestId}] ❌ Max retries (${maxRetries}) exhausted for overload error`,
-            )
+            console.error(`[Chat:${requestId}] ❌ Max retries (${maxRetries}) exhausted for overload error`)
             throw invokeError
           }
         } else if (
@@ -801,7 +744,7 @@ Use tools to make informed decisions.`,
           (typeof invokeError === 'object' &&
             invokeError !== null &&
             'response' in invokeError &&
-            (invokeError as { response?: { status?: number } }).response?.status === 429)
+            (invokeError as {response?: {status?: number}}).response?.status === 429)
         ) {
           console.error(`[Chat:${requestId}] ⏳ Rate limit error detected, not retrying`)
           throw invokeError
@@ -835,9 +778,7 @@ Use tools to make informed decisions.`,
         } tool(s): ${initialResponse.tool_calls.map(tc => tc.name).join(', ')}`,
       )
 
-      console.log(
-        `[Chat:${requestId}] === EXECUTING ${initialResponse.tool_calls.length} TOOL CALLS ===`,
-      )
+      console.log(`[Chat:${requestId}] === EXECUTING ${initialResponse.tool_calls.length} TOOL CALLS ===`)
 
       // Execute each tool call
       const toolResults = []
@@ -845,9 +786,7 @@ Use tools to make informed decisions.`,
         const toolCall = initialResponse.tool_calls[i]
         const toolStartTime = Date.now()
         console.log(
-          `[Chat:${requestId}] [Tool ${i + 1}/${
-            initialResponse.tool_calls.length
-          }] Starting: ${toolCall.name}`,
+          `[Chat:${requestId}] [Tool ${i + 1}/${initialResponse.tool_calls.length}] Starting: ${toolCall.name}`,
         )
         console.log(
           `[Chat:${requestId}] [Tool ${i + 1}/${
@@ -889,9 +828,7 @@ Use tools to make informed decisions.`,
             }] ${toolCall.name} completed in ${toolDuration}ms`,
           )
           console.log(
-            `[Chat:${requestId}] [Tool ${i + 1}/${
-              initialResponse.tool_calls.length
-            }] Result: ${resultSummary}`,
+            `[Chat:${requestId}] [Tool ${i + 1}/${initialResponse.tool_calls.length}] Result: ${resultSummary}`,
           )
 
           toolResults.push({
@@ -907,9 +844,7 @@ Use tools to make informed decisions.`,
             }] ${toolCall.name} failed after ${toolDuration}ms`,
           )
           console.error(
-            `[Chat:${requestId}] [Tool ${i + 1}/${
-              initialResponse.tool_calls.length
-            }] Error: ${errorMessage}`,
+            `[Chat:${requestId}] [Tool ${i + 1}/${initialResponse.tool_calls.length}] Error: ${errorMessage}`,
           )
           if (error instanceof Error && error.stack) {
             console.error(
@@ -928,9 +863,7 @@ Use tools to make informed decisions.`,
 
       // Create tool response message
       const toolMessage = {
-        content: toolResults
-          .map(r => `Tool ${r.tool_call_id} result: ${JSON.stringify(r.output)}`)
-          .join('\n\n'),
+        content: toolResults.map(r => `Tool ${r.tool_call_id} result: ${JSON.stringify(r.output)}`).join('\n\n'),
         role: 'tool' as const,
         tool_call_id: initialResponse.tool_calls[0].id,
       }
@@ -986,15 +919,15 @@ Use tools to make informed decisions.`,
     )
     console.log(
       `[Chat:${requestId}] Conversation length: ${
-        [...request.conversationHistory, { content: request.message, role: 'user' }].length + 1
+        [...request.conversationHistory, {content: request.message, role: 'user'}].length + 1
       } messages`,
     )
 
     return c.json({
       conversationHistory: [
         ...request.conversationHistory,
-        { content: actualMessage, role: 'user' as const }, // Use actualMessage without playlist ID prefix
-        { content: responseContent, role: 'assistant' as const },
+        {content: actualMessage, role: 'user' as const}, // Use actualMessage without playlist ID prefix
+        {content: responseContent, role: 'assistant' as const},
       ],
       duration,
       message: responseContent,
@@ -1005,11 +938,7 @@ Use tools to make informed decisions.`,
     console.error(`[Chat:${requestId}] ${'='.repeat(50)}`)
     console.error(`[Chat:${requestId}] === REQUEST FAILED ===`)
     console.error(`[Chat:${requestId}] Duration: ${duration}ms`)
-    console.error(
-      `[Chat:${requestId}] Error type: ${
-        error instanceof Error ? error.constructor.name : typeof error
-      }`,
-    )
+    console.error(`[Chat:${requestId}] Error type: ${error instanceof Error ? error.constructor.name : typeof error}`)
 
     // Detailed error logging
     if (error instanceof z.ZodError) {
@@ -1032,10 +961,7 @@ Use tools to make informed decisions.`,
     if (error instanceof Error) {
       console.error(`[Chat:${requestId}] ${error.name} after ${duration}ms: ${error.message}`)
       if (error.stack) {
-        console.error(
-          `[Chat:${requestId}] Stack trace:`,
-          error.stack.split('\n').slice(0, 5).join('\n'),
-        )
+        console.error(`[Chat:${requestId}] Stack trace:`, error.stack.split('\n').slice(0, 5).join('\n'))
       }
 
       // Check for specific error types
@@ -1117,4 +1043,4 @@ chatRouter.get('/health', c => {
   })
 })
 
-export { chatRouter }
+export {chatRouter}

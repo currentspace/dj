@@ -414,7 +414,7 @@ await queue.processAllWithCallback((result, index, total) => {
     "tracks_found": "number",
     "bpm": {
       "avg": "number",
-      "range": { "min": "number", "max": "number" },
+      "range": {"min": "number", "max": "number"},
       "sample_size": "number"
     },
     "rank": {
@@ -427,7 +427,7 @@ await queue.processAllWithCallback((result, index, total) => {
   },
 
   "lastfm_analysis": {
-    "crowd_tags": [{ "tag": "string", "count": "number" }],
+    "crowd_tags": [{"tag": "string", "count": "number"}],
     "avg_listeners": "number",
     "avg_playcount": "number",
     "similar_tracks": ["Artist - Track"],
@@ -570,7 +570,7 @@ The `build:worker` script handles this automatically.
 2. Define router with Hono
 3. Register in `workers/api/src/index.ts`:
    ```typescript
-   import { myRouter } from './routes/my-route'
+   import {myRouter} from './routes/my-route'
    app.route('/api/my-route', myRouter)
    ```
 4. Commit and push to deploy

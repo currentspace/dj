@@ -1,8 +1,8 @@
-import { Hono } from 'hono'
+import {Hono} from 'hono'
 
-import type { Env } from '../index'
+import type {Env} from '../index'
 
-import { isSuccessResponse, safeParse } from '../lib/guards'
+import {isSuccessResponse, safeParse} from '../lib/guards'
 import {
   AnthropicMessageSchema,
   GeneratedPlaylistSchema,
@@ -15,7 +15,7 @@ import {
   SpotifyUserSchema,
 } from '../lib/schemas'
 
-const playlistRouter = new Hono<{ Bindings: Env }>()
+const playlistRouter = new Hono<{Bindings: Env}>()
 
 playlistRouter.post('/generate', async c => {
   try {
@@ -23,11 +23,11 @@ playlistRouter.post('/generate', async c => {
     const request = safeParse(GeneratePlaylistRequestSchema, requestBody)
 
     if (!request) {
-      return c.json({ error: 'Valid prompt is required' }, 400)
+      return c.json({error: 'Valid prompt is required'}, 400)
     }
 
     const token = c.req.header('Authorization')?.replace('Bearer ', '')
-    const { prompt } = request
+    const {prompt} = request
 
     // Step 1: Generate playlist ideas with Anthropic
     const anthropicResponse = await fetch('https://api.anthropic.com/v1/messages', {
@@ -91,9 +91,7 @@ playlistRouter.post('/generate', async c => {
         playlistData.tracks.map(async (track): Promise<PlaylistTrack> => {
           try {
             const searchResponse = await fetch(
-              `https://api.spotify.com/v1/search?q=${encodeURIComponent(
-                track.query,
-              )}&type=track&limit=1`,
+              `https://api.spotify.com/v1/search?q=${encodeURIComponent(track.query)}&type=track&limit=1`,
               {
                 headers: {
                   Authorization: `Bearer ${token}`,
@@ -133,7 +131,7 @@ playlistRouter.post('/generate', async c => {
     return c.json(playlistData)
   } catch (error) {
     console.error('Playlist generation error:', error)
-    return c.json({ error: 'Failed to generate playlist' }, 500)
+    return c.json({error: 'Failed to generate playlist'}, 500)
   }
 })
 
@@ -143,16 +141,16 @@ playlistRouter.post('/save', async c => {
     const request = safeParse(SavePlaylistRequestSchema, requestBody)
 
     if (!request) {
-      return c.json({ error: 'Invalid playlist data' }, 400)
+      return c.json({error: 'Invalid playlist data'}, 400)
     }
 
     const token = c.req.header('Authorization')?.replace('Bearer ', '')
 
     if (!token) {
-      return c.json({ error: 'Not authenticated' }, 401)
+      return c.json({error: 'Not authenticated'}, 401)
     }
 
-    const { playlist } = request
+    const {playlist} = request
 
     // Get user ID
     const userResponse = await fetch('https://api.spotify.com/v1/me', {
@@ -201,25 +199,20 @@ playlistRouter.post('/save', async c => {
 
     // Add tracks to playlist
     const trackUris = playlist.tracks
-      .filter((track: PlaylistTrack): track is PlaylistTrack & { spotifyUri: string } =>
-        Boolean(track.spotifyUri),
-      )
-      .map((track: PlaylistTrack & { spotifyUri: string }) => track.spotifyUri)
+      .filter((track: PlaylistTrack): track is PlaylistTrack & {spotifyUri: string} => Boolean(track.spotifyUri))
+      .map((track: PlaylistTrack & {spotifyUri: string}) => track.spotifyUri)
 
     if (trackUris.length > 0) {
-      const addTracksResponse = await fetch(
-        `https://api.spotify.com/v1/playlists/${createdPlaylist.id}/tracks`,
-        {
-          body: JSON.stringify({
-            uris: trackUris,
-          }),
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          method: 'POST',
+      const addTracksResponse = await fetch(`https://api.spotify.com/v1/playlists/${createdPlaylist.id}/tracks`, {
+        body: JSON.stringify({
+          uris: trackUris,
+        }),
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
         },
-      )
+        method: 'POST',
+      })
 
       if (!addTracksResponse.ok) {
         throw new Error('Failed to add tracks to playlist')
@@ -233,8 +226,8 @@ playlistRouter.post('/save', async c => {
     })
   } catch (error) {
     console.error('Save playlist error:', error)
-    return c.json({ error: 'Failed to save playlist to Spotify' }, 500)
+    return c.json({error: 'Failed to save playlist to Spotify'}, 500)
   }
 })
 
-export { playlistRouter }
+export {playlistRouter}

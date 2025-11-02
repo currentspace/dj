@@ -1,14 +1,14 @@
-import { Suspense, useState } from 'react'
+import {Suspense, useState} from 'react'
 
-import { ErrorBoundary, PlaylistErrorBoundary } from './app/ErrorBoundary'
-import { BuildInfo } from './components/BuildInfo'
-import { SpotifyAuth } from './features/auth/SpotifyAuth'
-import { ChatInterface } from './features/chat/ChatInterface'
-import { ScopeDebugger } from './features/debug/ScopeDebugger'
-import { UserPlaylists } from './features/playlist/UserPlaylists'
-import { TestPage } from './features/test/TestPage'
-import { useSpotifyAuth } from './hooks/useSpotifyAuth'
-import { SSETestPage } from './pages/SSETestPage'
+import {ErrorBoundary, PlaylistErrorBoundary} from './app/ErrorBoundary'
+import {BuildInfo} from './components/BuildInfo'
+import {SpotifyAuth} from './features/auth/SpotifyAuth'
+import {ChatInterface} from './features/chat/ChatInterface'
+import {ScopeDebugger} from './features/debug/ScopeDebugger'
+import {UserPlaylists} from './features/playlist/UserPlaylists'
+import {TestPage} from './features/test/TestPage'
+import {useSpotifyAuth} from './hooks/useSpotifyAuth'
+import {SSETestPage} from './pages/SSETestPage'
 import './styles/build-info.css'
 
 interface SpotifyPlaylist {
@@ -33,7 +33,7 @@ interface SpotifyPlaylist {
 }
 
 function App() {
-  const { clearError, error, isAuthenticated, isLoading, login, logout } = useSpotifyAuth()
+  const {clearError, error, isAuthenticated, isLoading, login, logout} = useSpotifyAuth()
 
   const [selectedPlaylist, setSelectedPlaylist] = useState<null | SpotifyPlaylist>(null)
   const [showTestPage, setShowTestPage] = useState(false)
@@ -59,8 +59,7 @@ function App() {
                     setShowScopeDebug(!showScopeDebug)
                     setShowSSETest(false)
                     setShowTestPage(false)
-                  }}
-                >
+                  }}>
                   {showScopeDebug ? '🎵 Back to Chat' : '🔍 Scope Debug'}
                 </button>
                 <button
@@ -69,8 +68,7 @@ function App() {
                     setShowSSETest(!showSSETest)
                     setShowTestPage(false)
                     setShowScopeDebug(false)
-                  }}
-                >
+                  }}>
                   {showSSETest ? '🎵 Back to Chat' : '🔧 SSE Debug'}
                 </button>
                 <button
@@ -79,8 +77,7 @@ function App() {
                     setShowTestPage(!showTestPage)
                     setShowSSETest(false)
                     setShowScopeDebug(false)
-                  }}
-                >
+                  }}>
                   {showTestPage ? '🎵 Back to Chat' : '🧪 Test Mode'}
                 </button>
                 <button className="logout-button" onClick={logout}>
@@ -106,22 +103,14 @@ function App() {
             </Suspense>
           ) : !isAuthenticated ? (
             <Suspense fallback={<div className="loading">Loading...</div>}>
-              <SpotifyAuth
-                error={error}
-                isLoading={isLoading}
-                onClearError={clearError}
-                onLogin={login}
-              />
+              <SpotifyAuth error={error} isLoading={isLoading} onClearError={clearError} onLogin={login} />
             </Suspense>
           ) : (
             <PlaylistErrorBoundary>
               <div className="main-content">
                 <div className="playlists-section">
                   <Suspense fallback={<div className="loading">Loading playlists...</div>}>
-                    <UserPlaylists
-                      onPlaylistSelect={handlePlaylistSelect}
-                      selectedPlaylist={selectedPlaylist}
-                    />
+                    <UserPlaylists onPlaylistSelect={handlePlaylistSelect} selectedPlaylist={selectedPlaylist} />
                   </Suspense>
                 </div>
 
@@ -133,9 +122,7 @@ function App() {
                   ) : (
                     <div className="no-playlist-selected">
                       <h2>🎵 Select a Playlist</h2>
-                      <p>
-                        Choose a playlist from the left to start chatting with your AI DJ assistant!
-                      </p>
+                      <p>Choose a playlist from the left to start chatting with your AI DJ assistant!</p>
                     </div>
                   )}
                 </div>

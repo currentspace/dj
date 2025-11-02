@@ -3,14 +3,9 @@
  * Migrated to use @hono/zod-openapi
  */
 
-import type { OpenAPIHono } from '@hono/zod-openapi'
+import type {OpenAPIHono} from '@hono/zod-openapi'
 
-import {
-  createPlaylist,
-  getPlaylistTracks,
-  getUserPlaylists,
-  modifyPlaylist,
-} from '@dj/api-contracts'
+import {createPlaylist, getPlaylistTracks, getUserPlaylists, modifyPlaylist} from '@dj/api-contracts'
 import {
   SpotifyAddTracksResponseSchema,
   SpotifyPlaylistFullSchema,
@@ -19,14 +14,14 @@ import {
   SpotifyUserSchema,
 } from '@dj/shared-types'
 
-import type { Env } from '../index'
+import type {Env} from '../index'
 
-import { isSuccessResponse } from '../lib/guards'
+import {isSuccessResponse} from '../lib/guards'
 
 /**
  * Register playlist routes on the provided OpenAPI app
  */
-export function registerPlaylistRoutes(app: OpenAPIHono<{ Bindings: Env }>) {
+export function registerPlaylistRoutes(app: OpenAPIHono<{Bindings: Env}>) {
   // GET /api/spotify/playlists - Get user's playlists
   app.openapi(getUserPlaylists, async c => {
     try {
@@ -34,25 +29,22 @@ export function registerPlaylistRoutes(app: OpenAPIHono<{ Bindings: Env }>) {
       const token = c.req.header('authorization')?.replace('Bearer ', '')
 
       if (!token) {
-        return c.json({ error: 'No authorization token' }, 401)
+        return c.json({error: 'No authorization token'}, 401)
       }
 
       // Query params automatically validated by contract
       const limit = c.req.query('limit') ?? '20'
       const offset = c.req.query('offset') ?? '0'
 
-      const response = await fetch(
-        `https://api.spotify.com/v1/me/playlists?limit=${limit}&offset=${offset}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+      const response = await fetch(`https://api.spotify.com/v1/me/playlists?limit=${limit}&offset=${offset}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
         },
-      )
+      })
 
       if (!isSuccessResponse(response)) {
         console.error(`Get playlists failed: ${response.status} ${response.statusText}`)
-        return c.json({ error: 'Failed to get playlists' }, 401)
+        return c.json({error: 'Failed to get playlists'}, 401)
       }
 
       const rawData = await response.json()
@@ -60,7 +52,7 @@ export function registerPlaylistRoutes(app: OpenAPIHono<{ Bindings: Env }>) {
 
       if (!parseResult.success) {
         console.error('Invalid Spotify playlists response:', parseResult.error)
-        return c.json({ error: 'Invalid response from Spotify API' }, 500)
+        return c.json({error: 'Invalid response from Spotify API'}, 500)
       }
 
       // Response automatically validated against contract schema
@@ -68,7 +60,7 @@ export function registerPlaylistRoutes(app: OpenAPIHono<{ Bindings: Env }>) {
     } catch (error) {
       console.error('Get playlists error:', error)
       const message = error instanceof Error ? error.message : 'Failed to get playlists'
-      return c.json({ error: message }, 401)
+      return c.json({error: message}, 401)
     }
   })
 
@@ -80,7 +72,7 @@ export function registerPlaylistRoutes(app: OpenAPIHono<{ Bindings: Env }>) {
       const playlistId = c.req.param('id')
 
       if (!token) {
-        return c.json({ error: 'No authorization token' }, 401)
+        return c.json({error: 'No authorization token'}, 401)
       }
 
       // Query params automatically validated by contract
@@ -98,10 +90,10 @@ export function registerPlaylistRoutes(app: OpenAPIHono<{ Bindings: Env }>) {
 
       if (!isSuccessResponse(response)) {
         if (response.status === 404) {
-          return c.json({ error: 'Playlist not found' }, 404)
+          return c.json({error: 'Playlist not found'}, 404)
         }
         console.error(`Get playlist tracks failed: ${response.status} ${response.statusText}`)
-        return c.json({ error: 'Failed to get playlist tracks' }, 401)
+        return c.json({error: 'Failed to get playlist tracks'}, 401)
       }
 
       const rawData = await response.json()
@@ -109,15 +101,15 @@ export function registerPlaylistRoutes(app: OpenAPIHono<{ Bindings: Env }>) {
 
       if (!parseResult.success) {
         console.error('Invalid Spotify playlist tracks response:', parseResult.error)
-        return c.json({ error: 'Invalid response from Spotify API' }, 500)
+        return c.json({error: 'Invalid response from Spotify API'}, 500)
       }
 
       // Response automatically validated against contract schema
-      return c.json({ items: parseResult.data.items })
+      return c.json({items: parseResult.data.items})
     } catch (error) {
       console.error('Get playlist tracks error:', error)
       const message = error instanceof Error ? error.message : 'Failed to get playlist tracks'
-      return c.json({ error: message }, 401)
+      return c.json({error: message}, 401)
     }
   })
 
@@ -128,10 +120,10 @@ export function registerPlaylistRoutes(app: OpenAPIHono<{ Bindings: Env }>) {
     try {
       // Headers and body automatically validated by contract
       const token = c.req.header('authorization')?.replace('Bearer ', '')
-      const { name, description, public: isPublic } = await c.req.json()
+      const {name, description, public: isPublic} = await c.req.json()
 
       if (!token) {
-        return c.json({ error: 'No authorization token' }, 401)
+        return c.json({error: 'No authorization token'}, 401)
       }
 
       // First, get the user's Spotify ID
@@ -142,7 +134,7 @@ export function registerPlaylistRoutes(app: OpenAPIHono<{ Bindings: Env }>) {
       })
 
       if (!isSuccessResponse(userResponse)) {
-        return c.json({ error: 'Failed to get user info' }, 400)
+        return c.json({error: 'Failed to get user info'}, 400)
       }
 
       const rawUserData = await userResponse.json()
@@ -150,7 +142,7 @@ export function registerPlaylistRoutes(app: OpenAPIHono<{ Bindings: Env }>) {
 
       if (!userParseResult.success) {
         console.error('Invalid Spotify user response:', userParseResult.error)
-        return c.json({ error: 'Invalid response from Spotify API' }, 500)
+        return c.json({error: 'Invalid response from Spotify API'}, 500)
       }
 
       const userId = userParseResult.data.id
@@ -170,10 +162,8 @@ export function registerPlaylistRoutes(app: OpenAPIHono<{ Bindings: Env }>) {
       })
 
       if (!isSuccessResponse(createResponse)) {
-        console.error(
-          `Create playlist failed: ${createResponse.status} ${createResponse.statusText}`,
-        )
-        return c.json({ error: 'Failed to create playlist' }, 400)
+        console.error(`Create playlist failed: ${createResponse.status} ${createResponse.statusText}`)
+        return c.json({error: 'Failed to create playlist'}, 400)
       }
 
       const rawPlaylist = await createResponse.json()
@@ -181,7 +171,7 @@ export function registerPlaylistRoutes(app: OpenAPIHono<{ Bindings: Env }>) {
 
       if (!playlistParseResult.success) {
         console.error('Invalid Spotify create playlist response:', playlistParseResult.error)
-        return c.json({ error: 'Invalid response from Spotify API' }, 500)
+        return c.json({error: 'Invalid response from Spotify API'}, 500)
       }
 
       // Response automatically validated against contract schema
@@ -189,7 +179,7 @@ export function registerPlaylistRoutes(app: OpenAPIHono<{ Bindings: Env }>) {
     } catch (error) {
       console.error('Create playlist error:', error)
       const message = error instanceof Error ? error.message : 'Failed to create playlist'
-      return c.json({ error: message }, 400)
+      return c.json({error: message}, 400)
     }
   })
 
@@ -198,10 +188,10 @@ export function registerPlaylistRoutes(app: OpenAPIHono<{ Bindings: Env }>) {
     try {
       // Headers and body automatically validated by contract
       const token = c.req.header('authorization')?.replace('Bearer ', '')
-      const { action, playlistId, trackUris } = await c.req.json()
+      const {action, playlistId, trackUris} = await c.req.json()
 
       if (!token) {
-        return c.json({ error: 'No authorization token' }, 401)
+        return c.json({error: 'No authorization token'}, 401)
       }
 
       if (action === 'add') {
@@ -219,7 +209,7 @@ export function registerPlaylistRoutes(app: OpenAPIHono<{ Bindings: Env }>) {
 
         if (!isSuccessResponse(response)) {
           console.error(`Add tracks failed: ${response.status} ${response.statusText}`)
-          return c.json({ error: 'Failed to add tracks' }, 400)
+          return c.json({error: 'Failed to add tracks'}, 400)
         }
 
         const rawResult = await response.json()
@@ -227,7 +217,7 @@ export function registerPlaylistRoutes(app: OpenAPIHono<{ Bindings: Env }>) {
 
         if (!addParseResult.success) {
           console.error('Invalid Spotify add tracks response:', addParseResult.error)
-          return c.json({ error: 'Invalid response from Spotify API' }, 500)
+          return c.json({error: 'Invalid response from Spotify API'}, 500)
         }
 
         // Response automatically validated against contract schema
@@ -240,7 +230,7 @@ export function registerPlaylistRoutes(app: OpenAPIHono<{ Bindings: Env }>) {
         // Remove tracks from playlist
         const response = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks`, {
           body: JSON.stringify({
-            tracks: trackUris.map(uri => ({ uri })),
+            tracks: trackUris.map(uri => ({uri})),
           }),
           headers: {
             Authorization: `Bearer ${token}`,
@@ -251,7 +241,7 @@ export function registerPlaylistRoutes(app: OpenAPIHono<{ Bindings: Env }>) {
 
         if (!isSuccessResponse(response)) {
           console.error(`Remove tracks failed: ${response.status} ${response.statusText}`)
-          return c.json({ error: 'Failed to remove tracks' }, 400)
+          return c.json({error: 'Failed to remove tracks'}, 400)
         }
 
         const rawResult = await response.json()
@@ -259,7 +249,7 @@ export function registerPlaylistRoutes(app: OpenAPIHono<{ Bindings: Env }>) {
 
         if (!removeParseResult.success) {
           console.error('Invalid Spotify remove tracks response:', removeParseResult.error)
-          return c.json({ error: 'Invalid response from Spotify API' }, 500)
+          return c.json({error: 'Invalid response from Spotify API'}, 500)
         }
 
         // Response automatically validated against contract schema
@@ -270,11 +260,11 @@ export function registerPlaylistRoutes(app: OpenAPIHono<{ Bindings: Env }>) {
         })
       }
 
-      return c.json({ error: 'Invalid action' }, 400)
+      return c.json({error: 'Invalid action'}, 400)
     } catch (error) {
       console.error('Modify playlist error:', error)
       const message = error instanceof Error ? error.message : 'Failed to modify playlist'
-      return c.json({ error: message }, 400)
+      return c.json({error: message}, 400)
     }
   })
 }

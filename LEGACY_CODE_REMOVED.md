@@ -34,20 +34,20 @@
 ### Clean Imports (index.ts)
 
 ```typescript
-import { OpenAPIHono } from '@hono/zod-openapi'
-import { cors } from 'hono/cors'
-import { swaggerUI } from '@hono/swagger-ui'
+import {OpenAPIHono} from '@hono/zod-openapi'
+import {cors} from 'hono/cors'
+import {swaggerUI} from '@hono/swagger-ui'
 
-import { anthropicStatusRouter } from './routes/anthropic-status'
-import { chatRouter } from './routes/chat-simple'
-import { chatStreamRouter } from './routes/chat-stream'
-import { chatTestRouter } from './routes/chat-test'
-import { mcpRouter } from './routes/mcp'
-import { playlistRouter } from './routes/playlist'
-import { registerPlaylistRoutes } from './routes/playlists-openapi'
-import { registerSpotifyAuthRoutes } from './routes/spotify-openapi'
-import { sseTestRouter } from './routes/sse-test'
-import { testRouter } from './routes/test'
+import {anthropicStatusRouter} from './routes/anthropic-status'
+import {chatRouter} from './routes/chat-simple'
+import {chatStreamRouter} from './routes/chat-stream'
+import {chatTestRouter} from './routes/chat-test'
+import {mcpRouter} from './routes/mcp'
+import {playlistRouter} from './routes/playlist'
+import {registerPlaylistRoutes} from './routes/playlists-openapi'
+import {registerSpotifyAuthRoutes} from './routes/spotify-openapi'
+import {sseTestRouter} from './routes/sse-test'
+import {testRouter} from './routes/test'
 ```
 
 ### Clean Route Registrations

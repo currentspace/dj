@@ -36,11 +36,7 @@ High-level API for managing rate-limited requests
 const result = await orchestrator.execute(() => apiCall())
 
 // Execute batch with ID
-orchestrator.enqueueBatch('my-batch', [
-  () => fetch('url1'),
-  () => fetch('url2'),
-  () => fetch('url3'),
-])
+orchestrator.enqueueBatch('my-batch', [() => fetch('url1'), () => fetch('url2'), () => fetch('url3')])
 const results = await orchestrator.awaitBatch('my-batch')
 
 // Get pending task count
@@ -82,10 +78,10 @@ const results = await executeBatch([
 For one-off API calls:
 
 ```typescript
-import { rateLimitedSpotifyCall } from '../utils/RateLimitedAPIClients'
+import {rateLimitedSpotifyCall} from '../utils/RateLimitedAPIClients'
 
 const playlist = await rateLimitedSpotifyCall(
-  () => spotifyApi.createPlaylist(userId, { name }),
+  () => spotifyApi.createPlaylist(userId, {name}),
   logger,
   'create playlist',
 )
@@ -96,7 +92,7 @@ const playlist = await rateLimitedSpotifyCall(
 For independent parallel requests (e.g., enriching 50 tracks):
 
 ```typescript
-import { getGlobalOrchestrator } from '../utils/RateLimitedAPIClients'
+import {getGlobalOrchestrator} from '../utils/RateLimitedAPIClients'
 
 const orchestrator = getGlobalOrchestrator()
 
@@ -144,13 +140,13 @@ const enriched = await orchestrator.awaitBatch('lastfm-enrich')
 Combine rate-limited requests with non-blocking SSE writes:
 
 ```typescript
-import { SSEWriter } from './chat-stream'
+import {SSEWriter} from './chat-stream'
 
 // Start batch processing
 orchestrator.enqueueBatch('enrich', tasks)
 
 // Update progress without blocking (fire-and-forget)
-sseWriter.writeAsync({ type: 'thinking', data: 'Enriching tracks...' })
+sseWriter.writeAsync({type: 'thinking', data: 'Enriching tracks...'})
 
 // Process batch with progress callbacks
 const results = await orchestrator.awaitBatch('enrich')
@@ -158,7 +154,7 @@ const results = await orchestrator.awaitBatch('enrich')
 // Flush SSE writes before next phase
 await sseWriter.flush()
 
-sseWriter.writeAsync({ type: 'thinking', data: 'Analyzing features...' })
+sseWriter.writeAsync({type: 'thinking', data: 'Analyzing features...'})
 ```
 
 ## SSE Write Pipeline Pattern
@@ -207,7 +203,7 @@ class SSEWriter {
 
 ```typescript
 // Phase 1: Search tracks
-sseWriter.writeAsync({ type: 'thinking', data: '🔍 Searching for tracks...' })
+sseWriter.writeAsync({type: 'thinking', data: '🔍 Searching for tracks...'})
 
 orchestrator.enqueueBatch('searches', searchTasks)
 const tracks = await orchestrator.awaitBatch('searches')
@@ -216,7 +212,7 @@ const tracks = await orchestrator.awaitBatch('searches')
 await sseWriter.flush()
 
 // Phase 2: Enrich tracks (with progress updates)
-sseWriter.writeAsync({ type: 'thinking', data: '🎧 Enriching tracks...' })
+sseWriter.writeAsync({type: 'thinking', data: '🎧 Enriching tracks...'})
 
 orchestrator.enqueueBatch('enrich-tracks', enrichTasks)
 
@@ -242,7 +238,7 @@ const results = await orchestrator.awaitBatch('enrich-tracks')
 await sseWriter.flush()
 
 // Send final result (blocking)
-await sseWriter.write({ type: 'done', data: null })
+await sseWriter.write({type: 'done', data: null})
 ```
 
 ## Rate Limit Budget
@@ -280,8 +276,8 @@ const track2 = await lastfm.getTrackInfo(track2)
 const track3 = await lastfm.getTrackInfo(track3)
 
 // ❌ Blocking SSE writes
-await sseWriter.write({ type: 'thinking', data: 'Processing...' })
-await sseWriter.write({ type: 'thinking', data: 'Still processing...' })
+await sseWriter.write({type: 'thinking', data: 'Processing...'})
+await sseWriter.write({type: 'thinking', data: 'Still processing...'})
 ```
 
 ### After (Orchestrated + Pipelined)
@@ -296,8 +292,8 @@ orchestrator.enqueueBatch('tracks', [
 ])
 
 // ✅ Non-blocking SSE writes
-sseWriter.writeAsync({ type: 'thinking', data: 'Processing...' })
-sseWriter.writeAsync({ type: 'thinking', data: 'Still processing...' })
+sseWriter.writeAsync({type: 'thinking', data: 'Processing...'})
+sseWriter.writeAsync({type: 'thinking', data: 'Still processing...'})
 
 // ✅ Await batch when needed
 const results = await orchestrator.awaitBatch('tracks')
@@ -351,7 +347,7 @@ console.log(`Completed, ${endCount} tasks remaining`)
 Enable detailed logging:
 
 ```typescript
-import { ServiceLogger } from '../utils/ServiceLogger'
+import {ServiceLogger} from '../utils/ServiceLogger'
 
 const logger = new ServiceLogger('Orchestrator')
 

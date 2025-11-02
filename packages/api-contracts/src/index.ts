@@ -3,7 +3,7 @@
  * Contract-first API definitions using Hono + Zod + OpenAPI
  */
 
-import { OpenAPIHono } from '@hono/zod-openapi'
+import {OpenAPIHono} from '@hono/zod-openapi'
 
 // Export route definitions
 export * from './routes/auth'

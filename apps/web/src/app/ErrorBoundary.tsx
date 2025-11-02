@@ -1,4 +1,4 @@
-import { Component, type ErrorInfo, type ReactNode } from 'react'
+import {Component, type ErrorInfo, type ReactNode} from 'react'
 
 interface Props {
   children: ReactNode
@@ -15,7 +15,7 @@ interface State {
 export class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props)
-    this.state = { hasError: false }
+    this.state = {hasError: false}
   }
 
   static getDerivedStateFromError(error: Error): State {
@@ -34,7 +34,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   handleReset = () => {
-    this.setState({ error: undefined, errorInfo: undefined, hasError: false })
+    this.setState({error: undefined, errorInfo: undefined, hasError: false})
     this.props.onReset?.()
   }
 
@@ -50,8 +50,8 @@ export class ErrorBoundary extends Component<Props, State> {
             <div className="error-icon">⚠️</div>
             <h2>Something went wrong</h2>
             <p>
-              We're sorry, but something unexpected happened. You can try reloading the page or
-              contact support if the problem persists.
+              We're sorry, but something unexpected happened. You can try reloading the page or contact support if the
+              problem persists.
             </p>
 
             <div className="error-actions">
@@ -80,7 +80,7 @@ export class ErrorBoundary extends Component<Props, State> {
 }
 
 // Convenience component for playlist-specific errors
-export function PlaylistErrorBoundary({ children }: { children: ReactNode }) {
+export function PlaylistErrorBoundary({children}: {children: ReactNode}) {
   return (
     <ErrorBoundary
       fallback={
@@ -92,8 +92,7 @@ export function PlaylistErrorBoundary({ children }: { children: ReactNode }) {
       onReset={() => {
         // Clear any cached playlist data
         localStorage.removeItem('current_playlist')
-      }}
-    >
+      }}>
       {children}
     </ErrorBoundary>
   )

@@ -1,5 +1,5 @@
 // Session Management for MCP Integration
-import { customAlphabet } from 'nanoid'
+import {customAlphabet} from 'nanoid'
 
 // Generate secure session tokens
 const nanoid = customAlphabet('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz', 32)
@@ -50,9 +50,7 @@ export class SessionManager {
       userId,
     }
 
-    console.log(
-      `[Session] Creating session ${sessionToken.substring(0, 8)}... for user ${userId ?? 'unknown'}`,
-    )
+    console.log(`[Session] Creating session ${sessionToken.substring(0, 8)}... for user ${userId ?? 'unknown'}`)
 
     // Store in memory for fast access
     this.memory.set(sessionToken, session)
@@ -64,7 +62,7 @@ export class SessionManager {
         await this.kv.put(
           `session:${sessionToken}`,
           JSON.stringify(session),
-          { expirationTtl: 4 * 60 * 60 }, // 4 hours TTL
+          {expirationTtl: 4 * 60 * 60}, // 4 hours TTL
         )
         console.log(`[Session] Stored in KV with 4-hour TTL`)
       } catch (error) {

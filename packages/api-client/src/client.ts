@@ -3,9 +3,9 @@
  * Provides end-to-end type safety from server to client
  */
 
-import type { AppType } from '@dj/api-contracts'
+import type {AppType} from '@dj/api-contracts'
 
-import { hc } from 'hono/client'
+import {hc} from 'hono/client'
 
 /**
  * Create a typed API client
@@ -47,9 +47,7 @@ export const apiClient = createApiClient(
 export async function parseResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const errorText = await response.text().catch(() => '')
-    throw new Error(
-      `API Error ${response.status}: ${response.statusText}${errorText ? ` - ${errorText}` : ''}`,
-    )
+    throw new Error(`API Error ${response.status}: ${response.statusText}${errorText ? ` - ${errorText}` : ''}`)
   }
 
   return response.json() as Promise<T>

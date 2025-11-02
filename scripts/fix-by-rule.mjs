@@ -6,8 +6,8 @@
  * Example: node scripts/fix-by-rule.mjs jsx-a11y/click-events-have-key-events
  */
 
-import { ESLint } from 'eslint'
-import { writeFileSync } from 'fs'
+import {ESLint} from 'eslint'
+import {writeFileSync} from 'fs'
 
 const ruleToFix = process.argv[2]
 
@@ -60,7 +60,7 @@ async function fixByRule() {
   console.log(`Found ${filesToFix.size} files with fixable ${ruleToFix} violations\n`)
 
   // Apply fixes
-  for (const [filePath, { fixes, source }] of filesToFix.entries()) {
+  for (const [filePath, {fixes, source}] of filesToFix.entries()) {
     let fixed = source
 
     // Apply fixes from end to start to preserve indices
@@ -69,9 +69,7 @@ async function fixByRule() {
     }
 
     writeFileSync(filePath, fixed, 'utf-8')
-    console.log(
-      `✓ Fixed ${fixes.length} occurrences in ${filePath.replace(process.cwd() + '/', '')}`,
-    )
+    console.log(`✓ Fixed ${fixes.length} occurrences in ${filePath.replace(process.cwd() + '/', '')}`)
     totalFixed += fixes.length
   }
 

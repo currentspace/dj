@@ -3,7 +3,7 @@
  * Provides runtime validation and type inference for all Spotify data
  */
 
-import { z } from 'zod'
+import {z} from 'zod'
 
 // ===== Base Types =====
 

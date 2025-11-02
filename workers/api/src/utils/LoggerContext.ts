@@ -5,9 +5,9 @@
  * Uses Cloudflare Workers' nodejs_compat AsyncLocalStorage support.
  */
 
-import { AsyncLocalStorage } from 'node:async_hooks'
+import {AsyncLocalStorage} from 'node:async_hooks'
 
-import { ServiceLogger } from './ServiceLogger'
+import {ServiceLogger} from './ServiceLogger'
 
 interface LoggerContext {
   logger: ServiceLogger
@@ -42,5 +42,5 @@ export function getLogger(): null | ServiceLogger {
  * Must be called with async/await (not thenables) to ensure context preservation
  */
 export async function runWithLogger<T>(logger: ServiceLogger, fn: () => Promise<T>): Promise<T> {
-  return await loggerStorage.run({ logger }, fn)
+  return await loggerStorage.run({logger}, fn)
 }

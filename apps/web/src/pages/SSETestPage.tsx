@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import {useEffect, useRef, useState} from 'react'
 
 import '../styles/sse-test.css'
 
@@ -29,7 +29,7 @@ export function SSETestPage() {
 
   const addLog = (message: string, type: LogEntry['type'] = 'info') => {
     const timestamp = new Date().toISOString().split('T')[1].slice(0, -1)
-    setLogs(prev => [...prev, { message, timestamp, type }])
+    setLogs(prev => [...prev, {message, timestamp, type}])
   }
 
   const clearLogs = () => {
@@ -65,10 +65,10 @@ export function SSETestPage() {
       let buffer = ''
 
       while (true) {
-        const { done, value } = await reader.read()
+        const {done, value} = await reader.read()
         if (done) break
 
-        buffer += decoder.decode(value, { stream: true })
+        buffer += decoder.decode(value, {stream: true})
         const lines = buffer.split('\n')
         buffer = lines.pop() ?? ''
 
@@ -94,7 +94,7 @@ export function SSETestPage() {
 
     try {
       const response = await fetch(`${apiBase}/sse-test/post-stream`, {
-        body: JSON.stringify({ test: 'data', timestamp: Date.now() }),
+        body: JSON.stringify({test: 'data', timestamp: Date.now()}),
         headers: {
           Accept: 'text/event-stream',
           'Content-Type': 'application/json',
@@ -115,10 +115,10 @@ export function SSETestPage() {
       let buffer = ''
 
       while (true) {
-        const { done, value } = await reader.read()
+        const {done, value} = await reader.read()
         if (done) break
 
-        buffer += decoder.decode(value, { stream: true })
+        buffer += decoder.decode(value, {stream: true})
         const lines = buffer.split('\n')
         buffer = lines.pop() ?? ''
 
@@ -163,10 +163,7 @@ export function SSETestPage() {
         method: 'POST',
       })
 
-      addLog(
-        `Response status: ${response.status} ${response.statusText}`,
-        response.ok ? 'success' : 'error',
-      )
+      addLog(`Response status: ${response.status} ${response.statusText}`, response.ok ? 'success' : 'error')
       addLog('Response headers:', 'info')
       for (const [key, value] of response.headers.entries()) {
         addLog(`  ${key}: ${value}`, 'info')
@@ -219,10 +216,7 @@ export function SSETestPage() {
       addLog(`Response status: ${response.status}`, response.ok ? 'success' : 'error')
 
       const contentType = response.headers.get('content-type') ?? ''
-      addLog(
-        `Content-Type: ${contentType}`,
-        contentType.includes('text/event-stream') ? 'success' : 'warning',
-      )
+      addLog(`Content-Type: ${contentType}`, contentType.includes('text/event-stream') ? 'success' : 'warning')
 
       if (!response.ok) {
         const text = await response.text()
@@ -244,24 +238,19 @@ export function SSETestPage() {
       let eventCount = 0
 
       while (true) {
-        const { done, value } = await reader.read()
+        const {done, value} = await reader.read()
 
         if (done) {
           addLog('Stream ended', 'info')
           break
         }
 
-        const chunk = decoder.decode(value, { stream: true })
+        const chunk = decoder.decode(value, {stream: true})
         buffer += chunk
 
         // Log raw chunks
         if (chunk.trim()) {
-          addLog(
-            `Raw chunk (${chunk.length} bytes): ${chunk.slice(0, 200)}${
-              chunk.length > 200 ? '...' : ''
-            }`,
-            'info',
-          )
+          addLog(`Raw chunk (${chunk.length} bytes): ${chunk.slice(0, 200)}${chunk.length > 200 ? '...' : ''}`, 'info')
         }
 
         // Parse SSE events
@@ -274,10 +263,7 @@ export function SSETestPage() {
             const data = line.slice(6)
             try {
               const event = JSON.parse(data)
-              addLog(
-                `Event #${eventCount} [${event.type}]: ${JSON.stringify(event.data).slice(0, 200)}`,
-                'success',
-              )
+              addLog(`Event #${eventCount} [${event.type}]: ${JSON.stringify(event.data).slice(0, 200)}`, 'success')
 
               if (event.type === 'done') {
                 addLog('Received done event', 'success')

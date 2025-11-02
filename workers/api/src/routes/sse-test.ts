@@ -1,14 +1,14 @@
-import { Hono } from 'hono'
+import {Hono} from 'hono'
 
-import type { Env } from '../index'
+import type {Env} from '../index'
 
-const sseTestRouter = new Hono<{ Bindings: Env }>()
+const sseTestRouter = new Hono<{Bindings: Env}>()
 
 // Simple SSE test endpoint
 sseTestRouter.get('/simple', async () => {
   console.log('[SSE-Test] Simple SSE test endpoint hit')
 
-  const { readable, writable } = new TransformStream()
+  const {readable, writable} = new TransformStream()
   const writer = writable.getWriter()
   const encoder = new TextEncoder()
 
@@ -21,9 +21,7 @@ sseTestRouter.get('/simple', async () => {
       // Send a few test messages
       for (let i = 0; i < 5; i++) {
         await new Promise(resolve => setTimeout(resolve, 1000))
-        await writer.write(
-          encoder.encode(`data: {"type": "message", "data": "Message ${i + 1}"}\n\n`),
-        )
+        await writer.write(encoder.encode(`data: {"type": "message", "data": "Message ${i + 1}"}\n\n`))
       }
 
       // Send done
@@ -55,7 +53,7 @@ sseTestRouter.post('/post-stream', async c => {
   const body = await c.req.json().catch(() => ({}))
   console.log('[SSE-Test] Request body:', body)
 
-  const { readable, writable } = new TransformStream()
+  const {readable, writable} = new TransformStream()
   const writer = writable.getWriter()
   const encoder = new TextEncoder()
 
@@ -63,9 +61,7 @@ sseTestRouter.post('/post-stream', async c => {
   const processStream = async () => {
     try {
       // Echo the request
-      await writer.write(
-        encoder.encode(`data: {"type": "echo", "data": ${JSON.stringify(body)}}\n\n`),
-      )
+      await writer.write(encoder.encode(`data: {"type": "echo", "data": ${JSON.stringify(body)}}\n\n`))
 
       // Send heartbeat
       await writer.write(encoder.encode(': heartbeat\n\n'))
@@ -94,4 +90,4 @@ sseTestRouter.post('/post-stream', async c => {
   })
 })
 
-export { sseTestRouter }
+export {sseTestRouter}

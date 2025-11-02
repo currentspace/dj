@@ -1,9 +1,4 @@
-import type {
-  StreamDebugData,
-  StreamLogData,
-  StreamToolData,
-  StreamToolResult,
-} from '@dj/shared-types'
+import type {StreamDebugData, StreamLogData, StreamToolData, StreamToolResult} from '@dj/shared-types'
 
 import {
   SpotifyPlaylistFullSchema,
@@ -12,23 +7,23 @@ import {
   type SpotifyTrackFull,
   SpotifyTrackFullSchema,
 } from '@dj/shared-types'
-import { ChatAnthropic } from '@langchain/anthropic'
-import { AIMessage, HumanMessage, SystemMessage, ToolMessage } from '@langchain/core/messages'
-import { DynamicStructuredTool } from '@langchain/core/tools'
-import { Hono } from 'hono'
-import { z } from 'zod'
+import {ChatAnthropic} from '@langchain/anthropic'
+import {AIMessage, HumanMessage, SystemMessage, ToolMessage} from '@langchain/core/messages'
+import {DynamicStructuredTool} from '@langchain/core/tools'
+import {Hono} from 'hono'
+import {z} from 'zod'
 
-import type { Env } from '../index'
+import type {Env} from '../index'
 
-import { ProgressNarrator } from '../lib/progress-narrator'
-import { executeSpotifyTool } from '../lib/spotify-tools'
-import { AudioEnrichmentService } from '../services/AudioEnrichmentService'
-import { LastFmService } from '../services/LastFmService'
-import { getChildLogger, getLogger, runWithLogger } from '../utils/LoggerContext'
-import { rateLimitedAnthropicCall, rateLimitedSpotifyCall } from '../utils/RateLimitedAPIClients'
-import { ServiceLogger } from '../utils/ServiceLogger'
+import {ProgressNarrator} from '../lib/progress-narrator'
+import {executeSpotifyTool} from '../lib/spotify-tools'
+import {AudioEnrichmentService} from '../services/AudioEnrichmentService'
+import {LastFmService} from '../services/LastFmService'
+import {getChildLogger, getLogger, runWithLogger} from '../utils/LoggerContext'
+import {rateLimitedAnthropicCall, rateLimitedSpotifyCall} from '../utils/RateLimitedAPIClients'
+import {ServiceLogger} from '../utils/ServiceLogger'
 
-const chatStreamRouter = new Hono<{ Bindings: Env }>()
+const chatStreamRouter = new Hono<{Bindings: Env}>()
 
 // Request schema
 const ChatRequestSchema = z.object({
@@ -50,17 +45,17 @@ interface AnalysisResult {
   deezer_analysis?: {
     bpm?: {
       avg: number
-      range: { max: number; min: number }
+      range: {max: number; min: number}
       sample_size: number
     }
     gain?: {
       avg: number
-      range: { max: number; min: number }
+      range: {max: number; min: number}
       sample_size: number
     }
     rank?: {
       avg: number
-      range: { max: number; min: number }
+      range: {max: number; min: number}
       sample_size: number
     }
     source: string
@@ -71,7 +66,7 @@ interface AnalysisResult {
     artists_enriched: number
     avg_listeners: number
     avg_playcount: number
-    crowd_tags: { count: number; tag: string }[]
+    crowd_tags: {count: number; tag: string}[]
     sample_size: number
     similar_tracks: string[]
     source: string
@@ -106,14 +101,14 @@ interface CreatePlaylistResult {
 
 // SSE message types
 type StreamEvent =
-  | { data: null; type: 'done' }
-  | { data: StreamDebugData; type: 'debug' }
-  | { data: StreamLogData; type: 'log' }
-  | { data: StreamToolData; type: 'tool_start' }
-  | { data: StreamToolResult; type: 'tool_end' }
-  | { data: string; type: 'content' }
-  | { data: string; type: 'error' }
-  | { data: string; type: 'thinking' }
+  | {data: null; type: 'done'}
+  | {data: StreamDebugData; type: 'debug'}
+  | {data: StreamLogData; type: 'log'}
+  | {data: StreamToolData; type: 'tool_start'}
+  | {data: StreamToolResult; type: 'tool_end'}
+  | {data: string; type: 'content'}
+  | {data: string; type: 'error'}
+  | {data: string; type: 'thinking'}
 
 // Writer queue to prevent concurrent writes
 class SSEWriter {
@@ -215,7 +210,7 @@ function createStreamingSpotifyTools(
         if (abortSignal?.aborted) throw new Error('Request aborted')
 
         await sseWriter.write({
-          data: { args, tool: 'search_spotify_tracks' },
+          data: {args, tool: 'search_spotify_tracks'},
           type: 'tool_start',
         })
 
@@ -244,14 +239,14 @@ function createStreamingSpotifyTools(
         if (abortSignal?.aborted) throw new Error('Request aborted')
 
         // Auto-inject playlist ID if missing or empty
-        const finalArgs = { ...args }
+        const finalArgs = {...args}
         if (!args.playlist_id && contextPlaylistId) {
           console.log(`[analyze_playlist] Auto-injecting playlist_id: ${contextPlaylistId}`)
           finalArgs.playlist_id = contextPlaylistId
         }
 
         await sseWriter.write({
-          data: { args: finalArgs, tool: 'analyze_playlist' },
+          data: {args: finalArgs, tool: 'analyze_playlist'},
           type: 'tool_start',
         })
 
@@ -270,9 +265,7 @@ function createStreamingSpotifyTools(
         const analysisResult = result as AnalysisResult
         await sseWriter.write({
           data: {
-            result: analysisResult.playlist_name
-              ? `Analyzed "${analysisResult.playlist_name}"`
-              : 'Analysis complete',
+            result: analysisResult.playlist_name ? `Analyzed "${analysisResult.playlist_name}"` : 'Analysis complete',
             tool: 'analyze_playlist',
           },
           type: 'tool_end',
@@ -309,7 +302,7 @@ function createStreamingSpotifyTools(
         }
 
         await sseWriter.write({
-          data: { args: finalArgs, tool: 'get_playlist_tracks' },
+          data: {args: finalArgs, tool: 'get_playlist_tracks'},
           type: 'tool_start',
         })
 
@@ -323,7 +316,7 @@ function createStreamingSpotifyTools(
           () =>
             fetch(
               `https://api.spotify.com/v1/playlists/${finalArgs.playlist_id}/tracks?offset=${finalArgs.offset}&limit=${finalArgs.limit}`,
-              { headers: { Authorization: `Bearer ${spotifyToken}` } },
+              {headers: {Authorization: `Bearer ${spotifyToken}`}},
             ),
           getLogger(),
           `get playlist tracks offset=${finalArgs.offset}`,
@@ -335,9 +328,7 @@ function createStreamingSpotifyTools(
 
         const rawData = await response.json()
         const data = SpotifyPlaylistTracksResponseSchema.parse(rawData)
-        const tracks = data.items
-          .map(item => item.track)
-          .filter((track): track is SpotifyTrackFull => track !== null)
+        const tracks = data.items.map(item => item.track).filter((track): track is SpotifyTrackFull => track !== null)
 
         // Return compact track info
         const compactTracks = tracks.map(track => ({
@@ -386,7 +377,7 @@ function createStreamingSpotifyTools(
         if (abortSignal?.aborted) throw new Error('Request aborted')
 
         await sseWriter.write({
-          data: { args, tool: 'get_track_details' },
+          data: {args, tool: 'get_track_details'},
           type: 'tool_start',
         })
 
@@ -399,7 +390,7 @@ function createStreamingSpotifyTools(
         const response = await rateLimitedSpotifyCall(
           () =>
             fetch(`https://api.spotify.com/v1/tracks?ids=${args.track_ids.join(',')}`, {
-              headers: { Authorization: `Bearer ${spotifyToken}` },
+              headers: {Authorization: `Bearer ${spotifyToken}`},
             }),
           getLogger(),
           `get ${args.track_ids.length} track details`,
@@ -456,7 +447,7 @@ function createStreamingSpotifyTools(
           type: 'tool_end',
         })
 
-        return { tracks: detailedTracks }
+        return {tracks: detailedTracks}
       },
       name: 'get_track_details',
       schema: z.object({
@@ -470,7 +461,7 @@ function createStreamingSpotifyTools(
     new DynamicStructuredTool({
       description: 'Get track recommendations',
       func: async args => {
-        const finalArgs = { ...args }
+        const finalArgs = {...args}
 
         // Smart context inference: if no seeds but we have playlist context
         if (
@@ -479,16 +470,14 @@ function createStreamingSpotifyTools(
           contextPlaylistId &&
           (mode === 'analyze' || mode === 'create')
         ) {
-          console.log(
-            `[get_recommendations] Auto-fetching seed tracks from playlist: ${contextPlaylistId}`,
-          )
+          console.log(`[get_recommendations] Auto-fetching seed tracks from playlist: ${contextPlaylistId}`)
 
           try {
             // Fetch playlist tracks to use as seeds
             const playlistResponse = await rateLimitedSpotifyCall(
               () =>
                 fetch(`https://api.spotify.com/v1/playlists/${contextPlaylistId}/tracks?limit=50`, {
-                  headers: { Authorization: `Bearer ${spotifyToken}` },
+                  headers: {Authorization: `Bearer ${spotifyToken}`},
                 }),
               getLogger(),
               `get seed tracks for playlist ${contextPlaylistId}`,
@@ -517,7 +506,7 @@ function createStreamingSpotifyTools(
         if (abortSignal?.aborted) throw new Error('Request aborted')
 
         await sseWriter.write({
-          data: { args: finalArgs, tool: 'get_recommendations' },
+          data: {args: finalArgs, tool: 'get_recommendations'},
           type: 'tool_start',
         })
 
@@ -548,7 +537,7 @@ function createStreamingSpotifyTools(
 
         await sseWriter.write({
           data: {
-            args: { name: args.name, tracks: args.track_uris.length },
+            args: {name: args.name, tracks: args.track_uris.length},
             tool: 'create_playlist',
           },
           type: 'tool_start',
@@ -583,7 +572,7 @@ function createStreamingSpotifyTools(
 
         await sseWriter.write({
           data: {
-            args: { has_metadata: !!args.analysis_data },
+            args: {has_metadata: !!args.analysis_data},
             tool: 'extract_playlist_vibe',
           },
           type: 'tool_start',
@@ -614,7 +603,7 @@ ${JSON.stringify(args.analysis_data.lastfm_analysis ?? {}, null, 2)}
 ${
   args.sample_tracks?.length
     ? `SAMPLE TRACKS:\n${args.sample_tracks
-        .map((t: { artists: string; name: string }) => `- "${t.name}" by ${t.artists}`)
+        .map((t: {artists: string; name: string}) => `- "${t.name}" by ${t.artists}`)
         .join('\n')}`
     : ''
 }
@@ -653,16 +642,11 @@ Return ONLY valid JSON:
 
         try {
           const response = await anthropic.invoke([
-            new SystemMessage(
-              'You are a music critic. Return only valid JSON with deep vibe analysis.',
-            ),
+            new SystemMessage('You are a music critic. Return only valid JSON with deep vibe analysis.'),
             new HumanMessage(vibePrompt),
           ])
 
-          const content =
-            typeof response.content === 'string'
-              ? response.content
-              : JSON.stringify(response.content)
+          const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content)
           const jsonMatch = /\{[\s\S]*\}/.exec(content)
           if (!jsonMatch) {
             throw new Error('No JSON found in vibe analysis response')
@@ -677,9 +661,7 @@ Return ONLY valid JSON:
 
           await sseWriter.write({
             data: {
-              result: `Analyzed vibe: ${vibeAnalysis.emotional_characteristics
-                ?.slice(0, 3)
-                .join(', ')}`,
+              result: `Analyzed vibe: ${vibeAnalysis.emotional_characteristics?.slice(0, 3).join(', ')}`,
               tool: 'extract_playlist_vibe',
             },
             type: 'tool_end',
@@ -693,7 +675,7 @@ Return ONLY valid JSON:
           const tags =
             args.analysis_data.lastfm_analysis?.crowd_tags
               ?.slice(0, 5)
-              .map((t: { count: number; tag: string }) => t.tag) ?? []
+              .map((t: {count: number; tag: string}) => t.tag) ?? []
           const fallbackVibe = {
             discovery_hints: {
               artist_archetypes: [],
@@ -739,21 +721,21 @@ Return ONLY valid JSON:
                 bpm: z
                   .object({
                     avg: z.number(),
-                    range: z.object({ max: z.number(), min: z.number() }),
+                    range: z.object({max: z.number(), min: z.number()}),
                     sample_size: z.number(),
                   })
                   .optional(),
                 gain: z
                   .object({
                     avg: z.number(),
-                    range: z.object({ max: z.number(), min: z.number() }),
+                    range: z.object({max: z.number(), min: z.number()}),
                     sample_size: z.number(),
                   })
                   .optional(),
                 rank: z
                   .object({
                     avg: z.number(),
-                    range: z.object({ max: z.number(), min: z.number() }),
+                    range: z.object({max: z.number(), min: z.number()}),
                     sample_size: z.number(),
                   })
                   .optional(),
@@ -767,7 +749,7 @@ Return ONLY valid JSON:
                 artists_enriched: z.number(),
                 avg_listeners: z.number(),
                 avg_playcount: z.number(),
-                crowd_tags: z.array(z.object({ count: z.number(), tag: z.string() })),
+                crowd_tags: z.array(z.object({count: z.number(), tag: z.string()})),
                 sample_size: z.number(),
                 similar_tracks: z.array(z.string()),
                 source: z.string(),
@@ -816,7 +798,7 @@ Return ONLY valid JSON:
 
         await sseWriter.write({
           data: {
-            args: { has_vibe: !!args.vibe_profile },
+            args: {has_vibe: !!args.vibe_profile},
             tool: 'plan_discovery_strategy',
           },
           type: 'tool_start',
@@ -887,10 +869,7 @@ Return ONLY valid JSON:
             new HumanMessage(strategyPrompt),
           ])
 
-          const content =
-            typeof response.content === 'string'
-              ? response.content
-              : JSON.stringify(response.content)
+          const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content)
           const jsonMatch = /\{[\s\S]*\}/.exec(content)
           if (!jsonMatch) {
             throw new Error('No JSON found in strategy response')
@@ -969,7 +948,7 @@ Return ONLY valid JSON:
         if (abortSignal?.aborted) throw new Error('Request aborted')
 
         await sseWriter.write({
-          data: { args, tool: 'recommend_from_similar' },
+          data: {args, tool: 'recommend_from_similar'},
           type: 'tool_start',
         })
 
@@ -1012,7 +991,7 @@ Return ONLY valid JSON:
                   `https://api.spotify.com/v1/search?q=${encodeURIComponent(
                     query,
                   )}&type=track&limit=${args.limit_per_track}`,
-                  { headers: { Authorization: `Bearer ${spotifyToken}` } },
+                  {headers: {Authorization: `Bearer ${spotifyToken}`}},
                 ),
               getLogger(),
               `search similar: ${artist} - ${track}`,
@@ -1082,13 +1061,12 @@ Return ONLY valid JSON:
     }),
 
     new DynamicStructuredTool({
-      description:
-        'Discover tracks based on Last.fm crowd tags/genres. Searches Spotify using tag combinations.',
+      description: 'Discover tracks based on Last.fm crowd tags/genres. Searches Spotify using tag combinations.',
       func: async args => {
         if (abortSignal?.aborted) throw new Error('Request aborted')
 
         await sseWriter.write({
-          data: { args, tool: 'recommend_from_tags' },
+          data: {args, tool: 'recommend_from_tags'},
           type: 'tool_start',
         })
 
@@ -1129,12 +1107,9 @@ Return ONLY valid JSON:
 
         const response = await rateLimitedSpotifyCall(
           () =>
-            fetch(
-              `https://api.spotify.com/v1/search?q=${encodeURIComponent(
-                query,
-              )}&type=track&limit=${args.limit}`,
-              { headers: { Authorization: `Bearer ${spotifyToken}` } },
-            ),
+            fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=track&limit=${args.limit}`, {
+              headers: {Authorization: `Bearer ${spotifyToken}`},
+            }),
           getLogger(),
           `search by tags: ${args.tags.join(', ')}`,
         )
@@ -1185,9 +1160,7 @@ Return ONLY valid JSON:
           .array(z.string())
           .min(1)
           .max(5)
-          .describe(
-            'Genre/mood tags from Last.fm crowd_tags (e.g., ["italo-disco", "80s", "synth-pop"])',
-          ),
+          .describe('Genre/mood tags from Last.fm crowd_tags (e.g., ["italo-disco", "80s", "synth-pop"])'),
       }),
     }),
 
@@ -1230,16 +1203,8 @@ ${
     ? `BPM Range: ${args.playlist_context.bpm_range.min}-${args.playlist_context.bpm_range.max}`
     : ''
 }
-${
-  args.playlist_context.dominant_tags?.length
-    ? `Dominant Tags: ${args.playlist_context.dominant_tags.join(', ')}`
-    : ''
-}
-${
-  args.playlist_context.avg_popularity
-    ? `Average Popularity: ${args.playlist_context.avg_popularity}/100`
-    : ''
-}
+${args.playlist_context.dominant_tags?.length ? `Dominant Tags: ${args.playlist_context.dominant_tags.join(', ')}` : ''}
+${args.playlist_context.avg_popularity ? `Average Popularity: ${args.playlist_context.avg_popularity}/100` : ''}
 ${args.playlist_context.era ? `Era: ${args.playlist_context.era}` : ''}
 
 CANDIDATE TRACKS (${args.candidate_tracks.length} total):
@@ -1281,10 +1246,7 @@ Return ONLY a JSON object with this structure:
           console.log(`[curate_recommendations] Claude response:`, response.content)
 
           // Parse JSON from response
-          const content =
-            typeof response.content === 'string'
-              ? response.content
-              : JSON.stringify(response.content)
+          const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content)
           const jsonMatch = /\{[\s\S]*\}/.exec(content)
           if (!jsonMatch) {
             throw new Error('No JSON found in response')
@@ -1298,14 +1260,12 @@ Return ONLY a JSON object with this structure:
           const reasoning = curation.reasoning ?? 'AI curation complete'
 
           // Filter candidate tracks to only selected ones
-          const curatedTracks = args.candidate_tracks.filter((t: { id: string }) =>
-            selectedIds.includes(t.id),
-          )
+          const curatedTracks = args.candidate_tracks.filter((t: {id: string}) => selectedIds.includes(t.id))
 
           // Preserve order from AI selection
           const orderedTracks = selectedIds
-            .map((id: string) => curatedTracks.find((t: { id: string }) => t.id === id))
-            .filter((t): t is { id: string } => !!t)
+            .map((id: string) => curatedTracks.find((t: {id: string}) => t.id === id))
+            .filter((t): t is {id: string} => !!t)
 
           await sseWriter.write({
             data: `✅ Curated ${orderedTracks.length} top picks: ${reasoning}`,
@@ -1331,10 +1291,7 @@ Return ONLY a JSON object with this structure:
 
           // Fallback: Sort by popularity and return top N
           const fallbackTracks = args.candidate_tracks
-            .sort(
-              (a: { popularity?: number }, b: { popularity?: number }) =>
-                (b.popularity ?? 0) - (a.popularity ?? 0),
-            )
+            .sort((a: {popularity?: number}, b: {popularity?: number}) => (b.popularity ?? 0) - (a.popularity ?? 0))
             .slice(0, args.top_n)
 
           await sseWriter.write({
@@ -1372,23 +1329,16 @@ Return ONLY a JSON object with this structure:
           )
           .min(1)
           .max(100)
-          .describe(
-            'Tracks to curate (from various sources like tag search, similar tracks, Spotify recommendations)',
-          ),
+          .describe('Tracks to curate (from various sources like tag search, similar tracks, Spotify recommendations)'),
         playlist_context: z
           .object({
             avg_popularity: z.number().optional(),
-            bpm_range: z.object({ max: z.number(), min: z.number() }).optional(),
+            bpm_range: z.object({max: z.number(), min: z.number()}).optional(),
             dominant_tags: z.array(z.string()).optional(),
             era: z.string().optional(),
           })
           .describe('Context from analyze_playlist to guide curation'),
-        top_n: z
-          .number()
-          .min(1)
-          .max(50)
-          .default(10)
-          .describe('How many curated recommendations to return'),
+        top_n: z.number().min(1).max(50).default(10).describe('How many curated recommendations to return'),
         user_request: z.string().describe("User's original request to understand intent"),
       }),
     }),
@@ -1416,7 +1366,7 @@ async function executeSpotifyToolWithProgress(
   console.log(`[Tool] Executing ${toolName} with args:`, JSON.stringify(args).substring(0, 200))
 
   if (toolName === 'analyze_playlist') {
-    const { playlist_id } = args
+    const {playlist_id} = args
 
     try {
       // Use narrator if available, otherwise fallback to static message
@@ -1430,7 +1380,7 @@ async function executeSpotifyToolWithProgress(
           })
         : '📊 Starting playlist analysis...'
 
-      sseWriter.writeAsync({ data: startMessage, type: 'thinking' })
+      sseWriter.writeAsync({data: startMessage, type: 'thinking'})
 
       // Step 1: Get playlist details
       const fetchMessage = narrator
@@ -1440,13 +1390,13 @@ async function executeSpotifyToolWithProgress(
             userRequest,
           })
         : '🔍 Fetching playlist information...'
-      sseWriter.writeAsync({ data: fetchMessage, type: 'thinking' })
+      sseWriter.writeAsync({data: fetchMessage, type: 'thinking'})
 
       console.log(`[SpotifyAPI] Fetching playlist details: ${playlist_id}`)
       const playlistResponse = await rateLimitedSpotifyCall(
         () =>
           fetch(`https://api.spotify.com/v1/playlists/${playlist_id}`, {
-            headers: { Authorization: `Bearer ${token}` },
+            headers: {Authorization: `Bearer ${token}`},
           }),
         getLogger(),
         `get playlist ${playlist_id}`,
@@ -1459,9 +1409,7 @@ async function executeSpotifyToolWithProgress(
 
       const rawPlaylist = await playlistResponse.json()
       const playlist = SpotifyPlaylistFullSchema.parse(rawPlaylist)
-      console.log(
-        `[SpotifyAPI] Playlist loaded: "${playlist.name}" with ${playlist.tracks.total} tracks`,
-      )
+      console.log(`[SpotifyAPI] Playlist loaded: "${playlist.name}" with ${playlist.tracks.total} tracks`)
 
       const foundMessage = narrator
         ? await narrator.generateMessage({
@@ -1474,24 +1422,24 @@ async function executeSpotifyToolWithProgress(
             userRequest,
           })
         : `🎼 Found "${playlist.name}" with ${playlist.tracks.total} tracks`
-      sseWriter.writeAsync({ data: foundMessage, type: 'thinking' })
+      sseWriter.writeAsync({data: foundMessage, type: 'thinking'})
 
       // Step 2: Get tracks
       const tracksMessage = narrator
         ? await narrator.generateMessage({
             eventType: 'analyzing_audio',
-            metadata: { trackCount: playlist.tracks.total },
+            metadata: {trackCount: playlist.tracks.total},
             previousMessages: recentMessages,
             userRequest,
           })
         : '🎵 Fetching track details...'
-      sseWriter.writeAsync({ data: tracksMessage, type: 'thinking' })
+      sseWriter.writeAsync({data: tracksMessage, type: 'thinking'})
 
       console.log(`[SpotifyAPI] Fetching tracks from playlist: ${playlist_id}`)
       const tracksResponse = await rateLimitedSpotifyCall(
         () =>
           fetch(`https://api.spotify.com/v1/playlists/${playlist_id}/tracks?limit=100`, {
-            headers: { Authorization: `Bearer ${token}` },
+            headers: {Authorization: `Bearer ${token}`},
           }),
         getLogger(),
         `get tracks for playlist ${playlist_id}`,
@@ -1500,9 +1448,7 @@ async function executeSpotifyToolWithProgress(
       console.log(`[SpotifyAPI] Tracks response status: ${tracksResponse?.status}`)
       if (!tracksResponse?.ok) {
         const errorBody = tracksResponse ? await tracksResponse.text() : 'null response'
-        console.error(
-          `[SpotifyAPI] Tracks fetch failed: ${tracksResponse?.status || 'null'} - ${errorBody}`,
-        )
+        console.error(`[SpotifyAPI] Tracks fetch failed: ${tracksResponse?.status || 'null'} - ${errorBody}`)
         throw new Error(`Failed to get tracks: ${tracksResponse?.status || 'null response'}`)
       }
 
@@ -1543,18 +1489,13 @@ async function executeSpotifyToolWithProgress(
       // Calculate metadata-based statistics
       const validTracks = tracks // All tracks are now guaranteed to have required fields
       const avgPopularity =
-        validTracks.length > 0
-          ? validTracks.reduce((sum, t) => sum + t.popularity, 0) / validTracks.length
-          : 0
+        validTracks.length > 0 ? validTracks.reduce((sum, t) => sum + t.popularity, 0) / validTracks.length : 0
 
       const avgDuration =
-        validTracks.length > 0
-          ? validTracks.reduce((sum, t) => sum + t.duration_ms, 0) / validTracks.length
-          : 0
+        validTracks.length > 0 ? validTracks.reduce((sum, t) => sum + t.duration_ms, 0) / validTracks.length : 0
 
       const explicitCount = validTracks.filter(t => t.explicit).length
-      const explicitPercentage =
-        validTracks.length > 0 ? (explicitCount / validTracks.length) * 100 : 0
+      const explicitPercentage = validTracks.length > 0 ? (explicitCount / validTracks.length) * 100 : 0
 
       // Extract unique artists for genre analysis
       const artistIds = new Set<string>()
@@ -1576,7 +1517,7 @@ async function executeSpotifyToolWithProgress(
         const artistsResponse = await rateLimitedSpotifyCall(
           () =>
             fetch(`https://api.spotify.com/v1/artists?ids=${artistIdsArray.join(',')}`, {
-              headers: { Authorization: `Bearer ${token}` },
+              headers: {Authorization: `Bearer ${token}`},
             }),
           getLogger(),
           `get ${artistIdsArray.length} artists`,
@@ -1623,9 +1564,7 @@ async function executeSpotifyToolWithProgress(
       await sseWriter.flush()
 
       // Step 5: Analyze release dates
-      const releaseDates = validTracks
-        .map(t => t.album.release_date)
-        .filter((date): date is string => !!date)
+      const releaseDates = validTracks.map(t => t.album.release_date).filter((date): date is string => !!date)
 
       const releaseYears = releaseDates
         .map((date: string) => parseInt(date.split('-')[0]))
@@ -1633,10 +1572,7 @@ async function executeSpotifyToolWithProgress(
 
       const avgReleaseYear =
         releaseYears.length > 0
-          ? Math.round(
-              releaseYears.reduce((sum: number, year: number) => sum + year, 0) /
-                releaseYears.length,
-            )
+          ? Math.round(releaseYears.reduce((sum: number, year: number) => sum + year, 0) / releaseYears.length)
           : null
 
       const oldestYear = releaseYears.length > 0 ? Math.min(...releaseYears) : null
@@ -1646,17 +1582,17 @@ async function executeSpotifyToolWithProgress(
       let deezerData: null | {
         bpm?: {
           avg: number
-          range: { max: number; min: number }
+          range: {max: number; min: number}
           sample_size: number
         }
         gain?: {
           avg: number
-          range: { max: number; min: number }
+          range: {max: number; min: number}
           sample_size: number
         }
         rank?: {
           avg: number
-          range: { max: number; min: number }
+          range: {max: number; min: number}
           sample_size: number
         }
         source: string
@@ -1692,38 +1628,27 @@ async function executeSpotifyToolWithProgress(
           if (tracksToEnrich.length > 0) {
             console.log(`[BPMEnrichment] ========== ENRICHMENT TRACK STRUCTURE DEBUG ==========`)
             tracksToEnrich.slice(0, 3).forEach((track, idx) => {
-              console.log(
-                `[BPMEnrichment] Track ${idx + 1}: "${track.name}" by ${track.artists?.[0]?.name}`,
-              )
+              console.log(`[BPMEnrichment] Track ${idx + 1}: "${track.name}" by ${track.artists?.[0]?.name}`)
               console.log(`[BPMEnrichment]   - ID: ${track.id}`)
               console.log(`[BPMEnrichment]   - Duration: ${track.duration_ms}ms`)
               console.log(`[BPMEnrichment]   - has external_ids: ${!!track.external_ids}`)
               console.log(`[BPMEnrichment]   - external_ids type: ${typeof track.external_ids}`)
-              console.log(
-                `[BPMEnrichment]   - external_ids value:`,
-                JSON.stringify(track.external_ids),
-              )
+              console.log(`[BPMEnrichment]   - external_ids value:`, JSON.stringify(track.external_ids))
               console.log(`[BPMEnrichment]   - ISRC: ${track.external_ids?.isrc ?? 'NOT PRESENT'}`)
               console.log(`[BPMEnrichment]   - Track object keys:`, Object.keys(track).join(', '))
             })
-            console.log(
-              `[BPMEnrichment] ========== END ENRICHMENT TRACK STRUCTURE DEBUG ==========`,
-            )
+            console.log(`[BPMEnrichment] ========== END ENRICHMENT TRACK STRUCTURE DEBUG ==========`)
           }
 
           if (tracksWithISRC === 0) {
             console.warn(`[BPMEnrichment] ⚠️ CRITICAL: No tracks have ISRC in external_ids`)
-            console.warn(
-              `[BPMEnrichment] Will need to fetch full track details from Spotify /tracks API`,
-            )
+            console.warn(`[BPMEnrichment] Will need to fetch full track details from Spotify /tracks API`)
             sseWriter.writeAsync({
               data: '⚠️ Tracks missing ISRC data - fetching from Spotify API...',
               type: 'thinking',
             })
           } else {
-            console.log(
-              `[BPMEnrichment] ✅ Found ${tracksWithISRC} tracks with ISRC, proceeding with enrichment`,
-            )
+            console.log(`[BPMEnrichment] ✅ Found ${tracksWithISRC} tracks with ISRC, proceeding with enrichment`)
           }
 
           for (let i = 0; i < tracksToEnrich.length; i++) {
@@ -1731,11 +1656,7 @@ async function executeSpotifyToolWithProgress(
 
             // Log every track attempt for first 5 tracks, then every 10th
             if (i < 5 || i % 10 === 0) {
-              console.log(
-                `[BPMEnrichment] Processing track ${i + 1}/${
-                  tracksToEnrich.length
-                }: "${track.name}"`,
-              )
+              console.log(`[BPMEnrichment] Processing track ${i + 1}/${tracksToEnrich.length}: "${track.name}"`)
             }
 
             try {
@@ -1930,27 +1851,22 @@ async function executeSpotifyToolWithProgress(
           }
 
           // Step 7b: Get unique artists and fetch artist info separately (cached + rate-limited queue)
-          const uniqueArtists = [
-            ...new Set(tracksForLastFm.map(t => t.artists?.[0]?.name).filter(Boolean)),
-          ]
+          const uniqueArtists = [...new Set(tracksForLastFm.map(t => t.artists?.[0]?.name).filter(Boolean))]
           sseWriter.writeAsync({
             data: `🎤 Fetching artist info for ${uniqueArtists.length} unique artists...`,
             type: 'thinking',
           })
 
-          const artistInfoMap = await lastfmService.batchGetArtistInfo(
-            uniqueArtists,
-            async (current, total) => {
-              // Report progress every 10 artists with simple message
-              // Note: Narrator calls disabled here - concurrent ChatAnthropic instance creation fails
-              if (current % 10 === 0 || current === total) {
-                sseWriter.writeAsync({
-                  data: `🎤 Enriched ${current}/${total} artists...`,
-                  type: 'thinking',
-                })
-              }
-            },
-          )
+          const artistInfoMap = await lastfmService.batchGetArtistInfo(uniqueArtists, async (current, total) => {
+            // Report progress every 10 artists with simple message
+            // Note: Narrator calls disabled here - concurrent ChatAnthropic instance creation fails
+            if (current % 10 === 0 || current === total) {
+              sseWriter.writeAsync({
+                data: `🎤 Enriched ${current}/${total} artists...`,
+                type: 'thinking',
+              })
+            }
+          })
 
           // Step 7c: Attach artist info to track signals and update cache
           for (const [trackId, signals] of signalsMap.entries()) {
@@ -1959,10 +1875,7 @@ async function executeSpotifyToolWithProgress(
               signals.artistInfo = artistInfoMap.get(artistKey)
 
               // Update cache with complete signals including artist info
-              const cacheKey = lastfmService.generateCacheKey(
-                signals.canonicalArtist,
-                signals.canonicalTrack,
-              )
+              const cacheKey = lastfmService.generateCacheKey(signals.canonicalArtist, signals.canonicalTrack)
               await lastfmService.updateCachedSignals(cacheKey, signals)
             }
           }
@@ -1979,7 +1892,7 @@ async function executeSpotifyToolWithProgress(
             let count = 0
             for (const signals of signalsMap.values()) {
               if (count >= 3) break // Only get similar from first 3 tracks
-              signals.similar.slice(0, 3).forEach((s: { artist: string; name: string }) => {
+              signals.similar.slice(0, 3).forEach((s: {artist: string; name: string}) => {
                 similarTracks.add(`${s.artist} - ${s.name}`)
               })
               count++
@@ -2069,9 +1982,7 @@ async function executeSpotifyToolWithProgress(
       const analysisJson = JSON.stringify(analysis)
       console.log(`[Tool] analyze_playlist completed successfully`)
       console.log(
-        `[Tool] Analysis JSON size: ${analysisJson.length} bytes (${(
-          analysisJson.length / 1024
-        ).toFixed(1)}KB)`,
+        `[Tool] Analysis JSON size: ${analysisJson.length} bytes (${(analysisJson.length / 1024).toFixed(1)}KB)`,
       )
       console.log(`[Tool] Returning metadata analysis with ${trackIds.length} track IDs`)
 
@@ -2116,7 +2027,7 @@ chatStreamRouter.post('/message', async c => {
   c.req.raw.signal.addEventListener('abort', onAbort)
 
   // Create a TransformStream for proper SSE handling in Cloudflare Workers
-  const { readable, writable } = new TransformStream()
+  const {readable, writable} = new TransformStream()
   const writer = writable.getWriter()
   const sseWriter = new SSEWriter(writer)
 
@@ -2133,10 +2044,7 @@ chatStreamRouter.post('/message', async c => {
   let requestBody
   try {
     requestBody = await c.req.json()
-    console.log(
-      `[Stream:${requestId}] Request body parsed:`,
-      JSON.stringify(requestBody).slice(0, 200),
-    )
+    console.log(`[Stream:${requestId}] Request body parsed:`, JSON.stringify(requestBody).slice(0, 200))
   } catch (error) {
     console.error(`[Stream:${requestId}] Failed to parse request body:`, error)
     return c.text('Invalid JSON', 400)
@@ -2196,9 +2104,7 @@ chatStreamRouter.post('/message', async c => {
         await sseWriter.write({
           data: {
             level: 'info',
-            message: `[${requestId}] Request received - Body size: ${
-              JSON.stringify(body).length
-            } bytes`,
+            message: `[${requestId}] Request received - Body size: ${JSON.stringify(body).length} bytes`,
           },
           type: 'log',
         })
@@ -2235,10 +2141,7 @@ chatStreamRouter.post('/message', async c => {
           await sseWriter.write({
             data: {
               level: 'warn',
-              message: `[${requestId}] ⚠️ No playlist ID found in message: "${request.message.substring(
-                0,
-                50,
-              )}..."`,
+              message: `[${requestId}] ⚠️ No playlist ID found in message: "${request.message.substring(0, 50)}..."`,
             },
             type: 'log',
           })
@@ -2273,7 +2176,7 @@ chatStreamRouter.post('/message', async c => {
           userRequest: request.message,
         })
         recentMessages.push(initialMessage)
-        sseWriter.writeAsync({ data: initialMessage, type: 'thinking' })
+        sseWriter.writeAsync({data: initialMessage, type: 'thinking'})
 
         // Create tools with streaming callbacks
         const tools = createStreamingSpotifyTools(
@@ -2489,9 +2392,7 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
 
         let response
         try {
-          console.log(
-            `[Stream:${requestId}] Calling createModelWithTools().stream() with ${messages.length} messages`,
-          )
+          console.log(`[Stream:${requestId}] Calling createModelWithTools().stream() with ${messages.length} messages`)
           // Wrap stream call in orchestrator to respect anthropic lane limits (max 2 concurrent)
           response = await rateLimitedAnthropicCall(
             () =>
@@ -2540,23 +2441,14 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
 
           if (textContent) {
             fullResponse += textContent
-            await sseWriter.write({ data: textContent, type: 'content' })
-            console.log(
-              `[Stream:${requestId}] Content chunk ${chunkCount}: ${textContent.substring(
-                0,
-                50,
-              )}...`,
-            )
+            await sseWriter.write({data: textContent, type: 'content'})
+            console.log(`[Stream:${requestId}] Content chunk ${chunkCount}: ${textContent.substring(0, 50)}...`)
           }
 
           // Handle tool calls
           if (chunk.tool_calls && chunk.tool_calls.length > 0) {
             toolCalls = chunk.tool_calls
-            console.log(
-              `[Stream:${requestId}] Tool calls received: ${chunk.tool_calls
-                .map(tc => tc.name)
-                .join(', ')}`,
-            )
+            console.log(`[Stream:${requestId}] Tool calls received: ${chunk.tool_calls.map(tc => tc.name).join(', ')}`)
           }
         }
 
@@ -2587,9 +2479,7 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
           if (recentToolCalls.length >= 3) {
             const lastThree = recentToolCalls.slice(-3)
             if (lastThree[0] === lastThree[1] && lastThree[1] === lastThree[2]) {
-              console.warn(
-                `[Stream:${requestId}] ⚠️ Loop detected: identical tool calls 3 times in a row. Breaking.`,
-              )
+              console.warn(`[Stream:${requestId}] ⚠️ Loop detected: identical tool calls 3 times in a row. Breaking.`)
               console.warn(`[Stream:${requestId}] Tool signature: ${lastThree[0]}`)
               sseWriter.writeAsync({
                 data: 'Detected repetitive tool calls, wrapping up...',
@@ -2633,9 +2523,7 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
 
                 const toolContent = JSON.stringify(result)
                 console.log(`[Stream:${requestId}] Tool result JSON length: ${toolContent.length}`)
-                console.log(
-                  `[Stream:${requestId}] Tool result preview: ${toolContent.substring(0, 500)}...`,
-                )
+                console.log(`[Stream:${requestId}] Tool result preview: ${toolContent.substring(0, 500)}...`)
 
                 // Create the tool message
                 const toolMsg = new ToolMessage({
@@ -2649,9 +2537,7 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
                 console.log(`[Stream:${requestId}]   - call_id: ${toolCall.id}`)
                 console.log(`[Stream:${requestId}]   - content length: ${toolContent.length}`)
                 console.log(
-                  `[Stream:${requestId}]   - content has playlist_name: ${toolContent.includes(
-                    'playlist_name',
-                  )}`,
+                  `[Stream:${requestId}]   - content has playlist_name: ${toolContent.includes('playlist_name')}`,
                 )
               } catch (error) {
                 if (abortController.signal.aborted) {
@@ -2678,18 +2564,14 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
           console.log(`[Stream:${requestId}] All tools executed. Results: ${toolMessages.length}`)
 
           // Get next response with tool results
-          console.log(
-            `[Stream:${requestId}] Getting next response from Claude (turn ${turnCount})...`,
-          )
+          console.log(`[Stream:${requestId}] Getting next response from Claude (turn ${turnCount})...`)
           sseWriter.writeAsync({
             data: 'Preparing response...',
             type: 'thinking',
           })
 
           console.log(`[Stream:${requestId}] Sending tool results back to Claude...`)
-          console.log(
-            `[Stream:${requestId}] Full response so far: "${fullResponse.substring(0, 100)}"`,
-          )
+          console.log(`[Stream:${requestId}] Full response so far: "${fullResponse.substring(0, 100)}"`)
 
           // Build the conversation including tool results
           const aiMessageContent = fullResponse || ''
@@ -2707,9 +2589,7 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
           // Add the tool results
           conversationMessages.push(...toolMessages)
 
-          console.log(
-            `[Stream:${requestId}] Conversation now has ${conversationMessages.length} messages`,
-          )
+          console.log(`[Stream:${requestId}] Conversation now has ${conversationMessages.length} messages`)
 
           console.log(`[Stream:${requestId}] Attempting to get next response from Claude...`)
           console.log(`[Stream:${requestId}] Message structure (last 5):`)
@@ -2717,15 +2597,11 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
             const msgType = msg.constructor.name
             const contentPreview = msg.content?.toString().slice(0, 200) || 'no content'
             console.log(
-              `[Stream:${requestId}]   ${
-                conversationMessages.length - 5 + i
-              }: ${msgType} - ${contentPreview}`,
+              `[Stream:${requestId}]   ${conversationMessages.length - 5 + i}: ${msgType} - ${contentPreview}`,
             )
             if (msgType === 'ToolMessage' && 'tool_call_id' in msg) {
               console.log(`[Stream:${requestId}]     Tool call ID: ${msg.tool_call_id}`)
-              console.log(
-                `[Stream:${requestId}]     Content length: ${msg.content?.toString().length || 0}`,
-              )
+              console.log(`[Stream:${requestId}]     Content length: ${msg.content?.toString().length || 0}`)
             } else if (msgType === 'AIMessage' && 'tool_calls' in msg && msg.tool_calls) {
               console.log(
                 `[Stream:${requestId}]     Tool calls: ${msg.tool_calls
@@ -2750,8 +2626,7 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
             const logger = getLogger()
             logger?.error('Claude streaming API call failed', streamError, {
               conversationLength: conversationMessages.length,
-              errorMessage:
-                streamError instanceof Error ? streamError.message : String(streamError),
+              errorMessage: streamError instanceof Error ? streamError.message : String(streamError),
               errorType: streamError?.constructor?.name,
               hasAnyContent,
               turn: turnCount,
@@ -2759,13 +2634,10 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
 
             // If we already have content from any turn (initial or tools), break gracefully
             if (hasAnyContent) {
-              logger?.info(
-                'Breaking agentic loop due to streaming error (content already available)',
-                {
-                  hasAnyContent,
-                  turn: turnCount,
-                },
-              )
+              logger?.info('Breaking agentic loop due to streaming error (content already available)', {
+                hasAnyContent,
+                turn: turnCount,
+              })
               await sseWriter.write({
                 data: '\n\n✅ Task completed successfully!',
                 type: 'content',
@@ -2835,7 +2707,7 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
                 }
                 fullResponse += textContent
                 hasAnyContent = true // Track that we got content
-                await sseWriter.write({ data: textContent, type: 'content' })
+                await sseWriter.write({data: textContent, type: 'content'})
               }
 
               // Check for MORE tool calls in the response
@@ -2905,10 +2777,7 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
             const logger = getLogger()
             logger?.error('Final Claude streaming API call failed', finalStreamError, {
               conversationLength: conversationMessages.length,
-              errorMessage:
-                finalStreamError instanceof Error
-                  ? finalStreamError.message
-                  : String(finalStreamError),
+              errorMessage: finalStreamError instanceof Error ? finalStreamError.message : String(finalStreamError),
               errorType: finalStreamError?.constructor?.name,
               turn: turnCount,
             })
@@ -2944,16 +2813,13 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
 
                 if (textContent) {
                   fullResponse += textContent
-                  await sseWriter.write({ data: textContent, type: 'content' })
+                  await sseWriter.write({data: textContent, type: 'content'})
                 }
               }
             } catch (finalChunkError) {
               const logger = getLogger()
               logger?.error('Error processing final response chunks', finalChunkError, {
-                errorMessage:
-                  finalChunkError instanceof Error
-                    ? finalChunkError.message
-                    : String(finalChunkError),
+                errorMessage: finalChunkError instanceof Error ? finalChunkError.message : String(finalChunkError),
                 errorType: finalChunkError?.constructor?.name,
                 partialResponseLength: fullResponse.length,
               })
@@ -2968,9 +2834,7 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
               }
             }
 
-            console.log(
-              `[Stream:${requestId}] Final response after limit: ${fullResponse.length} chars`,
-            )
+            console.log(`[Stream:${requestId}] Final response after limit: ${fullResponse.length} chars`)
           }
         }
 
@@ -2987,7 +2851,7 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
 
         // Send completion
         console.log(`[Stream:${requestId}] Sending done event`)
-        await sseWriter.write({ data: null, type: 'done' })
+        await sseWriter.write({data: null, type: 'done'})
         console.log(`[Stream:${requestId}] Stream complete - all events sent`)
       } catch (error) {
         const logger = getLogger()!
@@ -3022,11 +2886,8 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
 
   // Return the SSE response immediately
   console.log(`[Stream:${requestId}] Returning Response with SSE headers`)
-  const response = new Response(readable, { headers })
-  console.log(
-    `[Stream:${requestId}] Response created, headers:`,
-    Object.fromEntries(headers.entries()),
-  )
+  const response = new Response(readable, {headers})
+  console.log(`[Stream:${requestId}] Response created, headers:`, Object.fromEntries(headers.entries()))
   return response
 })
 
@@ -3057,7 +2918,7 @@ chatStreamRouter.get('/events', async c => {
   c.req.raw.signal.addEventListener('abort', onAbort)
 
   // Create SSE stream
-  const { readable, writable } = new TransformStream()
+  const {readable, writable} = new TransformStream()
   const writer = writable.getWriter()
   const encoder = new TextEncoder()
 
@@ -3086,9 +2947,7 @@ chatStreamRouter.get('/events', async c => {
 
     try {
       // Send initial event
-      await writer.write(
-        encoder.encode(`data: {"type":"connected","requestId":"${requestId}"}\n\n`),
-      )
+      await writer.write(encoder.encode(`data: {"type":"connected","requestId":"${requestId}"}\n\n`))
 
       // Keep connection open until client disconnects
       await new Promise(resolve => {
@@ -3103,7 +2962,7 @@ chatStreamRouter.get('/events', async c => {
 
   processStream().catch(console.error)
 
-  return new Response(readable, { headers })
+  return new Response(readable, {headers})
 })
 
-export { chatStreamRouter }
+export {chatStreamRouter}

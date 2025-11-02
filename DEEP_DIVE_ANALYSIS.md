@@ -239,14 +239,14 @@ processSSEEvents() {
 
 ```typescript
 type StreamEvent =
-  | { type: 'thinking'; data: string }
-  | { type: 'tool_start'; data: { tool: string; args: object } }
-  | { type: 'tool_end'; data: { tool: string; result: unknown } }
-  | { type: 'content'; data: string }
-  | { type: 'error'; data: string }
-  | { type: 'done'; data: null }
-  | { type: 'log'; data: { level: 'info' | 'warn' | 'error'; message: string } }
-  | { type: 'debug'; data: object }
+  | {type: 'thinking'; data: string}
+  | {type: 'tool_start'; data: {tool: string; args: object}}
+  | {type: 'tool_end'; data: {tool: string; result: unknown}}
+  | {type: 'content'; data: string}
+  | {type: 'error'; data: string}
+  | {type: 'done'; data: null}
+  | {type: 'log'; data: {level: 'info' | 'warn' | 'error'; message: string}}
+  | {type: 'debug'; data: object}
 ```
 
 ### Playlist Selection (UserPlaylists.tsx)
@@ -547,7 +547,7 @@ Each tool has logic to auto-inject context when missing:
 ```typescript
 // Example: analyze_playlist tool
 func: async args => {
-  let finalArgs = { ...args }
+  let finalArgs = {...args}
 
   // If no playlist_id provided BUT we have context
   if (!args.playlist_id && contextPlaylistId) {
@@ -581,7 +581,7 @@ async function executeSpotifyToolWithProgress(
   sseWriter: SSEWriter,
 ): Promise<unknown> {
   if (toolName === 'analyze_playlist') {
-    const { playlist_id } = args
+    const {playlist_id} = args
 
     // Step 1: Get playlist details
     await sseWriter.write({
@@ -692,9 +692,7 @@ Be concise and helpful. Use tools to get real data.`
 // Build message history
 const messages = [
   new SystemMessage(systemPrompt),
-  ...conversationHistory.map(m =>
-    m.role === 'user' ? new HumanMessage(m.content) : new AIMessage(m.content),
-  ),
+  ...conversationHistory.map(m => (m.role === 'user' ? new HumanMessage(m.content) : new AIMessage(m.content))),
   new HumanMessage(actualMessage),
 ]
 ```
@@ -765,7 +763,7 @@ if (toolCalls.length > 0) {
 }
 
 // Send completion event
-await sseWriter.write({ type: 'done', data: null })
+await sseWriter.write({type: 'done', data: null})
 ```
 
 **Tool Execution Flow:**
@@ -793,12 +791,10 @@ export async function executeSpotifyTool(
 ): Promise<unknown> {
   switch (toolName) {
     case 'search_spotify_tracks': {
-      const { query, limit = 10 } = args
+      const {query, limit = 10} = args
       const response = await fetch(
-        `https://api.spotify.com/v1/search?q=${encodeURIComponent(
-          query,
-        )}&type=track&limit=${limit}`,
-        { headers: { Authorization: `Bearer ${token}` } },
+        `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=track&limit=${limit}`,
+        {headers: {Authorization: `Bearer ${token}`}},
       )
       const data = await response.json()
 
@@ -813,11 +809,11 @@ export async function executeSpotifyTool(
     }
 
     case 'create_playlist': {
-      const { name, description, track_uris } = args
+      const {name, description, track_uris} = args
 
       // 1. Get user ID
       const meResponse = await fetch('https://api.spotify.com/v1/me', {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {Authorization: `Bearer ${token}`},
       })
       const user = await meResponse.json()
 
@@ -828,7 +824,7 @@ export async function executeSpotifyTool(
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ name, description, public: false }),
+        body: JSON.stringify({name, description, public: false}),
       })
       const playlist = await createResponse.json()
 
@@ -839,10 +835,10 @@ export async function executeSpotifyTool(
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ uris: track_uris }),
+        body: JSON.stringify({uris: track_uris}),
       })
 
-      return { id: playlist.id, name, url: playlist.external_urls.spotify }
+      return {id: playlist.id, name, url: playlist.external_urls.spotify}
     }
 
     // ... more tools
@@ -899,7 +895,7 @@ mcpRouter.all('/', async c => {
   // Validate session
   const spotifyToken = await sessionManager.validateSession(sessionToken)
   if (!spotifyToken) {
-    return c.json({ error: 'Invalid session' }, 401)
+    return c.json({error: 'Invalid session'}, 401)
   }
 
   if (method === 'GET') {
@@ -1262,11 +1258,11 @@ processing.
 **Solution:** Create TransformStream, return readable immediately, write to writable async:
 
 ```typescript
-const { readable, writable } = new TransformStream()
+const {readable, writable} = new TransformStream()
 const writer = writable.getWriter()
 
 // Return immediately
-return new Response(readable, { headers })
+return new Response(readable, {headers})
 
 // Process async (doesn't block)
 processStream(writer)
@@ -1307,14 +1303,14 @@ this.writeQueue = this.writeQueue.then(async () => {
 **Solution:** Stream progress updates via SSE:
 
 ```typescript
-await sseWriter.write({ type: 'thinking', data: '🔍 Fetching playlist...' })
+await sseWriter.write({type: 'thinking', data: '🔍 Fetching playlist...'})
 // ... fetch playlist
 await sseWriter.write({
   type: 'thinking',
   data: '🎵 Found "Lover" (17 tracks)',
 })
 // ... get tracks
-await sseWriter.write({ type: 'thinking', data: '🎚️ Analyzing audio...' })
+await sseWriter.write({type: 'thinking', data: '🎚️ Analyzing audio...'})
 ```
 
 **Result:** Users stay engaged, understand what's happening.

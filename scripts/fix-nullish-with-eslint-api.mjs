@@ -5,8 +5,8 @@
  * using ESLint's programmatic API
  */
 
-import { ESLint } from 'eslint'
-import { writeFileSync } from 'fs'
+import {ESLint} from 'eslint'
+import {writeFileSync} from 'fs'
 
 async function fixNullishCoalescing() {
   const eslint = new ESLint({
@@ -28,10 +28,7 @@ async function fixNullishCoalescing() {
     const fixes = []
 
     for (const message of result.messages) {
-      if (
-        message.ruleId === '@typescript-eslint/prefer-nullish-coalescing' &&
-        message.suggestions
-      ) {
+      if (message.ruleId === '@typescript-eslint/prefer-nullish-coalescing' && message.suggestions) {
         // Take the first suggestion (usually the correct one)
         if (message.suggestions[0]?.fix) {
           fixes.push(message.suggestions[0].fix)
@@ -50,7 +47,7 @@ async function fixNullishCoalescing() {
   console.log(`Found ${filesToFix.size} files with fixable violations\n`)
 
   // Apply fixes
-  for (const [filePath, { fixes, source }] of filesToFix.entries()) {
+  for (const [filePath, {fixes, source}] of filesToFix.entries()) {
     let fixed = source
 
     // Apply fixes from end to start to preserve indices
@@ -59,9 +56,7 @@ async function fixNullishCoalescing() {
     }
 
     writeFileSync(filePath, fixed, 'utf-8')
-    console.log(
-      `✓ Fixed ${fixes.length} occurrences in ${filePath.replace(process.cwd() + '/', '')}`,
-    )
+    console.log(`✓ Fixed ${fixes.length} occurrences in ${filePath.replace(process.cwd() + '/', '')}`)
     totalFixed += fixes.length
   }
 

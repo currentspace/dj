@@ -6,7 +6,7 @@ export async function withLoopbackFetch<T>(
   {
     pathPrefix = '/api/mcp',
     sentinelHeader = 'x-internal-dispatch',
-  }: { pathPrefix?: string; sentinelHeader?: string } = {},
+  }: {pathPrefix?: string; sentinelHeader?: string} = {},
 ): Promise<T> {
   const origFetch = fetch.bind(globalThis)
   const selfOrigin = new URL(c.req.url).origin
@@ -32,7 +32,7 @@ export async function withLoopbackFetch<T>(
         console.log(`[LoopbackFetch] Intercepting self-request to ${url.pathname}`)
         const headers = new Headers(input.headers)
         headers.set(sentinelHeader, '1')
-        const req = new Request(input, { headers })
+        const req = new Request(input, {headers})
         const res = await app.fetch(req, c.env, c.executionCtx)
         console.log(`[LoopbackFetch] Internal dispatch returned ${res.status}`)
         return res
@@ -49,7 +49,7 @@ export async function withLoopbackFetch<T>(
           const auth = c.req.header('authorization')
           if (auth) headers.set('authorization', auth)
         }
-        const req = new Request(url.toString(), { ...init, headers, method })
+        const req = new Request(url.toString(), {...init, headers, method})
         const res = await app.fetch(req, c.env, c.executionCtx)
         console.log(`[LoopbackFetch] Internal dispatch returned ${res.status}`)
         return res

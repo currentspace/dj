@@ -143,8 +143,8 @@ Last.fm, narrator) share the same rate limit budget.
 
 ```typescript
 // ❌ BAD: Multiple separate queues
-const spotifyQueue = new RateLimitedQueue({ rate: 40 })
-const lastfmQueue = new RateLimitedQueue({ rate: 40 })
+const spotifyQueue = new RateLimitedQueue({rate: 40})
+const lastfmQueue = new RateLimitedQueue({rate: 40})
 // → Can hit 80 RPS total!
 
 // ✅ GOOD: Single global orchestrator
@@ -194,13 +194,13 @@ orchestrator.execute(() => call3())
 ```typescript
 // ❌ BAD: Blocks for 30ms per write
 for (let i = 0; i < 10; i++) {
-  await sseWriter.write({ data: `Progress ${i}` }) // 30ms each
+  await sseWriter.write({data: `Progress ${i}`}) // 30ms each
 }
 // Total: 300ms wasted
 
 // ✅ GOOD: Non-blocking, flush once
 for (let i = 0; i < 10; i++) {
-  sseWriter.writeAsync({ data: `Progress ${i}` }) // ~0ms
+  sseWriter.writeAsync({data: `Progress ${i}`}) // ~0ms
 }
 await sseWriter.flush() // 30ms total
 // Total: 30ms (10x faster!)
@@ -298,7 +298,7 @@ Total: ~13.6 seconds
 Single API calls:
 
 ```typescript
-const playlist = await orchestrator.execute(() => spotify.createPlaylist(userId, { name }))
+const playlist = await orchestrator.execute(() => spotify.createPlaylist(userId, {name}))
 ```
 
 ### When to use enqueueBatch()
@@ -318,7 +318,7 @@ const results = await orchestrator.awaitBatch('searches')
 Progress updates, thinking messages:
 
 ```typescript
-sseWriter.writeAsync({ type: 'thinking', data: 'Working...' })
+sseWriter.writeAsync({type: 'thinking', data: 'Working...'})
 ```
 
 ### When to use flush()
@@ -335,8 +335,8 @@ await expensiveComputation()
 Critical messages that MUST arrive:
 
 ```typescript
-await sseWriter.write({ type: 'error', data: 'Failed!' })
-await sseWriter.write({ type: 'done', data: null })
+await sseWriter.write({type: 'error', data: 'Failed!'})
+await sseWriter.write({type: 'done', data: null})
 ```
 
 ## Performance Monitoring

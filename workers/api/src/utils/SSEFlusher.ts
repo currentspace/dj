@@ -38,7 +38,7 @@ export function makeControlledSSEFlusher(
   mark: () => void
   maybeFlush: () => Promise<void>
 } {
-  const { everyMs = 500, everyN = 20 } = options
+  const {everyMs = 500, everyN = 20} = options
 
   let sinceLastFlush = 0
   let lastFlushTime = Date.now()
@@ -84,7 +84,7 @@ export function makeSSEFlusher(
   flush: () => Promise<void>,
   options: SSEFlusherOptions = {},
 ): () => Promise<void> {
-  const { everyMs = 500, everyN = 20 } = options
+  const {everyMs = 500, everyN = 20} = options
 
   let sinceLastFlush = 0
   let lastFlushTime = Date.now()

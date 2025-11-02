@@ -71,13 +71,13 @@ export interface SpotifyAuthResponse {
 
 export interface SpotifyPlaylist {
   description: string
-  external_urls: { spotify: string }
+  external_urls: {spotify: string}
   id: string
-  images: { height: number; url: string; width: number }[]
+  images: {height: number; url: string; width: number}[]
   name: string
-  owner: { display_name: string }
+  owner: {display_name: string}
   public: boolean
-  tracks: { total: number }
+  tracks: {total: number}
 }
 
 export interface SpotifySearchRequest {
@@ -89,11 +89,11 @@ export interface SpotifySearchRequest {
 export interface SpotifyTrack {
   album: {
     id: string
-    images: { height: number; url: string; width: number }[]
+    images: {height: number; url: string; width: number}[]
     name: string
   }
-  artists: { id: string; name: string }[]
-  external_urls: { spotify: string }
+  artists: {id: string; name: string}[]
+  external_urls: {spotify: string}
   id: string
   name: string
   preview_url: null | string
@@ -104,7 +104,7 @@ export interface SpotifyUser {
   display_name: string
   email?: string
   id: string
-  images: { height: number; url: string; width: number }[]
+  images: {height: number; url: string; width: number}[]
 }
 
 export interface SpotifyWebhookPayload {

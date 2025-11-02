@@ -231,13 +231,13 @@ get_track_details(track_ids) → Returns full metadata:
 
 ```typescript
 // Get tracks 0-20
-get_playlist_tracks({ offset: 0, limit: 20 })
+get_playlist_tracks({offset: 0, limit: 20})
 
 // Get tracks 20-40
-get_playlist_tracks({ offset: 20, limit: 20 })
+get_playlist_tracks({offset: 20, limit: 20})
 
 // Get tracks 40-60
-get_playlist_tracks({ offset: 40, limit: 20 })
+get_playlist_tracks({offset: 40, limit: 20})
 ```
 
 ### get_track_details
@@ -260,19 +260,19 @@ get_playlist_tracks({ offset: 40, limit: 20 })
     {
       id: string,
       name: string,
-      artists: [{ id: string, name: string }],
+      artists: [{id: string, name: string}],
       album: {
         id: string,
         name: string,
         release_date: string, // YYYY-MM-DD
         total_tracks: number,
-        images: [{ url: string, height: number, width: number }],
+        images: [{url: string, height: number, width: number}],
       },
       duration_ms: number,
       popularity: number,
       explicit: boolean,
       uri: string,
-      external_urls: { spotify: string },
+      external_urls: {spotify: string},
       preview_url: string | null,
     },
   ]

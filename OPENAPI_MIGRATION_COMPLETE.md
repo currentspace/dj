@@ -66,7 +66,7 @@ All routes now use OpenAPI contracts with automatic validation:
 ### 2. Type-Safe Client
 
 ```typescript
-import { apiClient } from '@dj/api-client'
+import {apiClient} from '@dj/api-client'
 
 // Fully typed request and response
 const res = await apiClient.api.spotify['auth-url'].$get()

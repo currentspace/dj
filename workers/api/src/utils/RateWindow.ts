@@ -88,7 +88,7 @@ export class RateWindow {
   /**
    * Get a summary of the current window state
    */
-  summary(): { count: number; rps: number; windowMs: number } {
+  summary(): {count: number; rps: number; windowMs: number} {
     return {
       count: this.count(),
       rps: this.rps(),

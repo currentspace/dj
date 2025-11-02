@@ -1,5 +1,5 @@
 // Spotify Tools for Anthropic Function Calling
-import { z } from 'zod'
+import {z} from 'zod'
 
 import {
   SpotifyAlbumFullSchema,
@@ -15,8 +15,8 @@ import {
   SpotifyUserSchema,
 } from '@dj/shared-types'
 
-import { formatZodError, safeParse } from './guards'
-import { rateLimitedSpotifyCall } from '../utils/RateLimitedAPIClients'
+import {formatZodError, safeParse} from './guards'
+import {rateLimitedSpotifyCall} from '../utils/RateLimitedAPIClients'
 
 // Tool schemas
 export const SearchTracksSchema = z.object({
@@ -69,11 +69,11 @@ export const spotifyTools = [
       properties: {
         filters: {
           properties: {
-            genre: { type: 'string' },
-            max_energy: { maximum: 1, minimum: 0, type: 'number' },
-            max_tempo: { maximum: 300, minimum: 0, type: 'number' },
-            min_energy: { maximum: 1, minimum: 0, type: 'number' },
-            min_tempo: { maximum: 300, minimum: 0, type: 'number' },
+            genre: {type: 'string'},
+            max_energy: {maximum: 1, minimum: 0, type: 'number'},
+            max_tempo: {maximum: 300, minimum: 0, type: 'number'},
+            min_energy: {maximum: 1, minimum: 0, type: 'number'},
+            min_tempo: {maximum: 300, minimum: 0, type: 'number'},
           },
           type: 'object',
         },
@@ -98,7 +98,7 @@ export const spotifyTools = [
       properties: {
         track_ids: {
           description: 'Array of Spotify track IDs',
-          items: { type: 'string' },
+          items: {type: 'string'},
           maxItems: 100,
           type: 'array',
         },
@@ -112,28 +112,28 @@ export const spotifyTools = [
     description: 'Get track recommendations based on seeds and target audio features',
     input_schema: {
       properties: {
-        limit: { default: 20, maximum: 100, minimum: 1, type: 'number' },
+        limit: {default: 20, maximum: 100, minimum: 1, type: 'number'},
         seed_artists: {
           description: 'Seed artist IDs',
-          items: { type: 'string' },
+          items: {type: 'string'},
           maxItems: 5,
           type: 'array',
         },
         seed_genres: {
           description: 'Seed genres',
-          items: { type: 'string' },
+          items: {type: 'string'},
           maxItems: 5,
           type: 'array',
         },
         seed_tracks: {
           description: 'Seed track IDs',
-          items: { type: 'string' },
+          items: {type: 'string'},
           maxItems: 5,
           type: 'array',
         },
-        target_danceability: { maximum: 1, minimum: 0, type: 'number' },
-        target_energy: { maximum: 1, minimum: 0, type: 'number' },
-        target_valence: { maximum: 1, minimum: 0, type: 'number' },
+        target_danceability: {maximum: 1, minimum: 0, type: 'number'},
+        target_energy: {maximum: 1, minimum: 0, type: 'number'},
+        target_valence: {maximum: 1, minimum: 0, type: 'number'},
       },
       type: 'object',
     },
@@ -161,7 +161,7 @@ export const spotifyTools = [
         },
         track_uris: {
           description: 'Spotify track URIs to add (spotify:track:...)',
-          items: { type: 'string' },
+          items: {type: 'string'},
           type: 'array',
         },
       },
@@ -190,7 +190,7 @@ export const spotifyTools = [
         },
         track_uris: {
           description: 'Track URIs to add/remove/reorder',
-          items: { type: 'string' },
+          items: {type: 'string'},
           type: 'array',
         },
       },
@@ -287,7 +287,7 @@ export async function executeSpotifyTool(
 }
 
 async function analyzePlaylist(args: any, token: string) {
-  const { playlist_id } = args
+  const {playlist_id} = args
 
   console.log(`[analyzePlaylist] Starting analysis with args:`, JSON.stringify(args))
   console.log(`[analyzePlaylist] Extracted playlist_id: "${playlist_id}"`)
@@ -303,7 +303,7 @@ async function analyzePlaylist(args: any, token: string) {
   const playlistResponse = await rateLimitedSpotifyCall(
     () =>
       fetch(`https://api.spotify.com/v1/playlists/${playlist_id}`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {Authorization: `Bearer ${token}`},
       }),
     undefined,
     'playlist:details',
@@ -313,9 +313,7 @@ async function analyzePlaylist(args: any, token: string) {
 
   if (!playlistResponse.ok) {
     const errorText = await playlistResponse.text()
-    console.error(
-      `[analyzePlaylist] Failed to get playlist: ${playlistResponse.status} - ${errorText}`,
-    )
+    console.error(`[analyzePlaylist] Failed to get playlist: ${playlistResponse.status} - ${errorText}`)
     throw new Error(`Failed to get playlist: ${playlistResponse.status}`)
   }
 
@@ -323,24 +321,19 @@ async function analyzePlaylist(args: any, token: string) {
   const playlistResult = safeParse(SpotifyPlaylistFullSchema, playlistJson)
 
   if (!playlistResult.success) {
-    console.error(
-      '[analyzePlaylist] Failed to parse playlist:',
-      formatZodError(playlistResult.error),
-    )
+    console.error('[analyzePlaylist] Failed to parse playlist:', formatZodError(playlistResult.error))
     throw new Error(`Invalid playlist data: ${formatZodError(playlistResult.error)}`)
   }
 
   const playlist = playlistResult.data
-  console.log(
-    `[analyzePlaylist] Successfully got playlist: "${playlist.name}" (${playlist.tracks?.total} tracks)`,
-  )
+  console.log(`[analyzePlaylist] Successfully got playlist: "${playlist.name}" (${playlist.tracks?.total} tracks)`)
 
   // Get tracks
   console.log(`[analyzePlaylist] Fetching playlist tracks...`)
   const tracksResponse = await rateLimitedSpotifyCall(
     () =>
       fetch(`https://api.spotify.com/v1/playlists/${playlist_id}/tracks?limit=100`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {Authorization: `Bearer ${token}`},
       }),
     undefined,
     'playlist:tracks',
@@ -350,9 +343,7 @@ async function analyzePlaylist(args: any, token: string) {
 
   if (!tracksResponse.ok) {
     const errorText = await tracksResponse.text()
-    console.error(
-      `[analyzePlaylist] Failed to get playlist tracks: ${tracksResponse.status} - ${errorText}`,
-    )
+    console.error(`[analyzePlaylist] Failed to get playlist tracks: ${tracksResponse.status} - ${errorText}`)
     throw new Error(`Failed to get playlist tracks: ${tracksResponse.status}`)
   }
 
@@ -374,18 +365,12 @@ async function analyzePlaylist(args: any, token: string) {
   // Log the structure of a single track object to see what Spotify returns
   if (tracks.length > 0) {
     const sampleTrack = tracks[0]
-    console.log(
-      `[analyzePlaylist] Sample track object keys: ${Object.keys(sampleTrack).join(', ')}`,
-    )
-    console.log(
-      `[analyzePlaylist] Single track JSON size: ${JSON.stringify(sampleTrack).length} bytes`,
-    )
+    console.log(`[analyzePlaylist] Sample track object keys: ${Object.keys(sampleTrack).join(', ')}`)
+    console.log(`[analyzePlaylist] Single track JSON size: ${JSON.stringify(sampleTrack).length} bytes`)
 
     // Log size of specific fields
     if (sampleTrack.album) {
-      console.log(
-        `[analyzePlaylist]   - album field size: ${JSON.stringify(sampleTrack.album).length} bytes`,
-      )
+      console.log(`[analyzePlaylist]   - album field size: ${JSON.stringify(sampleTrack.album).length} bytes`)
       console.log(`[analyzePlaylist]   - album keys: ${Object.keys(sampleTrack.album).join(', ')}`)
     }
     // Note: available_markets not included in schema to reduce payload size
@@ -401,7 +386,7 @@ async function analyzePlaylist(args: any, token: string) {
     const featuresResponse = await rateLimitedSpotifyCall(
       () =>
         fetch(`https://api.spotify.com/v1/audio-features?ids=${trackIds.slice(0, 100).join(',')}`, {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: {Authorization: `Bearer ${token}`},
         }),
       undefined,
       'audio-features:analyze',
@@ -415,20 +400,13 @@ async function analyzePlaylist(args: any, token: string) {
 
       if (featuresResult.success) {
         audioFeatures = featuresResult.data.audio_features ?? []
-        console.log(
-          `[analyzePlaylist] Got audio features for ${audioFeatures.filter(f => f).length} tracks`,
-        )
+        console.log(`[analyzePlaylist] Got audio features for ${audioFeatures.filter(f => f).length} tracks`)
       } else {
-        console.error(
-          '[analyzePlaylist] Failed to parse audio features:',
-          formatZodError(featuresResult.error),
-        )
+        console.error('[analyzePlaylist] Failed to parse audio features:', formatZodError(featuresResult.error))
       }
     } else {
       const errorText = await featuresResponse.text()
-      console.error(
-        `[analyzePlaylist] Failed to get audio features: ${featuresResponse.status} - ${errorText}`,
-      )
+      console.error(`[analyzePlaylist] Failed to get audio features: ${featuresResponse.status} - ${errorText}`)
       console.error(
         `[analyzePlaylist] Request URL: https://api.spotify.com/v1/audio-features?ids=${trackIds.slice(0, 100).join(',').substring(0, 200)}...`,
       )
@@ -437,9 +415,7 @@ async function analyzePlaylist(args: any, token: string) {
   }
 
   // Calculate averages
-  console.log(
-    `[analyzePlaylist] Calculating audio analysis from ${audioFeatures.length} features...`,
-  )
+  console.log(`[analyzePlaylist] Calculating audio analysis from ${audioFeatures.length} features...`)
   const validFeatures = audioFeatures.filter((f: any) => f !== null)
   console.log(`[analyzePlaylist] Valid features: ${validFeatures.length}/${audioFeatures.length}`)
 
@@ -449,23 +425,14 @@ async function analyzePlaylist(args: any, token: string) {
       validFeatures.length > 0
         ? {
             avg_acousticness:
-              validFeatures.reduce((sum: number, f: any) => sum + f.acousticness, 0) /
-              validFeatures.length,
+              validFeatures.reduce((sum: number, f: any) => sum + f.acousticness, 0) / validFeatures.length,
             avg_danceability:
-              validFeatures.reduce((sum: number, f: any) => sum + f.danceability, 0) /
-              validFeatures.length,
-            avg_energy:
-              validFeatures.reduce((sum: number, f: any) => sum + f.energy, 0) /
-              validFeatures.length,
+              validFeatures.reduce((sum: number, f: any) => sum + f.danceability, 0) / validFeatures.length,
+            avg_energy: validFeatures.reduce((sum: number, f: any) => sum + f.energy, 0) / validFeatures.length,
             avg_instrumentalness:
-              validFeatures.reduce((sum: number, f: any) => sum + f.instrumentalness, 0) /
-              validFeatures.length,
-            avg_tempo:
-              validFeatures.reduce((sum: number, f: any) => sum + f.tempo, 0) /
-              validFeatures.length,
-            avg_valence:
-              validFeatures.reduce((sum: number, f: any) => sum + f.valence, 0) /
-              validFeatures.length,
+              validFeatures.reduce((sum: number, f: any) => sum + f.instrumentalness, 0) / validFeatures.length,
+            avg_tempo: validFeatures.reduce((sum: number, f: any) => sum + f.tempo, 0) / validFeatures.length,
+            avg_valence: validFeatures.reduce((sum: number, f: any) => sum + f.valence, 0) / validFeatures.length,
           }
         : null,
     // Add genre analysis if available
@@ -490,7 +457,7 @@ async function analyzePlaylist(args: any, token: string) {
     )
       .sort((a: any, b: any) => b[1] - a[1])
       .slice(0, 5)
-      .map(([artist, count]) => ({ artist, track_count: count })),
+      .map(([artist, count]) => ({artist, track_count: count})),
     total_tracks: tracks.length,
   }
 
@@ -512,12 +479,8 @@ async function analyzePlaylist(args: any, token: string) {
   const oldSize = JSON.stringify(oldAnalysis).length
   console.log(`[analyzePlaylist] OLD analysis size would have been: ${oldSize} bytes`)
   console.log(`[analyzePlaylist] Size breakdown of old format:`)
-  console.log(
-    `[analyzePlaylist]   - tracks field: ${JSON.stringify(tracks.slice(0, 20)).length} bytes`,
-  )
-  console.log(
-    `[analyzePlaylist]   - audio_features field: ${JSON.stringify(audioFeatures.slice(0, 20)).length} bytes`,
-  )
+  console.log(`[analyzePlaylist]   - tracks field: ${JSON.stringify(tracks.slice(0, 20)).length} bytes`)
+  console.log(`[analyzePlaylist]   - audio_features field: ${JSON.stringify(audioFeatures.slice(0, 20)).length} bytes`)
   console.log(
     `[analyzePlaylist]   - other fields: ${oldSize - JSON.stringify(tracks.slice(0, 20)).length - JSON.stringify(audioFeatures.slice(0, 20)).length} bytes`,
   )
@@ -535,7 +498,7 @@ async function createPlaylist(args: any, token: string) {
   const userResponse = await rateLimitedSpotifyCall(
     () =>
       fetch('https://api.spotify.com/v1/me', {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {Authorization: `Bearer ${token}`},
       }),
     undefined,
     'user:profile',
@@ -550,10 +513,7 @@ async function createPlaylist(args: any, token: string) {
   const userResult = safeParse(SpotifyUserSchema, userJson)
 
   if (!userResult.success) {
-    console.error(
-      '[Tool:createPlaylist] Failed to parse user data:',
-      formatZodError(userResult.error),
-    )
+    console.error('[Tool:createPlaylist] Failed to parse user data:', formatZodError(userResult.error))
     throw new Error(`Invalid user data: ${formatZodError(userResult.error)}`)
   }
 
@@ -588,10 +548,7 @@ async function createPlaylist(args: any, token: string) {
   const playlistResult = safeParse(SpotifyCreatePlaylistResponseSchema, playlistJson)
 
   if (!playlistResult.success) {
-    console.error(
-      '[Tool:createPlaylist] Failed to parse playlist response:',
-      formatZodError(playlistResult.error),
-    )
+    console.error('[Tool:createPlaylist] Failed to parse playlist response:', formatZodError(playlistResult.error))
     throw new Error(`Invalid playlist response: ${formatZodError(playlistResult.error)}`)
   }
 
@@ -625,12 +582,12 @@ async function createPlaylist(args: any, token: string) {
 }
 
 async function getAlbumInfo(args: any, token: string) {
-  const { album_id } = args
+  const {album_id} = args
 
   const response = await rateLimitedSpotifyCall(
     () =>
       fetch(`https://api.spotify.com/v1/albums/${album_id}`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {Authorization: `Bearer ${token}`},
       }),
     undefined,
     'album:info',
@@ -658,7 +615,7 @@ async function getAlbumInfo(args: any, token: string) {
     const featuresResponse = await rateLimitedSpotifyCall(
       () =>
         fetch(`https://api.spotify.com/v1/audio-features?ids=${trackIds.join(',')}`, {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: {Authorization: `Bearer ${token}`},
         }),
       undefined,
       'audio-features:album',
@@ -671,10 +628,7 @@ async function getAlbumInfo(args: any, token: string) {
       if (featuresResult.success) {
         audioFeatures = featuresResult.data.audio_features ?? []
       } else {
-        console.error(
-          '[getAlbumInfo] Failed to parse audio features:',
-          formatZodError(featuresResult.error),
-        )
+        console.error('[getAlbumInfo] Failed to parse audio features:', formatZodError(featuresResult.error))
       }
     }
   }
@@ -686,12 +640,12 @@ async function getAlbumInfo(args: any, token: string) {
 }
 
 async function getArtistInfo(args: any, token: string) {
-  const { artist_id } = args
+  const {artist_id} = args
 
   const response = await rateLimitedSpotifyCall(
     () =>
       fetch(`https://api.spotify.com/v1/artists/${artist_id}`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {Authorization: `Bearer ${token}`},
       }),
     undefined,
     'artist:info',
@@ -705,12 +659,12 @@ async function getArtistInfo(args: any, token: string) {
 }
 
 async function getArtistTopTracks(args: any, token: string) {
-  const { artist_id, market = 'US' } = args
+  const {artist_id, market = 'US'} = args
 
   const response = await rateLimitedSpotifyCall(
     () =>
       fetch(`https://api.spotify.com/v1/artists/${artist_id}/top-tracks?market=${market}`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {Authorization: `Bearer ${token}`},
       }),
     undefined,
     'artist:top-tracks',
@@ -732,7 +686,7 @@ async function getArtistTopTracks(args: any, token: string) {
 }
 
 async function getAudioFeatures(args: any, token: string) {
-  const { track_ids } = args
+  const {track_ids} = args
 
   console.log(`[getAudioFeatures] Starting with args:`, JSON.stringify(args))
   console.log(`[getAudioFeatures] Extracted track_ids:`, track_ids)
@@ -746,7 +700,7 @@ async function getAudioFeatures(args: any, token: string) {
   const response = await rateLimitedSpotifyCall(
     () =>
       fetch(`https://api.spotify.com/v1/audio-features?ids=${track_ids.join(',')}`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {Authorization: `Bearer ${token}`},
       }),
     undefined,
     'audio-features:batch',
@@ -756,9 +710,7 @@ async function getAudioFeatures(args: any, token: string) {
 
   if (!response.ok) {
     const errorText = await response.text()
-    console.error(
-      `[getAudioFeatures] Failed to get audio features: ${response.status} - ${errorText}`,
-    )
+    console.error(`[getAudioFeatures] Failed to get audio features: ${response.status} - ${errorText}`)
     throw new Error(`Failed to get audio features: ${response.status}`)
   }
 
@@ -779,7 +731,7 @@ async function getAvailableGenres(token: string) {
   const response = await rateLimitedSpotifyCall(
     () =>
       fetch('https://api.spotify.com/v1/recommendations/available-genre-seeds', {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {Authorization: `Bearer ${token}`},
       }),
     undefined,
     'genres:available',
@@ -790,7 +742,7 @@ async function getAvailableGenres(token: string) {
   }
 
   const json = await response.json()
-  const GenresSchema = z.object({ genres: z.array(z.string()) })
+  const GenresSchema = z.object({genres: z.array(z.string())})
   const result = safeParse(GenresSchema, json)
 
   if (!result.success) {
@@ -807,18 +759,15 @@ async function getRecommendations(args: any, token: string) {
   if (args.seed_tracks) params.append('seed_tracks', args.seed_tracks.join(','))
   if (args.seed_artists) params.append('seed_artists', args.seed_artists.join(','))
   if (args.seed_genres) params.append('seed_genres', args.seed_genres.join(','))
-  if (args.target_energy !== undefined)
-    params.append('target_energy', args.target_energy.toString())
-  if (args.target_danceability !== undefined)
-    params.append('target_danceability', args.target_danceability.toString())
-  if (args.target_valence !== undefined)
-    params.append('target_valence', args.target_valence.toString())
+  if (args.target_energy !== undefined) params.append('target_energy', args.target_energy.toString())
+  if (args.target_danceability !== undefined) params.append('target_danceability', args.target_danceability.toString())
+  if (args.target_valence !== undefined) params.append('target_valence', args.target_valence.toString())
   params.append('limit', (args.limit ?? 20).toString())
 
   const response = await rateLimitedSpotifyCall(
     () =>
       fetch(`https://api.spotify.com/v1/recommendations?${params}`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {Authorization: `Bearer ${token}`},
       }),
     undefined,
     'recommendations',
@@ -840,12 +789,12 @@ async function getRecommendations(args: any, token: string) {
 }
 
 async function getRelatedArtists(args: any, token: string) {
-  const { artist_id } = args
+  const {artist_id} = args
 
   const response = await rateLimitedSpotifyCall(
     () =>
       fetch(`https://api.spotify.com/v1/artists/${artist_id}/related-artists`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {Authorization: `Bearer ${token}`},
       }),
     undefined,
     'artist:related',
@@ -856,7 +805,7 @@ async function getRelatedArtists(args: any, token: string) {
   }
 
   const json = await response.json()
-  const ArtistsSchema = z.object({ artists: z.array(z.any()) }) // Artists have complex schema
+  const ArtistsSchema = z.object({artists: z.array(z.any())}) // Artists have complex schema
   const result = safeParse(ArtistsSchema, json)
 
   if (!result.success) {
@@ -868,12 +817,12 @@ async function getRelatedArtists(args: any, token: string) {
 }
 
 async function getTrackDetails(args: any, token: string) {
-  const { track_id } = args
+  const {track_id} = args
 
   const response = await rateLimitedSpotifyCall(
     () =>
       fetch(`https://api.spotify.com/v1/tracks/${track_id}`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {Authorization: `Bearer ${token}`},
       }),
     undefined,
     'track:details',
@@ -897,7 +846,7 @@ async function getTrackDetails(args: any, token: string) {
   const featuresResponse = await rateLimitedSpotifyCall(
     () =>
       fetch(`https://api.spotify.com/v1/audio-features/${track_id}`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {Authorization: `Bearer ${token}`},
       }),
     undefined,
     'audio-features:single',
@@ -911,10 +860,7 @@ async function getTrackDetails(args: any, token: string) {
     if (featuresResult.success) {
       audioFeatures = featuresResult.data
     } else {
-      console.error(
-        '[getTrackDetails] Failed to parse audio features:',
-        formatZodError(featuresResult.error),
-      )
+      console.error('[getTrackDetails] Failed to parse audio features:', formatZodError(featuresResult.error))
     }
   }
 
@@ -938,7 +884,7 @@ async function getTrackDetails(args: any, token: string) {
 }
 
 async function modifyPlaylist(args: any, token: string) {
-  const { action, playlist_id, position, track_uris } = args
+  const {action, playlist_id, position, track_uris} = args
 
   const url = `https://api.spotify.com/v1/playlists/${playlist_id}/tracks`
   let method = 'POST'
@@ -951,7 +897,7 @@ async function modifyPlaylist(args: any, token: string) {
       break
     case 'remove':
       method = 'DELETE'
-      body.tracks = track_uris.map((uri: string) => ({ uri }))
+      body.tracks = track_uris.map((uri: string) => ({uri}))
       break
     case 'reorder':
       method = 'PUT'
@@ -981,20 +927,17 @@ async function modifyPlaylist(args: any, token: string) {
     throw new Error(`Failed to ${action} tracks: ${response.status}`)
   }
 
-  return { action, success: true, track_count: track_uris.length }
+  return {action, success: true, track_count: track_uris.length}
 }
 
 async function searchArtists(args: any, token: string) {
-  const { limit = 10, query } = args
+  const {limit = 10, query} = args
 
   const response = await rateLimitedSpotifyCall(
     () =>
-      fetch(
-        `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=artist&limit=${limit}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      ),
+      fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=artist&limit=${limit}`, {
+        headers: {Authorization: `Bearer ${token}`},
+      }),
     undefined,
     'search:artists',
   )
@@ -1022,16 +965,13 @@ async function searchSpotifyTracks(
   args: z.infer<typeof SearchTracksSchema>,
   token: string,
 ): Promise<z.infer<typeof SpotifyTrackFullSchema>[]> {
-  const { filters, limit = 10, query } = args
+  const {filters, limit = 10, query} = args
 
   const response = await rateLimitedSpotifyCall(
     () =>
-      fetch(
-        `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=track&limit=${limit}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      ),
+      fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=track&limit=${limit}`, {
+        headers: {Authorization: `Bearer ${token}`},
+      }),
     undefined,
     'search:tracks',
   )
@@ -1053,7 +993,7 @@ async function searchSpotifyTracks(
   // Apply filters if provided
   if (filters && tracks.length > 0) {
     const trackIds = tracks.map(track => track.id)
-    const features = await getAudioFeatures({ track_ids: trackIds }, token)
+    const features = await getAudioFeatures({track_ids: trackIds}, token)
 
     return tracks.filter((_track, index) => {
       const feature = features[index]

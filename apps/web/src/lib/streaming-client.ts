@@ -1,10 +1,5 @@
 // SSE streaming client for real-time chat responses
-import type {
-  StreamDebugData,
-  StreamLogData,
-  StreamToolData,
-  StreamToolResult,
-} from '@dj/shared-types'
+import type {StreamDebugData, StreamLogData, StreamToolData, StreamToolResult} from '@dj/shared-types'
 
 export interface StreamCallbacks {
   onContent?: (content: string) => void
@@ -18,14 +13,14 @@ export interface StreamCallbacks {
 }
 
 export type StreamEvent =
-  | { data: null; type: 'done' }
-  | { data: StreamDebugData; type: 'debug' }
-  | { data: StreamLogData; type: 'log' }
-  | { data: StreamToolData; type: 'tool_start' }
-  | { data: StreamToolResult; type: 'tool_end' }
-  | { data: string; type: 'content' }
-  | { data: string; type: 'error' }
-  | { data: string; type: 'thinking' }
+  | {data: null; type: 'done'}
+  | {data: StreamDebugData; type: 'debug'}
+  | {data: StreamLogData; type: 'log'}
+  | {data: StreamToolData; type: 'tool_start'}
+  | {data: StreamToolResult; type: 'tool_end'}
+  | {data: string; type: 'content'}
+  | {data: string; type: 'error'}
+  | {data: string; type: 'thinking'}
 
 export class ChatStreamClient {
   private static readonly MAX_BUFFER_SIZE = 2 * 1024 * 1024 // 2MB safety cap
@@ -40,11 +35,11 @@ export class ChatStreamClient {
 
   async streamMessage(
     message: string,
-    conversationHistory: { content: string; role: 'assistant' | 'user' }[],
+    conversationHistory: {content: string; role: 'assistant' | 'user'}[],
     mode: 'analyze' | 'create' | 'edit',
     callbacks: StreamCallbacks,
-    options?: { signal?: AbortSignal },
-  ): Promise<{ close: () => void }> {
+    options?: {signal?: AbortSignal},
+  ): Promise<{close: () => void}> {
     // Get auth token
     const token = localStorage.getItem('spotify_token')
     if (!token) {
@@ -95,11 +90,7 @@ export class ChatStreamClient {
         case 'log': {
           // Log to browser console with better formatting
           const logColor =
-            event.data.level === 'error'
-              ? 'color: red'
-              : event.data.level === 'warn'
-                ? 'color: orange'
-                : 'color: blue'
+            event.data.level === 'error' ? 'color: red' : event.data.level === 'warn' ? 'color: orange' : 'color: blue'
           console.warn(`%c[Server ${event.data.level}]`, logColor, event.data.message)
           break
         }
@@ -120,11 +111,11 @@ export class ChatStreamClient {
 
   private async streamWithFetch(
     message: string,
-    conversationHistory: { content: string; role: 'assistant' | 'user' }[],
+    conversationHistory: {content: string; role: 'assistant' | 'user'}[],
     mode: 'analyze' | 'create' | 'edit',
     token: string,
     callbacks: StreamCallbacks,
-    options?: { signal?: AbortSignal },
+    options?: {signal?: AbortSignal},
   ): Promise<void> {
     // Create abort controller for fetch
     this.abortController = new AbortController()
@@ -174,9 +165,7 @@ export class ChatStreamClient {
         const errorText = await response.text().catch(() => '')
         console.error('[ChatStream] Error response:', errorText)
         throw new Error(
-          `HTTP ${response.status}: ${response.statusText}${
-            errorText ? ` - ${errorText.slice(0, 300)}` : ''
-          }`,
+          `HTTP ${response.status}: ${response.statusText}${errorText ? ` - ${errorText.slice(0, 300)}` : ''}`,
         )
       }
 
@@ -194,9 +183,7 @@ export class ChatStreamClient {
           throw new Error(errorMessage)
         } catch {
           throw new Error(
-            `Unexpected content-type: ${contentType}${
-              errorText ? `. Response: ${errorText.slice(0, 300)}` : ''
-            }`,
+            `Unexpected content-type: ${contentType}${errorText ? `. Response: ${errorText.slice(0, 300)}` : ''}`,
           )
         }
       }
@@ -296,7 +283,7 @@ export class ChatStreamClient {
 
       // Read and process the stream
       while (true) {
-        const { done, value } = await reader.read()
+        const {done, value} = await reader.read()
         chunkCount++
 
         if (done) {
@@ -307,11 +294,8 @@ export class ChatStreamClient {
           break
         }
 
-        const chunk = decoder.decode(value, { stream: true })
-        console.log(
-          `[ChatStream] Chunk #${chunkCount} received (${chunk.length} bytes):`,
-          chunk.slice(0, 100),
-        )
+        const chunk = decoder.decode(value, {stream: true})
+        console.log(`[ChatStream] Chunk #${chunkCount} received (${chunk.length} bytes):`, chunk.slice(0, 100))
         buffer += chunk
 
         // Safety cap on buffer size to prevent memory issues

@@ -3,11 +3,11 @@
  * This avoids the Cloudflare Workers limitation where workers cannot fetch their own URLs
  */
 
-import { DynamicStructuredTool } from '@langchain/core/tools'
+import {DynamicStructuredTool} from '@langchain/core/tools'
 
-import type { Env } from '../index'
+import type {Env} from '../index'
 
-import { executeSpotifyTool, spotifyTools } from './spotify-tools'
+import {executeSpotifyTool, spotifyTools} from './spotify-tools'
 
 export interface InternalMCPTool {
   description: string

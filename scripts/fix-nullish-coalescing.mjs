@@ -5,12 +5,12 @@
  * This script is safe for this codebase where we trust all replacements.
  */
 
-import { readFileSync, writeFileSync } from 'fs'
-import { execSync } from 'child_process'
+import {readFileSync, writeFileSync} from 'fs'
+import {execSync} from 'child_process'
 
 // Get all files with prefer-nullish-coalescing errors
 console.log('Finding files with nullish coalescing violations...\n')
-const lintOutput = execSync('pnpm run lint 2>&1 || true', { encoding: 'utf-8' })
+const lintOutput = execSync('pnpm run lint 2>&1 || true', {encoding: 'utf-8'})
 
 // Extract unique file paths
 const fileMatches = lintOutput.matchAll(/^(.+\.tsx?)$/gm)
@@ -58,7 +58,7 @@ for (const file of files) {
     },
   ]
 
-  for (const { pattern, replacement } of patterns) {
+  for (const {pattern, replacement} of patterns) {
     const before = content
     content = content.replace(pattern, replacement)
     const matches = (before.match(pattern) || []).length

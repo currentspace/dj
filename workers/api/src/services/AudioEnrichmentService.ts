@@ -16,8 +16,8 @@ import {
   MusicBrainzSearchResponseSchema,
 } from '@dj/shared-types'
 
-import { safeParse } from '../lib/guards'
-import { getGlobalOrchestrator, rateLimitedDeezerCall } from '../utils/RateLimitedAPIClients'
+import {safeParse} from '../lib/guards'
+import {getGlobalOrchestrator, rateLimitedDeezerCall} from '../utils/RateLimitedAPIClients'
 
 export interface BPMEnrichment {
   bpm: null | number
@@ -35,9 +35,9 @@ export interface EnrichmentCache {
 }
 
 interface SpotifyTrack {
-  artists: { name: string }[]
+  artists: {name: string}[]
   duration_ms: number
-  external_ids?: { isrc?: string }
+  external_ids?: {isrc?: string}
   id: string
   name: string
 }
@@ -84,14 +84,11 @@ export class AudioEnrichmentService {
     const cacheKey = track.id
 
     // Debug: Log incoming track structure
-    console.log(
-      `[BPMEnrichment] enrichTrack called for "${track.name}" by ${track.artists[0]?.name}`,
-      {
-        external_ids: track.external_ids,
-        has_external_ids: !!track.external_ids,
-        track_keys: Object.keys(track),
-      },
-    )
+    console.log(`[BPMEnrichment] enrichTrack called for "${track.name}" by ${track.artists[0]?.name}`, {
+      external_ids: track.external_ids,
+      has_external_ids: !!track.external_ids,
+      track_keys: Object.keys(track),
+    })
 
     // Try cache first
     let existingEnrichment: BPMEnrichment | null = null
@@ -112,11 +109,7 @@ export class AudioEnrichmentService {
         // If this is a recent miss (less than 5 minutes old), return the miss
         const age = Date.now() - new Date(cached.fetched_at).getTime()
         if (cached.is_miss && age < this.missCacheTTL * 1000) {
-          console.log(
-            `[DeezerEnrichment] 🔄 Recent miss cached for ${
-              track.id
-            }, age: ${Math.round(age / 1000 / 60)}m`,
-          )
+          console.log(`[DeezerEnrichment] 🔄 Recent miss cached for ${track.id}, age: ${Math.round(age / 1000 / 60)}m`)
           return cached.enrichment
         }
 
@@ -140,11 +133,7 @@ export class AudioEnrichmentService {
     } else {
       // Fallback: Try to get ISRC from MusicBrainz, then retry
       console.log(`[BPMEnrichment] No ISRC for "${track.name}", trying MusicBrainz`)
-      const mbIsrc = await this.findISRCViaMusicBrainz(
-        track.name,
-        track.artists[0]?.name ?? '',
-        track.duration_ms,
-      )
+      const mbIsrc = await this.findISRCViaMusicBrainz(track.name, track.artists[0]?.name ?? '', track.duration_ms)
 
       if (mbIsrc) {
         console.log(`[BPMEnrichment] MusicBrainz found ISRC: ${mbIsrc}, querying Deezer`)
@@ -206,10 +195,7 @@ export class AudioEnrichmentService {
       const parseResult = safeParse(DeezerSearchResponseSchema, json)
 
       if (!parseResult.success) {
-        console.error(
-          '[BPMEnrichment] Deezer search response validation failed:',
-          parseResult.error.errors,
-        )
+        console.error('[BPMEnrichment] Deezer search response validation failed:', parseResult.error.errors)
         return []
       }
 
@@ -232,9 +218,7 @@ export class AudioEnrichmentService {
 
       const response = await rateLimitedDeezerCall(() => fetch(url), undefined, `isrc:${isrc}`)
 
-      console.log(
-        `[BPMEnrichment] Deezer direct ISRC response status: ${response?.status ?? 'null'}`,
-      )
+      console.log(`[BPMEnrichment] Deezer direct ISRC response status: ${response?.status ?? 'null'}`)
       if (!response?.ok) {
         return null
       }
@@ -243,10 +227,7 @@ export class AudioEnrichmentService {
       const parseResult = safeParse(DeezerTrackSchema, json)
 
       if (!parseResult.success) {
-        console.error(
-          '[BPMEnrichment] Deezer ISRC response validation failed:',
-          parseResult.error.errors,
-        )
+        console.error('[BPMEnrichment] Deezer ISRC response validation failed:', parseResult.error.errors)
         return null
       }
 
@@ -254,9 +235,7 @@ export class AudioEnrichmentService {
       const hasTrack = !!data.id
       const hasBPM = !!data.bpm
       console.log(
-        `[BPMEnrichment] Deezer direct result: hasTrack=${hasTrack}, hasBPM=${hasBPM}, BPM=${
-          data.bpm ?? 'N/A'
-        }`,
+        `[BPMEnrichment] Deezer direct result: hasTrack=${hasTrack}, hasBPM=${hasBPM}, BPM=${data.bpm ?? 'N/A'}`,
       )
       return data
     } catch (error) {
@@ -275,9 +254,7 @@ export class AudioEnrichmentService {
 
       const response = await rateLimitedDeezerCall(() => fetch(url), undefined, `track:${id}`)
 
-      console.log(
-        `[BPMEnrichment] Deezer track by ID response status: ${response?.status ?? 'null'}`,
-      )
+      console.log(`[BPMEnrichment] Deezer track by ID response status: ${response?.status ?? 'null'}`)
       if (!response?.ok) {
         return null
       }
@@ -286,10 +263,7 @@ export class AudioEnrichmentService {
       const parseResult = safeParse(DeezerTrackSchema, json)
 
       if (!parseResult.success) {
-        console.error(
-          '[BPMEnrichment] Deezer track by ID validation failed:',
-          parseResult.error.errors,
-        )
+        console.error('[BPMEnrichment] Deezer track by ID validation failed:', parseResult.error.errors)
         return null
       }
 
@@ -297,9 +271,7 @@ export class AudioEnrichmentService {
       const hasTrack = !!data.id
       const hasBPM = !!data.bpm
       console.log(
-        `[BPMEnrichment] Deezer track by ID result: hasTrack=${hasTrack}, hasBPM=${hasBPM}, BPM=${
-          data.bpm ?? 'N/A'
-        }`,
+        `[BPMEnrichment] Deezer track by ID result: hasTrack=${hasTrack}, hasBPM=${hasBPM}, BPM=${data.bpm ?? 'N/A'}`,
       )
       return data
     } catch (error) {
@@ -313,9 +285,7 @@ export class AudioEnrichmentService {
    */
   private async enrichByISRC(isrc: string, durationMs: number): Promise<BPMEnrichment> {
     try {
-      console.log(
-        `[BPMEnrichment] enrichByISRC called with ISRC: ${isrc}, duration: ${durationMs}ms`,
-      )
+      console.log(`[BPMEnrichment] enrichByISRC called with ISRC: ${isrc}, duration: ${durationMs}ms`)
 
       // Try direct ISRC endpoint first
       console.log(`[BPMEnrichment] Attempting direct Deezer ISRC lookup...`)
@@ -368,9 +338,7 @@ export class AudioEnrichmentService {
       const bestMatch = sorted[0]?.track
 
       if (bestMatch) {
-        console.log(
-          `[BPMEnrichment] Best match: Deezer ID ${bestMatch.id}, duration diff: ${sorted[0].diff}s`,
-        )
+        console.log(`[BPMEnrichment] Best match: Deezer ID ${bestMatch.id}, duration diff: ${sorted[0].diff}s`)
         // Fetch full track details to get BPM (may not be in search results)
         console.log(`[BPMEnrichment] Fetching full track details for Deezer ID ${bestMatch.id}...`)
         const fullTrack = await this.deezerTrackById(bestMatch.id)
@@ -426,9 +394,7 @@ export class AudioEnrichmentService {
   ): Promise<null | string> {
     try {
       const query = `recording:"${trackName}" AND artist:"${artistName}"`
-      const url = `https://musicbrainz.org/ws/2/recording/?query=${encodeURIComponent(
-        query,
-      )}&fmt=json&limit=5`
+      const url = `https://musicbrainz.org/ws/2/recording/?query=${encodeURIComponent(query)}&fmt=json&limit=5`
 
       const orchestrator = getGlobalOrchestrator()
       const response = await orchestrator.execute(() =>
@@ -448,10 +414,7 @@ export class AudioEnrichmentService {
       const parseResult = safeParse(MusicBrainzSearchResponseSchema, json)
 
       if (!parseResult.success) {
-        console.error(
-          '[BPMEnrichment] MusicBrainz response validation failed:',
-          parseResult.error.errors,
-        )
+        console.error('[BPMEnrichment] MusicBrainz response validation failed:', parseResult.error.errors)
         return null
       }
 
@@ -479,9 +442,7 @@ export class AudioEnrichmentService {
       }
 
       // If no duration match, just return first ISRC
-      const firstWithISRC = recordings.find(
-        (r: MusicBrainzRecording) => r.isrcs && r.isrcs.length > 0,
-      )
+      const firstWithISRC = recordings.find((r: MusicBrainzRecording) => r.isrcs && r.isrcs.length > 0)
       return firstWithISRC?.isrcs?.[0] ?? null
     } catch (error) {
       console.error('[BPMEnrichment] MusicBrainz fetch failed:', error)
@@ -521,11 +482,7 @@ export class AudioEnrichmentService {
   /**
    * Cache enrichment data
    */
-  private async setCached(
-    trackId: string,
-    enrichment: BPMEnrichment,
-    isMiss = false,
-  ): Promise<void> {
+  private async setCached(trackId: string, enrichment: BPMEnrichment, isMiss = false): Promise<void> {
     if (!this.cache) return
 
     try {
@@ -542,9 +499,7 @@ export class AudioEnrichmentService {
       })
 
       const ttlDisplay = isMiss ? `${Math.round(ttl / 60)}m` : `${Math.round(ttl / 86400)}d`
-      console.log(
-        `[BPMEnrichment] Cached ${isMiss ? 'miss' : 'hit'} for ${trackId} (TTL: ${ttlDisplay})`,
-      )
+      console.log(`[BPMEnrichment] Cached ${isMiss ? 'miss' : 'hit'} for ${trackId} (TTL: ${ttlDisplay})`)
     } catch (error) {
       console.error('[BPMEnrichment] Cache write error:', error)
     }

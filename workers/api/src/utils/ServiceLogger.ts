@@ -7,13 +7,13 @@
  * - Provide consistent formatting
  */
 
-import type { StreamLogData } from '@dj/shared-types'
+import type {StreamLogData} from '@dj/shared-types'
 
 type LogLevel = 'debug' | 'error' | 'info' | 'warn'
 
 // Simple interface for SSEWriter (to avoid circular dependency)
 interface SSEWriter {
-  write(event: { data: any; type: string }): Promise<void>
+  write(event: {data: any; type: string}): Promise<void>
 }
 
 export class ServiceLogger {
@@ -44,9 +44,7 @@ export class ServiceLogger {
    */
   error(message: string, error?: any | Error, data?: Record<string, any>): void {
     const errorData =
-      error instanceof Error
-        ? { error: error.message, stack: error.stack, ...data }
-        : { error: String(error), ...data }
+      error instanceof Error ? {error: error.message, stack: error.stack, ...data} : {error: String(error), ...data}
     this.log('error', message, errorData)
   }
 
@@ -72,8 +70,7 @@ export class ServiceLogger {
     const formattedMessage = `[${this.serviceName}] ${message}`
 
     // Always log to console
-    const consoleMethod =
-      level === 'error' ? console.error : level === 'warn' ? console.warn : console.log
+    const consoleMethod = level === 'error' ? console.error : level === 'warn' ? console.warn : console.log
     if (data && Object.keys(data).length > 0) {
       consoleMethod(formattedMessage, data)
     } else {
@@ -85,7 +82,7 @@ export class ServiceLogger {
       const logData: StreamLogData = {
         level,
         message: formattedMessage,
-        ...(data && { data }),
+        ...(data && {data}),
       }
 
       // Fire and forget - don't await to avoid blocking

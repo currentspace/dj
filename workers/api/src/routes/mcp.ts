@@ -1,13 +1,13 @@
 // MCP Server - Streamable HTTP Transport (2025-03-26)
-import { Hono } from 'hono'
-import { z } from 'zod'
+import {Hono} from 'hono'
+import {z} from 'zod'
 
-import type { Env } from '../index'
+import type {Env} from '../index'
 
-import { SessionManager } from '../lib/session-manager'
-import { executeSpotifyTool, spotifyTools } from '../lib/spotify-tools'
+import {SessionManager} from '../lib/session-manager'
+import {executeSpotifyTool, spotifyTools} from '../lib/spotify-tools'
 
-const mcpRouter = new Hono<{ Bindings: Env }>()
+const mcpRouter = new Hono<{Bindings: Env}>()
 
 // MCP Protocol Schemas
 const MCPRequestSchema = z.object({
@@ -32,10 +32,7 @@ mcpRouter.use('*', async (c, next) => {
   // Add CORS headers for LangChain MCP client
   c.res.headers.set('Access-Control-Allow-Origin', '*')
   c.res.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-  c.res.headers.set(
-    'Access-Control-Allow-Headers',
-    'Content-Type, Authorization, MCP-Protocol-Version, Accept',
-  )
+  c.res.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, MCP-Protocol-Version, Accept')
   c.res.headers.set('Access-Control-Max-Age', '86400')
 
   // Handle preflight OPTIONS requests
@@ -65,11 +62,7 @@ mcpRouter.all('/', async c => {
     console.log(`[MCP:${requestId}] URL: ${c.req.url}`)
     console.log(`[MCP:${requestId}] Method: ${method}`)
     console.log(`[MCP:${requestId}] Accept: ${acceptHeader}`)
-    console.log(
-      `[MCP:${requestId}] User-Agent: ${userAgent.substring(0, 100)}${
-        userAgent.length > 100 ? '...' : ''
-      }`,
-    )
+    console.log(`[MCP:${requestId}] User-Agent: ${userAgent.substring(0, 100)}${userAgent.length > 100 ? '...' : ''}`)
     console.log(`[MCP:${requestId}] Origin: ${origin}`)
     console.log(`[MCP:${requestId}] Session-Id: ${sessionId?.substring(0, 8) ?? 'none'}`)
 
@@ -78,17 +71,13 @@ mcpRouter.all('/', async c => {
 
     const dumpHeaders = () => {
       const entries = Array.from(c.req.raw.headers.entries())
-      return Object.fromEntries(
-        entries.map(([k, v]) => [k, k.toLowerCase() === 'authorization' ? '<redacted>' : v]),
-      )
+      return Object.fromEntries(entries.map(([k, v]) => [k, k.toLowerCase() === 'authorization' ? '<redacted>' : v]))
     }
 
     // Validate authorization
     const authorization = getHeader('authorization')
     console.log(`[MCP:${requestId}] Authorization header present: ${!!authorization}`)
-    console.log(
-      `[MCP:${requestId}] Authorization format correct: ${authorization?.startsWith('Bearer ')}`,
-    )
+    console.log(`[MCP:${requestId}] Authorization format correct: ${authorization?.startsWith('Bearer ')}`)
 
     if (!authorization?.startsWith('Bearer ')) {
       const duration = Date.now() - startTime
@@ -110,12 +99,7 @@ mcpRouter.all('/', async c => {
     }
 
     const sessionToken = authorization.replace('Bearer ', '')
-    console.log(
-      `[MCP:${requestId}] Session token: ${sessionToken.substring(
-        0,
-        8,
-      )}...${sessionToken.substring(-4)}`,
-    )
+    console.log(`[MCP:${requestId}] Session token: ${sessionToken.substring(0, 8)}...${sessionToken.substring(-4)}`)
 
     console.log(`[MCP:${requestId}] Validating session with session manager...`)
     let spotifyToken: null | string = null
@@ -125,10 +109,7 @@ mcpRouter.all('/', async c => {
       console.log(`[MCP:${requestId}] Session validation completed, token found: ${!!spotifyToken}`)
     } catch (sessionError) {
       const duration = Date.now() - startTime
-      console.error(
-        `[MCP:${requestId}] SESSION VALIDATION ERROR after ${duration}ms:`,
-        sessionError,
-      )
+      console.error(`[MCP:${requestId}] SESSION VALIDATION ERROR after ${duration}ms:`, sessionError)
       return c.json(
         {
           details: sessionError instanceof Error ? sessionError.message : 'Unknown session error',
@@ -141,12 +122,8 @@ mcpRouter.all('/', async c => {
 
     if (!spotifyToken) {
       const duration = Date.now() - startTime
-      console.warn(
-        `[MCP:${requestId}] INVALID SESSION - Token not found or expired (${duration}ms)`,
-      )
-      console.log(
-        `[MCP:${requestId}] Session validation failed for: ${sessionToken.substring(0, 8)}...`,
-      )
+      console.warn(`[MCP:${requestId}] INVALID SESSION - Token not found or expired (${duration}ms)`)
+      console.log(`[MCP:${requestId}] Session validation failed for: ${sessionToken.substring(0, 8)}...`)
       return c.json(
         {
           details: 'Session token not found or has expired',
@@ -168,9 +145,7 @@ mcpRouter.all('/', async c => {
 
       if (!acceptHeader.includes('text/event-stream')) {
         const duration = Date.now() - startTime
-        console.warn(
-          `[MCP:${requestId}] GET REJECTED - Missing text/event-stream accept header (${duration}ms)`,
-        )
+        console.warn(`[MCP:${requestId}] GET REJECTED - Missing text/event-stream accept header (${duration}ms)`)
         console.log(`[MCP:${requestId}] Expected: text/event-stream, Got: ${acceptHeader}`)
 
         // For debugging, also try to serve SSE even without the header
@@ -233,14 +208,14 @@ mcpRouter.all('/', async c => {
           )
 
           // Send ready event
-          send({ timestamp: Date.now(), type: 'ready' }, 'ready')
+          send({timestamp: Date.now(), type: 'ready'}, 'ready')
 
           console.log(`[MCP:${requestId}] SSE connection established, events sent`)
 
           // Heartbeat every 20 seconds to prevent 522s
           const heartbeat = setInterval(() => {
             try {
-              send({ timestamp: Date.now(), type: 'heartbeat' }, 'ping')
+              send({timestamp: Date.now(), type: 'heartbeat'}, 'ping')
             } catch (error) {
               console.log(`[MCP:${requestId}] Heartbeat failed, client likely disconnected`)
               clearInterval(heartbeat)
@@ -258,7 +233,7 @@ mcpRouter.all('/', async c => {
         },
       })
 
-      return new Response(stream, { headers, status: 200 })
+      return new Response(stream, {headers, status: 200})
     }
 
     if (method === 'POST') {
@@ -267,11 +242,9 @@ mcpRouter.all('/', async c => {
       // POST requests must support application/json
       if (!acceptHeader.includes('application/json')) {
         const duration = Date.now() - startTime
-        console.error(
-          `[MCP:${requestId}] POST REJECTED - Missing application/json accept header (${duration}ms)`,
-        )
+        console.error(`[MCP:${requestId}] POST REJECTED - Missing application/json accept header (${duration}ms)`)
         console.log(`[MCP:${requestId}] Expected: application/json, Got: ${acceptHeader}`)
-        return c.json({ error: 'Bad Request' }, 400)
+        return c.json({error: 'Bad Request'}, 400)
       }
 
       try {
@@ -287,17 +260,13 @@ mcpRouter.all('/', async c => {
         const responses: any[] = []
 
         console.log(
-          `[MCP:${requestId}] Processing ${requests.length} request(s) ${
-            Array.isArray(body) ? '(batch)' : '(single)'
-          }`,
+          `[MCP:${requestId}] Processing ${requests.length} request(s) ${Array.isArray(body) ? '(batch)' : '(single)'}`,
         )
 
         for (let i = 0; i < requests.length; i++) {
           const request = requests[i]
           console.log(
-            `[MCP:${requestId}] Processing request ${i + 1}/${
-              requests.length
-            }: ${request?.method ?? 'unknown'}`,
+            `[MCP:${requestId}] Processing request ${i + 1}/${requests.length}: ${request?.method ?? 'unknown'}`,
           )
 
           try {
@@ -305,18 +274,14 @@ mcpRouter.all('/', async c => {
 
             // Check if this is a notification
             if (isNotification(mcpRequest.method)) {
-              console.log(
-                `[MCP:${requestId}] Notification received: ${mcpRequest.method} (no response will be sent)`,
-              )
+              console.log(`[MCP:${requestId}] Notification received: ${mcpRequest.method} (no response will be sent)`)
               // Notifications don't get responses, skip to next
               continue
             }
 
             // For non-notifications, require an id
             if (mcpRequest.id === undefined || mcpRequest.id === null) {
-              console.error(
-                `[MCP:${requestId}] Non-notification ${mcpRequest.method} missing required id`,
-              )
+              console.error(`[MCP:${requestId}] Non-notification ${mcpRequest.method} missing required id`)
               responses.push({
                 error: {
                   code: -32600,
@@ -328,20 +293,12 @@ mcpRouter.all('/', async c => {
               continue
             }
 
-            const response = await handleMCPRequest(
-              mcpRequest,
-              spotifyToken,
-              requestId,
-              sessionToken,
-            )
+            const response = await handleMCPRequest(mcpRequest, spotifyToken, requestId, sessionToken)
             responses.push(response)
             console.log(`[MCP:${requestId}] Request ${i + 1} completed successfully`)
           } catch (error) {
             console.error(`[MCP:${requestId}] Request ${i + 1} validation error:`, error)
-            console.log(
-              `[MCP:${requestId}] Invalid request data:`,
-              JSON.stringify(request).substring(0, 200),
-            )
+            console.log(`[MCP:${requestId}] Invalid request data:`, JSON.stringify(request).substring(0, 200))
             responses.push({
               error: {
                 code: -32602,
@@ -357,7 +314,7 @@ mcpRouter.all('/', async c => {
         if (responses.length === 0) {
           // All were notifications, return 204 No Content
           console.log(`[MCP:${requestId}] All requests were notifications, returning 204`)
-          return new Response(null, { status: 204 })
+          return new Response(null, {status: 204})
         }
 
         const result = Array.isArray(body) ? responses : responses[0]
@@ -398,7 +355,7 @@ mcpRouter.all('/', async c => {
 
     const duration = Date.now() - startTime
     console.error(`[MCP:${requestId}] UNSUPPORTED METHOD: ${method} (${duration}ms)`)
-    return c.json({ error: 'Method not allowed' }, 405)
+    return c.json({error: 'Method not allowed'}, 405)
   } catch (error) {
     const duration = Date.now() - startTime
     console.error(`[MCP:${requestId}] FATAL ERROR after ${duration}ms:`, error)
@@ -423,12 +380,7 @@ mcpRouter.all('/', async c => {
   }
 })
 
-async function handleMCPRequest(
-  request: any,
-  spotifyToken: string,
-  requestId: string,
-  sessionToken?: string,
-) {
+async function handleMCPRequest(request: any, spotifyToken: string, requestId: string, sessionToken?: string) {
   const methodStartTime = Date.now()
   const method = request.method
   const requestIdHeader = request.id
@@ -484,15 +436,13 @@ async function handleMCPRequest(
       const listDuration = Date.now() - methodStartTime
       console.log(`[MCP:${requestId}] TOOLS/LIST completed in ${listDuration}ms`)
       console.log(`[MCP:${requestId}] Available tools: ${toolsResult.result.tools.length}`)
-      console.log(
-        `[MCP:${requestId}] Tool names: [${toolsResult.result.tools.map(t => t.name).join(', ')}]`,
-      )
+      console.log(`[MCP:${requestId}] Tool names: [${toolsResult.result.tools.map(t => t.name).join(', ')}]`)
 
       return toolsResult
     }
 
     case 'tools/call': {
-      const { arguments: args, name } = request.params ?? {}
+      const {arguments: args, name} = request.params ?? {}
 
       console.log(`[MCP:${requestId}] TOOLS/CALL - Executing: ${name}`)
       console.log(`[MCP:${requestId}] Tool arguments:`, JSON.stringify(args).substring(0, 200))
@@ -547,10 +497,7 @@ async function handleMCPRequest(
         }
       } catch (toolError) {
         const totalDuration = Date.now() - methodStartTime
-        console.error(
-          `[MCP:${requestId}] TOOLS/CALL FAILED - ${name} error after ${totalDuration}ms:`,
-          toolError,
-        )
+        console.error(`[MCP:${requestId}] TOOLS/CALL FAILED - ${name} error after ${totalDuration}ms:`, toolError)
         console.log(`[MCP:${requestId}] Tool error details:`, {
           message: toolError instanceof Error ? toolError.message : String(toolError),
           name: toolError instanceof Error ? toolError.name : 'Unknown',
@@ -595,11 +542,7 @@ mcpRouter.post('/session/create', async c => {
 
   console.log(`[MCP:${sessionRequestId}] === SESSION CREATE REQUEST ===`)
   console.log(`[MCP:${sessionRequestId}] URL: ${c.req.url}`)
-  console.log(
-    `[MCP:${sessionRequestId}] User-Agent: ${
-      c.req.header('User-Agent')?.substring(0, 100) ?? 'unknown'
-    }`,
-  )
+  console.log(`[MCP:${sessionRequestId}] User-Agent: ${c.req.header('User-Agent')?.substring(0, 100) ?? 'unknown'}`)
 
   try {
     const authorization = c.req.header('Authorization')
@@ -610,10 +553,8 @@ mcpRouter.post('/session/create', async c => {
 
     if (!spotifyToken) {
       const duration = Date.now() - startTime
-      console.error(
-        `[MCP:${sessionRequestId}] SESSION CREATE FAILED - No Spotify token provided (${duration}ms)`,
-      )
-      return c.json({ error: 'Spotify token required' }, 400)
+      console.error(`[MCP:${sessionRequestId}] SESSION CREATE FAILED - No Spotify token provided (${duration}ms)`)
+      return c.json({error: 'Spotify token required'}, 400)
     }
 
     console.log(`[MCP:${sessionRequestId}] Spotify token: ${spotifyToken.substring(0, 20)}...`)
@@ -628,19 +569,15 @@ mcpRouter.post('/session/create', async c => {
     })
     const spotifyDuration = Date.now() - spotifyStartTime
 
-    console.log(
-      `[MCP:${sessionRequestId}] Spotify API response: ${testResponse.status} (${spotifyDuration}ms)`,
-    )
+    console.log(`[MCP:${sessionRequestId}] Spotify API response: ${testResponse.status} (${spotifyDuration}ms)`)
 
     if (!testResponse.ok) {
       const duration = Date.now() - startTime
       const errorText = await testResponse.text().catch(() => 'unknown')
       console.error(`[MCP:${sessionRequestId}] SESSION CREATE FAILED - Invalid Spotify token`)
-      console.log(
-        `[MCP:${sessionRequestId}] Status: ${testResponse.status}, Duration: ${duration}ms`,
-      )
+      console.log(`[MCP:${sessionRequestId}] Status: ${testResponse.status}, Duration: ${duration}ms`)
       console.log(`[MCP:${sessionRequestId}] Spotify error: ${errorText.substring(0, 200)}`)
-      return c.json({ error: 'Invalid Spotify token' }, 401)
+      return c.json({error: 'Invalid Spotify token'}, 401)
     }
 
     const userData = await testResponse.json()
@@ -662,10 +599,7 @@ mcpRouter.post('/session/create', async c => {
     console.log(`[MCP:${sessionRequestId}] Session creation time: ${sessionCreationTime}ms`)
     console.log(`[MCP:${sessionRequestId}] Total duration: ${totalDuration}ms`)
     console.log(
-      `[MCP:${sessionRequestId}] Session token: ${sessionToken.substring(
-        0,
-        8,
-      )}...${sessionToken.substring(-4)}`,
+      `[MCP:${sessionRequestId}] Session token: ${sessionToken.substring(0, 8)}...${sessionToken.substring(-4)}`,
     )
     console.log(`[MCP:${sessionRequestId}] MCP server URL: ${mcpServerUrl}`)
 
@@ -737,17 +671,12 @@ mcpRouter.get('/test-sse', async c => {
         }
         message += `data: ${JSON.stringify(data)}\n\n`
         controller.enqueue(enc.encode(message))
-        console.log(
-          `[SSE-Test:${testId}] Sent: ${event ?? 'data'} - ${JSON.stringify(data).substring(
-            0,
-            100,
-          )}`,
-        )
+        console.log(`[SSE-Test:${testId}] Sent: ${event ?? 'data'} - ${JSON.stringify(data).substring(0, 100)}`)
       }
 
       // Send immediate events
-      send({ testId, timestamp: Date.now(), type: 'connected' }, 'connected')
-      send({ message: 'SSE test endpoint ready', type: 'ready' }, 'ready')
+      send({testId, timestamp: Date.now(), type: 'connected'}, 'connected')
+      send({message: 'SSE test endpoint ready', type: 'ready'}, 'ready')
 
       // Send periodic test events
       const interval = setInterval(() => {
@@ -764,7 +693,7 @@ mcpRouter.get('/test-sse', async c => {
           )
 
           if (counter >= 5) {
-            send({ message: 'Test complete', type: 'complete' }, 'complete')
+            send({message: 'Test complete', type: 'complete'}, 'complete')
             clearInterval(interval)
             controller.close()
             console.log(`[SSE-Test:${testId}] Test completed, connection closed`)
@@ -789,7 +718,7 @@ mcpRouter.get('/test-sse', async c => {
     },
   })
 
-  return new Response(stream, { headers, status: 200 })
+  return new Response(stream, {headers, status: 200})
 })
 
 /**
@@ -804,18 +733,13 @@ mcpRouter.post('/session/destroy', async c => {
   const authorization = c.req.header('Authorization')
   if (!authorization?.startsWith('Bearer ')) {
     const duration = Date.now() - startTime
-    console.error(
-      `[MCP:${destroyRequestId}] SESSION DESTROY FAILED - No bearer token (${duration}ms)`,
-    )
-    return c.json({ error: 'Unauthorized' }, 401)
+    console.error(`[MCP:${destroyRequestId}] SESSION DESTROY FAILED - No bearer token (${duration}ms)`)
+    return c.json({error: 'Unauthorized'}, 401)
   }
 
   const sessionToken = authorization.replace('Bearer ', '')
   console.log(
-    `[MCP:${destroyRequestId}] Destroying session: ${sessionToken.substring(
-      0,
-      8,
-    )}...${sessionToken.substring(-4)}`,
+    `[MCP:${destroyRequestId}] Destroying session: ${sessionToken.substring(0, 8)}...${sessionToken.substring(-4)}`,
   )
 
   try {
@@ -842,4 +766,4 @@ mcpRouter.post('/session/destroy', async c => {
   }
 })
 
-export { mcpRouter }
+export {mcpRouter}

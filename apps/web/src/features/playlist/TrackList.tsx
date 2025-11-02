@@ -1,12 +1,12 @@
-import type { Track } from '@dj/shared-types'
+import type {Track} from '@dj/shared-types'
 
-import { memo } from 'react'
+import {memo} from 'react'
 
 interface TrackListProps {
   tracks: Track[]
 }
 
-export const TrackList = memo(function TrackList({ tracks }: TrackListProps) {
+export const TrackList = memo(function TrackList({tracks}: TrackListProps) {
   return (
     <div className="track-list">
       {tracks.map((track, index) => (
@@ -22,7 +22,7 @@ interface TrackItemProps {
 }
 
 const TrackItem = memo(
-  function TrackItem({ number, track }: TrackItemProps) {
+  function TrackItem({number, track}: TrackItemProps) {
     return (
       <div className="track-item">
         <span className="track-number">{number}</span>
@@ -34,8 +34,7 @@ const TrackItem = memo(
           <button
             aria-label={`Play preview of ${track.name}`}
             className="preview-button"
-            onClick={() => playPreview(track.previewUrl!)}
-          >
+            onClick={() => playPreview(track.previewUrl!)}>
             ▶️
           </button>
         )}
@@ -45,8 +44,7 @@ const TrackItem = memo(
             className="spotify-link"
             href={track.externalUrl}
             rel="noopener noreferrer"
-            target="_blank"
-          >
+            target="_blank">
             🔗
           </a>
         )}

@@ -63,7 +63,7 @@ const response = await fetch('/api/mcp/session/create', {
   },
 })
 
-const { sessionToken, mcpServerUrl } = await response.json()
+const {sessionToken, mcpServerUrl} = await response.json()
 
 // Configure Claude with MCP
 const claudeConfig = {

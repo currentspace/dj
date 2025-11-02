@@ -3,8 +3,8 @@
  * CRUD operations for Spotify playlists
  */
 
-import { SpotifyPlaylistSimpleSchema, UserPlaylistsResponseSchema } from '@dj/shared-types'
-import { createRoute, z } from '@hono/zod-openapi'
+import {SpotifyPlaylistSimpleSchema, UserPlaylistsResponseSchema} from '@dj/shared-types'
+import {createRoute, z} from '@hono/zod-openapi'
 
 /**
  * GET /api/spotify/playlists

@@ -3,7 +3,7 @@
  * Covers Deezer, Last.fm, and MusicBrainz APIs
  */
 
-import { z } from 'zod'
+import {z} from 'zod'
 
 // ===== Deezer API =====
 

@@ -1,6 +1,6 @@
 // @ts-check
-import { fileURLToPath } from 'node:url'
-import { dirname } from 'node:path'
+import {fileURLToPath} from 'node:url'
+import {dirname} from 'node:path'
 import js from '@eslint/js'
 import tseslint from 'typescript-eslint'
 import reactPlugin from 'eslint-plugin-react'
@@ -114,7 +114,7 @@ export default [
       ...reactHooks.configs['recommended-latest'].rules,
 
       // React Refresh
-      'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
+      'react-refresh/only-export-components': ['warn', {allowConstantExport: true}],
 
       // Accessibility Rules
       ...jsxA11y.flatConfigs.recommended.rules,
@@ -172,7 +172,7 @@ export default [
     },
     rules: {
       // Console usage - only warn/error in production workers
-      'no-console': ['warn', { allow: ['warn', 'error'] }],
+      'no-console': ['warn', {allow: ['warn', 'error']}],
 
       // Perfectionist - keep imports organized in workers
       'perfectionist/sort-imports': [
@@ -213,8 +213,7 @@ export default [
       'no-restricted-syntax': [
         'error',
         {
-          message:
-            'Shared types package should only export types, interfaces, and enums - not runtime code',
+          message: 'Shared types package should only export types, interfaces, and enums - not runtime code',
           selector:
             'ExportNamedDeclaration[declaration.type!="TSInterfaceDeclaration"][declaration.type!="TSTypeAliasDeclaration"][declaration.type!="TSEnumDeclaration"]',
         },
@@ -256,11 +255,7 @@ export default [
   // TEST FILES - More lenient rules
   // ============================================================================
   {
-    files: [
-      '**/*.test.{ts,tsx,js,jsx}',
-      '**/*.spec.{ts,tsx,js,jsx}',
-      '**/__tests__/**/*.{ts,tsx,js,jsx}',
-    ],
+    files: ['**/*.test.{ts,tsx,js,jsx}', '**/*.spec.{ts,tsx,js,jsx}', '**/__tests__/**/*.{ts,tsx,js,jsx}'],
     rules: {
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/no-unsafe-assignment': 'off',

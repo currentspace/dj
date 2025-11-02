@@ -110,7 +110,7 @@ These schemas exist but are NOT imported/used:
    const data = (await response.json()) as any
 
    // AFTER
-   import { DeezerTrackSchema, parse } from '@dj/shared-types'
+   import {DeezerTrackSchema, parse} from '@dj/shared-types'
    const data = await response.json()
    const validated = parse(DeezerTrackSchema, data)
    ```

@@ -334,18 +334,14 @@ export class RateLimitedQueue<T> {
         this.tokens -= 1
         const task = this.queue.shift()! // Take from front
         console.log(
-          `[RateLimitedQueue] Launching task - remaining queue: ${
-            this.queue.length
-          }, running: ${this.running + 1}`,
+          `[RateLimitedQueue] Launching task - remaining queue: ${this.queue.length}, running: ${this.running + 1}`,
         )
         runOne(task)
       }
 
       // If there are still tasks, schedule next wakeup
       if (this.queue.length > 0) {
-        console.log(
-          `[RateLimitedQueue] Scheduling next tick for ${this.queue.length} remaining tasks`,
-        )
+        console.log(`[RateLimitedQueue] Scheduling next tick for ${this.queue.length} remaining tasks`)
         scheduleNext()
       }
     }

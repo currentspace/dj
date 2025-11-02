@@ -11,10 +11,10 @@
  * Dynamic: "Digging through Spotify's crates for workout bangers..."
  */
 
-import { ChatAnthropic } from '@langchain/anthropic'
+import {ChatAnthropic} from '@langchain/anthropic'
 
-import { rateLimitedAnthropicCall } from '../utils/RateLimitedAPIClients'
-import { ServiceLogger } from '../utils/ServiceLogger'
+import {rateLimitedAnthropicCall} from '../utils/RateLimitedAPIClients'
+import {ServiceLogger} from '../utils/ServiceLogger'
 
 interface MessageContext {
   eventType: string
@@ -64,17 +64,14 @@ export class ProgressNarrator {
         prompt += `\n\n${randomStyle} Variation #${Math.floor(Math.random() * 10000)}`
       }
 
-      this.logger.debug(
-        `Generating message for event: ${context.eventType}${skipCache ? ' (uncached)' : ''}`,
-        {
-          maxTokens: 100,
-          model: 'claude-3-5-haiku-20241022',
-          promptLength: prompt.length,
-          promptPreview: prompt.substring(0, 200),
-          systemPromptLength: this.systemPrompt.length,
-          temperature: skipCache ? 1.0 : 0.7,
-        },
-      )
+      this.logger.debug(`Generating message for event: ${context.eventType}${skipCache ? ' (uncached)' : ''}`, {
+        maxTokens: 100,
+        model: 'claude-3-5-haiku-20241022',
+        promptLength: prompt.length,
+        promptPreview: prompt.substring(0, 200),
+        systemPromptLength: this.systemPrompt.length,
+        temperature: skipCache ? 1.0 : 0.7,
+      })
 
       this.logger.info('About to call Anthropic API (rate-limited)', {
         hasApiKey: !!this.apiKey,
@@ -83,8 +80,8 @@ export class ProgressNarrator {
 
       // Create Langchain messages
       const messages = [
-        { content: this.systemPrompt, role: 'system' as const },
-        { content: prompt, role: 'user' as const },
+        {content: this.systemPrompt, role: 'system' as const},
+        {content: prompt, role: 'user' as const},
       ]
 
       // Use rate-limited API wrapper (no timeout - orchestrator handles queuing)
@@ -96,7 +93,7 @@ export class ProgressNarrator {
             maxTokens: 100,
             model: 'claude-3-5-haiku-20241022',
             temperature: skipCache ? 1.0 : 0.7,
-            ...(skipCache ? { topP: 0.95 } : {}),
+            ...(skipCache ? {topP: 0.95} : {}),
             maxRetries: 0,
           })
           return await anthropic.invoke(messages)
@@ -114,10 +111,7 @@ export class ProgressNarrator {
         responseType: response.constructor.name,
       })
 
-      const message =
-        typeof response.content === 'string'
-          ? response.content.trim()
-          : this.getFallbackMessage(context)
+      const message = typeof response.content === 'string' ? response.content.trim() : this.getFallbackMessage(context)
 
       this.logger.info(`Generated message`, {
         contentLength: message.length,
@@ -171,13 +165,13 @@ export class ProgressNarrator {
    */
   async warmupCache(): Promise<void> {
     const contexts: MessageContext[] = [
-      { eventType: 'started' },
-      { eventType: 'analyzing_request' },
-      { eventType: 'searching_tracks' },
-      { eventType: 'analyzing_audio' },
-      { eventType: 'creating_playlist' },
-      { eventType: 'adding_tracks' },
-      { eventType: 'completed' },
+      {eventType: 'started'},
+      {eventType: 'analyzing_request'},
+      {eventType: 'searching_tracks'},
+      {eventType: 'analyzing_audio'},
+      {eventType: 'creating_playlist'},
+      {eventType: 'adding_tracks'},
+      {eventType: 'completed'},
     ]
 
     // Generate common messages in parallel

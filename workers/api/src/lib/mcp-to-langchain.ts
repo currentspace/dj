@@ -1,14 +1,11 @@
-import { DynamicStructuredTool } from '@langchain/core/tools'
-import { z } from 'zod'
+import {DynamicStructuredTool} from '@langchain/core/tools'
+import {z} from 'zod'
 
 /**
  * Convert MCP tool definitions to LangChain DynamicStructuredTool instances
  * This ensures compatibility with LangChain's ReAct agent
  */
-export function convertMCPToolsToLangChain(
-  mcpTools: any[],
-  sessionToken: string,
-): DynamicStructuredTool[] {
+export function convertMCPToolsToLangChain(mcpTools: any[], sessionToken: string): DynamicStructuredTool[] {
   console.log(`[MCPConverter] Converting ${mcpTools.length} MCP tools to LangChain format`)
 
   // Check if tools are already LangChain tools (have _call method)

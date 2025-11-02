@@ -22,9 +22,9 @@
  * ```
  */
 
-import type { ServiceLogger } from './ServiceLogger'
+import type {ServiceLogger} from './ServiceLogger'
 
-import { globalOrchestrator } from './RequestOrchestrator'
+import {globalOrchestrator} from './RequestOrchestrator'
 
 /**
  * Get the global orchestrator instance
@@ -48,13 +48,11 @@ export async function rateLimitedAnthropicCall<T>(
       logger?.debug(`Anthropic API call starting${context ? `: ${context}` : ''}`)
       const result = await call()
       const duration = performance.now() - start
-      logger?.debug(
-        `Anthropic API call completed in ${duration.toFixed(0)}ms${context ? `: ${context}` : ''}`,
-      )
+      logger?.debug(`Anthropic API call completed in ${duration.toFixed(0)}ms${context ? `: ${context}` : ''}`)
       return result
     } catch (error) {
       const duration = performance.now() - start
-      const errorDetails: any = { context }
+      const errorDetails: any = {context}
       if (error instanceof Error) {
         errorDetails.message = error.message
         errorDetails.name = error.name
@@ -82,13 +80,11 @@ export async function rateLimitedDeezerCall<T>(
       logger?.debug(`Deezer API call starting${context ? `: ${context}` : ''}`)
       const result = await call()
       const duration = performance.now() - start
-      logger?.debug(
-        `Deezer API call completed in ${duration.toFixed(0)}ms${context ? `: ${context}` : ''}`,
-      )
+      logger?.debug(`Deezer API call completed in ${duration.toFixed(0)}ms${context ? `: ${context}` : ''}`)
       return result
     } catch (error) {
       const duration = performance.now() - start
-      logger?.error(`Deezer API call failed after ${duration.toFixed(0)}ms`, error, { context })
+      logger?.error(`Deezer API call failed after ${duration.toFixed(0)}ms`, error, {context})
       throw error
     }
   }, 'deezer')
@@ -109,13 +105,11 @@ export async function rateLimitedLastFmCall<T>(
       logger?.debug(`Last.fm API call starting${context ? `: ${context}` : ''}`)
       const result = await call()
       const duration = performance.now() - start
-      logger?.debug(
-        `Last.fm API call completed in ${duration.toFixed(0)}ms${context ? `: ${context}` : ''}`,
-      )
+      logger?.debug(`Last.fm API call completed in ${duration.toFixed(0)}ms${context ? `: ${context}` : ''}`)
       return result
     } catch (error) {
       const duration = performance.now() - start
-      logger?.error(`Last.fm API call failed after ${duration.toFixed(0)}ms`, error, { context })
+      logger?.error(`Last.fm API call failed after ${duration.toFixed(0)}ms`, error, {context})
       throw error
     }
   }, 'lastfm')
@@ -136,13 +130,11 @@ export async function rateLimitedSpotifyCall<T>(
       logger?.debug(`Spotify API call starting${context ? `: ${context}` : ''}`)
       const result = await call()
       const duration = performance.now() - start
-      logger?.debug(
-        `Spotify API call completed in ${duration.toFixed(0)}ms${context ? `: ${context}` : ''}`,
-      )
+      logger?.debug(`Spotify API call completed in ${duration.toFixed(0)}ms${context ? `: ${context}` : ''}`)
       return result
     } catch (error) {
       const duration = performance.now() - start
-      logger?.error(`Spotify API call failed after ${duration.toFixed(0)}ms`, error, { context })
+      logger?.error(`Spotify API call failed after ${duration.toFixed(0)}ms`, error, {context})
       throw error
     }
   }, 'spotify')

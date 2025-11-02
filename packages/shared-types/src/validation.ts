@@ -3,21 +3,17 @@
  * Uses Zod for runtime validation with TypeScript inference
  */
 
-import { z } from 'zod'
+import {z} from 'zod'
 
 /**
  * Safe parse result that preserves type information
  */
-export type SafeParseResult<T> =
-  | { data: null; error: z.ZodError; success: false }
-  | { data: T; error: null; success: true }
+export type SafeParseResult<T> = {data: null; error: z.ZodError; success: false} | {data: T; error: null; success: true}
 
 /**
  * Create a type guard from a Zod schema
  */
-export function createTypeGuard<T extends z.ZodTypeAny>(
-  schema: T,
-): (value: unknown) => value is z.infer<T> {
+export function createTypeGuard<T extends z.ZodTypeAny>(schema: T): (value: unknown) => value is z.infer<T> {
   return (value: unknown): value is z.infer<T> => {
     return schema.safeParse(value).success
   }
@@ -70,10 +66,7 @@ export async function parseJsonResponse<T extends z.ZodTypeAny>(
  * Safely parse data with Zod schema
  * Returns typed result or null with error details
  */
-export function safeParse<T extends z.ZodTypeAny>(
-  schema: T,
-  data: unknown,
-): SafeParseResult<z.infer<T>> {
+export function safeParse<T extends z.ZodTypeAny>(schema: T, data: unknown): SafeParseResult<z.infer<T>> {
   const result = schema.safeParse(data)
 
   if (result.success) {

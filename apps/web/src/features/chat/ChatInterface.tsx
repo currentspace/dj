@@ -1,9 +1,9 @@
-import type { ChatMessage, SpotifyPlaylist } from '@dj/shared-types'
+import type {ChatMessage, SpotifyPlaylist} from '@dj/shared-types'
 
-import { useCallback, useMemo, useRef, useState, useTransition } from 'react'
-import { flushSync } from 'react-dom'
+import {useCallback, useMemo, useRef, useState, useTransition} from 'react'
+import {flushSync} from 'react-dom'
 
-import { chatStreamClient } from '../../lib/streaming-client'
+import {chatStreamClient} from '../../lib/streaming-client'
 import '../../styles/streaming.css'
 import '../../styles/chat-interface.css'
 
@@ -18,11 +18,9 @@ interface StreamingStatus {
   toolsUsed: string[]
 }
 
-export function ChatInterface({ selectedPlaylist }: ChatInterfaceProps) {
+export function ChatInterface({selectedPlaylist}: ChatInterfaceProps) {
   // Maintain separate conversation history per playlist
-  const [conversationsByPlaylist, setConversationsByPlaylist] = useState<
-    Map<string, ChatMessage[]>
-  >(new Map())
+  const [conversationsByPlaylist, setConversationsByPlaylist] = useState<Map<string, ChatMessage[]>>(new Map())
   const [currentPlaylistId, setCurrentPlaylistId] = useState<null | string>(null)
   const [input, setInput] = useState('')
   const [mode, setMode] = useState<'analyze' | 'create' | 'edit'>('analyze')
@@ -33,7 +31,7 @@ export function ChatInterface({ selectedPlaylist }: ChatInterfaceProps) {
   const [, setCurrentStreamContent] = useState('')
   const [isPending, startTransition] = useTransition()
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const streamHandleRef = useRef<null | { close: () => void }>(null)
+  const streamHandleRef = useRef<null | {close: () => void}>(null)
 
   // Check if playlist changed - switch context immediately if so
   const playlistId = selectedPlaylist?.id ?? null
@@ -49,7 +47,7 @@ export function ChatInterface({ selectedPlaylist }: ChatInterfaceProps) {
   )
 
   const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    messagesEndRef.current?.scrollIntoView({behavior: 'smooth'})
   }, [])
 
   const handleModeChange = useCallback((newMode: 'analyze' | 'create' | 'edit') => {
@@ -92,7 +90,7 @@ export function ChatInterface({ selectedPlaylist }: ChatInterfaceProps) {
           const newMap = new Map(prev)
           const playlistKey = playlistId ?? ''
           const currentMessages = newMap.get(playlistKey) ?? []
-          newMap.set(playlistKey, [...currentMessages, { content: displayMessage, role: 'user' }])
+          newMap.set(playlistKey, [...currentMessages, {content: displayMessage, role: 'user'}])
           return newMap
         })
       })
@@ -112,16 +110,10 @@ export function ChatInterface({ selectedPlaylist }: ChatInterfaceProps) {
 
               if (lastMessage?.role === 'assistant') {
                 // Update existing assistant message
-                newMap.set(playlistKey, [
-                  ...currentMessages.slice(0, -1),
-                  { ...lastMessage, content: newContent },
-                ])
+                newMap.set(playlistKey, [...currentMessages.slice(0, -1), {...lastMessage, content: newContent}])
               } else {
                 // Add new assistant message
-                newMap.set(playlistKey, [
-                  ...currentMessages,
-                  { content: newContent, role: 'assistant' },
-                ])
+                newMap.set(playlistKey, [...currentMessages, {content: newContent, role: 'assistant'}])
               }
 
               return newMap
@@ -152,10 +144,7 @@ export function ChatInterface({ selectedPlaylist }: ChatInterfaceProps) {
             const newMap = new Map(prevMap)
             const playlistKey = playlistId ?? ''
             const currentMessages = newMap.get(playlistKey) ?? []
-            newMap.set(playlistKey, [
-              ...currentMessages,
-              { content: `Error: ${error}`, role: 'assistant' },
-            ])
+            newMap.set(playlistKey, [...currentMessages, {content: `Error: ${error}`, role: 'assistant'}])
             return newMap
           })
           scrollToBottom()
@@ -296,7 +285,7 @@ export function ChatInterface({ selectedPlaylist }: ChatInterfaceProps) {
 }
 
 // Tool status display component
-function StreamingStatusDisplay({ status }: { status: StreamingStatus }) {
+function StreamingStatusDisplay({status}: {status: StreamingStatus}) {
   if (!status.isStreaming && status.toolsUsed.length === 0) return null
 
   return (

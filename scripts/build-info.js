@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-import { execSync } from 'child_process'
-import { writeFileSync } from 'fs'
+import {execSync} from 'child_process'
+import {writeFileSync} from 'fs'
 
 // Get git commit hash (short)
 const commitHash = execSync('git rev-parse --short HEAD').toString().trim()

@@ -26,7 +26,7 @@ export class DJApiClient {
 
   async generatePlaylist(prompt: string): Promise<GeneratePlaylistResponse> {
     return this.request<GeneratePlaylistResponse>('/playlist/generate', {
-      body: JSON.stringify({ prompt } as GeneratePlaylistRequest),
+      body: JSON.stringify({prompt} as GeneratePlaylistRequest),
       method: 'POST',
     })
   }
@@ -41,14 +41,14 @@ export class DJApiClient {
     }
 
     return this.request<SavePlaylistResponse>('/playlist/save', {
-      body: JSON.stringify({ playlist } as SavePlaylistRequest),
+      body: JSON.stringify({playlist} as SavePlaylistRequest),
       method: 'POST',
     })
   }
 
   async searchSpotify(query: string, type = 'track') {
     return this.request(`/spotify/search`, {
-      body: JSON.stringify({ query, type }),
+      body: JSON.stringify({query, type}),
       method: 'POST',
     })
   }
@@ -95,7 +95,5 @@ export class DJApiClient {
 
 // Export a singleton instance for convenience
 export const apiClient = new DJApiClient(
-  typeof window !== 'undefined' && window.location.hostname === 'localhost'
-    ? 'http://localhost:8787/api'
-    : '/api',
+  typeof window !== 'undefined' && window.location.hostname === 'localhost' ? 'http://localhost:8787/api' : '/api',
 )

@@ -3,22 +3,17 @@
  * Migrated from spotify.ts to use @hono/zod-openapi
  */
 
-import type { OpenAPIHono } from '@hono/zod-openapi'
+import type {OpenAPIHono} from '@hono/zod-openapi'
 
-import {
-  exchangeSpotifyToken,
-  getSpotifyAuthUrl,
-  handleSpotifyCallback,
-  searchSpotify,
-} from '@dj/api-contracts'
+import {exchangeSpotifyToken, getSpotifyAuthUrl, handleSpotifyCallback, searchSpotify} from '@dj/api-contracts'
 
-import { SpotifyTokenResponseSchema } from '@dj/shared-types'
+import {SpotifyTokenResponseSchema} from '@dj/shared-types'
 
-import type { Env } from '../index'
+import type {Env} from '../index'
 
-import { isSuccessResponse, safeParse } from '../lib/guards'
-import { SpotifySearchResponseSchema } from '../lib/schemas'
-import { parse } from '@dj/shared-types'
+import {isSuccessResponse, safeParse} from '../lib/guards'
+import {SpotifySearchResponseSchema} from '../lib/schemas'
+import {parse} from '@dj/shared-types'
 
 const SPOTIFY_AUTH_URL = 'https://accounts.spotify.com/authorize'
 const SPOTIFY_TOKEN_URL = 'https://accounts.spotify.com/api/token'
@@ -61,13 +56,7 @@ async function hmacSign(data: string, key: string): Promise<string> {
   const keyData = encoder.encode(key)
   const dataBuffer = encoder.encode(data)
 
-  const cryptoKey = await crypto.subtle.importKey(
-    'raw',
-    keyData,
-    { hash: 'SHA-256', name: 'HMAC' },
-    false,
-    ['sign'],
-  )
+  const cryptoKey = await crypto.subtle.importKey('raw', keyData, {hash: 'SHA-256', name: 'HMAC'}, false, ['sign'])
 
   const signature = await crypto.subtle.sign('HMAC', cryptoKey, dataBuffer)
   return base64urlEncode(String.fromCharCode(...new Uint8Array(signature)))
@@ -81,7 +70,7 @@ async function hmacVerify(data: string, signature: string, key: string): Promise
 /**
  * Register Spotify auth routes on the provided OpenAPI app
  */
-export function registerSpotifyAuthRoutes(app: OpenAPIHono<{ Bindings: Env }>) {
+export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
   // GET /api/spotify/auth-url - Generate OAuth URL with PKCE
   app.openapi(getSpotifyAuthUrl, async c => {
     const env = c.env as Env
@@ -116,10 +105,7 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{ Bindings: Env }>) {
     })
 
     // Set secure, SameSite cookie with verifier
-    c.header(
-      'Set-Cookie',
-      `spotify_oauth=${cookieValue}; Max-Age=900; Secure; SameSite=Lax; Path=/; HttpOnly`,
-    )
+    c.header('Set-Cookie', `spotify_oauth=${cookieValue}; Max-Age=900; Secure; SameSite=Lax; Path=/; HttpOnly`)
 
     // Response automatically validated against contract schema
     return c.json({
@@ -139,16 +125,12 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{ Bindings: Env }>) {
 
       if (error) {
         console.error('OAuth error:', error)
-        return c.redirect(
-          `${env.FRONTEND_URL ?? 'https://dj.current.space'}?error=${encodeURIComponent(error)}`,
-        )
+        return c.redirect(`${env.FRONTEND_URL ?? 'https://dj.current.space'}?error=${encodeURIComponent(error)}`)
       }
 
       if (!code || !state) {
         console.error('Missing code or state parameter')
-        return c.redirect(
-          `${env.FRONTEND_URL ?? 'https://dj.current.space'}?error=missing_parameters`,
-        )
+        return c.redirect(`${env.FRONTEND_URL ?? 'https://dj.current.space'}?error=missing_parameters`)
       }
 
       // Retrieve and verify the signed cookie
@@ -176,7 +158,7 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{ Bindings: Env }>) {
 
       // Decode and validate cookie data
       const cookieData = JSON.parse(base64urlDecode(payload))
-      const { state: cookieState, timestamp, verifier: codeVerifier } = cookieData
+      const {state: cookieState, timestamp, verifier: codeVerifier} = cookieData
 
       // Validate state matches (CSRF protection)
       if (state !== cookieState) {
@@ -210,9 +192,7 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{ Bindings: Env }>) {
       if (!tokenResponse.ok) {
         const errorText = await tokenResponse.text()
         console.error('Token exchange failed:', tokenResponse.status, errorText)
-        return c.redirect(
-          `${env.FRONTEND_URL ?? 'https://dj.current.space'}?error=token_exchange_failed`,
-        )
+        return c.redirect(`${env.FRONTEND_URL ?? 'https://dj.current.space'}?error=token_exchange_failed`)
       }
 
       const data = await tokenResponse.json()
@@ -221,9 +201,7 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{ Bindings: Env }>) {
         tokenData = parse(SpotifyTokenResponseSchema, data)
       } catch (error) {
         console.error('Invalid token response format:', error)
-        return c.redirect(
-          `${env.FRONTEND_URL ?? 'https://dj.current.space'}?error=invalid_token_response`,
-        )
+        return c.redirect(`${env.FRONTEND_URL ?? 'https://dj.current.space'}?error=invalid_token_response`)
       }
 
       // Clear the OAuth cookie
@@ -247,7 +225,7 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{ Bindings: Env }>) {
 
     try {
       // Request body automatically validated by contract
-      const { code, codeVerifier } = await c.req.json()
+      const {code, codeVerifier} = await c.req.json()
 
       const response = await fetch(SPOTIFY_TOKEN_URL, {
         body: new URLSearchParams({
@@ -316,10 +294,10 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{ Bindings: Env }>) {
     try {
       // Headers and body automatically validated by contract
       const token = c.req.header('authorization')?.replace('Bearer ', '')
-      const { query, type } = await c.req.json()
+      const {query, type} = await c.req.json()
 
       if (!token) {
-        return c.json({ error: 'No authorization token' }, 401)
+        return c.json({error: 'No authorization token'}, 401)
       }
 
       const response = await fetch(
@@ -333,7 +311,7 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{ Bindings: Env }>) {
 
       if (!isSuccessResponse(response)) {
         console.error(`Spotify search failed: ${response.status} ${response.statusText}`)
-        return c.json({ error: 'Spotify search failed' }, 400)
+        return c.json({error: 'Spotify search failed'}, 400)
       }
 
       const responseData = await response.json()
@@ -341,7 +319,7 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{ Bindings: Env }>) {
 
       if (!spotifyData) {
         console.error('Invalid Spotify search response format')
-        return c.json({ error: 'Invalid response from Spotify' }, 400)
+        return c.json({error: 'Invalid response from Spotify'}, 400)
       }
 
       // Response automatically validated against contract schema
@@ -349,7 +327,7 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{ Bindings: Env }>) {
     } catch (error) {
       console.error('Spotify search error:', error)
       const message = error instanceof Error ? error.message : 'Search failed'
-      return c.json({ error: message }, 401)
+      return c.json({error: message}, 401)
     }
   })
 }

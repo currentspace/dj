@@ -1,10 +1,10 @@
-import { ChatAnthropic } from '@langchain/anthropic'
-import { HumanMessage, SystemMessage } from '@langchain/core/messages'
-import { Hono } from 'hono'
+import {ChatAnthropic} from '@langchain/anthropic'
+import {HumanMessage, SystemMessage} from '@langchain/core/messages'
+import {Hono} from 'hono'
 
-import type { Env } from '../index'
+import type {Env} from '../index'
 
-const testRouter = new Hono<{ Bindings: Env }>()
+const testRouter = new Hono<{Bindings: Env}>()
 
 // Test page HTML
 const testPageHTML = `
@@ -190,7 +190,7 @@ testRouter.get('/env', c => {
 testRouter.get('/anthropic', async c => {
   try {
     if (!c.env.ANTHROPIC_API_KEY) {
-      return c.json({ error: 'ANTHROPIC_API_KEY not found' }, 500)
+      return c.json({error: 'ANTHROPIC_API_KEY not found'}, 500)
     }
 
     const chat = new ChatAnthropic({
@@ -230,15 +230,15 @@ testRouter.get('/anthropic', async c => {
 // Mock Spotify search (without auth)
 testRouter.post('/spotify-mock', async c => {
   try {
-    const { query } = await c.req.json()
+    const {query} = await c.req.json()
 
     // Return mock Spotify data
     return c.json({
       tracks: {
         items: [
           {
-            artists: [{ name: 'Mock Artist' }],
-            external_urls: { spotify: 'https://open.spotify.com/track/mock1' },
+            artists: [{name: 'Mock Artist'}],
+            external_urls: {spotify: 'https://open.spotify.com/track/mock1'},
             id: 'mock-track-1',
             name: `Mock Track for "${query}"`,
             preview_url: 'https://example.com/preview.mp3',
@@ -248,8 +248,8 @@ testRouter.post('/spotify-mock', async c => {
       },
     })
   } catch (error) {
-    return c.json({ error: 'Invalid request' }, 400)
+    return c.json({error: 'Invalid request'}, 400)
   }
 })
 
-export { testRouter }
+export {testRouter}

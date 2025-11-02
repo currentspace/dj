@@ -276,14 +276,14 @@ TOTAL: ~1500ms with pipelined writes
 ```typescript
 // Phase 1: Do work
 orchestrator.enqueueBatch('phase1', tasks)
-sseWriter.writeAsync({ type: 'thinking', data: 'Phase 1...' })
+sseWriter.writeAsync({type: 'thinking', data: 'Phase 1...'})
 await orchestrator.awaitBatch('phase1')
 
 // Flush checkpoint (ensures user saw progress)
 await sseWriter.flush()
 
 // Phase 2: Do work
-sseWriter.writeAsync({ type: 'thinking', data: 'Phase 2...' })
+sseWriter.writeAsync({type: 'thinking', data: 'Phase 2...'})
 ```
 
 ### 2. Progress Updates During Batch
@@ -326,9 +326,9 @@ const step2Results = await orchestrator.awaitBatch('step2')
 ```typescript
 // Optional enhancement: narrator messages
 orchestrator
-  .execute(() => narrator.generateMessage({ eventType: 'enriching_tracks' }))
+  .execute(() => narrator.generateMessage({eventType: 'enriching_tracks'}))
   .then(message => {
-    sseWriter.writeAsync({ type: 'thinking', data: message })
+    sseWriter.writeAsync({type: 'thinking', data: message})
   })
   .catch(error => {
     // Fallback to static message

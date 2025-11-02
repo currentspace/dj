@@ -1,8 +1,8 @@
-import { z } from 'zod'
+import {z} from 'zod'
 
 // Response helper with proper status typing
 export function createErrorResponse(message: string, status: 400 | 401 | 404 | 500 = 500) {
-  return { error: message, status }
+  return {error: message, status}
 }
 
 // Generic type guard creator
@@ -18,7 +18,7 @@ export function createTypeGuard<T>(schema: z.ZodSchema<T>) {
 }
 
 // Type predicate for checking if response is ok
-export function isSuccessResponse(response: Response): response is Response & { ok: true } {
+export function isSuccessResponse(response: Response): response is Response & {ok: true} {
   return response.ok
 }
 
@@ -28,9 +28,7 @@ export function isValidHttpStatus(status: number): status is 200 | 201 | 400 | 4
 }
 
 // Safe parse result type
-export type SafeParseResult<T> =
-  | { data: null; error: z.ZodError; success: false }
-  | { data: T; error: null; success: true }
+export type SafeParseResult<T> = {data: null; error: z.ZodError; success: false} | {data: T; error: null; success: true}
 
 // Format Zod error for logging/display
 export function formatZodError(error: z.ZodError): string {

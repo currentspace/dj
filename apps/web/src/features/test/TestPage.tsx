@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import {useState} from 'react'
 
 interface TestResult {
   data: any
@@ -14,13 +14,13 @@ export function TestPage() {
   const apiBase = import.meta.env.DEV ? 'http://localhost:8787' : ''
 
   const runTest = async (testName: string, testFn: () => Promise<any>) => {
-    setLoading(prev => ({ ...prev, [testName]: true }))
+    setLoading(prev => ({...prev, [testName]: true}))
 
     try {
       const data = await testFn()
       setResults(prev => ({
         ...prev,
-        [testName]: { data, success: true },
+        [testName]: {data, success: true},
       }))
     } catch (error) {
       setResults(prev => ({
@@ -32,7 +32,7 @@ export function TestPage() {
         },
       }))
     } finally {
-      setLoading(prev => ({ ...prev, [testName]: false }))
+      setLoading(prev => ({...prev, [testName]: false}))
     }
   }
 
@@ -96,11 +96,7 @@ export function TestPage() {
 
     return (
       <div className={`result ${result.success ? 'success' : 'error'}`}>
-        {result.success ? (
-          <pre>{JSON.stringify(result.data, null, 2)}</pre>
-        ) : (
-          <div>Error: {result.error}</div>
-        )}
+        {result.success ? <pre>{JSON.stringify(result.data, null, 2)}</pre> : <div>Error: {result.error}</div>}
       </div>
     )
   }

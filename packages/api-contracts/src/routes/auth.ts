@@ -3,7 +3,7 @@
  * Spotify OAuth flow with PKCE and token management
  */
 
-import { createRoute, z } from '@hono/zod-openapi'
+import {createRoute, z} from '@hono/zod-openapi'
 
 /**
  * GET /api/spotify/auth-url
