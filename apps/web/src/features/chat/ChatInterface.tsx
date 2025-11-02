@@ -36,14 +36,14 @@ export function ChatInterface({ selectedPlaylist }: ChatInterfaceProps) {
   const streamHandleRef = useRef<null | { close: () => void }>(null)
 
   // Check if playlist changed - switch context immediately if so
-  const playlistId = selectedPlaylist?.id || null
+  const playlistId = selectedPlaylist?.id ?? null
   if (playlistId !== currentPlaylistId) {
     console.log(`[ChatInterface] Switching playlist context: ${currentPlaylistId} → ${playlistId}`)
     setCurrentPlaylistId(playlistId)
   }
 
   // Get messages for current playlist
-  const messages = conversationsByPlaylist.get(playlistId || '') || []
+  const messages = conversationsByPlaylist.get(playlistId ?? '') ?? []
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -85,8 +85,8 @@ export function ChatInterface({ selectedPlaylist }: ChatInterfaceProps) {
     flushSync(() => {
       setConversationsByPlaylist(prev => {
         const newMap = new Map(prev)
-        const playlistKey = playlistId || ''
-        const currentMessages = newMap.get(playlistKey) || []
+        const playlistKey = playlistId ?? ''
+        const currentMessages = newMap.get(playlistKey) ?? []
         newMap.set(playlistKey, [...currentMessages, { content: displayMessage, role: 'user' }])
         return newMap
       })
@@ -105,8 +105,8 @@ export function ChatInterface({ selectedPlaylist }: ChatInterfaceProps) {
             // Update the last message or add new one in current playlist's conversation
             setConversationsByPlaylist(prevMap => {
               const newMap = new Map(prevMap)
-              const playlistKey = playlistId || ''
-              const currentMessages = newMap.get(playlistKey) || []
+              const playlistKey = playlistId ?? ''
+              const currentMessages = newMap.get(playlistKey) ?? []
               const lastMessage = currentMessages[currentMessages.length - 1]
 
               if (lastMessage?.role === 'assistant') {
@@ -146,8 +146,8 @@ export function ChatInterface({ selectedPlaylist }: ChatInterfaceProps) {
           }))
           setConversationsByPlaylist(prevMap => {
             const newMap = new Map(prevMap)
-            const playlistKey = playlistId || ''
-            const currentMessages = newMap.get(playlistKey) || []
+            const playlistKey = playlistId ?? ''
+            const currentMessages = newMap.get(playlistKey) ?? []
             newMap.set(playlistKey, [...currentMessages, { content: `Error: ${error}`, role: 'assistant' }])
             return newMap
           })
