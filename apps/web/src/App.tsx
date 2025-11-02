@@ -6,9 +6,7 @@ import {SpotifyAuth} from './features/auth/SpotifyAuth'
 import {ChatInterface} from './features/chat/ChatInterface'
 import {ScopeDebugger} from './features/debug/ScopeDebugger'
 import {UserPlaylists} from './features/playlist/UserPlaylists'
-import {TestPage} from './features/test/TestPage'
 import {useSpotifyAuth} from './hooks/useSpotifyAuth'
-import {SSETestPage} from './pages/SSETestPage'
 import './styles/build-info.css'
 
 interface SpotifyPlaylist {
@@ -36,8 +34,6 @@ function App() {
   const {clearError, error, isAuthenticated, isLoading, login, logout} = useSpotifyAuth()
 
   const [selectedPlaylist, setSelectedPlaylist] = useState<null | SpotifyPlaylist>(null)
-  const [showTestPage, setShowTestPage] = useState(false)
-  const [showSSETest, setShowSSETest] = useState(false)
   const [showScopeDebug, setShowScopeDebug] = useState(false)
 
   const handlePlaylistSelect = (playlist: SpotifyPlaylist) => {
@@ -53,32 +49,8 @@ function App() {
           <div className="header-buttons">
             {isAuthenticated && (
               <>
-                <button
-                  className="test-button"
-                  onClick={() => {
-                    setShowScopeDebug(!showScopeDebug)
-                    setShowSSETest(false)
-                    setShowTestPage(false)
-                  }}>
+                <button className="test-button" onClick={() => setShowScopeDebug(!showScopeDebug)}>
                   {showScopeDebug ? '🎵 Back to Chat' : '🔍 Scope Debug'}
-                </button>
-                <button
-                  className="test-button"
-                  onClick={() => {
-                    setShowSSETest(!showSSETest)
-                    setShowTestPage(false)
-                    setShowScopeDebug(false)
-                  }}>
-                  {showSSETest ? '🎵 Back to Chat' : '🔧 SSE Debug'}
-                </button>
-                <button
-                  className="test-button"
-                  onClick={() => {
-                    setShowTestPage(!showTestPage)
-                    setShowSSETest(false)
-                    setShowScopeDebug(false)
-                  }}>
-                  {showTestPage ? '🎵 Back to Chat' : '🧪 Test Mode'}
                 </button>
                 <button className="logout-button" onClick={logout}>
                   Logout from Spotify
@@ -92,14 +64,6 @@ function App() {
           {showScopeDebug && isAuthenticated ? (
             <Suspense fallback={<div className="loading">Loading scope debugger...</div>}>
               <ScopeDebugger />
-            </Suspense>
-          ) : showSSETest && isAuthenticated ? (
-            <Suspense fallback={<div className="loading">Loading SSE test page...</div>}>
-              <SSETestPage />
-            </Suspense>
-          ) : showTestPage && isAuthenticated ? (
-            <Suspense fallback={<div className="loading">Loading test page...</div>}>
-              <TestPage />
             </Suspense>
           ) : !isAuthenticated ? (
             <Suspense fallback={<div className="loading">Loading...</div>}>

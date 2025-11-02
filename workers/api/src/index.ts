@@ -2,16 +2,9 @@ import {swaggerUI} from '@hono/swagger-ui'
 import {OpenAPIHono} from '@hono/zod-openapi'
 import {cors} from 'hono/cors'
 
-import {anthropicStatusRouter} from './routes/anthropic-status'
-import {chatRouter} from './routes/chat-simple'
 import {chatStreamRouter} from './routes/chat-stream'
-import {chatTestRouter} from './routes/chat-test'
-import {mcpRouter} from './routes/mcp'
-import {playlistRouter} from './routes/playlist'
 import {registerPlaylistRoutes} from './routes/playlists-openapi'
 import {registerSpotifyAuthRoutes} from './routes/spotify-openapi'
-import {sseTestRouter} from './routes/sse-test'
-import {testRouter} from './routes/test'
 
 export interface Env {
   ANTHROPIC_API_KEY: string
@@ -59,15 +52,8 @@ app.doc('/api/openapi.json', {
 // Serve Swagger UI at /api/docs
 app.get('/api/docs', swaggerUI({url: '/api/openapi.json'}))
 
-// Legacy routes (non-OpenAPI) - will be migrated gradually
-app.route('/api/playlist', playlistRouter) // Legacy - will migrate later
-app.route('/api/chat', chatRouter) // Simplified chat endpoint with direct tool integration
-app.route('/api/chat-stream', chatStreamRouter) // SSE streaming chat endpoint
-app.route('/api/chat-test', chatTestRouter) // Test endpoints for debugging
-app.route('/api/anthropic', anthropicStatusRouter) // Anthropic rate limit and status checking
-app.route('/api/test', testRouter)
-app.route('/api/mcp', mcpRouter) // MCP server endpoint (keeping for backwards compat)
-app.route('/api/sse-test', sseTestRouter) // SSE test endpoints for debugging
+// SSE streaming chat endpoint (production)
+app.route('/api/chat-stream', chatStreamRouter)
 
 // Serve static files for non-API routes
 app.get('*', async c => {
