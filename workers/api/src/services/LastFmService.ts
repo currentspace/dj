@@ -85,15 +85,15 @@ export interface LastFmSignals {
   }
 }
 
+interface LastFmImage {
+  '#text': string
+  size: string
+}
+
 interface LastFmTrack {
   artist: string
   duration_ms?: number
   name: string
-}
-
-interface LastFmImage {
-  '#text': string
-  size: string
 }
 
 export class LastFmService {

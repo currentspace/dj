@@ -49,7 +49,7 @@ if (
  * Get the current request's logger
  * Returns undefined if called outside of a logger context
  */
-export function getLogger(): undefined | ServiceLogger {
+export function getLogger(): ServiceLogger | undefined {
   // Type guard ensures loggerStorageRaw has getStore method
   if (typeof (loggerStorageRaw as {getStore?: unknown}).getStore !== 'function') {
     return undefined
