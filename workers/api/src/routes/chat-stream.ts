@@ -214,7 +214,7 @@ function createStreamingSpotifyTools(
           type: 'tool_start',
         })
 
-        const result = await executeSpotifyTool('search_spotify_tracks', args, spotifyToken)
+        const result = await executeSpotifyTool('search_spotify_tracks', args, spotifyToken, env?.AUDIO_FEATURES_CACHE)
 
         await sseWriter.write({
           data: {
@@ -510,7 +510,7 @@ function createStreamingSpotifyTools(
           type: 'tool_start',
         })
 
-        const result = await executeSpotifyTool('get_recommendations', finalArgs, spotifyToken)
+        const result = await executeSpotifyTool('get_recommendations', finalArgs, spotifyToken, env?.AUDIO_FEATURES_CACHE)
 
         await sseWriter.write({
           data: {
@@ -543,7 +543,7 @@ function createStreamingSpotifyTools(
           type: 'tool_start',
         })
 
-        const result = await executeSpotifyTool('create_playlist', args, spotifyToken)
+        const result = await executeSpotifyTool('create_playlist', args, spotifyToken, env?.AUDIO_FEATURES_CACHE)
         const createResult = result as CreatePlaylistResult
 
         await sseWriter.write({
@@ -2005,7 +2005,7 @@ async function executeSpotifyToolWithProgress(
   }
 
   // Fall back to original tool executor for other tools
-  return await executeSpotifyTool(toolName, args, token)
+  return await executeSpotifyTool(toolName, args, token, env?.AUDIO_FEATURES_CACHE)
 }
 
 /**

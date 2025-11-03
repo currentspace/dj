@@ -225,6 +225,7 @@ export async function executeSpotifyTool(
   toolName: string,
   args: Record<string, unknown>,
   token: string,
+  cache?: KVNamespace,
 ): Promise<unknown> {
   getLogger()?.info(`[Tool] Executing ${toolName} with args:`, JSON.stringify(args).substring(0, 200))
   const startTime = Date.now()
@@ -248,7 +249,7 @@ export async function executeSpotifyTool(
         result = await getArtistTopTracks(args, token)
         break
       case 'get_audio_features':
-        result = await getAudioFeatures(args, token)
+        result = await getAudioFeatures(args, token, cache)
         break
       case 'get_available_genres':
         result = await getAvailableGenres(token)
@@ -685,8 +686,9 @@ async function getArtistTopTracks(args: any, token: string) {
   return result.data.items ?? []
 }
 
-async function getAudioFeatures(args: any, token: string) {
+async function getAudioFeatures(args: any, token: string, cache?: KVNamespace) {
   const {track_ids} = args
+  const CACHE_TTL = 7 * 24 * 60 * 60 // 7 days in seconds
 
   getLogger()?.info(`[getAudioFeatures] Starting with args:`, JSON.stringify(args))
   getLogger()?.info(`[getAudioFeatures] Extracted track_ids:`, track_ids)
@@ -696,35 +698,88 @@ async function getAudioFeatures(args: any, token: string) {
     throw new Error('track_ids parameter is required and must be a non-empty array')
   }
 
-  getLogger()?.info(`[getAudioFeatures] Fetching audio features for ${track_ids.length} tracks`)
-  const response = await rateLimitedSpotifyCall(
-    () =>
-      fetch(`https://api.spotify.com/v1/audio-features?ids=${track_ids.join(',')}`, {
-        headers: {Authorization: `Bearer ${token}`},
+  // Check cache for each track
+  const cachedFeatures: Map<string, any> = new Map()
+  const uncachedTrackIds: string[] = []
+
+  if (cache) {
+    getLogger()?.info(`[getAudioFeatures] Checking cache for ${track_ids.length} tracks`)
+    await Promise.all(
+      track_ids.map(async (trackId: string) => {
+        const cacheKey = `spotify:audio_features:${trackId}`
+        const cached = await cache.get(cacheKey, 'json')
+        if (cached) {
+          cachedFeatures.set(trackId, cached)
+          getLogger()?.info(`[getAudioFeatures] Cache hit for ${trackId}`)
+        } else {
+          uncachedTrackIds.push(trackId)
+        }
       }),
-    undefined,
-    'audio-features:batch',
-  )
-
-  getLogger()?.info(`[getAudioFeatures] API response status: ${response.status}`)
-
-  if (!response.ok) {
-    const errorText = await response.text()
-    getLogger()?.error(`[getAudioFeatures] Failed to get audio features: ${response.status} - ${errorText}`)
-    throw new Error(`Failed to get audio features: ${response.status}`)
+    )
+    getLogger()?.info(
+      `[getAudioFeatures] Cache results: ${cachedFeatures.size} hits, ${uncachedTrackIds.length} misses`,
+    )
+  } else {
+    uncachedTrackIds.push(...track_ids)
   }
 
-  const json = await response.json()
-  const result = safeParse(SpotifyAudioFeaturesBatchSchema, json)
+  // Fetch uncached tracks from Spotify
+  let freshFeatures: any[] = []
+  if (uncachedTrackIds.length > 0) {
+    getLogger()?.info(`[getAudioFeatures] Fetching ${uncachedTrackIds.length} tracks from Spotify API`)
+    const response = await rateLimitedSpotifyCall(
+      () =>
+        fetch(`https://api.spotify.com/v1/audio-features?ids=${uncachedTrackIds.join(',')}`, {
+          headers: {Authorization: `Bearer ${token}`},
+        }),
+      undefined,
+      'audio-features:batch',
+    )
 
-  if (!result.success) {
-    getLogger()?.error('[getAudioFeatures] Failed to parse response:', formatZodError(result.error))
-    return []
+    getLogger()?.info(`[getAudioFeatures] API response status: ${response.status}`)
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      getLogger()?.error(`[getAudioFeatures] Failed to get audio features: ${response.status} - ${errorText}`)
+      throw new Error(`Failed to get audio features: ${response.status}`)
+    }
+
+    const json = await response.json()
+    const result = safeParse(SpotifyAudioFeaturesBatchSchema, json)
+
+    if (!result.success) {
+      getLogger()?.error('[getAudioFeatures] Failed to parse response:', formatZodError(result.error))
+      return []
+    }
+
+    freshFeatures = result.data.audio_features ?? []
+    getLogger()?.info(`[getAudioFeatures] Retrieved ${freshFeatures.length} fresh audio features`)
+
+    // Cache fresh results
+    if (cache) {
+      await Promise.all(
+        freshFeatures.map(async feature => {
+          if (feature && feature.id) {
+            const cacheKey = `spotify:audio_features:${feature.id}`
+            await cache.put(cacheKey, JSON.stringify(feature), {expirationTtl: CACHE_TTL})
+            getLogger()?.info(`[getAudioFeatures] Cached audio features for ${feature.id}`)
+          }
+        }),
+      )
+    }
   }
 
-  const features = result.data.audio_features ?? []
-  getLogger()?.info(`[getAudioFeatures] Retrieved ${features.length} audio features`)
-  return features
+  // Merge cached and fresh results, maintaining original order
+  const allFeatures = track_ids.map((trackId: string) => {
+    const cached = cachedFeatures.get(trackId)
+    if (cached) return cached
+
+    const fresh = freshFeatures.find(f => f && f.id === trackId)
+    return fresh ?? null
+  })
+
+  getLogger()?.info(`[getAudioFeatures] Returning ${allFeatures.length} total audio features`)
+  return allFeatures
 }
 
 async function getAvailableGenres(token: string) {
