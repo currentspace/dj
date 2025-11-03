@@ -23,6 +23,8 @@
     "test:contracts:spotify": "pnpm --filter @dj/api-worker test:contracts -- spotify.contract.test.ts",
     "test:contracts:deezer": "pnpm --filter @dj/api-worker test:contracts -- deezer.contract.test.ts",
     "test:contracts:lastfm": "pnpm --filter @dj/api-worker test:contracts -- lastfm.contract.test.ts",
+    "test:integration": "pnpm --filter @dj/api-worker test:integration",
+    "test:integration:watch": "pnpm --filter @dj/api-worker test:integration:watch",
     "deploy": "pnpm build && pnpm --filter @dj/api-worker deploy && pnpm --filter @dj/webhook-worker deploy"
   },
   "devDependencies": {

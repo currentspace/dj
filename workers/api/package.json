@@ -9,7 +9,9 @@
     "deploy": "wrangler deploy",
     "typecheck": "tsc --noEmit",
     "test": "vitest",
-    "test:contracts": "vitest --config vitest.contracts.config.ts"
+    "test:contracts": "vitest --config vitest.contracts.config.ts",
+    "test:integration": "vitest --config vitest.integration.config.ts",
+    "test:integration:watch": "vitest --config vitest.integration.config.ts --watch"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.68.0",
