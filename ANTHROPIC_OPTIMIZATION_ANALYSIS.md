@@ -549,6 +549,59 @@ For conversational AI: Use `maxTokens = 2 × thinking.budget_tokens` to be safe.
 **Documentation Reference:**
 https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking#max-tokens-and-context-window-size
 
+### Issue 2: Prompt Caching Requires Langchain Message Instances
+
+**Error Encountered:**
+```
+Claude streaming API call failed: 400 invalid_request_error
+```
+
+Occurred on turn 1 of agentic loop after tool execution.
+
+**Root Cause:**
+- Mixed raw message objects with Langchain message instances
+- Initial system prompt was raw object with cache_control:
+  ```typescript
+  {
+    role: 'system',
+    content: [{type: 'text', text: systemPrompt, cache_control: {...}}]
+  }
+  ```
+- But agentic loop accumulated Langchain instances (AIMessage, ToolMessage)
+- Second call had: raw object + HumanMessage + AIMessage + ToolMessage
+- Langchain's `.stream()` doesn't handle this mixed format in agentic loops
+
+**Why It Worked Initially:**
+- First call only had: raw system object + HumanMessage
+- This simple case works
+- But adding more Langchain message instances broke it
+
+**Why Progress Narrator Works With Raw Format:**
+- Progress narrator uses single `invoke()` call (not streaming agentic loop)
+- Messages array is simple: system + user, both raw objects
+- No message accumulation across multiple turns
+
+**Fix Applied (Commit 3919f07):**
+```typescript
+// Wrap in SystemMessage instance while preserving cache_control
+new SystemMessage({
+  content: [
+    {
+      type: 'text' as const,
+      text: systemPrompt,
+      cache_control: {type: 'ephemeral' as const},
+    },
+  ],
+})
+```
+
+**Key Lesson:**
+When using Langchain with agentic loops/streaming:
+- Use Langchain message classes (SystemMessage, HumanMessage, etc.)
+- Pass cache_control via message content structure
+- Don't mix raw objects with Langchain instances in the same messages array
+- Raw objects work for simple invoke() calls, but not streaming agentic loops
+
 ---
 
 ## Conclusion
