@@ -78,9 +78,19 @@ export class ProgressNarrator {
         model: 'claude-3-5-haiku-20241022',
       })
 
-      // Create Langchain messages
+      // Create Langchain messages with prompt caching
+      // Cache the system prompt since it's the same across all requests
       const messages = [
-        {content: this.systemPrompt, role: 'system' as const},
+        {
+          content: [
+            {
+              type: 'text' as const,
+              text: this.systemPrompt,
+              cache_control: {type: 'ephemeral' as const},
+            },
+          ],
+          role: 'system' as const,
+        },
         {content: prompt, role: 'user' as const},
       ]
 
