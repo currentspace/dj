@@ -11,7 +11,7 @@
  * Dynamic: "Digging through Spotify's crates for workout bangers..."
  */
 
-import {ChatAnthropic} from '@langchain/anthropic'
+import Anthropic from '@anthropic-ai/sdk'
 
 import {rateLimitedAnthropicCall} from '../utils/RateLimitedAPIClients'
 import {ServiceLogger} from '../utils/ServiceLogger'
@@ -78,35 +78,27 @@ export class ProgressNarrator {
         model: 'claude-haiku-4-5-20251001',
       })
 
-      // Create Langchain messages with prompt caching
-      // Cache the system prompt since it's the same across all requests
-      const messages = [
-        {
-          content: [
-            {
-              type: 'text' as const,
-              text: this.systemPrompt,
-              cache_control: {type: 'ephemeral' as const},
-            },
-          ],
-          role: 'system' as const,
-        },
-        {content: prompt, role: 'user' as const},
-      ]
-
       // Use rate-limited API wrapper (no timeout - orchestrator handles queuing)
-      // Create a fresh ChatAnthropic instance for each call to avoid state issues in Workers
+      // Create a fresh Anthropic instance for each call to avoid state issues in Workers
       const response = await rateLimitedAnthropicCall(
         async () => {
-          const anthropic = new ChatAnthropic({
+          const anthropic = new Anthropic({
             apiKey: this.apiKey,
-            maxTokens: 100,
-            model: 'claude-haiku-4-5-20251001', // Haiku 4.5: 2x faster, better at creative tasks
-            temperature: skipCache ? 1.0 : 0.7,
-            ...(skipCache ? {topP: 0.95} : {}),
-            maxRetries: 0,
           })
-          return await anthropic.invoke(messages)
+          return await anthropic.messages.create({
+            max_tokens: 100,
+            messages: [{content: prompt, role: 'user'}],
+            model: 'claude-haiku-4-5-20251001', // Haiku 4.5: 2x faster, better at creative tasks
+            system: [
+              {
+                type: 'text' as const,
+                text: this.systemPrompt,
+                cache_control: {type: 'ephemeral' as const},
+              },
+            ],
+            temperature: skipCache ? 1.0 : 0.7,
+            ...(skipCache ? {top_p: 0.95} : {}),
+          })
         },
         this.logger,
         `narrator:${context.eventType}`,
@@ -121,7 +113,9 @@ export class ProgressNarrator {
         responseType: response.constructor.name,
       })
 
-      const message = typeof response.content === 'string' ? response.content.trim() : this.getFallbackMessage(context)
+      // Extract text from Anthropic response content blocks
+      const textBlocks = response.content.filter((block): block is Anthropic.TextBlock => block.type === 'text')
+      const message = textBlocks.length > 0 ? textBlocks[0].text.trim() : this.getFallbackMessage(context)
 
       this.logger.info(`Generated message`, {
         contentLength: message.length,

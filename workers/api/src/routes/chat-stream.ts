@@ -7,11 +7,18 @@ import {
   type SpotifyTrackFull,
   SpotifyTrackFullSchema,
 } from '@dj/shared-types'
-import {ChatAnthropic} from '@langchain/anthropic'
-import {AIMessage, HumanMessage, SystemMessage, ToolMessage} from '@langchain/core/messages'
-import {DynamicStructuredTool} from '@langchain/core/tools'
+import Anthropic from '@anthropic-ai/sdk'
 import {Hono} from 'hono'
 import {z} from 'zod'
+import {zodToJsonSchema} from 'zod-to-json-schema'
+
+// Native tool definition (replaces DynamicStructuredTool)
+interface NativeTool {
+  name: string
+  description: string
+  schema: z.ZodObject<any>
+  func: (args: any) => Promise<any>
+}
 
 import type {Env} from '../index'
 
@@ -189,6 +196,24 @@ class SSEWriter {
 }
 
 /**
+ * Convert Langchain DynamicStructuredTool to Anthropic tool format
+ */
+function convertToAnthropicTools(tools: NativeTool[]): Anthropic.Tool[] {
+  return tools.map(tool => {
+    const jsonSchema = zodToJsonSchema(tool.schema) as any
+    return {
+      name: tool.name,
+      description: tool.description,
+      input_schema: {
+        type: 'object' as const,
+        properties: jsonSchema.properties || {},
+        required: jsonSchema.required || [],
+      },
+    }
+  })
+}
+
+/**
  * Create Spotify tools with streaming callbacks
  */
 
@@ -202,9 +227,9 @@ function createStreamingSpotifyTools(
   narrator?: ProgressNarrator,
   userRequest?: string,
   recentMessages?: string[],
-): DynamicStructuredTool[] {
-  const tools: DynamicStructuredTool[] = [
-    new DynamicStructuredTool({
+): NativeTool[] {
+  const tools: NativeTool[] = [
+    {
       description: 'Search for tracks on Spotify',
       func: async args => {
         if (abortSignal?.aborted) throw new Error('Request aborted')
@@ -231,9 +256,9 @@ function createStreamingSpotifyTools(
         limit: z.number().min(1).max(50).default(10),
         query: z.string(),
       }),
-    }),
+    },
 
-    new DynamicStructuredTool({
+    {
       description: 'Analyze a playlist',
       func: async args => {
         if (abortSignal?.aborted) throw new Error('Request aborted')
@@ -277,9 +302,9 @@ function createStreamingSpotifyTools(
       schema: z.object({
         playlist_id: z.string().optional(),
       }),
-    }),
+    },
 
-    new DynamicStructuredTool({
+    {
       description:
         'Get tracks from a playlist with pagination. Returns compact track info (name, artists, duration, popularity). Use this after analyze_playlist to get actual track details.',
       func: async args => {
@@ -415,9 +440,9 @@ function createStreamingSpotifyTools(
         offset: z.number().min(0).default(0),
         playlist_id: z.string().optional(),
       }),
-    }),
+    },
 
-    new DynamicStructuredTool({
+    {
       description:
         'Get detailed information about specific tracks. Use when you need full metadata like album details, release dates, external URLs, etc.',
       func: async args => {
@@ -500,12 +525,12 @@ function createStreamingSpotifyTools(
       schema: z.object({
         track_ids: z.array(z.string()).min(1).max(50),
       }),
-    }),
+    },
 
     // Note: get_audio_features tool removed - Spotify deprecated this API for apps created after Nov 27, 2024
     // We now use Deezer + Last.fm enrichment instead via analyze_playlist
 
-    new DynamicStructuredTool({
+    {
       description: 'Get track recommendations',
       func: async args => {
         const finalArgs = {...args}
@@ -575,9 +600,9 @@ function createStreamingSpotifyTools(
         seed_artists: z.array(z.string()).max(5).optional(),
         seed_tracks: z.array(z.string()).max(5).optional(),
       }),
-    }),
+    },
 
-    new DynamicStructuredTool({
+    {
       description: 'Create a new Spotify playlist',
       func: async args => {
         if (abortSignal?.aborted) throw new Error('Request aborted')
@@ -609,9 +634,9 @@ function createStreamingSpotifyTools(
         name: z.string().min(1).max(100),
         track_uris: z.array(z.string()),
       }),
-    }),
+    },
 
-    new DynamicStructuredTool({
+    {
       description:
         'Use AI to deeply analyze playlist enrichment data and extract subtle vibe signals that go beyond genre tags. Returns natural language vibe profile with discovery hints.',
       func: async args => {
@@ -630,12 +655,8 @@ function createStreamingSpotifyTools(
           type: 'thinking',
         })
 
-        const anthropic = new ChatAnthropic({
-          apiKey: env.ANTHROPIC_API_KEY,
-          maxRetries: 0,
-          maxTokens: 2000,
-          model: 'claude-sonnet-4-5-20250929',
-          temperature: 0.7,
+        const anthropic = new Anthropic({
+          apiKey: env!.ANTHROPIC_API_KEY,
         })
 
         const vibePrompt = `You are a music critic analyzing a playlist's vibe. Extract SUBTLE signals that algorithms miss.
@@ -690,12 +711,19 @@ Return ONLY valid JSON:
 }`
 
         try {
-          const response = await anthropic.invoke([
-            new SystemMessage('You are a music critic. Return only valid JSON with deep vibe analysis.'),
-            new HumanMessage(vibePrompt),
-          ])
+          const response = await anthropic.messages.create({
+            max_tokens: 2000,
+            messages: [{content: vibePrompt, role: 'user'}],
+            model: 'claude-sonnet-4-5-20250929',
+            system: 'You are a music critic. Return only valid JSON with deep vibe analysis.',
+            temperature: 0.7,
+          })
 
-          const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content)
+          // Extract text from content blocks
+          const content = response.content
+            .filter((block): block is Anthropic.TextBlock => block.type === 'text')
+            .map(block => block.text)
+            .join('')
           const jsonMatch = /\{[\s\S]*\}/.exec(content)
           if (!jsonMatch) {
             throw new Error('No JSON found in vibe analysis response')
@@ -837,9 +865,9 @@ Return ONLY valid JSON:
           .optional()
           .describe('Sample track names for additional context'),
       }),
-    }),
+    },
 
-    new DynamicStructuredTool({
+    {
       description:
         'Use AI to create a smart multi-pronged discovery strategy based on vibe analysis. Returns specific search queries and parameters to find interesting recommendations.',
       func: async args => {
@@ -858,12 +886,8 @@ Return ONLY valid JSON:
           type: 'thinking',
         })
 
-        const anthropic = new ChatAnthropic({
-          apiKey: env.ANTHROPIC_API_KEY,
-          maxRetries: 0,
-          maxTokens: 3000,
-          model: 'claude-sonnet-4-5-20250929',
-          temperature: 0.7,
+        const anthropic = new Anthropic({
+          apiKey: env!.ANTHROPIC_API_KEY,
         })
 
         const strategyPrompt = `You are a music discovery strategist. Create a smart plan to find interesting tracks.
@@ -915,12 +939,19 @@ Return ONLY valid JSON:
 }`
 
         try {
-          const response = await anthropic.invoke([
-            new SystemMessage('You are a music discovery strategist. Return only valid JSON.'),
-            new HumanMessage(strategyPrompt),
-          ])
+          const response = await anthropic.messages.create({
+            max_tokens: 3000,
+            messages: [{content: strategyPrompt, role: 'user'}],
+            model: 'claude-sonnet-4-5-20250929',
+            system: 'You are a music discovery strategist. Return only valid JSON.',
+            temperature: 0.7,
+          })
 
-          const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content)
+          // Extract text from content blocks
+          const content = response.content
+            .filter((block): block is Anthropic.TextBlock => block.type === 'text')
+            .map(block => block.text)
+            .join('')
           const jsonMatch = /\{[\s\S]*\}/.exec(content)
           if (!jsonMatch) {
             throw new Error('No JSON found in strategy response')
@@ -990,9 +1021,9 @@ Return ONLY valid JSON:
         user_request: z.string().describe("User's original request to understand intent"),
         vibe_profile: z.record(z.unknown()).describe('Output from extract_playlist_vibe'),
       }),
-    }),
+    },
 
-    new DynamicStructuredTool({
+    {
       description:
         'Get Spotify track IDs from Last.fm similar tracks. Provide artist-track strings (e.g., "Daft Punk - One More Time") and get back Spotify IDs ready to use.',
       func: async args => {
@@ -1109,9 +1140,9 @@ Return ONLY valid JSON:
           .max(20)
           .describe('Array of "Artist - Track" strings from Last.fm similar_tracks'),
       }),
-    }),
+    },
 
-    new DynamicStructuredTool({
+    {
       description: 'Discover tracks based on Last.fm crowd tags/genres. Searches Spotify using tag combinations.',
       func: async args => {
         if (abortSignal?.aborted) throw new Error('Request aborted')
@@ -1213,9 +1244,9 @@ Return ONLY valid JSON:
           .max(5)
           .describe('Genre/mood tags from Last.fm crowd_tags (e.g., ["italo-disco", "80s", "synth-pop"])'),
       }),
-    }),
+    },
 
-    new DynamicStructuredTool({
+    {
       description:
         'Use AI to intelligently rank and filter track recommendations based on user criteria and playlist characteristics. Provide tracks and context, get back curated top picks with reasoning.',
       func: async args => {
@@ -1238,12 +1269,8 @@ Return ONLY valid JSON:
         })
 
         // Use Claude Sonnet 4.5 for high-quality intelligent curation
-        const anthropic = new ChatAnthropic({
-          apiKey: env.ANTHROPIC_API_KEY,
-          maxRetries: 0,
-          maxTokens: 2000,
-          model: 'claude-sonnet-4-5-20250929',
-          temperature: 0.7,
+        const anthropic = new Anthropic({
+          apiKey: env!.ANTHROPIC_API_KEY,
         })
 
         const curationPrompt = `You are a music curator helping select the best track recommendations.
@@ -1291,15 +1318,21 @@ Return ONLY a JSON object with this structure:
 }`
 
         try {
-          const response = await anthropic.invoke([
-            new SystemMessage('You are a music curator. Return only valid JSON.'),
-            new HumanMessage(curationPrompt),
-          ])
+          const response = await anthropic.messages.create({
+            max_tokens: 2000,
+            messages: [{content: curationPrompt, role: 'user'}],
+            model: 'claude-sonnet-4-5-20250929',
+            system: 'You are a music curator. Return only valid JSON.',
+            temperature: 0.7,
+          })
 
-          getLogger()?.info(`[curate_recommendations] Claude response:`, response.content)
+          // Extract text from content blocks
+          const content = response.content
+            .filter((block): block is Anthropic.TextBlock => block.type === 'text')
+            .map(block => block.text)
+            .join('')
 
-          // Parse JSON from response
-          const content = typeof response.content === 'string' ? response.content : JSON.stringify(response.content)
+          getLogger()?.info(`[curate_recommendations] Claude response:`, content.substring(0, 200))
           const jsonMatch = /\{[\s\S]*\}/.exec(content)
           if (!jsonMatch) {
             throw new Error('No JSON found in response')
@@ -1394,7 +1427,7 @@ Return ONLY a JSON object with this structure:
         top_n: z.number().min(1).max(50).default(10).describe('How many curated recommendations to return'),
         user_request: z.string().describe("User's original request to understand intent"),
       }),
-    }),
+    },
   ]
 
   return tools
@@ -2255,24 +2288,14 @@ chatStreamRouter.post('/message', async c => {
 
         getLogger()?.info(`[Stream:${requestId}] Initializing Claude with API key`)
 
-        // Helper function to create fresh ChatAnthropic instance
-        // CRITICAL: Must create new instance for each .stream() call in Workers
-        // Reusing instances causes "Connection error" on subsequent calls
-        const createModelWithTools = () => {
-          const llm = new ChatAnthropic({
-            apiKey: env.ANTHROPIC_API_KEY,
-            maxRetries: 0,
-            maxTokens: 4000,
-            model: 'claude-sonnet-4-5-20250929',
-            streaming: true,
-            temperature: 0.7, // Balanced for tool selection
-            // Extended thinking disabled: Langchain doesn't preserve thinking blocks in agentic loops
-            // Anthropic requires: "assistant message must start with thinking block before tool_use"
-            // TODO: Re-enable when we implement proper thinking block preservation
-            // See: https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking
-          })
-          return llm.bindTools(tools)
-        }
+        // Initialize Anthropic client
+        // Extended thinking enabled with temperature 1.0 and budget 5000 tokens
+        const anthropic = new Anthropic({
+          apiKey: env.ANTHROPIC_API_KEY,
+        })
+
+        // Convert Langchain tools to Anthropic format
+        const anthropicTools = convertToAnthropicTools(tools)
 
         // Build system prompt using Anthropic's 2025 best practices
         // Structure: XML tags, principle-based, minimal examples, transparent reasoning
@@ -2356,23 +2379,18 @@ Be concise, helpful, and music-knowledgeable. Describe playlists using genres, e
           type: 'debug',
         })
 
-        // Build messages with prompt caching
-        // Cache the system prompt since it's reused across all messages in a conversation
-        // System prompt changes when playlist context changes, which is desired behavior
-        const messages = [
-          new SystemMessage({
-            content: [
-              {
-                type: 'text' as const,
-                text: systemPrompt,
-                cache_control: {type: 'ephemeral' as const},
-              },
-            ],
-          }),
-          ...request.conversationHistory.map(m =>
-            m.role === 'user' ? new HumanMessage(m.content) : new AIMessage(m.content),
-          ),
-          new HumanMessage(actualMessage),
+        // Build messages in Anthropic format
+        // Note: System prompt is separate, not in messages array
+        // Convert conversation history to Anthropic message format
+        const messages: Anthropic.MessageParam[] = [
+          ...request.conversationHistory.map(m => ({
+            role: m.role as 'user' | 'assistant',
+            content: m.content,
+          })),
+          {
+            role: 'user' as const,
+            content: actualMessage,
+          },
         ]
 
         await sseWriter.write({
@@ -2384,16 +2402,16 @@ Be concise, helpful, and music-knowledgeable. Describe playlists using genres, e
         })
         getLogger()?.info(`[Stream:${requestId}] User message: "${actualMessage}"`)
 
-        // Stream the response
-        interface ToolCall {
+        // Stream the response using Anthropic SDK
+        interface AnthropicToolCall {
           args: Record<string, unknown>
-          id?: string
+          id: string
           name: string
         }
         let fullResponse = ''
-        let toolCalls: ToolCall[] = []
+        let toolCalls: AnthropicToolCall[] = []
 
-        getLogger()?.info(`[Stream:${requestId}] Starting Claude streaming...`)
+        getLogger()?.info(`[Stream:${requestId}] Starting Claude streaming with Anthropic SDK...`)
         sseWriter.writeAsync({
           data: 'Analyzing your request...',
           type: 'thinking',
@@ -2404,19 +2422,91 @@ Be concise, helpful, and music-knowledgeable. Describe playlists using genres, e
           throw new Error('Request aborted')
         }
 
-        let response
         try {
-          getLogger()?.info(`[Stream:${requestId}] Calling createModelWithTools().stream() with ${messages.length} messages`)
-          // Wrap stream call in orchestrator to respect anthropic lane limits (max 2 concurrent)
-          response = await rateLimitedAnthropicCall(
-            () =>
-              createModelWithTools().stream(messages, {
-                signal: abortController.signal,
-              }),
-            getLogger(),
-            `main chat stream (initial, ${messages.length} messages)`,
-          )
+          getLogger()?.info(`[Stream:${requestId}] Calling anthropic.messages.stream() with ${messages.length} messages`)
+
+          // Create stream with Anthropic SDK
+          // Extended thinking enabled: temperature 1.0, budget 5000 tokens
+          const stream = anthropic.messages.stream({
+            max_tokens: 10000, // 5000 for thinking + 5000 for response
+            messages: messages,
+            model: 'claude-sonnet-4-5-20250929',
+            system: [
+              {
+                type: 'text' as const,
+                text: systemPrompt,
+                cache_control: {type: 'ephemeral' as const},
+              },
+            ],
+            temperature: 1.0, // Required for extended thinking
+            thinking: {
+              type: 'enabled' as const,
+              budget_tokens: 5000,
+            },
+            tools: anthropicTools,
+          })
+
           getLogger()?.info(`[Stream:${requestId}] Claude stream initialized`)
+
+          // Process streaming events
+          let eventCount = 0
+          const contentBlocks: any[] = []
+          let currentBlockIndex = -1
+
+          for await (const event of stream) {
+            if (abortController.signal.aborted) {
+              throw new Error('Request aborted')
+            }
+
+            eventCount++
+
+            if (event.type === 'content_block_start') {
+              currentBlockIndex = event.index
+              contentBlocks[currentBlockIndex] = event.content_block
+
+              if (event.content_block.type === 'tool_use') {
+                // Initialize tool call
+                getLogger()?.info(`[Stream:${requestId}] Tool use started: ${event.content_block.name}`)
+              }
+            } else if (event.type === 'content_block_delta') {
+              if (event.delta.type === 'text_delta') {
+                // Text content delta
+                const text = event.delta.text
+                fullResponse += text
+                await sseWriter.write({data: text, type: 'content'})
+              } else if (event.delta.type === 'thinking_delta') {
+                // Thinking content delta (show to user)
+                const text = event.delta.thinking
+                await sseWriter.write({data: `💭 ${text}`, type: 'thinking'})
+              } else if (event.delta.type === 'input_json_delta') {
+                // Tool input delta - accumulate
+                const currentBlock = contentBlocks[currentBlockIndex]
+                if (currentBlock && currentBlock.type === 'tool_use') {
+                  if (!currentBlock.input) {
+                    currentBlock.input = ''
+                  }
+                  currentBlock.input += event.delta.partial_json
+                }
+              }
+            } else if (event.type === 'content_block_stop') {
+              // Content block completed
+              const block = contentBlocks[event.index]
+              if (block && block.type === 'tool_use' && block.id && block.name) {
+                // Parse accumulated JSON and add to tool calls
+                const input = JSON.parse(block.input || '{}')
+                toolCalls.push({
+                  id: block.id,
+                  name: block.name,
+                  args: input,
+                })
+                getLogger()?.info(`[Stream:${requestId}] Tool use complete: ${block.name}`)
+              }
+            }
+          }
+
+          getLogger()?.info(
+            `[Stream:${requestId}] Initial streaming complete. Events: ${eventCount}, Tool calls: ${toolCalls.length}, Content length: ${fullResponse.length}`,
+          )
         } catch (apiError) {
           if (abortController.signal.aborted) {
             throw new Error('Request aborted')
@@ -2429,46 +2519,9 @@ Be concise, helpful, and music-knowledgeable. Describe playlists using genres, e
               stack: apiError.stack?.substring(0, 500),
             })
           }
-          // Try to parse and provide more details
           const errorMessage = apiError instanceof Error ? apiError.message : 'Unknown API error'
           throw new Error(`Claude API failed: ${errorMessage}`)
         }
-
-        let chunkCount = 0
-        for await (const chunk of response) {
-          if (abortController.signal.aborted) {
-            throw new Error('Request aborted')
-          }
-
-          chunkCount++
-          // Handle content chunks (both string and array formats)
-          let textContent = ''
-          if (typeof chunk.content === 'string' && chunk.content) {
-            textContent = chunk.content
-          } else if (Array.isArray(chunk.content)) {
-            for (const block of chunk.content) {
-              if (block.type === 'text' && block.text) {
-                textContent += block.text
-              }
-            }
-          }
-
-          if (textContent) {
-            fullResponse += textContent
-            await sseWriter.write({data: textContent, type: 'content'})
-            getLogger()?.info(`[Stream:${requestId}] Content chunk ${chunkCount}: ${textContent.substring(0, 50)}...`)
-          }
-
-          // Handle tool calls
-          if (chunk.tool_calls && chunk.tool_calls.length > 0) {
-            toolCalls = chunk.tool_calls
-            getLogger()?.info(`[Stream:${requestId}] Tool calls received: ${chunk.tool_calls.map(tc => tc.name).join(', ')}`)
-          }
-        }
-
-        getLogger()?.info(
-          `[Stream:${requestId}] Initial streaming complete. Chunks: ${chunkCount}, Tool calls: ${toolCalls.length}, Content length: ${fullResponse.length}`,
-        )
 
         // Agentic loop: Keep executing tools until Claude stops requesting them
         const conversationMessages = [...messages]
@@ -2511,8 +2564,8 @@ Be concise, helpful, and music-knowledgeable. Describe playlists using genres, e
             type: 'thinking',
           })
 
-          // Execute tools and build ToolMessages properly
-          const toolMessages = []
+          // Execute tools and build tool result blocks
+          const toolResultBlocks: Anthropic.ToolResultBlockParam[] = []
           for (const toolCall of currentToolCalls) {
             if (abortController.signal.aborted) {
               throw new Error('Request aborted')
@@ -2528,54 +2581,42 @@ Be concise, helpful, and music-knowledgeable. Describe playlists using genres, e
               try {
                 const result = await tool.func(toolCall.args)
                 getLogger()?.info(`[Stream:${requestId}] Tool ${toolCall.name} completed successfully`)
-                getLogger()?.info(`[Stream:${requestId}] Tool result type: ${typeof result}`)
-                getLogger()?.info(
-                  `[Stream:${requestId}] Tool result keys: ${
-                    typeof result === 'object' ? Object.keys(result ?? {}).join(', ') : 'N/A'
-                  }`,
-                )
 
                 const toolContent = JSON.stringify(result)
                 getLogger()?.info(`[Stream:${requestId}] Tool result JSON length: ${toolContent.length}`)
                 getLogger()?.info(`[Stream:${requestId}] Tool result preview: ${toolContent.substring(0, 500)}...`)
 
-                // Create the tool message
-                const toolMsg = new ToolMessage({
+                // Create tool result block
+                toolResultBlocks.push({
+                  type: 'tool_result',
+                  tool_use_id: toolCall.id,
                   content: toolContent,
-                  tool_call_id: toolCall.id,
                 })
 
-                toolMessages.push(toolMsg)
-
-                getLogger()?.info(`[Stream:${requestId}] Created ToolMessage with:`)
-                getLogger()?.info(`[Stream:${requestId}]   - call_id: ${toolCall.id}`)
-                getLogger()?.info(`[Stream:${requestId}]   - content length: ${toolContent.length}`)
-                getLogger()?.info(
-                  `[Stream:${requestId}]   - content has playlist_name: ${toolContent.includes('playlist_name')}`,
-                )
+                getLogger()?.info(`[Stream:${requestId}] Created tool result for: ${toolCall.id}`)
               } catch (error) {
                 if (abortController.signal.aborted) {
                   throw new Error('Request aborted')
                 }
                 getLogger()?.error(`[Stream:${requestId}] Tool ${toolCall.name} failed:`, error)
-                toolMessages.push(
-                  new ToolMessage({
-                    content: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
-                    tool_call_id: toolCall.id,
-                  }),
-                )
+                toolResultBlocks.push({
+                  type: 'tool_result',
+                  tool_use_id: toolCall.id,
+                  content: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                  is_error: true,
+                })
               }
             } else {
               getLogger()?.warn(`[Stream:${requestId}] Tool not found: ${toolCall.name}`)
-              toolMessages.push(
-                new ToolMessage({
-                  content: `Error: Tool ${toolCall.name} not found`,
-                  tool_call_id: toolCall.id,
-                }),
-              )
+              toolResultBlocks.push({
+                type: 'tool_result',
+                tool_use_id: toolCall.id,
+                content: `Error: Tool ${toolCall.name} not found`,
+                is_error: true,
+              })
             }
           }
-          getLogger()?.info(`[Stream:${requestId}] All tools executed. Results: ${toolMessages.length}`)
+          getLogger()?.info(`[Stream:${requestId}] All tools executed. Results: ${toolResultBlocks.length}`)
 
           // Get next response with tool results
           getLogger()?.info(`[Stream:${requestId}] Getting next response from Claude (turn ${turnCount})...`)
@@ -2587,55 +2628,56 @@ Be concise, helpful, and music-knowledgeable. Describe playlists using genres, e
           getLogger()?.info(`[Stream:${requestId}] Sending tool results back to Claude...`)
           getLogger()?.info(`[Stream:${requestId}] Full response so far: "${fullResponse.substring(0, 100)}"`)
 
-          // Build the conversation including tool results
-          const aiMessageContent = fullResponse || ''
-          getLogger()?.info(
-            `[Stream:${requestId}] Creating AIMessage with content length: ${aiMessageContent.length}, tool calls: ${currentToolCalls.length}`,
-          )
+          // Build Anthropic format messages for next turn
+          // Add assistant's message with tool use blocks
+          const assistantToolUseBlocks: Anthropic.ToolUseBlockParam[] = currentToolCalls.map(tc => ({
+            type: 'tool_use',
+            id: tc.id,
+            name: tc.name,
+            input: tc.args,
+          }))
 
-          // Add the AI's message with tool calls
-          conversationMessages.push(
-            new AIMessage({
-              content: aiMessageContent,
-              tool_calls: currentToolCalls,
-            }),
-          )
-          // Add the tool results
-          conversationMessages.push(...toolMessages)
+          // If there was text content before tool calls, include it
+          const assistantContent: Array<Anthropic.ContentBlock | Anthropic.ToolUseBlockParam> = []
+          if (fullResponse) {
+            assistantContent.push({type: 'text', text: fullResponse} as Anthropic.ContentBlock)
+          }
+          assistantContent.push(...assistantToolUseBlocks)
+
+          conversationMessages.push({
+            role: 'assistant',
+            content: assistantContent,
+          })
+
+          // Add tool results as a user message
+          conversationMessages.push({
+            role: 'user',
+            content: toolResultBlocks,
+          })
 
           getLogger()?.info(`[Stream:${requestId}] Conversation now has ${conversationMessages.length} messages`)
 
-          getLogger()?.info(`[Stream:${requestId}] Attempting to get next response from Claude...`)
-          getLogger()?.info(`[Stream:${requestId}] Message structure (last 5):`)
-          conversationMessages.slice(-5).forEach((msg, i) => {
-            const msgType = msg.constructor.name
-            const contentPreview = msg.content?.toString().slice(0, 200) || 'no content'
-            getLogger()?.info(
-              `[Stream:${requestId}]   ${conversationMessages.length - 5 + i}: ${msgType} - ${contentPreview}`,
-            )
-            if (msgType === 'ToolMessage' && 'tool_call_id' in msg) {
-              getLogger()?.info(`[Stream:${requestId}]     Tool call ID: ${msg.tool_call_id}`)
-              getLogger()?.info(`[Stream:${requestId}]     Content length: ${msg.content?.toString().length || 0}`)
-            } else if (msgType === 'AIMessage' && 'tool_calls' in msg && msg.tool_calls) {
-              getLogger()?.info(
-                `[Stream:${requestId}]     Tool calls: ${msg.tool_calls
-                  .map((tc: ToolCall) => `${tc.name}(id:${tc.id})`)
-                  .join(', ')}`,
-              )
-            }
-          })
-
-          let nextResponse
           try {
-            // Wrap stream call in orchestrator to respect anthropic lane limits (max 2 concurrent)
-            nextResponse = await rateLimitedAnthropicCall(
-              () =>
-                createModelWithTools().stream(conversationMessages, {
-                  signal: abortController.signal,
-                }),
-              getLogger(),
-              `main chat stream (turn ${turnCount}, ${conversationMessages.length} messages)`,
-            )
+            // Create second stream with tool results
+            const nextStream = anthropic.messages.stream({
+              max_tokens: 10000,
+              messages: conversationMessages,
+              model: 'claude-sonnet-4-5-20250929',
+              system: [
+                {
+                  type: 'text' as const,
+                  text: systemPrompt,
+                  cache_control: {type: 'ephemeral' as const},
+                },
+              ],
+              temperature: 1.0,
+              thinking: {
+                type: 'enabled' as const,
+                budget_tokens: 5000,
+              },
+              tools: anthropicTools,
+            })
+
           } catch (streamError) {
             const logger = getLogger()
             logger?.error('Claude streaming API call failed', streamError, {
@@ -2666,78 +2708,67 @@ Be concise, helpful, and music-knowledgeable. Describe playlists using genres, e
           }
 
           fullResponse = ''
-          let nextChunkCount = 0
-          let nextToolCalls: ToolCall[] = []
+          let nextToolCalls: AnthropicToolCall[] = []
           getLogger()?.info(`[Stream:${requestId}] Streaming response from Claude (turn ${turnCount})...`)
-          let contentStarted = false
 
           try {
-            for await (const chunk of nextResponse) {
+            // Process streaming events from second call
+            let nextEventCount = 0
+            const nextContentBlocks: any[] = []
+            let nextCurrentBlockIndex = -1
+
+            for await (const event of nextStream) {
               if (abortController.signal.aborted) {
                 throw new Error('Request aborted')
               }
 
-              nextChunkCount++
-              // Log ALL chunks to see what Claude is actually sending
-              const contentPreview =
-                typeof chunk.content === 'string'
-                  ? chunk.content.substring(0, 100)
-                  : Array.isArray(chunk.content)
-                    ? JSON.stringify(chunk.content).substring(0, 100)
-                    : chunk.content
-                      ? String(chunk.content).substring(0, 100)
-                      : 'no content'
+              nextEventCount++
 
-              getLogger()?.info(`[Stream:${requestId}] Turn ${turnCount} chunk ${nextChunkCount}:`, {
-                chunkContent: contentPreview,
-                chunkKeys: Object.keys(chunk),
-                contentLength: typeof chunk.content === 'string' ? chunk.content.length : 0,
-                hasContent: !!chunk.content,
-                hasToolCalls: !!chunk.tool_calls,
-              })
+              if (event.type === 'content_block_start') {
+                nextCurrentBlockIndex = event.index
+                nextContentBlocks[nextCurrentBlockIndex] = event.content_block
 
-              // Handle both string content and array content blocks (Claude API format)
-              let textContent = ''
-              if (typeof chunk.content === 'string' && chunk.content) {
-                textContent = chunk.content
-              } else if (Array.isArray(chunk.content)) {
-                // Extract text from content blocks: [{"type":"text","text":"..."}]
-                for (const block of chunk.content) {
-                  if (block.type === 'text' && block.text) {
-                    textContent += block.text
+                if (event.content_block.type === 'tool_use') {
+                  getLogger()?.info(`[Stream:${requestId}] Turn ${turnCount} tool use started: ${event.content_block.name}`)
+                }
+              } else if (event.type === 'content_block_delta') {
+                if (event.delta.type === 'text_delta') {
+                  const text = event.delta.text
+                  fullResponse += text
+                  hasAnyContent = true
+                  await sseWriter.write({data: text, type: 'content'})
+                } else if (event.delta.type === 'thinking_delta') {
+                  const text = event.delta.thinking
+                  await sseWriter.write({data: `💭 ${text}`, type: 'thinking'})
+                } else if (event.delta.type === 'input_json_delta') {
+                  const currentBlock = nextContentBlocks[nextCurrentBlockIndex]
+                  if (currentBlock && currentBlock.type === 'tool_use') {
+                    if (!currentBlock.input) {
+                      currentBlock.input = ''
+                    }
+                    currentBlock.input += event.delta.partial_json
                   }
                 }
-              }
-
-              if (textContent) {
-                if (!contentStarted) {
-                  getLogger()?.info(
-                    `[Stream:${requestId}] CONTENT STARTED at turn ${turnCount} chunk ${nextChunkCount}: ${textContent.substring(
-                      0,
-                      100,
-                    )}`,
-                  )
-                  contentStarted = true
+              } else if (event.type === 'content_block_stop') {
+                const block = nextContentBlocks[event.index]
+                if (block && block.type === 'tool_use' && block.id && block.name) {
+                  const input = JSON.parse(block.input || '{}')
+                  nextToolCalls.push({
+                    id: block.id,
+                    name: block.name,
+                    args: input,
+                  })
+                  getLogger()?.info(`[Stream:${requestId}] Turn ${turnCount} tool use complete: ${block.name}`)
                 }
-                fullResponse += textContent
-                hasAnyContent = true // Track that we got content
-                await sseWriter.write({data: textContent, type: 'content'})
-              }
-
-              // Check for MORE tool calls in the response
-              if (chunk.tool_calls && chunk.tool_calls.length > 0) {
-                nextToolCalls = chunk.tool_calls as ToolCall[]
-                getLogger()?.info(
-                  `[Stream:${requestId}] ⚠️ Additional tool calls detected (turn ${turnCount}): ${chunk.tool_calls
-                    .map(tc => tc.name)
-                    .join(', ')}`,
-                )
               }
             }
+
+            getLogger()?.info(
+              `[Stream:${requestId}] Turn ${turnCount} streaming complete. Events: ${nextEventCount}, Tool calls: ${nextToolCalls.length}`,
+            )
           } catch (chunkError) {
             const logger = getLogger()
-            logger?.error('Error processing Claude stream chunks', chunkError, {
-              chunksProcessed: nextChunkCount,
+            logger?.error('Error processing Claude stream events', chunkError, {
               errorMessage: chunkError instanceof Error ? chunkError.message : String(chunkError),
               errorType: chunkError?.constructor?.name,
               partialResponseLength: fullResponse.length,
@@ -2752,7 +2783,7 @@ Be concise, helpful, and music-knowledgeable. Describe playlists using genres, e
           }
 
           getLogger()?.info(
-            `[Stream:${requestId}] Turn ${turnCount} complete. Chunks: ${nextChunkCount}, Content: ${fullResponse.length} chars, Next tool calls: ${nextToolCalls.length}`,
+            `[Stream:${requestId}] Turn ${turnCount} complete. Content: ${fullResponse.length} chars, Next tool calls: ${nextToolCalls.length}`,
           )
 
           // Update for next iteration
@@ -2766,27 +2797,36 @@ Be concise, helpful, and music-knowledgeable. Describe playlists using genres, e
           )
 
           // Ask Claude to provide a response based on what it has learned
-          const finalPrompt = new HumanMessage(
-            "Please provide your response based on the information you've gathered from the tools you've used.",
-          )
-          conversationMessages.push(finalPrompt)
+          conversationMessages.push({
+            role: 'user',
+            content: "Please provide your response based on the information you've gathered from the tools you've used.",
+          })
 
           sseWriter.writeAsync({
             data: 'Preparing final response...',
             type: 'thinking',
           })
 
-          let finalResponse
           try {
-            // Wrap stream call in orchestrator to respect anthropic lane limits (max 2 concurrent)
-            finalResponse = await rateLimitedAnthropicCall(
-              () =>
-                createModelWithTools().stream(conversationMessages, {
-                  signal: abortController.signal,
-                }),
-              getLogger(),
-              `main chat stream (final, ${conversationMessages.length} messages)`,
-            )
+            // Create final stream
+            const finalStream = anthropic.messages.stream({
+              max_tokens: 10000,
+              messages: conversationMessages,
+              model: 'claude-sonnet-4-5-20250929',
+              system: [
+                {
+                  type: 'text' as const,
+                  text: systemPrompt,
+                  cache_control: {type: 'ephemeral' as const},
+                },
+              ],
+              temperature: 1.0,
+              thinking: {
+                type: 'enabled' as const,
+                budget_tokens: 5000,
+              },
+              tools: anthropicTools,
+            })
           } catch (finalStreamError) {
             const logger = getLogger()
             logger?.error('Final Claude streaming API call failed', finalStreamError, {
@@ -2796,71 +2836,120 @@ Be concise, helpful, and music-knowledgeable. Describe playlists using genres, e
               turn: turnCount,
             })
 
-            // Provide a fallback response
-            await sseWriter.write({
-              data: 'I encountered a connection issue while preparing the final response. However, I was able to complete the task successfully.',
-              type: 'content',
-            })
-            fullResponse = 'Task completed despite connection error.'
+            // Provide useful feedback based on tool executions
+            const executedTools = conversationMessages
+              .filter(m => m.role === 'assistant')
+              .flatMap(m => {
+                const content = Array.isArray(m.content) ? m.content : []
+                return content
+                  .filter((block): block is Anthropic.ToolUseBlockParam => 'type' in block && block.type === 'tool_use')
+                  .map(block => block.name)
+              })
+
+            if (executedTools.length > 0) {
+              const toolSummary = [...new Set(executedTools)].join(', ')
+              await sseWriter.write({
+                data: `I encountered a streaming error while preparing my response. I was able to execute these tools: ${toolSummary}. Please ask me to clarify any specific information you need.`,
+                type: 'content',
+              })
+              fullResponse = `Executed tools: ${toolSummary}`
+            } else {
+              await sseWriter.write({
+                data: 'I encountered a streaming error. Please try rephrasing your request.',
+                type: 'content',
+              })
+              fullResponse = 'Streaming error occurred'
+            }
             getLogger()?.warn(`[Stream:${requestId}] Final response skipped due to streaming error`)
             // Skip the rest of this block
           }
 
-          if (finalResponse) {
-            fullResponse = ''
-            try {
-              for await (const chunk of finalResponse) {
-                if (abortController.signal.aborted) {
-                  throw new Error('Request aborted')
-                }
-
-                let textContent = ''
-                if (typeof chunk.content === 'string' && chunk.content) {
-                  textContent = chunk.content
-                } else if (Array.isArray(chunk.content)) {
-                  for (const block of chunk.content) {
-                    if (block.type === 'text' && block.text) {
-                      textContent += block.text
-                    }
-                  }
-                }
-
-                if (textContent) {
-                  fullResponse += textContent
-                  await sseWriter.write({data: textContent, type: 'content'})
-                }
+          // Process final stream events
+          fullResponse = ''
+          try {
+            for await (const event of finalStream) {
+              if (abortController.signal.aborted) {
+                throw new Error('Request aborted')
               }
-            } catch (finalChunkError) {
-              const logger = getLogger()
-              logger?.error('Error processing final response chunks', finalChunkError, {
-                errorMessage: finalChunkError instanceof Error ? finalChunkError.message : String(finalChunkError),
-                errorType: finalChunkError?.constructor?.name,
-                partialResponseLength: fullResponse.length,
-              })
 
-              // If we got no content, provide fallback
-              if (fullResponse.length === 0) {
-                await sseWriter.write({
-                  data: 'The task was completed successfully.',
-                  type: 'content',
-                })
-                fullResponse = 'Task completed.'
+              if (event.type === 'content_block_delta') {
+                if (event.delta.type === 'text_delta') {
+                  const text = event.delta.text
+                  fullResponse += text
+                  await sseWriter.write({data: text, type: 'content'})
+                } else if (event.delta.type === 'thinking_delta') {
+                  const text = event.delta.thinking
+                  await sseWriter.write({data: `💭 ${text}`, type: 'thinking'})
+                }
               }
             }
+          } catch (finalChunkError) {
+            const logger = getLogger()
+            logger?.error('Error processing final response events', finalChunkError, {
+              errorMessage: finalChunkError instanceof Error ? finalChunkError.message : String(finalChunkError),
+              errorType: finalChunkError?.constructor?.name,
+              partialResponseLength: fullResponse.length,
+            })
 
-            getLogger()?.info(`[Stream:${requestId}] Final response after limit: ${fullResponse.length} chars`)
+            // If we got no content, provide useful feedback based on tool executions
+            if (fullResponse.length === 0) {
+              const executedTools = conversationMessages
+                .filter(m => m.role === 'assistant')
+                .flatMap(m => {
+                  const content = Array.isArray(m.content) ? m.content : []
+                  return content
+                    .filter((block): block is Anthropic.ToolUseBlockParam => 'type' in block && block.type === 'tool_use')
+                    .map(block => block.name)
+                })
+
+              if (executedTools.length > 0) {
+                const toolSummary = [...new Set(executedTools)].join(', ')
+                await sseWriter.write({
+                  data: `I gathered information using: ${toolSummary}. Please ask me to explain any specific details.`,
+                  type: 'content',
+                })
+                fullResponse = `Executed tools: ${toolSummary}`
+              } else {
+                await sseWriter.write({
+                  data: 'I encountered an error processing the response. Please try again.',
+                  type: 'content',
+                })
+                fullResponse = 'Processing error occurred'
+              }
+            }
           }
+
+          getLogger()?.info(`[Stream:${requestId}] Final response after limit: ${fullResponse.length} chars`)
         }
 
         getLogger()?.info(`[Stream:${requestId}] Agentic loop complete after ${turnCount} turns`)
 
-        // If still no response after everything, provide fallback
+        // If still no response after everything, provide useful feedback
         if (fullResponse.length === 0) {
           getLogger()?.error(`[Stream:${requestId}] WARNING: No content received from Claude!`)
-          await sseWriter.write({
-            data: 'I apologize, but I encountered an issue generating a response. Please try again.',
-            type: 'content',
-          })
+
+          // Provide feedback based on what we attempted
+          const executedTools = conversationMessages
+            .filter(m => m.role === 'assistant')
+            .flatMap(m => {
+              const content = Array.isArray(m.content) ? m.content : []
+              return content
+                .filter((block): block is Anthropic.ToolUseBlockParam => 'type' in block && block.type === 'tool_use')
+                .map(block => block.name)
+            })
+
+          if (executedTools.length > 0) {
+            const toolSummary = [...new Set(executedTools)].join(', ')
+            await sseWriter.write({
+              data: `I successfully called these tools: ${toolSummary}, but encountered an issue formatting my response. Please ask me to explain the results.`,
+              type: 'content',
+            })
+          } else {
+            await sseWriter.write({
+              data: 'I encountered an issue processing your request. Please try rephrasing or simplifying your request.',
+              type: 'content',
+            })
+          }
         }
 
         // Stream processing complete - done event sent in finally block
