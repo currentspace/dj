@@ -21,12 +21,7 @@ import {
 import {
   StreamContentEventSchema,
   StreamToolStartEventSchema,
-  StreamToolEndEventSchema,
-  StreamLogEventSchema,
-  StreamDebugEventSchema,
   StreamErrorEventSchema,
-  StreamDoneEventSchema,
-  StreamThinkingEventSchema,
   StreamEventSchema,
 } from '../schemas/sse-schemas'
 
@@ -35,17 +30,14 @@ import {
   LastFmTrackInfoSchema,
   MusicBrainzRecordingSchema,
   LastFmSimilarTrackSchema,
-  LastFmArtistInfoSchema,
   EnrichedTrackDataSchema,
 } from '../schemas/external-api-schemas'
 
 import {
   ChatRequestSchema,
-  ChatResponseSchema,
   PlaylistSchema,
   TrackSchema,
   SavePlaylistResponseSchema,
-  SpotifyAuthResponseSchema,
 } from '../schemas/api-schemas'
 
 // ===== Helper Functions =====

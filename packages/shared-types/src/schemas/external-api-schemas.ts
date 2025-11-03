@@ -7,19 +7,30 @@ import {z} from 'zod'
 
 // ===== Deezer API =====
 
+/**
+ * Helper for optional URLs that might be empty strings
+ * Deezer API sometimes returns empty strings for missing URLs
+ */
+const optionalUrlOrEmpty = z.preprocess((val) => {
+  if (typeof val === 'string' && val.trim() === '') {
+    return undefined
+  }
+  return val
+}, z.string().url().optional())
+
 export const DeezerArtistSchema = z.object({
   id: z.number(),
   name: z.string(),
-  picture: z.string().url().optional(),
-  picture_medium: z.string().url().optional(),
-  picture_small: z.string().url().optional(),
+  picture: optionalUrlOrEmpty,
+  picture_medium: optionalUrlOrEmpty,
+  picture_small: optionalUrlOrEmpty,
   type: z.literal('artist').optional(),
 })
 
 export const DeezerAlbumSchema = z.object({
-  cover: z.string().url().optional(),
-  cover_medium: z.string().url().optional(),
-  cover_small: z.string().url().optional(),
+  cover: optionalUrlOrEmpty,
+  cover_medium: optionalUrlOrEmpty,
+  cover_small: optionalUrlOrEmpty,
   id: z.number(),
   title: z.string(),
   type: z.literal('album').optional(),
@@ -33,7 +44,7 @@ export const DeezerTrackSchema = z.object({
   gain: z.number().nullable(),
   id: z.number(),
   isrc: z.string().optional(),
-  preview: z.string().url().optional(),
+  preview: optionalUrlOrEmpty,
   rank: z.number().nullable(),
   release_date: z.string().optional(),
   title: z.string(),
@@ -42,30 +53,53 @@ export const DeezerTrackSchema = z.object({
 
 export const DeezerSearchResponseSchema = z.object({
   data: z.array(DeezerTrackSchema),
-  next: z.string().url().optional(),
+  next: optionalUrlOrEmpty,
   total: z.number(),
 })
 
 // ===== Last.fm API =====
 
+/**
+ * Helper to coerce string numbers to actual numbers
+ * Last.fm API sometimes returns numbers as strings
+ */
+const numberCoercion = z.preprocess((val) => {
+  if (typeof val === 'string' && val.trim() !== '') {
+    const num = Number(val)
+    return isNaN(num) ? val : num
+  }
+  return val
+}, z.number())
+
+/**
+ * Helper to handle URLs that might be empty strings
+ * Last.fm API returns empty strings instead of null/undefined
+ */
+const urlOrEmpty = z.preprocess((val) => {
+  if (typeof val === 'string' && val.trim() === '') {
+    return null
+  }
+  return val
+}, z.string().url().nullable())
+
 export const LastFmImageSchema = z.object({
-  '#text': z.string().url(),
+  '#text': urlOrEmpty,
   size: z.enum(['small', 'medium', 'large', 'extralarge', 'mega', '']),
 })
 
 export const LastFmTagSchema = z.object({
   name: z.string(),
-  url: z.string().url(),
+  url: urlOrEmpty,
 })
 
 export const LastFmTagWithCountSchema = LastFmTagSchema.extend({
-  count: z.number(),
+  count: numberCoercion,
 })
 
 export const LastFmArtistSchema = z.object({
   mbid: z.string().optional(),
   name: z.string(),
-  url: z.string().url(),
+  url: urlOrEmpty,
 })
 
 export const LastFmAlbumSchema = z.object({
@@ -73,7 +107,7 @@ export const LastFmAlbumSchema = z.object({
   image: z.array(LastFmImageSchema).optional(),
   mbid: z.string().optional(),
   title: z.string(),
-  url: z.string().url(),
+  url: urlOrEmpty,
 })
 
 export const LastFmWikiSchema = z.object({
@@ -84,29 +118,29 @@ export const LastFmWikiSchema = z.object({
 
 export const LastFmSimilarTrackSchema = z.object({
   artist: LastFmArtistSchema,
-  duration: z.number().optional(),
+  duration: numberCoercion.optional(),
   image: z.array(LastFmImageSchema).optional(),
-  match: z.number().min(0).max(1),
+  match: numberCoercion.pipe(z.number().min(0).max(1)),
   mbid: z.string().optional(),
   name: z.string(),
-  playcount: z.number().optional(),
-  url: z.string().url(),
+  playcount: numberCoercion.optional(),
+  url: urlOrEmpty,
 })
 
 export const LastFmTrackInfoSchema = z.object({
   album: LastFmAlbumSchema.optional(),
   artist: LastFmArtistSchema,
-  duration: z.number().optional(),
-  listeners: z.number().optional(),
+  duration: numberCoercion.optional(),
+  listeners: numberCoercion.optional(),
   mbid: z.string().optional(),
   name: z.string(),
-  playcount: z.number().optional(),
+  playcount: numberCoercion.optional(),
   toptags: z
     .object({
       tag: z.array(LastFmTagSchema),
     })
     .optional(),
-  url: z.string().url(),
+  url: urlOrEmpty,
   wiki: LastFmWikiSchema.optional(),
 })
 
@@ -119,7 +153,7 @@ export const LastFmTrackCorrectionSchema = z.object({
   artist: LastFmArtistSchema,
   mbid: z.string().optional(),
   name: z.string(),
-  url: z.string().url(),
+  url: urlOrEmpty,
 })
 
 export const LastFmTrackCorrectionResponseSchema = z.object({
@@ -157,8 +191,8 @@ export const LastFmArtistInfoSchema = z.object({
     .optional(),
   stats: z
     .object({
-      listeners: z.number().optional(),
-      playcount: z.number().optional(),
+      listeners: numberCoercion.optional(),
+      playcount: numberCoercion.optional(),
     })
     .optional(),
   tags: z
@@ -166,7 +200,7 @@ export const LastFmArtistInfoSchema = z.object({
       tag: z.array(LastFmTagSchema),
     })
     .optional(),
-  url: z.string().url(),
+  url: urlOrEmpty,
 })
 
 export const LastFmArtistInfoResponseSchema = z.object({
