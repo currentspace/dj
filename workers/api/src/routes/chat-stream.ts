@@ -633,6 +633,7 @@ function createStreamingSpotifyTools(
         const anthropic = new ChatAnthropic({
           apiKey: env.ANTHROPIC_API_KEY,
           maxRetries: 0,
+          maxTokens: 5000, // Must be > thinking.budget_tokens (2000 thinking + 3000 response)
           model: 'claude-sonnet-4-5-20250929',
           temperature: 1.0, // Required when extended thinking is enabled
           // Enable extended thinking for better reasoning
@@ -865,6 +866,7 @@ Return ONLY valid JSON:
         const anthropic = new ChatAnthropic({
           apiKey: env.ANTHROPIC_API_KEY,
           maxRetries: 0,
+          maxTokens: 8000, // Must be > thinking.budget_tokens (4000 thinking + 4000 response)
           model: 'claude-sonnet-4-5-20250929',
           temperature: 1.0, // Required when extended thinking is enabled
           // Enable extended thinking for better reasoning
@@ -1249,6 +1251,7 @@ Return ONLY valid JSON:
         const anthropic = new ChatAnthropic({
           apiKey: env.ANTHROPIC_API_KEY,
           maxRetries: 0,
+          maxTokens: 5000, // Must be > thinking.budget_tokens (2000 thinking + 3000 response)
           model: 'claude-sonnet-4-5-20250929',
           temperature: 1.0, // Required when extended thinking is enabled
           // Enable extended thinking for better reasoning
@@ -2274,7 +2277,7 @@ chatStreamRouter.post('/message', async c => {
           const llm = new ChatAnthropic({
             apiKey: env.ANTHROPIC_API_KEY,
             maxRetries: 0,
-            maxTokens: 2000,
+            maxTokens: 8000, // Must be > thinking.budget_tokens (4000 thinking + 4000 response)
             model: 'claude-sonnet-4-5-20250929',
             streaming: true,
             temperature: 1.0, // Required when extended thinking is enabled
