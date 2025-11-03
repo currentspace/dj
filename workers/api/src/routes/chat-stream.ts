@@ -2432,8 +2432,7 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
         // Cache the system prompt since it's reused across all messages in a conversation
         // System prompt changes when playlist context changes, which is desired behavior
         const messages = [
-          {
-            role: 'system' as const,
+          new SystemMessage({
             content: [
               {
                 type: 'text' as const,
@@ -2441,7 +2440,7 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
                 cache_control: {type: 'ephemeral' as const},
               },
             ],
-          },
+          }),
           ...request.conversationHistory.map(m =>
             m.role === 'user' ? new HumanMessage(m.content) : new AIMessage(m.content),
           ),
