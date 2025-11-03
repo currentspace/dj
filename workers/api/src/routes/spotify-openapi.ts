@@ -141,7 +141,7 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
 
       if (!tokenResponse.ok) {
         const errorText = await tokenResponse.text()
-        getLogger()?.error('Token exchange failed:', tokenResponse.status, errorText)
+        getLogger()?.error('Token exchange failed:', tokenResponse.status, {errorText})
         return c.redirect(`${env.FRONTEND_URL ?? 'https://dj.current.space'}?error=token_exchange_failed`)
       }
 

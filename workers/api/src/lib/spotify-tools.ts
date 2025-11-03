@@ -227,7 +227,7 @@ export async function executeSpotifyTool(
   token: string,
   cache?: KVNamespace,
 ): Promise<unknown> {
-  getLogger()?.info(`[Tool] Executing ${toolName} with args:`, JSON.stringify(args).substring(0, 200))
+  getLogger()?.info(`[Tool] Executing ${toolName} with args:`, {args: JSON.stringify(args).substring(0, 200)})
   const startTime = Date.now()
 
   try {
@@ -290,7 +290,7 @@ export async function executeSpotifyTool(
 async function analyzePlaylist(args: any, token: string) {
   const {playlist_id} = args
 
-  getLogger()?.info(`[analyzePlaylist] Starting analysis with args:`, JSON.stringify(args))
+  getLogger()?.info(`[analyzePlaylist] Starting analysis with args:`, {args: JSON.stringify(args)})
   getLogger()?.info(`[analyzePlaylist] Extracted playlist_id: "${playlist_id}"`)
   getLogger()?.info(`[analyzePlaylist] Token present: ${token ? 'YES' : 'NO'}`)
 
@@ -690,8 +690,8 @@ async function getAudioFeatures(args: any, token: string, cache?: KVNamespace) {
   const {track_ids} = args
   const CACHE_TTL = 7 * 24 * 60 * 60 // 7 days in seconds
 
-  getLogger()?.info(`[getAudioFeatures] Starting with args:`, JSON.stringify(args))
-  getLogger()?.info(`[getAudioFeatures] Extracted track_ids:`, track_ids)
+  getLogger()?.info(`[getAudioFeatures] Starting with args:`, {args: JSON.stringify(args)})
+  getLogger()?.info(`[getAudioFeatures] Extracted track_ids:`, {track_ids})
 
   if (!track_ids || !Array.isArray(track_ids) || track_ids.length === 0) {
     getLogger()?.error(`[getAudioFeatures] CRITICAL: track_ids is missing, not an array, or empty!`)

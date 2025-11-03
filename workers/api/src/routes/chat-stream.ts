@@ -1,5 +1,6 @@
 import type {StreamDebugData, StreamLogData, StreamToolData, StreamToolResult} from '@dj/shared-types'
 
+import Anthropic from '@anthropic-ai/sdk'
 import {
   SpotifyPlaylistFullSchema,
   SpotifyPlaylistTracksResponseSchema,
@@ -7,17 +8,16 @@ import {
   type SpotifyTrackFull,
   SpotifyTrackFullSchema,
 } from '@dj/shared-types'
-import Anthropic from '@anthropic-ai/sdk'
 import {Hono} from 'hono'
 import {z} from 'zod'
 import {zodToJsonSchema} from 'zod-to-json-schema'
 
 // Native tool definition (replaces DynamicStructuredTool)
 interface NativeTool {
-  name: string
   description: string
-  schema: z.ZodObject<any>
   func: (args: any) => Promise<any>
+  name: string
+  schema: z.ZodObject<any>
 }
 
 import type {Env} from '../index'
@@ -202,13 +202,13 @@ function convertToAnthropicTools(tools: NativeTool[]): Anthropic.Tool[] {
   return tools.map(tool => {
     const jsonSchema = zodToJsonSchema(tool.schema) as any
     return {
-      name: tool.name,
       description: tool.description,
       input_schema: {
-        type: 'object' as const,
         properties: jsonSchema.properties || {},
         required: jsonSchema.required || [],
+        type: 'object' as const,
       },
+      name: tool.name,
     }
   })
 }
@@ -230,7 +230,8 @@ function createStreamingSpotifyTools(
 ): NativeTool[] {
   const tools: NativeTool[] = [
     {
-      description: 'Search Spotify catalog for tracks by query string. Returns compact track info (name, artists, album, popularity, URI). Use for finding specific songs, artists, or exploring genre searches. Query can include track names, artist names, album names, or genre filters.',
+      description:
+        'Search Spotify catalog for tracks by query string. Returns compact track info (name, artists, album, popularity, URI). Use for finding specific songs, artists, or exploring genre searches. Query can include track names, artist names, album names, or genre filters.',
       func: async args => {
         if (abortSignal?.aborted) throw new Error('Request aborted')
 
@@ -259,7 +260,8 @@ function createStreamingSpotifyTools(
     },
 
     {
-      description: 'Get comprehensive playlist analysis with metadata (genres, popularity, era), BPM/rank from Deezer enrichment, and crowd tags/similar tracks from Last.fm. Returns aggregated insights and track IDs only (not full track objects). This is the FIRST tool to call for playlist questions - provides complete overview in compact format (~2-5KB regardless of playlist size). Use before fetching individual tracks.',
+      description:
+        'Get comprehensive playlist analysis with metadata (genres, popularity, era), BPM/rank from Deezer enrichment, and crowd tags/similar tracks from Last.fm. Returns aggregated insights and track IDs only (not full track objects). This is the FIRST tool to call for playlist questions - provides complete overview in compact format (~2-5KB regardless of playlist size). Use before fetching individual tracks.',
       func: async args => {
         if (abortSignal?.aborted) throw new Error('Request aborted')
 
@@ -531,7 +533,8 @@ function createStreamingSpotifyTools(
     // We now use Deezer + Last.fm enrichment instead via analyze_playlist
 
     {
-      description: 'Get Spotify algorithmic track recommendations based on seed tracks/artists/genres. Accepts audio feature parameters (energy, valence, danceability, etc.) to tune recommendations. Returns compact track info. Use as ONE component of discovery strategy, not the only source (algorithm alone produces generic results).',
+      description:
+        'Get Spotify algorithmic track recommendations based on seed tracks/artists/genres. Accepts audio feature parameters (energy, valence, danceability, etc.) to tune recommendations. Returns compact track info. Use as ONE component of discovery strategy, not the only source (algorithm alone produces generic results).',
       func: async args => {
         const finalArgs = {...args}
 
@@ -582,7 +585,12 @@ function createStreamingSpotifyTools(
           type: 'tool_start',
         })
 
-        const result = await executeSpotifyTool('get_recommendations', finalArgs, spotifyToken, env?.AUDIO_FEATURES_CACHE)
+        const result = await executeSpotifyTool(
+          'get_recommendations',
+          finalArgs,
+          spotifyToken,
+          env?.AUDIO_FEATURES_CACHE,
+        )
 
         await sseWriter.write({
           data: {
@@ -603,7 +611,8 @@ function createStreamingSpotifyTools(
     },
 
     {
-      description: 'Create a new Spotify playlist with name, optional description, and track URIs. Returns playlist ID and Spotify URL. Use after gathering and curating recommendations - this is the final step in the discovery workflow.',
+      description:
+        'Create a new Spotify playlist with name, optional description, and track URIs. Returns playlist ID and Spotify URL. Use after gathering and curating recommendations - this is the final step in the discovery workflow.',
       func: async args => {
         if (abortSignal?.aborted) throw new Error('Request aborted')
 
@@ -1269,7 +1278,8 @@ CRITICAL: Return valid JSON only. No markdown code blocks, no explanatory text o
     },
 
     {
-      description: 'Discover tracks by combining 2-3 Last.fm crowd tags/genres in Spotify search. Automatically adds genre: prefix for recognized genres for better results. Returns compact track info. Use tag combinations (not single tags) to capture vibe nuance. Part of multi-pronged discovery strategy.',
+      description:
+        'Discover tracks by combining 2-3 Last.fm crowd tags/genres in Spotify search. Automatically adds genre: prefix for recognized genres for better results. Returns compact track info. Use tag combinations (not single tags) to capture vibe nuance. Part of multi-pronged discovery strategy.',
       func: async args => {
         if (abortSignal?.aborted) throw new Error('Request aborted')
 
@@ -1525,7 +1535,7 @@ CRITICAL:
             .map(block => block.text)
             .join('')
 
-          getLogger()?.info(`[curate_recommendations] Claude response:`, content.substring(0, 200))
+          getLogger()?.info(`[curate_recommendations] Claude response:`, {preview: content.substring(0, 200)})
           const jsonMatch = /\{[\s\S]*\}/.exec(content)
           if (!jsonMatch) {
             throw new Error('No JSON found in response')
@@ -1642,7 +1652,7 @@ async function executeSpotifyToolWithProgress(
   if (!logger) {
     throw new Error('executeSpotifyToolWithProgress called outside logger context')
   }
-  getLogger()?.info(`[Tool] Executing ${toolName} with args:`, JSON.stringify(args).substring(0, 200))
+  getLogger()?.info(`[Tool] Executing ${toolName} with args:`, {args: JSON.stringify(args).substring(0, 200)})
 
   if (toolName === 'analyze_playlist') {
     const {playlist_id} = args
@@ -1749,7 +1759,7 @@ async function executeSpotifyToolWithProgress(
           getLogger()?.info(`[SpotifyAPI]   - has external_ids: ${!!track.external_ids}`)
           getLogger()?.info(`[SpotifyAPI]   - external_ids value:`, track.external_ids)
           getLogger()?.info(`[SpotifyAPI]   - ISRC: ${track.external_ids.isrc ?? 'NOT PRESENT'}`)
-          getLogger()?.info(`[SpotifyAPI]   - Available fields:`, Object.keys(track).join(', '))
+          getLogger()?.info(`[SpotifyAPI]   - Available fields:`, {fields: Object.keys(track).join(', ')})
         })
         getLogger()?.info(`[SpotifyAPI] ========== END TRACK STRUCTURE DEBUG ==========`)
       }
@@ -1912,9 +1922,9 @@ async function executeSpotifyToolWithProgress(
               getLogger()?.info(`[BPMEnrichment]   - Duration: ${track.duration_ms}ms`)
               getLogger()?.info(`[BPMEnrichment]   - has external_ids: ${!!track.external_ids}`)
               getLogger()?.info(`[BPMEnrichment]   - external_ids type: ${typeof track.external_ids}`)
-              getLogger()?.info(`[BPMEnrichment]   - external_ids value:`, JSON.stringify(track.external_ids))
+              getLogger()?.info(`[BPMEnrichment]   - external_ids value:`, {value: JSON.stringify(track.external_ids)})
               getLogger()?.info(`[BPMEnrichment]   - ISRC: ${track.external_ids?.isrc ?? 'NOT PRESENT'}`)
-              getLogger()?.info(`[BPMEnrichment]   - Track object keys:`, Object.keys(track).join(', '))
+              getLogger()?.info(`[BPMEnrichment]   - Track object keys:`, {keys: Object.keys(track).join(', ')})
             })
             getLogger()?.info(`[BPMEnrichment] ========== END ENRICHMENT TRACK STRUCTURE DEBUG ==========`)
           }
@@ -2326,7 +2336,7 @@ chatStreamRouter.post('/message', async c => {
   let requestBody
   try {
     requestBody = await c.req.json()
-    getLogger()?.info(`[Stream:${requestId}] Request body parsed:`, JSON.stringify(requestBody).slice(0, 200))
+    getLogger()?.info(`[Stream:${requestId}] Request body parsed:`, {body: JSON.stringify(requestBody).slice(0, 200)})
   } catch (error) {
     getLogger()?.error(`[Stream:${requestId}] Failed to parse request body:`, error)
     return c.text('Invalid JSON', 400)
@@ -2337,7 +2347,7 @@ chatStreamRouter.post('/message', async c => {
   const env = c.env
 
   getLogger()?.info(`[Stream:${requestId}] Auth header present: ${!!authorization}`)
-  getLogger()?.info(`[Stream:${requestId}] Env keys:`, Object.keys(env))
+  getLogger()?.info(`[Stream:${requestId}] Env keys:`, {keys: Object.keys(env)})
 
   // Initialize logger for this request
   const streamLogger = new ServiceLogger(`Stream:${requestId}`, sseWriter)
@@ -2617,12 +2627,12 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
         // Convert conversation history to Anthropic message format
         const messages: Anthropic.MessageParam[] = [
           ...request.conversationHistory.map(m => ({
-            role: m.role as 'user' | 'assistant',
             content: m.content,
+            role: m.role,
           })),
           {
-            role: 'user' as const,
             content: actualMessage,
+            role: 'user' as const,
           },
         ]
 
@@ -2642,7 +2652,7 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
           name: string
         }
         let fullResponse = ''
-        let toolCalls: AnthropicToolCall[] = []
+        const toolCalls: AnthropicToolCall[] = []
 
         getLogger()?.info(`[Stream:${requestId}] Starting Claude streaming with Anthropic SDK...`)
         sseWriter.writeAsync({
@@ -2656,7 +2666,9 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
         }
 
         try {
-          getLogger()?.info(`[Stream:${requestId}] Calling anthropic.messages.stream() with ${messages.length} messages`)
+          getLogger()?.info(
+            `[Stream:${requestId}] Calling anthropic.messages.stream() with ${messages.length} messages`,
+          )
 
           // Create stream with Anthropic SDK
           // Extended thinking enabled: temperature 1.0, budget 5000 tokens
@@ -2666,15 +2678,15 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
             model: 'claude-sonnet-4-5-20250929',
             system: [
               {
-                type: 'text' as const,
-                text: systemPrompt,
                 cache_control: {type: 'ephemeral' as const},
+                text: systemPrompt,
+                type: 'text' as const,
               },
             ],
             temperature: 1.0, // Required for extended thinking
             thinking: {
-              type: 'enabled' as const,
               budget_tokens: 5000,
+              type: 'enabled' as const,
             },
             tools: anthropicTools,
           })
@@ -2714,7 +2726,7 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
               } else if (event.delta.type === 'input_json_delta') {
                 // Tool input delta - accumulate
                 const currentBlock = contentBlocks[currentBlockIndex]
-                if (currentBlock && currentBlock.type === 'tool_use') {
+                if (currentBlock?.type === 'tool_use') {
                   if (!currentBlock.input) {
                     currentBlock.input = ''
                   }
@@ -2724,13 +2736,13 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
             } else if (event.type === 'content_block_stop') {
               // Content block completed
               const block = contentBlocks[event.index]
-              if (block && block.type === 'tool_use' && block.id && block.name) {
+              if (block?.type === 'tool_use' && block.id && block.name) {
                 // Parse accumulated JSON and add to tool calls
                 const input = JSON.parse(block.input || '{}')
                 toolCalls.push({
+                  args: input,
                   id: block.id,
                   name: block.name,
-                  args: input,
                 })
                 getLogger()?.info(`[Stream:${requestId}] Tool use complete: ${block.name}`)
               }
@@ -2779,7 +2791,9 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
           if (recentToolCalls.length >= 3) {
             const lastThree = recentToolCalls.slice(-3)
             if (lastThree[0] === lastThree[1] && lastThree[1] === lastThree[2]) {
-              getLogger()?.warn(`[Stream:${requestId}] ⚠️ Loop detected: identical tool calls 3 times in a row. Breaking.`)
+              getLogger()?.warn(
+                `[Stream:${requestId}] ⚠️ Loop detected: identical tool calls 3 times in a row. Breaking.`,
+              )
               getLogger()?.warn(`[Stream:${requestId}] Tool signature: ${lastThree[0]}`)
               sseWriter.writeAsync({
                 data: 'Detected repetitive tool calls, wrapping up...',
@@ -2809,7 +2823,7 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
             if (tool) {
               getLogger()?.info(
                 `[Stream:${requestId}] Executing tool: ${toolCall.name} with args:`,
-                JSON.stringify(toolCall.args).substring(0, 200),
+                {args: JSON.stringify(toolCall.args).substring(0, 200)},
               )
               try {
                 const result = await tool.func(toolCall.args)
@@ -2821,9 +2835,9 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
 
                 // Create tool result block
                 toolResultBlocks.push({
-                  type: 'tool_result',
-                  tool_use_id: toolCall.id,
                   content: toolContent,
+                  tool_use_id: toolCall.id,
+                  type: 'tool_result',
                 })
 
                 getLogger()?.info(`[Stream:${requestId}] Created tool result for: ${toolCall.id}`)
@@ -2833,19 +2847,19 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
                 }
                 getLogger()?.error(`[Stream:${requestId}] Tool ${toolCall.name} failed:`, error)
                 toolResultBlocks.push({
-                  type: 'tool_result',
-                  tool_use_id: toolCall.id,
                   content: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
                   is_error: true,
+                  tool_use_id: toolCall.id,
+                  type: 'tool_result',
                 })
               }
             } else {
               getLogger()?.warn(`[Stream:${requestId}] Tool not found: ${toolCall.name}`)
               toolResultBlocks.push({
-                type: 'tool_result',
-                tool_use_id: toolCall.id,
                 content: `Error: Tool ${toolCall.name} not found`,
                 is_error: true,
+                tool_use_id: toolCall.id,
+                type: 'tool_result',
               })
             }
           }
@@ -2864,28 +2878,28 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
           // Build Anthropic format messages for next turn
           // Add assistant's message with tool use blocks
           const assistantToolUseBlocks: Anthropic.ToolUseBlockParam[] = currentToolCalls.map(tc => ({
-            type: 'tool_use',
             id: tc.id,
-            name: tc.name,
             input: tc.args,
+            name: tc.name,
+            type: 'tool_use',
           }))
 
           // If there was text content before tool calls, include it
-          const assistantContent: Array<Anthropic.ContentBlock | Anthropic.ToolUseBlockParam> = []
+          const assistantContent: (Anthropic.ContentBlock | Anthropic.ToolUseBlockParam)[] = []
           if (fullResponse) {
-            assistantContent.push({type: 'text', text: fullResponse} as Anthropic.ContentBlock)
+            assistantContent.push({text: fullResponse, type: 'text'} as Anthropic.ContentBlock)
           }
           assistantContent.push(...assistantToolUseBlocks)
 
           conversationMessages.push({
-            role: 'assistant',
             content: assistantContent,
+            role: 'assistant',
           })
 
           // Add tool results as a user message
           conversationMessages.push({
-            role: 'user',
             content: toolResultBlocks,
+            role: 'user',
           })
 
           getLogger()?.info(`[Stream:${requestId}] Conversation now has ${conversationMessages.length} messages`)
@@ -2898,19 +2912,18 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
               model: 'claude-sonnet-4-5-20250929',
               system: [
                 {
-                  type: 'text' as const,
-                  text: systemPrompt,
                   cache_control: {type: 'ephemeral' as const},
+                  text: systemPrompt,
+                  type: 'text' as const,
                 },
               ],
               temperature: 1.0,
               thinking: {
-                type: 'enabled' as const,
                 budget_tokens: 5000,
+                type: 'enabled' as const,
               },
               tools: anthropicTools,
             })
-
           } catch (streamError) {
             const logger = getLogger()
             logger?.error('Claude streaming API call failed', streamError, {
@@ -2941,7 +2954,7 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
           }
 
           fullResponse = ''
-          let nextToolCalls: AnthropicToolCall[] = []
+          const nextToolCalls: AnthropicToolCall[] = []
           getLogger()?.info(`[Stream:${requestId}] Streaming response from Claude (turn ${turnCount})...`)
 
           try {
@@ -2962,7 +2975,9 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
                 nextContentBlocks[nextCurrentBlockIndex] = event.content_block
 
                 if (event.content_block.type === 'tool_use') {
-                  getLogger()?.info(`[Stream:${requestId}] Turn ${turnCount} tool use started: ${event.content_block.name}`)
+                  getLogger()?.info(
+                    `[Stream:${requestId}] Turn ${turnCount} tool use started: ${event.content_block.name}`,
+                  )
                 }
               } else if (event.type === 'content_block_delta') {
                 if (event.delta.type === 'text_delta') {
@@ -2975,7 +2990,7 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
                   await sseWriter.write({data: `💭 ${text}`, type: 'thinking'})
                 } else if (event.delta.type === 'input_json_delta') {
                   const currentBlock = nextContentBlocks[nextCurrentBlockIndex]
-                  if (currentBlock && currentBlock.type === 'tool_use') {
+                  if (currentBlock?.type === 'tool_use') {
                     if (!currentBlock.input) {
                       currentBlock.input = ''
                     }
@@ -2984,12 +2999,12 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
                 }
               } else if (event.type === 'content_block_stop') {
                 const block = nextContentBlocks[event.index]
-                if (block && block.type === 'tool_use' && block.id && block.name) {
+                if (block?.type === 'tool_use' && block.id && block.name) {
                   const input = JSON.parse(block.input || '{}')
                   nextToolCalls.push({
+                    args: input,
                     id: block.id,
                     name: block.name,
-                    args: input,
                   })
                   getLogger()?.info(`[Stream:${requestId}] Turn ${turnCount} tool use complete: ${block.name}`)
                 }
@@ -3031,8 +3046,9 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
 
           // Ask Claude to provide a response based on what it has learned
           conversationMessages.push({
+            content:
+              "Please provide your response based on the information you've gathered from the tools you've used.",
             role: 'user',
-            content: "Please provide your response based on the information you've gathered from the tools you've used.",
           })
 
           sseWriter.writeAsync({
@@ -3048,15 +3064,15 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
               model: 'claude-sonnet-4-5-20250929',
               system: [
                 {
-                  type: 'text' as const,
-                  text: systemPrompt,
                   cache_control: {type: 'ephemeral' as const},
+                  text: systemPrompt,
+                  type: 'text' as const,
                 },
               ],
               temperature: 1.0,
               thinking: {
-                type: 'enabled' as const,
                 budget_tokens: 5000,
+                type: 'enabled' as const,
               },
               tools: anthropicTools,
             })
@@ -3131,7 +3147,9 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
                 .flatMap(m => {
                   const content = Array.isArray(m.content) ? m.content : []
                   return content
-                    .filter((block): block is Anthropic.ToolUseBlockParam => 'type' in block && block.type === 'tool_use')
+                    .filter(
+                      (block): block is Anthropic.ToolUseBlockParam => 'type' in block && block.type === 'tool_use',
+                    )
                     .map(block => block.name)
                 })
 
