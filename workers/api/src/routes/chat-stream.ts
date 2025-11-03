@@ -2955,9 +2955,8 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
                 fullResponse += text
                 await sseWriter.write({data: text, type: 'content'})
               } else if (event.delta.type === 'thinking_delta') {
-                // Thinking content delta (show to user)
-                const text = event.delta.thinking
-                await sseWriter.write({data: `💭 ${text}`, type: 'thinking'})
+                // Skip Claude's internal reasoning tokens (noisy, not useful for end users)
+                // Meaningful progress messages are sent separately via tool execution handlers
               } else if (event.delta.type === 'input_json_delta') {
                 // Tool input delta - accumulate
                 // eslint-disable-next-line security/detect-object-injection
@@ -3242,8 +3241,7 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
                   hasAnyContent = true
                   await sseWriter.write({data: text, type: 'content'})
                 } else if (event.delta.type === 'thinking_delta') {
-                  const text = event.delta.thinking
-                  await sseWriter.write({data: `💭 ${text}`, type: 'thinking'})
+                  // Skip Claude's internal reasoning tokens (noisy, not useful for end users)
                 } else if (event.delta.type === 'input_json_delta') {
                   // eslint-disable-next-line security/detect-object-injection
                   const currentBlock = nextContentBlocks[nextCurrentBlockIndex]
@@ -3402,8 +3400,7 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
                     fullResponse += text
                     await sseWriter.write({data: text, type: 'content'})
                   } else if (event.delta.type === 'thinking_delta') {
-                    const text = event.delta.thinking
-                    await sseWriter.write({data: `💭 ${text}`, type: 'thinking'})
+                    // Skip Claude's internal reasoning tokens (noisy, not useful for end users)
                   }
                 }
               }
