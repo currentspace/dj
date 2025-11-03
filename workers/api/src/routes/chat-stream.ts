@@ -2268,49 +2268,51 @@ async function executeSpotifyToolWithProgress(
 
           const signalsMap = new Map()
 
-          // Step 7b: Get track signals (4 API calls per track for uncached)
+          // Step 7b: Get track signals (4 API calls per track for uncached) - PARALLEL processing
+          getLogger()?.info(`[LastFmEnrichment] Starting PARALLEL enrichment for ${tracksForLastFm.length} tracks`)
           sseWriter.writeAsync({
-            data: `🎧 Last.fm enrichment: ${cachedLastFmTracks.length} cached (${lastfmCacheHitRate.toFixed(0)}% hit rate), enriching ${tracksForLastFm.length} new tracks...`,
+            data: `🎧 Last.fm enrichment: ${cachedLastFmTracks.length} cached (${lastfmCacheHitRate.toFixed(0)}% hit rate), enriching ${tracksForLastFm.length} new tracks in parallel...`,
             type: 'thinking',
           })
 
+          // Convert to LastFmTrack format
+          const lastfmTracks = tracksForLastFm.map(track => ({
+            artist: track.artists?.[0]?.name ?? 'Unknown',
+            duration_ms: track.duration_ms,
+            name: track.name,
+          }))
+
+          // Use batchGetSignals for parallel processing (up to 10 concurrent via Last.fm lane)
+          const batchSignals = await lastfmService.batchGetSignals(lastfmTracks, true)
+
+          // Track subrequests (getTrackSignals makes 4 API calls per track for uncached)
+          const signalTracker = getSubrequestTracker()
+          if (signalTracker) {
+            // Estimate: 4 calls per track (correction, info, tags, similar)
+            signalTracker.record(tracksForLastFm.length * 4)
+          }
+
+          // Map results by track ID for consistency with previous implementation
           for (let i = 0; i < tracksForLastFm.length; i++) {
             // eslint-disable-next-line security/detect-object-injection
             const track = tracksForLastFm[i]
+            // eslint-disable-next-line security/detect-object-injection
+            const lastfmTrack = lastfmTracks[i]
 
-            try {
-              const lastfmTrack = {
-                artist: track.artists?.[0]?.name ?? 'Unknown',
-                duration_ms: track.duration_ms,
-                name: track.name,
-              }
+            const cacheKey = lastfmService.generateCacheKey(lastfmTrack.artist, lastfmTrack.name)
+            const signals = batchSignals.get(cacheKey)
 
-              // Get track signals WITHOUT artist info (skipArtistInfo=true)
-              const signals = await lastfmService.getTrackSignals(lastfmTrack, true)
-
-              // Track subrequests (getTrackSignals makes 4 API calls: correction, info, tags, similar)
-              const signalTracker = getSubrequestTracker()
-              if (signalTracker) {
-                signalTracker.record(4)
-              }
-
-              if (signals) {
-                const key = `${track.id}`
-                signalsMap.set(key, signals)
-
-                // Stream simple progress every 2 tracks
-                // Note: Narrator calls disabled here - concurrent ChatAnthropic instance creation fails
-                if ((i + 1) % 2 === 0 || i === tracksForLastFm.length - 1) {
-                  sseWriter.writeAsync({
-                    data: `🎧 Enriched ${i + 1}/${tracksForLastFm.length} tracks...`,
-                    type: 'thinking',
-                  })
-                }
-              }
-            } catch (error) {
-              getChildLogger('LastFm').error(`Failed for track ${track.name}`, error)
+            if (signals) {
+              const key = `${track.id}`
+              signalsMap.set(key, signals)
             }
           }
+
+          getLogger()?.info(`[LastFmEnrichment] Parallel enrichment complete: ${signalsMap.size} tracks processed`)
+          sseWriter.writeAsync({
+            data: `✅ Enriched ${signalsMap.size} tracks in parallel!`,
+            type: 'thinking',
+          })
 
           // Step 7b: Get unique artists and fetch artist info separately (cached + rate-limited queue)
           const uniqueArtists = [...new Set(tracksForLastFm.map(t => t.artists?.[0]?.name).filter(Boolean))]
