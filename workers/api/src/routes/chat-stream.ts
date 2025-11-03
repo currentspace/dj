@@ -306,28 +306,75 @@ function createStreamingSpotifyTools(
           type: 'tool_start',
         })
 
-        await sseWriter.write({
-          data: `📥 Fetching tracks ${finalArgs.offset}-${finalArgs.offset + finalArgs.limit}...`,
-          type: 'thinking',
-        })
+        const PLAYLIST_TRACKS_CACHE_TTL = 5 * 60 // 5 minutes in seconds
+        const cacheKey = `spotify:playlist_tracks:${finalArgs.playlist_id}:${finalArgs.offset}:${finalArgs.limit}`
 
-        // Fetch tracks from Spotify
-        const response = await rateLimitedSpotifyCall(
-          () =>
-            fetch(
-              `https://api.spotify.com/v1/playlists/${finalArgs.playlist_id}/tracks?offset=${finalArgs.offset}&limit=${finalArgs.limit}`,
-              {headers: {Authorization: `Bearer ${spotifyToken}`}},
-            ),
-          getLogger(),
-          `get playlist tracks offset=${finalArgs.offset}`,
-        )
+        // Check cache first
+        let data: z.infer<typeof SpotifyPlaylistTracksResponseSchema>
+        if (env?.AUDIO_FEATURES_CACHE) {
+          const cached = await env.AUDIO_FEATURES_CACHE.get(cacheKey, 'json')
+          if (cached) {
+            getLogger()?.info(`[get_playlist_tracks] Cache hit for ${finalArgs.playlist_id}`)
+            await sseWriter.write({
+              data: `💾 Using cached tracks ${finalArgs.offset}-${finalArgs.offset + finalArgs.limit}`,
+              type: 'thinking',
+            })
+            data = cached as z.infer<typeof SpotifyPlaylistTracksResponseSchema>
+          } else {
+            getLogger()?.info(`[get_playlist_tracks] Cache miss, fetching from Spotify`)
+            await sseWriter.write({
+              data: `📥 Fetching tracks ${finalArgs.offset}-${finalArgs.offset + finalArgs.limit}...`,
+              type: 'thinking',
+            })
 
-        if (!response?.ok) {
-          throw new Error(`Failed to get playlist tracks: ${response?.status || 'null response'}`)
+            // Fetch tracks from Spotify
+            const response = await rateLimitedSpotifyCall(
+              () =>
+                fetch(
+                  `https://api.spotify.com/v1/playlists/${finalArgs.playlist_id}/tracks?offset=${finalArgs.offset}&limit=${finalArgs.limit}`,
+                  {headers: {Authorization: `Bearer ${spotifyToken}`}},
+                ),
+              getLogger(),
+              `get playlist tracks offset=${finalArgs.offset}`,
+            )
+
+            if (!response?.ok) {
+              throw new Error(`Failed to get playlist tracks: ${response?.status || 'null response'}`)
+            }
+
+            const rawData = await response.json()
+            data = SpotifyPlaylistTracksResponseSchema.parse(rawData)
+
+            // Cache the result
+            await env.AUDIO_FEATURES_CACHE.put(cacheKey, JSON.stringify(data), {
+              expirationTtl: PLAYLIST_TRACKS_CACHE_TTL,
+            })
+            getLogger()?.info(`[get_playlist_tracks] Cached playlist tracks for ${finalArgs.playlist_id}`)
+          }
+        } else {
+          await sseWriter.write({
+            data: `📥 Fetching tracks ${finalArgs.offset}-${finalArgs.offset + finalArgs.limit}...`,
+            type: 'thinking',
+          })
+
+          // Fetch tracks from Spotify (no cache available)
+          const response = await rateLimitedSpotifyCall(
+            () =>
+              fetch(
+                `https://api.spotify.com/v1/playlists/${finalArgs.playlist_id}/tracks?offset=${finalArgs.offset}&limit=${finalArgs.limit}`,
+                {headers: {Authorization: `Bearer ${spotifyToken}`}},
+              ),
+            getLogger(),
+            `get playlist tracks offset=${finalArgs.offset}`,
+          )
+
+          if (!response?.ok) {
+            throw new Error(`Failed to get playlist tracks: ${response?.status || 'null response'}`)
+          }
+
+          const rawData = await response.json()
+          data = SpotifyPlaylistTracksResponseSchema.parse(rawData)
         }
-
-        const rawData = await response.json()
-        const data = SpotifyPlaylistTracksResponseSchema.parse(rawData)
         const tracks = data.items.map(item => item.track).filter((track): track is SpotifyTrackFull => track !== null)
 
         // Return compact track info
