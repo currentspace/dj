@@ -634,6 +634,7 @@ function createStreamingSpotifyTools(
           apiKey: env.ANTHROPIC_API_KEY,
           maxRetries: 0,
           model: 'claude-sonnet-4-5-20250929',
+          temperature: 1.0, // Required when extended thinking is enabled
           // Enable extended thinking for better reasoning
           thinking: {
             type: 'enabled',
@@ -865,6 +866,7 @@ Return ONLY valid JSON:
           apiKey: env.ANTHROPIC_API_KEY,
           maxRetries: 0,
           model: 'claude-sonnet-4-5-20250929',
+          temperature: 1.0, // Required when extended thinking is enabled
           // Enable extended thinking for better reasoning
           thinking: {
             type: 'enabled',
@@ -1248,6 +1250,7 @@ Return ONLY valid JSON:
           apiKey: env.ANTHROPIC_API_KEY,
           maxRetries: 0,
           model: 'claude-sonnet-4-5-20250929',
+          temperature: 1.0, // Required when extended thinking is enabled
           // Enable extended thinking for better reasoning
           thinking: {
             type: 'enabled',
@@ -2274,7 +2277,7 @@ chatStreamRouter.post('/message', async c => {
             maxTokens: 2000,
             model: 'claude-sonnet-4-5-20250929',
             streaming: true,
-            temperature: 0.2,
+            temperature: 1.0, // Required when extended thinking is enabled
             // Note: Cannot use both temperature and topP with Sonnet 4.5
             // Enable extended thinking for better reasoning
             thinking: {
