@@ -2282,7 +2282,7 @@ chatStreamRouter.post('/message', async c => {
             // Enable extended thinking for better reasoning
             thinking: {
               type: 'enabled',
-              budget_tokens: 1000,
+              budget_tokens: 1024, // Minimum is 1024 tokens
             },
           })
           return llm.bindTools(tools)
