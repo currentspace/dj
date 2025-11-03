@@ -13,13 +13,14 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 
+import {getLogger} from '../utils/LoggerContext'
 import {rateLimitedAnthropicCall} from '../utils/RateLimitedAPIClients'
 import {ServiceLogger} from '../utils/ServiceLogger'
 
 interface MessageContext {
   eventType: string
-  metadata?: Record<string, any>
-  parameters?: Record<string, any>
+  metadata?: Record<string, unknown>
+  parameters?: Record<string, unknown>
   previousMessages?: string[]
   toolName?: string
   userRequest?: string
@@ -91,9 +92,9 @@ export class ProgressNarrator {
             model: 'claude-haiku-4-5-20251001', // Haiku 4.5: 2x faster, better at creative tasks
             system: [
               {
-                type: 'text' as const,
-                text: this.systemPrompt,
                 cache_control: {type: 'ephemeral' as const},
+                text: this.systemPrompt,
+                type: 'text' as const,
               },
             ],
             temperature: skipCache ? 1.0 : 0.7,
@@ -137,7 +138,7 @@ export class ProgressNarrator {
       return message
     } catch (error) {
       // Detailed error logging
-      const errorDetails: Record<string, any> = {
+      const errorDetails: Record<string, unknown> = {
         errorMessage: error instanceof Error ? error.message : String(error),
         errorType: error?.constructor?.name,
         event: context.eventType,
@@ -387,7 +388,7 @@ Return ONLY the progress message text - no explanations, no meta-commentary, jus
     const key = [
       context.eventType,
       context.toolName,
-      context.parameters?.query?.toLowerCase().slice(0, 20),
+      typeof context.parameters?.query === 'string' ? context.parameters.query.toLowerCase().slice(0, 20) : null,
       context.metadata?.currentTrack ? 'progress' : null,
     ]
       .filter(Boolean)
