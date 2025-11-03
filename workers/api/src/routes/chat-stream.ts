@@ -2852,10 +2852,8 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
           })
         }
 
-        // Send completion
-        getLogger()?.info(`[Stream:${requestId}] Sending done event`)
-        await sseWriter.write({data: null, type: 'done'})
-        getLogger()?.info(`[Stream:${requestId}] Stream complete - all events sent`)
+        // Stream processing complete - done event sent in finally block
+        getLogger()?.info(`[Stream:${requestId}] Stream processing complete - all events sent`)
       } catch (error) {
         const logger = getLogger()!
         if (error instanceof Error && error.message === 'Request aborted') {
@@ -2872,6 +2870,9 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
         }
       } finally {
         const logger = getLogger()!
+        // CRITICAL: Always send done event so client knows stream is complete
+        logger.info(`[Stream:${requestId}] Sending done event in finally`)
+        await sseWriter.write({data: null, type: 'done'})
         clearInterval(heartbeatInterval)
         c.req.raw.signal.removeEventListener('abort', onAbort)
         logger.info('Closing writer...')
