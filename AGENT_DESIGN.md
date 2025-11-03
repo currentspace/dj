@@ -80,13 +80,15 @@ This prevents "generic algorithm trap" by understanding vibe BEFORE searching.
 ### Main Chat (Claude Sonnet 4.5)
 ```typescript
 model: 'claude-sonnet-4-5-20250929'
-temperature: 1.0  // Required for extended thinking
-maxTokens: 8000
-thinking: {
-  type: 'enabled',
-  budget_tokens: 4000  // Deep tool orchestration reasoning
-}
+temperature: 0.7  // Balanced for tool selection
+maxTokens: 4000
 ```
+
+**Extended Thinking**: Currently disabled
+- Langchain doesn't preserve thinking blocks in agentic loops
+- Anthropic requires: "assistant message must start with thinking block before tool_use"
+- TODO: Re-enable when we implement proper thinking block preservation
+- Current approach: Rely on smaller system prompt (70% reduction) for better performance
 
 **Prompt Caching**: System prompt cached with `cache_control: ephemeral`
 - ~90% cost reduction on messages after first in conversation
@@ -95,12 +97,11 @@ thinking: {
 ### Vibe/Strategy/Curation (Claude Sonnet 4.5)
 ```typescript
 model: 'claude-sonnet-4-5-20250929'
-temperature: 1.0
-maxTokens: 5000-8000
-thinking: {
-  budget_tokens: 2000-4000  // Strategy gets 4000 for deeper reasoning
-}
+temperature: 0.7
+maxTokens: 2000-3000
 ```
+
+**Note**: Extended thinking also disabled here for consistency. These single-call tasks could use extended thinking (no agentic loop), but keeping configuration consistent simplifies maintenance.
 
 ### Progress Narrator (Claude Haiku 4.5)
 ```typescript
@@ -173,10 +174,10 @@ Current workflows are proven patterns. Before changing:
 - Higher thinking budgets improve quality enough to reduce retries
 
 ### Quality Optimization
-- Extended thinking budget: 4000 for main + strategy (complex reasoning)
-- 2000 for vibe + curation (moderate reasoning)
-- Temperature 1.0 required when extended thinking enabled
-- maxTokens must exceed thinking.budget_tokens
+- Extended thinking: Disabled due to Langchain compatibility (see Model Configuration)
+- 70% smaller system prompt compensates for lack of extended thinking
+- Temperature 0.7 for balanced, focused responses
+- maxTokens sized appropriately for each task (2000-4000)
 
 ## Testing & Validation
 
@@ -211,3 +212,7 @@ Current workflows are proven patterns. Before changing:
 - Applied Anthropic 2025 best practices (XML structure, principle-based)
 - Removed example bloat, shifted to decision frameworks
 - Documented design philosophy and maintenance guidelines
+- Extended thinking disabled due to Langchain agentic loop compatibility
+  - Issue: Langchain doesn't preserve thinking blocks when creating AIMessage instances
+  - Anthropic requirement: "assistant message must start with thinking block before tool_use"
+  - Solution: Rely on 70% smaller prompt + better structure for quality improvements

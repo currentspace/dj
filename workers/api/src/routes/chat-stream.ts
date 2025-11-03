@@ -633,14 +633,9 @@ function createStreamingSpotifyTools(
         const anthropic = new ChatAnthropic({
           apiKey: env.ANTHROPIC_API_KEY,
           maxRetries: 0,
-          maxTokens: 5000, // Must be > thinking.budget_tokens (2000 thinking + 3000 response)
+          maxTokens: 2000,
           model: 'claude-sonnet-4-5-20250929',
-          temperature: 1.0, // Required when extended thinking is enabled
-          // Enable extended thinking for better reasoning
-          thinking: {
-            type: 'enabled',
-            budget_tokens: 2000,
-          },
+          temperature: 0.7,
         })
 
         const vibePrompt = `You are a music critic analyzing a playlist's vibe. Extract SUBTLE signals that algorithms miss.
@@ -866,14 +861,9 @@ Return ONLY valid JSON:
         const anthropic = new ChatAnthropic({
           apiKey: env.ANTHROPIC_API_KEY,
           maxRetries: 0,
-          maxTokens: 8000, // Must be > thinking.budget_tokens (4000 thinking + 4000 response)
+          maxTokens: 3000,
           model: 'claude-sonnet-4-5-20250929',
-          temperature: 1.0, // Required when extended thinking is enabled
-          // Enable extended thinking for better reasoning
-          thinking: {
-            type: 'enabled',
-            budget_tokens: 4000, // Increased from 2000 for deeper strategic reasoning
-          },
+          temperature: 0.7,
         })
 
         const strategyPrompt = `You are a music discovery strategist. Create a smart plan to find interesting tracks.
@@ -1251,14 +1241,9 @@ Return ONLY valid JSON:
         const anthropic = new ChatAnthropic({
           apiKey: env.ANTHROPIC_API_KEY,
           maxRetries: 0,
-          maxTokens: 5000, // Must be > thinking.budget_tokens (2000 thinking + 3000 response)
+          maxTokens: 2000,
           model: 'claude-sonnet-4-5-20250929',
-          temperature: 1.0, // Required when extended thinking is enabled
-          // Enable extended thinking for better reasoning
-          thinking: {
-            type: 'enabled',
-            budget_tokens: 2000,
-          },
+          temperature: 0.7,
         })
 
         const curationPrompt = `You are a music curator helping select the best track recommendations.
@@ -2277,16 +2262,14 @@ chatStreamRouter.post('/message', async c => {
           const llm = new ChatAnthropic({
             apiKey: env.ANTHROPIC_API_KEY,
             maxRetries: 0,
-            maxTokens: 8000, // Must be > thinking.budget_tokens (4000 thinking + 4000 response)
+            maxTokens: 4000,
             model: 'claude-sonnet-4-5-20250929',
             streaming: true,
-            temperature: 1.0, // Required when extended thinking is enabled
-            // Note: Cannot use both temperature and topP with Sonnet 4.5
-            // Enable extended thinking for better reasoning
-            thinking: {
-              type: 'enabled',
-              budget_tokens: 4000, // Increased from 1024 for deeper tool orchestration reasoning
-            },
+            temperature: 0.7, // Balanced for tool selection
+            // Extended thinking disabled: Langchain doesn't preserve thinking blocks in agentic loops
+            // Anthropic requires: "assistant message must start with thinking block before tool_use"
+            // TODO: Re-enable when we implement proper thinking block preservation
+            // See: https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking
           })
           return llm.bindTools(tools)
         }
