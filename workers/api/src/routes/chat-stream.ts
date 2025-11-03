@@ -46,12 +46,18 @@ import {LastFmService} from '../services/LastFmService'
 import {getChildLogger, getLogger, runWithLogger} from '../utils/LoggerContext'
 import {rateLimitedSpotifyCall} from '../utils/RateLimitedAPIClients'
 import {ServiceLogger} from '../utils/ServiceLogger'
+import {
+  getSubrequestTracker,
+  runWithSubrequestTracker,
+  SubrequestTracker,
+} from '../utils/SubrequestTracker'
 
-// Enrichment limits to stay within Cloudflare Workers subrequest cap (50 total)
+// Enrichment limits to stay within Cloudflare Workers subrequest cap (1000 on paid tier)
 // Last.fm makes 4 API calls per track (correction, info, tags, similar)
 // Deezer makes 1 call per uncached track (most are cached after first run)
-const MAX_DEEZER_ENRICHMENT = 100 // Usually only 10-20 actual API calls due to caching
-const MAX_LASTFM_ENRICHMENT = 8 // 8 tracks × 4 calls/track = 32 API calls
+// PAID TIER: 1000 subrequest limit (vs 50 on free tier)
+const MAX_DEEZER_ENRICHMENT = 500 // Can handle large playlists with cache
+const MAX_LASTFM_ENRICHMENT = 200 // 200 tracks × 4 calls/track = 800 API calls
 
 const chatStreamRouter = new Hono<{Bindings: Env}>()
 
@@ -1978,16 +1984,57 @@ async function executeSpotifyToolWithProgress(
           getLogger()?.info(`[DeezerEnrichment] KV Cache available: YES`)
           const enrichmentService = new AudioEnrichmentService(env.AUDIO_FEATURES_CACHE)
 
-          // Process tracks sequentially with rate limiting at 40 TPS
-          const tracksToEnrich = validTracks.slice(0, MAX_DEEZER_ENRICHMENT)
+          // Step 1: Check cache status for tracks (cache lookups don't count as subrequests)
+          const candidateTracks = validTracks.slice(0, MAX_DEEZER_ENRICHMENT)
+          const cachedTracks: typeof candidateTracks = []
+          const uncachedTracks: typeof candidateTracks = []
+
+          getLogger()?.info(`[DeezerEnrichment] Checking cache status for ${candidateTracks.length} tracks...`)
+          for (const track of candidateTracks) {
+            const cacheKey = `bpm:${track.id}`
+            const cached = await env.AUDIO_FEATURES_CACHE.get(cacheKey, 'json')
+            if (cached) {
+              cachedTracks.push(track)
+            } else {
+              uncachedTracks.push(track)
+            }
+          }
+
+          const cacheHitRate = (cachedTracks.length / candidateTracks.length) * 100
+          getLogger()?.info(
+            `[DeezerEnrichment] Cache status: ${cachedTracks.length} cached, ${uncachedTracks.length} uncached (${cacheHitRate.toFixed(1)}% hit rate)`,
+          )
+
+          // Step 2: Calculate how many uncached tracks we can enrich based on remaining budget
+          let tracksToEnrich: typeof uncachedTracks
+          const subrequestTracker = getSubrequestTracker()
+          if (subrequestTracker) {
+            const remaining = subrequestTracker.remaining()
+            // Reserve some budget for other operations (Spotify, Last.fm, etc.)
+            const availableBudget = Math.max(0, remaining - 10)
+            // Deezer makes 1 call per track (plus potential MusicBrainz fallback, so estimate 2 per track to be safe)
+            const deezerBudget = Math.floor(availableBudget * 0.5) // Use 50% of remaining budget for Deezer
+            tracksToEnrich = uncachedTracks.slice(0, Math.min(uncachedTracks.length, deezerBudget))
+
+            getLogger()?.info(
+              `[DeezerEnrichment] Budget: ${remaining} remaining, ${availableBudget} available, ${deezerBudget} for Deezer → enriching ${tracksToEnrich.length}/${uncachedTracks.length} uncached tracks`,
+            )
+          } else {
+            // Fallback to fixed limits if no tracker available
+            tracksToEnrich = uncachedTracks.slice(0, MAX_DEEZER_ENRICHMENT)
+            getLogger()?.info(
+              `[DeezerEnrichment] No subrequest tracker, using fixed limit → enriching ${tracksToEnrich.length}/${uncachedTracks.length} uncached tracks`,
+            )
+          }
+
           const bpmResults: number[] = []
           const rankResults: number[] = []
           const gainResults: number[] = []
           let enrichedCount = 0
 
-          getLogger()?.info(`[DeezerEnrichment] Will attempt to enrich ${tracksToEnrich.length} tracks`)
+          getLogger()?.info(`[DeezerEnrichment] Will attempt to enrich ${tracksToEnrich.length} uncached tracks`)
           sseWriter.writeAsync({
-            data: `🎵 Enriching ${tracksToEnrich.length} tracks with Deezer data (BPM, rank, gain)...`,
+            data: `🎵 Deezer enrichment: ${cachedTracks.length} cached (${cacheHitRate.toFixed(0)}% hit rate), enriching ${tracksToEnrich.length} new tracks...`,
             type: 'thinking',
           })
 
@@ -2054,6 +2101,13 @@ async function executeSpotifyToolWithProgress(
 
               const deezerResult = await enrichmentService.enrichTrack(spotifyTrack)
 
+              // Track subrequests (enrichTrack makes 1-2 API calls: Deezer + maybe MusicBrainz)
+              // Estimate 2 calls per track to be safe (actual may be 1 if cached or direct match)
+              const tracker = getSubrequestTracker()
+              if (tracker) {
+                tracker.record(deezerResult.source === 'deezer-via-musicbrainz' ? 2 : 1)
+              }
+
               // Log the result for first few tracks
               if (i < 3) {
                 getLogger()?.info(`[DeezerEnrichment] Result for "${track.name}":`, {
@@ -2096,11 +2150,22 @@ async function executeSpotifyToolWithProgress(
           }
 
           getLogger()?.info(`[DeezerEnrichment] ========== ENRICHMENT COMPLETE ==========`)
-          getLogger()?.info(`[DeezerEnrichment] Total tracks processed: ${tracksToEnrich.length}`)
-          getLogger()?.info(`[DeezerEnrichment] Tracks with Deezer match: ${enrichedCount}`)
-          getLogger()?.info(`[DeezerEnrichment] BPM results: ${bpmResults.length}`)
-          getLogger()?.info(`[DeezerEnrichment] Rank results: ${rankResults.length}`)
-          getLogger()?.info(`[DeezerEnrichment] Gain results: ${gainResults.length}`)
+          getLogger()?.info(`[DeezerEnrichment] Cache efficiency:`)
+          getLogger()?.info(`[DeezerEnrichment]   - Total candidates: ${candidateTracks.length}`)
+          getLogger()?.info(`[DeezerEnrichment]   - Cached: ${cachedTracks.length} (${cacheHitRate.toFixed(1)}%)`)
+          getLogger()?.info(`[DeezerEnrichment]   - Uncached: ${uncachedTracks.length}`)
+          getLogger()?.info(`[DeezerEnrichment]   - Enriched (new): ${tracksToEnrich.length}`)
+          getLogger()?.info(`[DeezerEnrichment] Enrichment results:`)
+          getLogger()?.info(`[DeezerEnrichment]   - Tracks with Deezer match: ${enrichedCount}/${tracksToEnrich.length}`)
+          getLogger()?.info(`[DeezerEnrichment]   - BPM results: ${bpmResults.length}`)
+          getLogger()?.info(`[DeezerEnrichment]   - Rank results: ${rankResults.length}`)
+          getLogger()?.info(`[DeezerEnrichment]   - Gain results: ${gainResults.length}`)
+          const finalTracker = getSubrequestTracker()
+          if (finalTracker) {
+            getLogger()?.info(
+              `[DeezerEnrichment] Subrequest tracking: ${finalTracker.getSummary().count}/${finalTracker.getSummary().max} used (${finalTracker.getSummary().percentage.toFixed(1)}%)`,
+            )
+          }
 
           if (enrichedCount > 0) {
             deezerData = {
@@ -2184,12 +2249,54 @@ async function executeSpotifyToolWithProgress(
         try {
           const lastfmService = new LastFmService(env.LASTFM_API_KEY, env.AUDIO_FEATURES_CACHE)
 
-          const tracksForLastFm = validTracks.slice(0, MAX_LASTFM_ENRICHMENT)
+          // Step 7a: Check cache status and calculate budget
+          const candidateLastFmTracks = validTracks.slice(0, MAX_LASTFM_ENRICHMENT)
+          const cachedLastFmTracks: typeof candidateLastFmTracks = []
+          const uncachedLastFmTracks: typeof candidateLastFmTracks = []
+
+          getLogger()?.info(`[LastFmEnrichment] Checking cache status for ${candidateLastFmTracks.length} tracks...`)
+          for (const track of candidateLastFmTracks) {
+            const artist = track.artists?.[0]?.name ?? 'Unknown'
+            const cacheKey = lastfmService.generateCacheKey(artist, track.name)
+            const cached = await env.AUDIO_FEATURES_CACHE.get(`lastfm:${cacheKey}`, 'json')
+            if (cached) {
+              cachedLastFmTracks.push(track)
+            } else {
+              uncachedLastFmTracks.push(track)
+            }
+          }
+
+          const lastfmCacheHitRate = (cachedLastFmTracks.length / candidateLastFmTracks.length) * 100
+          getLogger()?.info(
+            `[LastFmEnrichment] Cache status: ${cachedLastFmTracks.length} cached, ${uncachedLastFmTracks.length} uncached (${lastfmCacheHitRate.toFixed(1)}% hit rate)`,
+          )
+
+          // Calculate how many tracks to enrich based on remaining budget
+          // Last.fm makes 4 API calls per track (correction, info, tags, similar)
+          let tracksForLastFm: typeof uncachedLastFmTracks
+          const lastfmTracker = getSubrequestTracker()
+          if (lastfmTracker) {
+            const remainingAfterDeezer = lastfmTracker.remaining()
+            const availableForLastFm = Math.max(0, remainingAfterDeezer - 5) // Reserve 5 for other calls
+            const lastfmBudget = Math.floor(availableForLastFm / 4) // 4 calls per track
+            tracksForLastFm = uncachedLastFmTracks.slice(0, Math.min(uncachedLastFmTracks.length, lastfmBudget))
+
+            getLogger()?.info(
+              `[LastFmEnrichment] Budget: ${remainingAfterDeezer} remaining, ${availableForLastFm} available, ${lastfmBudget} tracks → enriching ${tracksForLastFm.length}/${uncachedLastFmTracks.length} uncached tracks`,
+            )
+          } else {
+            // Fallback to fixed limits if no tracker available
+            tracksForLastFm = uncachedLastFmTracks.slice(0, MAX_LASTFM_ENRICHMENT)
+            getLogger()?.info(
+              `[LastFmEnrichment] No subrequest tracker, using fixed limit → enriching ${tracksForLastFm.length}/${uncachedLastFmTracks.length} uncached tracks`,
+            )
+          }
+
           const signalsMap = new Map()
 
-          // Step 7a: Get track signals (4 API calls per track)
+          // Step 7b: Get track signals (4 API calls per track for uncached)
           sseWriter.writeAsync({
-            data: `🎧 Enriching ${tracksForLastFm.length} tracks with Last.fm data (40 TPS)...`,
+            data: `🎧 Last.fm enrichment: ${cachedLastFmTracks.length} cached (${lastfmCacheHitRate.toFixed(0)}% hit rate), enriching ${tracksForLastFm.length} new tracks...`,
             type: 'thinking',
           })
 
@@ -2206,6 +2313,12 @@ async function executeSpotifyToolWithProgress(
 
               // Get track signals WITHOUT artist info (skipArtistInfo=true)
               const signals = await lastfmService.getTrackSignals(lastfmTrack, true)
+
+              // Track subrequests (getTrackSignals makes 4 API calls: correction, info, tags, similar)
+              const signalTracker = getSubrequestTracker()
+              if (signalTracker) {
+                signalTracker.record(4)
+              }
 
               if (signals) {
                 const key = `${track.id}`
@@ -2243,6 +2356,30 @@ async function executeSpotifyToolWithProgress(
               })
             }
           })
+
+          // Track artist info subrequests (1 API call per artist, but some are cached)
+          // Estimate based on the number of artists actually enriched
+          const artistTracker = getSubrequestTracker()
+          if (artistTracker) {
+            artistTracker.record(artistInfoMap.size)
+          }
+
+          getLogger()?.info(`[LastFmEnrichment] ========== ENRICHMENT COMPLETE ==========`)
+          getLogger()?.info(`[LastFmEnrichment] Cache efficiency:`)
+          getLogger()?.info(`[LastFmEnrichment]   - Total candidates: ${candidateLastFmTracks.length}`)
+          getLogger()?.info(`[LastFmEnrichment]   - Cached: ${cachedLastFmTracks.length} (${lastfmCacheHitRate.toFixed(1)}%)`)
+          getLogger()?.info(`[LastFmEnrichment]   - Uncached: ${uncachedLastFmTracks.length}`)
+          getLogger()?.info(`[LastFmEnrichment]   - Enriched (new): ${tracksForLastFm.length}`)
+          getLogger()?.info(`[LastFmEnrichment] Enrichment results:`)
+          getLogger()?.info(`[LastFmEnrichment]   - Track signals: ${signalsMap.size}`)
+          getLogger()?.info(`[LastFmEnrichment]   - Unique artists: ${uniqueArtists.length}`)
+          getLogger()?.info(`[LastFmEnrichment]   - Artists enriched: ${artistInfoMap.size}`)
+          const finalLastfmTracker = getSubrequestTracker()
+          if (finalLastfmTracker) {
+            getLogger()?.info(
+              `[LastFmEnrichment] Subrequest tracking: ${finalLastfmTracker.getSummary().count}/${finalLastfmTracker.getSummary().max} used (${finalLastfmTracker.getSummary().percentage.toFixed(1)}%)`,
+            )
+          }
 
           // Step 7c: Attach artist info to track signals and update cache
           for (const [_trackId, signals] of signalsMap.entries()) {
@@ -2442,6 +2579,17 @@ chatStreamRouter.post('/message', async c => {
       const logger = getLogger()!
       logger.info('Starting async stream processing')
       logger.info('SSEWriter created, starting heartbeat')
+
+      // Initialize subrequest tracker to stay within Cloudflare Workers limits (PAID TIER)
+      const subrequestTracker = new SubrequestTracker({
+        enableLogging: true,
+        maxSubrequests: 950, // Safety margin below paid tier limit of 1000
+        warningThreshold: 0.8,
+      })
+      logger.info('[SubrequestTracker] Initialized with paid tier limit: 950')
+
+      // Wrap execution in subrequest tracker context (nested AsyncLocalStorage)
+      await runWithSubrequestTracker(subrequestTracker, async () => {
 
       // Heartbeat to keep connection alive
       const heartbeatInterval = setInterval(() => {
@@ -3358,6 +3506,7 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
         await sseWriter.close()
         logger.info('Stream cleanup complete, heartbeat cleared')
       }
+      }) // End runWithSubrequestTracker
     }) // End runWithLogger
   }
 

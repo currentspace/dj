@@ -7,7 +7,7 @@ import {z} from 'zod'
 
 // ===== Debug Data =====
 
-export const StreamDebugDataSchema = z.record(z.unknown())
+export const StreamDebugDataSchema = z.record(z.string(), z.unknown())
 
 // ===== Log Data =====
 
@@ -19,7 +19,7 @@ export const StreamLogDataSchema = z.object({
 // ===== Tool Data =====
 
 export const StreamToolDataSchema = z.object({
-  args: z.record(z.unknown()),
+  args: z.record(z.string(), z.unknown()),
   tool: z.string(),
 })
 

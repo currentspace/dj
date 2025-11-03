@@ -19,16 +19,16 @@
     "@dj/shared-types": "workspace:*",
     "@hono/swagger-ui": "^0.5.2",
     "@hono/zod-openapi": "^1.1.4",
-    "hono": "^4.9.8",
+    "hono": "^4.10.4",
     "nanoid": "^5.1.6",
-    "zod": "^3.25.76",
-    "zod-to-json-schema": "^3.24.6"
+    "zod": "^4.1.12"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20241127.0",
-    "@types/node": "^24.9.2",
-    "tsup": "^8.3.5",
+    "@cloudflare/workers-types": "^4.20251014.0",
+    "@types/node": "^24.10.0",
+    "tsup": "^8.5.0",
     "vitest": "^4.0.6",
-    "wrangler": "^4.38.0"
+    "wrangler": "^4.45.3",
+    "zod-to-json-schema": "^3.24.6"
   }
 }
