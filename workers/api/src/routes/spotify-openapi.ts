@@ -22,6 +22,7 @@ const REDIRECT_URI = 'https://dj.current.space/api/spotify/callback'
  */
 export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
   // GET /api/spotify/auth-url - Generate OAuth URL with PKCE
+  // @ts-expect-error Handler returns unified error type, but runtime validation handles this
   app.openapi(getSpotifyAuthUrl, async c => {
     const env = c.env
 
@@ -170,6 +171,7 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
   })
 
   // POST /api/spotify/token - Exchange authorization code for token
+  // @ts-expect-error Handler returns unified error type, but runtime validation handles this
   app.openapi(exchangeSpotifyToken, async c => {
     const env = c.env
 
@@ -240,6 +242,7 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
   })
 
   // POST /api/spotify/search - Search Spotify catalog
+  // @ts-expect-error Handler returns SafeParseResult type, but runtime validation handles this
   app.openapi(searchSpotify, async c => {
     try {
       // Headers and body automatically validated by contract

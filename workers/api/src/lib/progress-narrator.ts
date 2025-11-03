@@ -131,7 +131,9 @@ export class ProgressNarrator {
         // Limit cache size to prevent memory issues
         if (this.messageCache.size > 100) {
           const firstKey = this.messageCache.keys().next().value
-          this.messageCache.delete(firstKey)
+          if (firstKey !== undefined) {
+            this.messageCache.delete(firstKey)
+          }
         }
       }
 

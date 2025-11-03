@@ -80,7 +80,7 @@ export function makeControlledSSEFlusher(
  * Create a smart flusher that triggers based on message count or elapsed time
  */
 export function makeSSEFlusher(
-  writeAsync: (data: unknown) => Promise<void>,
+  _writeAsync: (data: unknown) => Promise<void>,
   flush: () => Promise<void>,
   options: SSEFlusherOptions = {},
 ): () => Promise<void> {

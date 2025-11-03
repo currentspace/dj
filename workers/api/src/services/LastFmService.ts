@@ -91,6 +91,11 @@ interface LastFmTrack {
   name: string
 }
 
+interface LastFmImage {
+  '#text': string
+  size: string
+}
+
 export class LastFmService {
   private apiBaseUrl = 'https://ws.audioscrobbler.com/2.0/'
   private apiKey: string

@@ -2707,6 +2707,7 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
 
             if (event.type === 'content_block_start') {
               currentBlockIndex = event.index
+              // eslint-disable-next-line security/detect-object-injection
               contentBlocks[currentBlockIndex] = event.content_block
 
               if (event.content_block.type === 'tool_use') {
@@ -2725,6 +2726,7 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
                 await sseWriter.write({data: `💭 ${text}`, type: 'thinking'})
               } else if (event.delta.type === 'input_json_delta') {
                 // Tool input delta - accumulate
+                // eslint-disable-next-line security/detect-object-injection
                 const currentBlock = contentBlocks[currentBlockIndex]
                 if (currentBlock?.type === 'tool_use') {
                   currentBlock.input ??= ''
@@ -2971,6 +2973,7 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
 
               if (event.type === 'content_block_start') {
                 nextCurrentBlockIndex = event.index
+                // eslint-disable-next-line security/detect-object-injection
                 nextContentBlocks[nextCurrentBlockIndex] = event.content_block
 
                 if (event.content_block.type === 'tool_use') {
@@ -2988,6 +2991,7 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
                   const text = event.delta.thinking
                   await sseWriter.write({data: `💭 ${text}`, type: 'thinking'})
                 } else if (event.delta.type === 'input_json_delta') {
+                  // eslint-disable-next-line security/detect-object-injection
                   const currentBlock = nextContentBlocks[nextCurrentBlockIndex]
                   if (currentBlock?.type === 'tool_use') {
                     currentBlock.input ??= ''
@@ -3113,24 +3117,25 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
 
           // Process final stream events
           fullResponse = ''
-          try {
-            for await (const event of finalStream) {
-              if (abortController.signal.aborted) {
-                throw new Error('Request aborted')
-              }
+          if (finalStream) {
+            try {
+              for await (const event of finalStream) {
+                if (abortController.signal.aborted) {
+                  throw new Error('Request aborted')
+                }
 
-              if (event.type === 'content_block_delta') {
-                if (event.delta.type === 'text_delta') {
-                  const text = event.delta.text
-                  fullResponse += text
-                  await sseWriter.write({data: text, type: 'content'})
-                } else if (event.delta.type === 'thinking_delta') {
-                  const text = event.delta.thinking
-                  await sseWriter.write({data: `💭 ${text}`, type: 'thinking'})
+                if (event.type === 'content_block_delta') {
+                  if (event.delta.type === 'text_delta') {
+                    const text = event.delta.text
+                    fullResponse += text
+                    await sseWriter.write({data: text, type: 'content'})
+                  } else if (event.delta.type === 'thinking_delta') {
+                    const text = event.delta.thinking
+                    await sseWriter.write({data: `💭 ${text}`, type: 'thinking'})
+                  }
                 }
               }
-            }
-          } catch (finalChunkError) {
+            } catch (finalChunkError) {
             const logger = getLogger()
             logger?.error('Error processing final response events', finalChunkError, {
               errorMessage: finalChunkError instanceof Error ? finalChunkError.message : String(finalChunkError),
@@ -3165,6 +3170,7 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
                 })
                 fullResponse = 'Processing error occurred'
               }
+            }
             }
           }
 

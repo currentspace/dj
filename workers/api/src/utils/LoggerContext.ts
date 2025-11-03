@@ -47,12 +47,12 @@ if (
 
 /**
  * Get the current request's logger
- * Returns null if called outside of a logger context
+ * Returns undefined if called outside of a logger context
  */
-export function getLogger(): null | ServiceLogger {
+export function getLogger(): undefined | ServiceLogger {
   // Type guard ensures loggerStorageRaw has getStore method
   if (typeof (loggerStorageRaw as {getStore?: unknown}).getStore !== 'function') {
-    return null
+    return undefined
   }
 
   const contextRaw = loggerStorageRaw.getStore()
@@ -60,7 +60,7 @@ export function getLogger(): null | ServiceLogger {
   // Validate context using Zod schema (handles null/undefined automatically)
   const validation = LoggerContextSchema.safeParse(contextRaw)
   if (!validation.success) {
-    return null
+    return undefined
   }
 
   return validation.data.logger
@@ -89,7 +89,7 @@ export async function runWithLogger<T>(logger: ServiceLogger, fn: () => Promise<
     run?: (context: LoggerContext, fn: () => Promise<T>) => Promise<T>
   }
   if (typeof storageWithRun.run === 'function') {
-    return await storageWithRun.run(validation.data, fn)
+    return await storageWithRun.run(context, fn)
   }
 
   throw new Error('AsyncLocalStorage.run is not available')
