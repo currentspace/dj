@@ -117,7 +117,7 @@ thinking: { type: 'enabled', budget_tokens: 2000 }
 
 **Configuration:**
 ```typescript
-model: 'claude-3-5-haiku-20241022'
+model: 'claude-haiku-4-5-20251001' // Haiku 4.5 (Oct 2025)
 temperature: 0.7 (1.0 when skipCache=true)
 maxTokens: 100
 ```

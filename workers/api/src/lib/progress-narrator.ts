@@ -66,7 +66,7 @@ export class ProgressNarrator {
 
       this.logger.debug(`Generating message for event: ${context.eventType}${skipCache ? ' (uncached)' : ''}`, {
         maxTokens: 100,
-        model: 'claude-3-5-haiku-20241022',
+        model: 'claude-haiku-4-5-20251001',
         promptLength: prompt.length,
         promptPreview: prompt.substring(0, 200),
         systemPromptLength: this.systemPrompt.length,
@@ -75,7 +75,7 @@ export class ProgressNarrator {
 
       this.logger.info('About to call Anthropic API (rate-limited)', {
         hasApiKey: !!this.apiKey,
-        model: 'claude-3-5-haiku-20241022',
+        model: 'claude-haiku-4-5-20251001',
       })
 
       // Create Langchain messages with prompt caching
@@ -101,7 +101,7 @@ export class ProgressNarrator {
           const anthropic = new ChatAnthropic({
             apiKey: this.apiKey,
             maxTokens: 100,
-            model: 'claude-3-5-haiku-20241022',
+            model: 'claude-haiku-4-5-20251001', // Haiku 4.5: 2x faster, better at creative tasks
             temperature: skipCache ? 1.0 : 0.7,
             ...(skipCache ? {topP: 0.95} : {}),
             maxRetries: 0,
