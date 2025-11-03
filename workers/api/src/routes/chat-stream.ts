@@ -47,6 +47,12 @@ import {getChildLogger, getLogger, runWithLogger} from '../utils/LoggerContext'
 import {rateLimitedSpotifyCall} from '../utils/RateLimitedAPIClients'
 import {ServiceLogger} from '../utils/ServiceLogger'
 
+// Enrichment limits to stay within Cloudflare Workers subrequest cap (50 total)
+// Last.fm makes 4 API calls per track (correction, info, tags, similar)
+// Deezer makes 1 call per uncached track (most are cached after first run)
+const MAX_DEEZER_ENRICHMENT = 100 // Usually only 10-20 actual API calls due to caching
+const MAX_LASTFM_ENRICHMENT = 8 // 8 tracks × 4 calls/track = 32 API calls
+
 const chatStreamRouter = new Hono<{Bindings: Env}>()
 
 // Request schema
@@ -1973,7 +1979,7 @@ async function executeSpotifyToolWithProgress(
           const enrichmentService = new AudioEnrichmentService(env.AUDIO_FEATURES_CACHE)
 
           // Process tracks sequentially with rate limiting at 40 TPS
-          const tracksToEnrich = validTracks.slice(0, 100) // Process up to 100 tracks
+          const tracksToEnrich = validTracks.slice(0, MAX_DEEZER_ENRICHMENT)
           const bpmResults: number[] = []
           const rankResults: number[] = []
           const gainResults: number[] = []
@@ -2178,10 +2184,10 @@ async function executeSpotifyToolWithProgress(
         try {
           const lastfmService = new LastFmService(env.LASTFM_API_KEY, env.AUDIO_FEATURES_CACHE)
 
-          const tracksForLastFm = validTracks.slice(0, 50) // Process up to 50 tracks
+          const tracksForLastFm = validTracks.slice(0, MAX_LASTFM_ENRICHMENT)
           const signalsMap = new Map()
 
-          // Step 7a: Get track signals (4 API calls per track = 200 total)
+          // Step 7a: Get track signals (4 API calls per track)
           sseWriter.writeAsync({
             data: `🎧 Enriching ${tracksForLastFm.length} tracks with Last.fm data (40 TPS)...`,
             type: 'thinking',
