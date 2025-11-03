@@ -578,6 +578,24 @@ export class LastFmService {
    * Get track correction (canonical names)
    */
   private async getCorrection(artist: string, track: string): Promise<null | {artist: string; track: string}> {
+    const CORRECTION_CACHE_TTL = 30 * 24 * 60 * 60 // 30 days in seconds
+
+    // Create cache key from artist and track name
+    const cacheKey = `lastfm:correction:${artist}:${track}`
+
+    // Check cache first
+    if (this.cache) {
+      const cached = await this.cache.get(cacheKey, 'json')
+      if (cached !== null) {
+        if (cached === 'null') {
+          getLogger()?.info(`[LastFm] Correction cache hit (no correction): ${artist} - ${track}`)
+          return null
+        }
+        getLogger()?.info(`[LastFm] Correction cache hit: ${artist} - ${track}`)
+        return cached as {artist: string; track: string}
+      }
+    }
+
     try {
       const data = await this.callApi(
         'track.getCorrection',
@@ -589,14 +607,22 @@ export class LastFmService {
       )
 
       const correction = data.corrections.correction
+      let result: null | {artist: string; track: string} = null
+
       if (correction?.track) {
-        return {
+        result = {
           artist: correction.track.artist.name ?? artist,
           track: correction.track.name ?? track,
         }
       }
 
-      return null
+      // Cache the result
+      if (this.cache) {
+        await this.cache.put(cacheKey, JSON.stringify(result ?? 'null'), {expirationTtl: CORRECTION_CACHE_TTL})
+        getLogger()?.info(`[LastFm] Cached correction: ${artist} - ${track} → ${result ? `${result.artist} - ${result.track}` : 'null'}`)
+      }
+
+      return result
     } catch (error) {
       getLogger()?.error('[LastFm] Correction failed:', error)
       return null
