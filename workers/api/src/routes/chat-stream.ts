@@ -2071,83 +2071,57 @@ async function executeSpotifyToolWithProgress(
             getLogger()?.info(`[BPMEnrichment] ✅ Found ${tracksWithISRC} tracks with ISRC, proceeding with enrichment`)
           }
 
-          for (let i = 0; i < tracksToEnrich.length; i++) {
-            // eslint-disable-next-line security/detect-object-injection
-            const track = tracksToEnrich[i]
+          // Convert tracks to SpotifyTrack format for batch enrichment
+          const spotifyTracks = tracksToEnrich.map(track => ({
+            artists: track.artists ?? [],
+            duration_ms: track.duration_ms,
+            external_ids: track.external_ids,
+            id: track.id,
+            name: track.name,
+          }))
 
-            // Log every track attempt for first 5 tracks, then every 10th
-            if (i < 5 || i % 10 === 0) {
-              getLogger()?.info(`[BPMEnrichment] Processing track ${i + 1}/${tracksToEnrich.length}: "${track.name}"`)
+          getLogger()?.info(`[BPMEnrichment] Starting PARALLEL enrichment for ${spotifyTracks.length} tracks`)
+          sseWriter.writeAsync({
+            data: `🎵 Enriching ${spotifyTracks.length} tracks in parallel...`,
+            type: 'thinking',
+          })
+
+          // Use batchEnrichTracks for parallel processing (up to 10 concurrent via Deezer lane)
+          const enrichmentResults = await enrichmentService.batchEnrichTracks(spotifyTracks)
+
+          // Process results
+          for (const [trackId, deezerResult] of enrichmentResults.entries()) {
+            const track = tracksToEnrich.find(t => t.id === trackId)
+
+            // Track subrequests (enrichTrack makes 1-2 API calls: Deezer + maybe MusicBrainz)
+            const tracker = getSubrequestTracker()
+            if (tracker) {
+              tracker.record(deezerResult.source === 'deezer-via-musicbrainz' ? 2 : 1)
             }
 
-            try {
-              const spotifyTrack = {
-                artists: track.artists ?? [],
-                duration_ms: track.duration_ms,
-                external_ids: track.external_ids,
-                id: track.id,
-                name: track.name,
-              }
+            // Collect all available Deezer data
+            if (deezerResult.bpm && AudioEnrichmentService.isValidBPM(deezerResult.bpm)) {
+              bpmResults.push(deezerResult.bpm)
+            }
+            if (deezerResult.rank !== null && deezerResult.rank > 0) {
+              rankResults.push(deezerResult.rank)
+            }
+            if (deezerResult.gain !== null) {
+              gainResults.push(deezerResult.gain)
+            }
 
-              // Log the track being sent to enrichment service
-              if (i < 3) {
-                getLogger()?.info(`[BPMEnrichment] Calling enrichTrack with:`, {
-                  has_external_ids: !!spotifyTrack.external_ids,
-                  id: spotifyTrack.id,
-                  isrc: spotifyTrack.external_ids?.isrc ?? 'NONE',
-                  name: spotifyTrack.name,
-                })
-              }
-
-              const deezerResult = await enrichmentService.enrichTrack(spotifyTrack)
-
-              // Track subrequests (enrichTrack makes 1-2 API calls: Deezer + maybe MusicBrainz)
-              // Estimate 2 calls per track to be safe (actual may be 1 if cached or direct match)
-              const tracker = getSubrequestTracker()
-              if (tracker) {
-                tracker.record(deezerResult.source === 'deezer-via-musicbrainz' ? 2 : 1)
-              }
-
-              // Log the result for first few tracks
-              if (i < 3) {
-                getLogger()?.info(`[DeezerEnrichment] Result for "${track.name}":`, {
-                  bpm: deezerResult.bpm,
-                  gain: deezerResult.gain,
-                  rank: deezerResult.rank,
-                  release_date: deezerResult.release_date,
-                  source: deezerResult.source,
-                })
-              }
-
-              // Collect all available Deezer data
-              if (deezerResult.bpm && AudioEnrichmentService.isValidBPM(deezerResult.bpm)) {
-                bpmResults.push(deezerResult.bpm)
-              }
-              if (deezerResult.rank !== null && deezerResult.rank > 0) {
-                rankResults.push(deezerResult.rank)
-              }
-              if (deezerResult.gain !== null) {
-                gainResults.push(deezerResult.gain)
-              }
-
-              if (deezerResult.source) {
-                enrichedCount++
-
-                // Stream progress updates every 5 tracks
-                if ((i + 1) % 5 === 0) {
-                  sseWriter.writeAsync({
-                    data: `🎵 Enriched ${enrichedCount}/${tracksToEnrich.length} tracks...`,
-                    type: 'thinking',
-                  })
-                }
-              }
-
-              // No manual rate limiting needed - orchestrator handles it via continuous queue
-            } catch (error) {
-              getChildLogger('BPMEnrichment').error(`Failed for track "${track.name}"`, error)
-              // Continue with next track
+            if (deezerResult.source) {
+              enrichedCount++
             }
           }
+
+          getLogger()?.info(
+            `[BPMEnrichment] Parallel enrichment complete: ${enrichedCount}/${tracksToEnrich.length} tracks enriched`,
+          )
+          sseWriter.writeAsync({
+            data: `✅ Enriched ${enrichedCount}/${tracksToEnrich.length} tracks`,
+            type: 'thinking',
+          })
 
           getLogger()?.info(`[DeezerEnrichment] ========== ENRICHMENT COMPLETE ==========`)
           getLogger()?.info(`[DeezerEnrichment] Cache efficiency:`)
