@@ -18,6 +18,19 @@ import {getLogger} from '../utils/LoggerContext'
 import {rateLimitedSpotifyCall} from '../utils/RateLimitedAPIClients'
 import {formatZodError, safeParse} from './guards'
 
+function isNumber(value: unknown): value is number {
+  return typeof value === 'number'
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === 'string'
+}
+
+// Type guards for runtime type checking of unknown values
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every(item => typeof item === 'string')
+}
+
 // Tool schemas
 export const SearchTracksSchema = z.object({
   filters: z
@@ -287,7 +300,7 @@ export async function executeSpotifyTool(
   }
 }
 
-async function analyzePlaylist(args: any, token: string) {
+async function analyzePlaylist(args: Record<string, unknown>, token: string) {
   const {playlist_id} = args
 
   getLogger()?.info(`[analyzePlaylist] Starting analysis with args:`, {args: JSON.stringify(args)})
@@ -417,7 +430,7 @@ async function analyzePlaylist(args: any, token: string) {
 
   // Calculate averages
   getLogger()?.info(`[analyzePlaylist] Calculating audio analysis from ${audioFeatures.length} features...`)
-  const validFeatures = audioFeatures.filter((f: any) => f !== null)
+  const validFeatures = audioFeatures.filter((f): f is z.infer<typeof SpotifyAudioFeaturesSchema> => f !== null)
   getLogger()?.info(`[analyzePlaylist] Valid features: ${validFeatures.length}/${audioFeatures.length}`)
 
   // Create a MUCH smaller analysis object for Claude (was 55KB, now ~2KB)
@@ -426,37 +439,52 @@ async function analyzePlaylist(args: any, token: string) {
       validFeatures.length > 0
         ? {
             avg_acousticness:
-              validFeatures.reduce((sum: number, f: any) => sum + f.acousticness, 0) / validFeatures.length,
+              validFeatures.reduce((sum: number, f) => sum + f.acousticness, 0) / validFeatures.length,
             avg_danceability:
-              validFeatures.reduce((sum: number, f: any) => sum + f.danceability, 0) / validFeatures.length,
-            avg_energy: validFeatures.reduce((sum: number, f: any) => sum + f.energy, 0) / validFeatures.length,
+              validFeatures.reduce((sum: number, f) => sum + f.danceability, 0) / validFeatures.length,
+            avg_energy: validFeatures.reduce((sum: number, f) => sum + f.energy, 0) / validFeatures.length,
             avg_instrumentalness:
-              validFeatures.reduce((sum: number, f: any) => sum + f.instrumentalness, 0) / validFeatures.length,
-            avg_tempo: validFeatures.reduce((sum: number, f: any) => sum + f.tempo, 0) / validFeatures.length,
-            avg_valence: validFeatures.reduce((sum: number, f: any) => sum + f.valence, 0) / validFeatures.length,
+              validFeatures.reduce((sum: number, f) => sum + f.instrumentalness, 0) / validFeatures.length,
+            avg_tempo: validFeatures.reduce((sum: number, f) => sum + f.tempo, 0) / validFeatures.length,
+            avg_valence: validFeatures.reduce((sum: number, f) => sum + f.valence, 0) / validFeatures.length,
           }
         : null,
-    // Add genre analysis if available
-    genres: Array.from(new Set(tracks.flatMap((t: any) => t.genres ?? []))).slice(0, 5),
+    // Add genre analysis from artists (tracks don't have genres, but artists do)
+    // Note: Artist genres may not be available in all responses
+    genres: Array.from(
+      new Set(
+        tracks.flatMap((t) =>
+          t.artists?.flatMap((a) => {
+            // Artists may have genres property depending on the endpoint
+            const artist = a as {genres?: string[]}
+            return artist.genres ?? []
+          }) ?? []
+        )
+      )
+    ).slice(0, 5),
     playlist_description: playlist.description ?? 'No description',
     playlist_name: playlist.name,
     // Only include a sample of tracks with minimal data (not full track objects)
-    sample_tracks: tracks.slice(0, 5).map((track: any) => ({
-      artists: track.artists?.map((a: any) => a.name).join(', ') ?? 'Unknown',
+    sample_tracks: tracks.slice(0, 5).map((track) => ({
+      artists: track.artists?.map((a) => a.name).join(', ') ?? 'Unknown',
       duration_ms: track.duration_ms,
       name: track.name,
       popularity: track.popularity,
     })),
     // Include artist frequency analysis
     top_artists: Object.entries(
-      tracks.reduce((acc: any, track: any) => {
-        track.artists?.forEach((artist: any) => {
+      tracks.reduce<Record<string, number>>((acc, track) => {
+        track.artists?.forEach((artist) => {
           acc[artist.name] = (acc[artist.name] ?? 0) + 1
         })
         return acc
       }, {}),
     )
-      .sort((a: any, b: any) => b[1] - a[1])
+      .sort((a, b) => {
+        const countA = a[1]
+        const countB = b[1]
+        return (typeof countB === 'number' ? countB : 0) - (typeof countA === 'number' ? countA : 0)
+      })
       .slice(0, 5)
       .map(([artist, count]) => ({artist, track_count: count})),
     total_tracks: tracks.length,
@@ -492,7 +520,7 @@ async function analyzePlaylist(args: any, token: string) {
   return analysis
 }
 
-async function createPlaylist(args: any, token: string) {
+async function createPlaylist(args: Record<string, unknown>, token: string) {
   getLogger()?.info(`[Tool:createPlaylist] Creating playlist: ${args.name}`)
 
   // Get user ID first
@@ -557,7 +585,7 @@ async function createPlaylist(args: any, token: string) {
   getLogger()?.info(`[Tool:createPlaylist] Playlist created with ID: ${playlist.id}`)
 
   // Add tracks if provided
-  if (args.track_uris && args.track_uris.length > 0) {
+  if (isStringArray(args.track_uris) && args.track_uris.length > 0) {
     const addResponse = await rateLimitedSpotifyCall(
       () =>
         fetch(`https://api.spotify.com/v1/playlists/${playlist.id}/tracks`, {
@@ -582,7 +610,7 @@ async function createPlaylist(args: any, token: string) {
   return playlist
 }
 
-async function getAlbumInfo(args: any, token: string) {
+async function getAlbumInfo(args: Record<string, unknown>, token: string) {
   const {album_id} = args
 
   const response = await rateLimitedSpotifyCall(
@@ -640,7 +668,7 @@ async function getAlbumInfo(args: any, token: string) {
   }
 }
 
-async function getArtistInfo(args: any, token: string) {
+async function getArtistInfo(args: Record<string, unknown>, token: string) {
   const {artist_id} = args
 
   const response = await rateLimitedSpotifyCall(
@@ -659,7 +687,7 @@ async function getArtistInfo(args: any, token: string) {
   return await response.json()
 }
 
-async function getArtistTopTracks(args: any, token: string) {
+async function getArtistTopTracks(args: Record<string, unknown>, token: string) {
   const {artist_id, market = 'US'} = args
 
   const response = await rateLimitedSpotifyCall(
@@ -686,7 +714,7 @@ async function getArtistTopTracks(args: any, token: string) {
   return result.data.items ?? []
 }
 
-async function getAudioFeatures(args: any, token: string, cache?: KVNamespace) {
+async function getAudioFeatures(args: Record<string, unknown>, token: string, cache?: KVNamespace) {
   const {track_ids} = args
   const CACHE_TTL = 7 * 24 * 60 * 60 // 7 days in seconds
 
@@ -699,7 +727,7 @@ async function getAudioFeatures(args: any, token: string, cache?: KVNamespace) {
   }
 
   // Check cache for each track
-  const cachedFeatures = new Map<string, any>()
+  const cachedFeatures = new Map<string, null | z.infer<typeof SpotifyAudioFeaturesSchema>>()
   const uncachedTrackIds: string[] = []
 
   if (cache) {
@@ -708,9 +736,16 @@ async function getAudioFeatures(args: any, token: string, cache?: KVNamespace) {
       track_ids.map(async (trackId: string) => {
         const cacheKey = `spotify:audio_features:${trackId}`
         const cached = await cache.get(cacheKey, 'json')
-        if (cached) {
-          cachedFeatures.set(trackId, cached)
-          getLogger()?.info(`[getAudioFeatures] Cache hit for ${trackId}`)
+        if (cached !== null) {
+          // Validate cached value with Zod schema
+          const parseResult = SpotifyAudioFeaturesSchema.safeParse(cached)
+          if (parseResult.success) {
+            cachedFeatures.set(trackId, parseResult.data)
+            getLogger()?.info(`[getAudioFeatures] Cache hit for ${trackId}`)
+          } else {
+            // Invalid cache entry, treat as miss
+            uncachedTrackIds.push(trackId)
+          }
         } else {
           uncachedTrackIds.push(trackId)
         }
@@ -724,7 +759,7 @@ async function getAudioFeatures(args: any, token: string, cache?: KVNamespace) {
   }
 
   // Fetch uncached tracks from Spotify
-  let freshFeatures: any[] = []
+  let freshFeatures: (null | z.infer<typeof SpotifyAudioFeaturesSchema>)[] = []
   if (uncachedTrackIds.length > 0) {
     getLogger()?.info(`[getAudioFeatures] Fetching ${uncachedTrackIds.length} tracks from Spotify API`)
     const response = await rateLimitedSpotifyCall(
@@ -808,16 +843,18 @@ async function getAvailableGenres(token: string) {
   return result.data.genres ?? []
 }
 
-async function getRecommendations(args: any, token: string) {
+async function getRecommendations(args: Record<string, unknown>, token: string) {
   const params = new URLSearchParams()
 
-  if (args.seed_tracks) params.append('seed_tracks', args.seed_tracks.join(','))
-  if (args.seed_artists) params.append('seed_artists', args.seed_artists.join(','))
-  if (args.seed_genres) params.append('seed_genres', args.seed_genres.join(','))
-  if (args.target_energy !== undefined) params.append('target_energy', args.target_energy.toString())
-  if (args.target_danceability !== undefined) params.append('target_danceability', args.target_danceability.toString())
-  if (args.target_valence !== undefined) params.append('target_valence', args.target_valence.toString())
-  params.append('limit', (args.limit ?? 20).toString())
+  if (isStringArray(args.seed_tracks)) params.append('seed_tracks', args.seed_tracks.join(','))
+  if (isStringArray(args.seed_artists)) params.append('seed_artists', args.seed_artists.join(','))
+  if (isStringArray(args.seed_genres)) params.append('seed_genres', args.seed_genres.join(','))
+  if (isNumber(args.target_energy)) params.append('target_energy', args.target_energy.toString())
+  if (isNumber(args.target_danceability)) params.append('target_danceability', args.target_danceability.toString())
+  if (isNumber(args.target_valence)) params.append('target_valence', args.target_valence.toString())
+
+  const limit = isNumber(args.limit) ? args.limit : 20
+  params.append('limit', limit.toString())
 
   const response = await rateLimitedSpotifyCall(
     () =>
@@ -843,7 +880,7 @@ async function getRecommendations(args: any, token: string) {
   return result.data.tracks ?? []
 }
 
-async function getRelatedArtists(args: any, token: string) {
+async function getRelatedArtists(args: Record<string, unknown>, token: string) {
   const {artist_id} = args
 
   const response = await rateLimitedSpotifyCall(
@@ -871,7 +908,7 @@ async function getRelatedArtists(args: any, token: string) {
   return result.data.artists ?? []
 }
 
-async function getTrackDetails(args: any, token: string) {
+async function getTrackDetails(args: Record<string, unknown>, token: string) {
   const {track_id} = args
 
   const response = await rateLimitedSpotifyCall(
@@ -938,12 +975,16 @@ async function getTrackDetails(args: any, token: string) {
   }
 }
 
-async function modifyPlaylist(args: any, token: string) {
+async function modifyPlaylist(args: Record<string, unknown>, token: string) {
   const {action, playlist_id, position, track_uris} = args
+
+  if (!isStringArray(track_uris)) {
+    throw new Error('track_uris must be an array of strings')
+  }
 
   const url = `https://api.spotify.com/v1/playlists/${playlist_id}/tracks`
   let method = 'POST'
-  let body: any = {}
+  let body: Record<string, unknown> = {}
 
   switch (action) {
     case 'add':
@@ -975,18 +1016,22 @@ async function modifyPlaylist(args: any, token: string) {
         method,
       }),
     undefined,
-    `playlist:${action}`,
+    `playlist:${isString(action) ? action : 'modify'}`,
   )
 
   if (!response.ok) {
-    throw new Error(`Failed to ${action} tracks: ${response.status}`)
+    throw new Error(`Failed to ${isString(action) ? action : 'modify'} tracks: ${response.status}`)
   }
 
   return {action, success: true, track_count: track_uris.length}
 }
 
-async function searchArtists(args: any, token: string) {
+async function searchArtists(args: Record<string, unknown>, token: string) {
   const {limit = 10, query} = args
+
+  if (!isString(query)) {
+    throw new Error('query must be a string')
+  }
 
   const response = await rateLimitedSpotifyCall(
     () =>

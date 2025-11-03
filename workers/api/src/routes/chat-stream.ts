@@ -15,9 +15,26 @@ import {zodToJsonSchema} from 'zod-to-json-schema'
 // Native tool definition (replaces DynamicStructuredTool)
 interface NativeTool {
   description: string
-  func: (args: any) => Promise<any>
+  func: (args: Record<string, unknown>) => Promise<unknown>
   name: string
-  schema: z.ZodObject<any>
+  schema: z.ZodObject<z.ZodRawShape>
+}
+
+function isNumber(value: unknown): value is number {
+  return typeof value === 'number'
+}
+
+function isObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === 'string'
+}
+
+// Type guards for runtime type checking of unknown values
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every(item => typeof item === 'string')
 }
 
 import type {Env} from '../index'
@@ -200,12 +217,19 @@ class SSEWriter {
  */
 function convertToAnthropicTools(tools: NativeTool[]): Anthropic.Tool[] {
   return tools.map(tool => {
-    const jsonSchema = zodToJsonSchema(tool.schema) as any
+    const jsonSchema = zodToJsonSchema(tool.schema) as Record<string, unknown>
+
+    // Extract properties with type guard
+    const properties = isObject(jsonSchema.properties) ? jsonSchema.properties : {}
+
+    // Extract required with type guard
+    const required = isStringArray(jsonSchema.required) ? jsonSchema.required : []
+
     return {
       description: tool.description,
       input_schema: {
-        properties: jsonSchema.properties ?? {},
-        required: jsonSchema.required ?? [],
+        properties,
+        required,
         type: 'object' as const,
       },
       name: tool.name,
@@ -314,8 +338,8 @@ function createStreamingSpotifyTools(
 
         // Auto-inject playlist ID and apply defaults
         const finalArgs = {
-          limit: args.limit ?? 20,
-          offset: args.offset ?? 0,
+          limit: isNumber(args.limit) ? args.limit : 20,
+          offset: isNumber(args.offset) ? args.offset : 0,
           playlist_id: args.playlist_id,
         }
 
@@ -455,19 +479,24 @@ function createStreamingSpotifyTools(
           type: 'tool_start',
         })
 
+        if (!isStringArray(args.track_ids)) {
+          throw new Error('track_ids must be an array of strings')
+        }
+        const trackIds = args.track_ids
+
         await sseWriter.write({
-          data: `🔍 Fetching details for ${args.track_ids.length} tracks...`,
+          data: `🔍 Fetching details for ${trackIds.length} tracks...`,
           type: 'thinking',
         })
 
         // Fetch tracks from Spotify (supports up to 50 tracks)
         const response = await rateLimitedSpotifyCall(
           () =>
-            fetch(`https://api.spotify.com/v1/tracks?ids=${args.track_ids.join(',')}`, {
+            fetch(`https://api.spotify.com/v1/tracks?ids=${trackIds.join(',')}`, {
               headers: {Authorization: `Bearer ${spotifyToken}`},
             }),
           getLogger(),
-          `get ${args.track_ids.length} track details`,
+          `get ${trackIds.length} track details`,
         )
 
         if (!response?.ok) {
@@ -540,8 +569,8 @@ function createStreamingSpotifyTools(
 
         // Smart context inference: if no seeds but we have playlist context
         if (
-          (!args.seed_tracks || args.seed_tracks.length === 0) &&
-          (!args.seed_artists || args.seed_artists.length === 0) &&
+          (!isStringArray(args.seed_tracks) || args.seed_tracks.length === 0) &&
+          (!isStringArray(args.seed_artists) || args.seed_artists.length === 0) &&
           contextPlaylistId &&
           (mode === 'analyze' || mode === 'create')
         ) {
@@ -568,8 +597,9 @@ function createStreamingSpotifyTools(
 
               if (trackIds.length > 0) {
                 finalArgs.seed_tracks = trackIds
+                const seedCount = isStringArray(finalArgs.seed_tracks) ? finalArgs.seed_tracks.length : 0
                 getLogger()?.info(
-                  `[get_recommendations] Auto-injected ${finalArgs.seed_tracks.length} seed tracks from playlist`,
+                  `[get_recommendations] Auto-injected ${seedCount} seed tracks from playlist`,
                 )
               }
             }
@@ -616,9 +646,10 @@ function createStreamingSpotifyTools(
       func: async args => {
         if (abortSignal?.aborted) throw new Error('Request aborted')
 
+        const trackCount = isStringArray(args.track_uris) ? args.track_uris.length : 0
         await sseWriter.write({
           data: {
-            args: {name: args.name, tracks: args.track_uris.length},
+            args: {name: args.name, tracks: trackCount},
             tool: 'create_playlist',
           },
           type: 'tool_start',
@@ -676,16 +707,16 @@ WHY THIS MATTERS: Generic algorithmic recommendations fail because they rely on 
 
 <input_data>
 METADATA ANALYSIS:
-${JSON.stringify(args.analysis_data.metadata_analysis ?? {}, null, 2)}
+${isObject(args.analysis_data) ? JSON.stringify(args.analysis_data.metadata_analysis ?? {}, null, 2) : '{}'}
 
 DEEZER ANALYSIS (BPM, rank, gain):
-${JSON.stringify(args.analysis_data.deezer_analysis ?? {}, null, 2)}
+${isObject(args.analysis_data) ? JSON.stringify(args.analysis_data.deezer_analysis ?? {}, null, 2) : '{}'}
 
 LAST.FM ANALYSIS (crowd tags, similar tracks):
-${JSON.stringify(args.analysis_data.lastfm_analysis ?? {}, null, 2)}
+${isObject(args.analysis_data) ? JSON.stringify(args.analysis_data.lastfm_analysis ?? {}, null, 2) : '{}'}
 
 ${
-  args.sample_tracks?.length
+  Array.isArray(args.sample_tracks) && args.sample_tracks.length
     ? `SAMPLE TRACKS (representative examples):\n${args.sample_tracks
         .map((t: {artists: string; name: string}) => `- "${t.name}" by ${t.artists}`)
         .join('\n')}`
@@ -815,9 +846,11 @@ CRITICAL: Ensure all JSON is valid. Do not include markdown code blocks, only th
 
           // Fallback: Basic analysis from tags
           const tags =
-            args.analysis_data.lastfm_analysis?.crowd_tags
-              ?.slice(0, 5)
-              .map((t: {count: number; tag: string}) => t.tag) ?? []
+            isObject(args.analysis_data) && isObject(args.analysis_data.lastfm_analysis) && Array.isArray(args.analysis_data.lastfm_analysis.crowd_tags)
+              ? args.analysis_data.lastfm_analysis.crowd_tags
+                  .slice(0, 5)
+                  .map((t: {count: number; tag: string}) => t.tag)
+              : []
           const fallbackVibe = {
             discovery_hints: {
               artist_archetypes: [],
@@ -986,7 +1019,7 @@ Use this to inform your strategy - the discovery hints are especially valuable.
 </vibe_context>
 
 ${
-  args.similar_tracks_available?.length
+  isStringArray(args.similar_tracks_available) && args.similar_tracks_available.length > 0
     ? `<lastfm_similar_tracks>
 AVAILABLE LAST.FM SIMILAR TRACKS:
 ${args.similar_tracks_available.slice(0, 10).join('\n')}
@@ -1116,7 +1149,9 @@ CRITICAL: Return valid JSON only. No markdown code blocks, no explanatory text o
           // Fallback: Basic strategy
           const fallbackStrategy = {
             avoid: [],
-            lastfm_similar_priority: args.similar_tracks_available?.slice(0, 5) ?? [],
+            lastfm_similar_priority: isStringArray(args.similar_tracks_available)
+              ? args.similar_tracks_available.slice(0, 5)
+              : [],
             recommendation_seeds: {
               approach: 'Use top tracks as seeds',
               parameters: {
@@ -1168,6 +1203,10 @@ CRITICAL: Return valid JSON only. No markdown code blocks, no explanatory text o
           data: {args, tool: 'recommend_from_similar'},
           type: 'tool_start',
         })
+
+        if (!isStringArray(args.similar_tracks)) {
+          throw new Error('similar_tracks must be an array of strings')
+        }
 
         await sseWriter.write({
           data: `🔍 Searching Spotify for ${args.similar_tracks.length} Last.fm recommendations...`,
@@ -1283,6 +1322,10 @@ CRITICAL: Return valid JSON only. No markdown code blocks, no explanatory text o
       func: async args => {
         if (abortSignal?.aborted) throw new Error('Request aborted')
 
+        if (!isStringArray(args.tags)) {
+          throw new Error('tags must be an array of strings')
+        }
+
         await sseWriter.write({
           data: {args, tool: 'recommend_from_tags'},
           type: 'tool_start',
@@ -1388,6 +1431,10 @@ CRITICAL: Return valid JSON only. No markdown code blocks, no explanatory text o
       func: async args => {
         if (abortSignal?.aborted) throw new Error('Request aborted')
 
+        if (!Array.isArray(args.candidate_tracks)) {
+          throw new Error('candidate_tracks must be an array')
+        }
+
         await sseWriter.write({
           data: {
             args: {
@@ -1430,13 +1477,13 @@ This interpretation should guide your selection priorities.
 <playlist_context>
 PLAYLIST CHARACTERISTICS (baseline for vibe matching):
 ${
-  args.playlist_context.bpm_range
+  isObject(args.playlist_context) && isObject(args.playlist_context.bpm_range)
     ? `BPM Range: ${args.playlist_context.bpm_range.min}-${args.playlist_context.bpm_range.max} (tempo profile)`
     : ''
 }
-${args.playlist_context.dominant_tags?.length ? `Dominant Tags: ${args.playlist_context.dominant_tags.join(', ')} (genre/mood signals)` : ''}
-${args.playlist_context.avg_popularity ? `Average Popularity: ${args.playlist_context.avg_popularity}/100 (mainstream vs underground)` : ''}
-${args.playlist_context.era ? `Era: ${args.playlist_context.era} (temporal context)` : ''}
+${isObject(args.playlist_context) && Array.isArray(args.playlist_context.dominant_tags) && args.playlist_context.dominant_tags.length ? `Dominant Tags: ${args.playlist_context.dominant_tags.join(', ')} (genre/mood signals)` : ''}
+${isObject(args.playlist_context) && isNumber(args.playlist_context.avg_popularity) ? `Average Popularity: ${args.playlist_context.avg_popularity}/100 (mainstream vs underground)` : ''}
+${isObject(args.playlist_context) && isString(args.playlist_context.era) ? `Era: ${args.playlist_context.era} (temporal context)` : ''}
 
 Use these characteristics as baseline expectations. Candidates should generally align with these patterns unless user intent explicitly requests deviation.
 </playlist_context>
@@ -1579,9 +1626,10 @@ CRITICAL:
           getLogger()?.error('[curate_recommendations] AI curation failed:', error)
 
           // Fallback: Sort by popularity and return top N
+          const topN = isNumber(args.top_n) ? args.top_n : 10
           const fallbackTracks = args.candidate_tracks
             .sort((a: {popularity?: number}, b: {popularity?: number}) => (b.popularity ?? 0) - (a.popularity ?? 0))
-            .slice(0, args.top_n)
+            .slice(0, topN)
 
           await sseWriter.write({
             data: `⚠️ AI curation unavailable, using popularity-based ranking`,
@@ -2695,7 +2743,7 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
 
           // Process streaming events
           let eventCount = 0
-          const contentBlocks: any[] = []
+          const contentBlocks: Anthropic.ContentBlock[] = []
           let currentBlockIndex = -1
 
           for await (const event of stream) {
@@ -2738,7 +2786,8 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
               const block = contentBlocks[event.index]
               if (block?.type === 'tool_use' && block.id && block.name) {
                 // Parse accumulated JSON and add to tool calls
-                const input = JSON.parse(block.input ?? '{}')
+                const inputStr = isString(block.input) ? block.input : '{}'
+                const input = JSON.parse(inputStr)
                 toolCalls.push({
                   args: input,
                   id: block.id,
@@ -2961,7 +3010,7 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
           try {
             // Process streaming events from second call
             let nextEventCount = 0
-            const nextContentBlocks: any[] = []
+            const nextContentBlocks: Anthropic.ContentBlock[] = []
             let nextCurrentBlockIndex = -1
 
             for await (const event of nextStream) {
@@ -3001,7 +3050,8 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
               } else if (event.type === 'content_block_stop') {
                 const block = nextContentBlocks[event.index]
                 if (block?.type === 'tool_use' && block.id && block.name) {
-                  const input = JSON.parse(block.input ?? '{}')
+                  const inputStr = isString(block.input) ? block.input : '{}'
+                  const input = JSON.parse(inputStr)
                   nextToolCalls.push({
                     args: input,
                     id: block.id,

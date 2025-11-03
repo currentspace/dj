@@ -24,8 +24,7 @@ import {getLogger} from '../utils/LoggerContext'
  */
 export function registerPlaylistRoutes(app: OpenAPIHono<{Bindings: Env}>) {
   // GET /api/spotify/playlists - Get user's playlists
-  // @ts-expect-error Handler returns 500 error not in contract, but runtime validation handles this
-  app.openapi(getUserPlaylists, async c => {
+  app.openapi(getUserPlaylists, async (c) => {
     try {
       // Headers automatically validated by contract
       const token = c.req.header('authorization')?.replace('Bearer ', '')
@@ -58,7 +57,7 @@ export function registerPlaylistRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       }
 
       // Response automatically validated against contract schema
-      return c.json(parseResult.data)
+      return c.json(parseResult.data, 200)
     } catch (error) {
       getLogger()?.error('Get playlists error:', error)
       const message = error instanceof Error ? error.message : 'Failed to get playlists'
@@ -67,8 +66,7 @@ export function registerPlaylistRoutes(app: OpenAPIHono<{Bindings: Env}>) {
   })
 
   // GET /api/spotify/playlists/:id/tracks - Get playlist tracks
-  // @ts-expect-error Handler returns 500 error not in contract, but runtime validation handles this
-  app.openapi(getPlaylistTracks, async c => {
+  app.openapi(getPlaylistTracks, async (c) => {
     try {
       // Headers and params automatically validated by contract
       const token = c.req.header('authorization')?.replace('Bearer ', '')
@@ -108,7 +106,7 @@ export function registerPlaylistRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       }
 
       // Response automatically validated against contract schema
-      return c.json({items: parseResult.data.items})
+      return c.json({items: parseResult.data.items}, 200)
     } catch (error) {
       getLogger()?.error('Get playlist tracks error:', error)
       const message = error instanceof Error ? error.message : 'Failed to get playlist tracks'
@@ -117,8 +115,7 @@ export function registerPlaylistRoutes(app: OpenAPIHono<{Bindings: Env}>) {
   })
 
   // POST /api/spotify/playlists - Create a new playlist
-  // @ts-expect-error Handler returns 500 error not in contract, but runtime validation handles this
-  app.openapi(createPlaylist, async c => {
+  app.openapi(createPlaylist, async (c) => {
     try {
       // Headers and body automatically validated by contract
       const token = c.req.header('authorization')?.replace('Bearer ', '')
@@ -186,8 +183,7 @@ export function registerPlaylistRoutes(app: OpenAPIHono<{Bindings: Env}>) {
   })
 
   // POST /api/spotify/playlists/modify - Add or remove tracks
-  // @ts-expect-error Handler returns 500 error not in contract, but runtime validation handles this
-  app.openapi(modifyPlaylist, async c => {
+  app.openapi(modifyPlaylist, async (c) => {
     try {
       // Headers and body automatically validated by contract
       const token = c.req.header('authorization')?.replace('Bearer ', '')
@@ -228,7 +224,7 @@ export function registerPlaylistRoutes(app: OpenAPIHono<{Bindings: Env}>) {
           action: 'added',
           snapshot_id: addParseResult.data.snapshot_id,
           success: true,
-        })
+        }, 200)
       } else if (action === 'remove') {
         // Remove tracks from playlist
         const response = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks`, {
@@ -260,7 +256,7 @@ export function registerPlaylistRoutes(app: OpenAPIHono<{Bindings: Env}>) {
           action: 'removed',
           snapshot_id: removeParseResult.data.snapshot_id,
           success: true,
-        })
+        }, 200)
       }
 
       return c.json({error: 'Invalid action'}, 400)

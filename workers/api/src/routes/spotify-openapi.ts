@@ -22,8 +22,7 @@ const REDIRECT_URI = 'https://dj.current.space/api/spotify/callback'
  */
 export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
   // GET /api/spotify/auth-url - Generate OAuth URL with PKCE
-  // @ts-expect-error Handler returns unified error type, but runtime validation handles this
-  app.openapi(getSpotifyAuthUrl, async c => {
+  app.openapi(getSpotifyAuthUrl, async (c) => {
     const env = c.env
 
     const codeVerifier = generateCodeVerifier()
@@ -61,7 +60,7 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
     // Response automatically validated against contract schema
     return c.json({
       url: `${SPOTIFY_AUTH_URL}?${params.toString()}`,
-    })
+    }, 200)
   })
 
   // GET /api/spotify/callback - OAuth callback handler
@@ -171,8 +170,7 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
   })
 
   // POST /api/spotify/token - Exchange authorization code for token
-  // @ts-expect-error Handler returns unified error type, but runtime validation handles this
-  app.openapi(exchangeSpotifyToken, async c => {
+  app.openapi(exchangeSpotifyToken, async (c) => {
     const env = c.env
 
     try {
@@ -228,7 +226,7 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
         refresh_token: tokenData.refresh_token,
         scope: tokenData.scope,
         token_type: 'Bearer' as const,
-      })
+      }, 200)
     } catch (error) {
       getLogger()?.error('Token exchange error:', error)
       return c.json(
@@ -242,8 +240,7 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
   })
 
   // POST /api/spotify/search - Search Spotify catalog
-  // @ts-expect-error Handler returns SafeParseResult type, but runtime validation handles this
-  app.openapi(searchSpotify, async c => {
+  app.openapi(searchSpotify, async (c) => {
     try {
       // Headers and body automatically validated by contract
       const token = c.req.header('authorization')?.replace('Bearer ', '')
@@ -268,15 +265,15 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       }
 
       const responseData = await response.json()
-      const spotifyData = safeParse(SpotifySearchResponseSchema, responseData)
+      const spotifyResult = safeParse(SpotifySearchResponseSchema, responseData)
 
-      if (!spotifyData) {
+      if (!spotifyResult.success) {
         getLogger()?.error('Invalid Spotify search response format')
         return c.json({error: 'Invalid response from Spotify'}, 400)
       }
 
       // Response automatically validated against contract schema
-      return c.json(spotifyData)
+      return c.json(spotifyResult.data, 200)
     } catch (error) {
       getLogger()?.error('Spotify search error:', error)
       const message = error instanceof Error ? error.message : 'Search failed'

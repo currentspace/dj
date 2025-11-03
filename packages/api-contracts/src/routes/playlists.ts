@@ -27,7 +27,7 @@ export const getUserPlaylists = createRoute({
     200: {
       content: {
         'application/json': {
-           
+
           schema: UserPlaylistsResponseSchema,
         },
       },
@@ -42,6 +42,16 @@ export const getUserPlaylists = createRoute({
         },
       },
       description: 'Unauthorized',
+    },
+    500: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            error: z.string(),
+          }),
+        },
+      },
+      description: 'Internal server error',
     },
   },
   tags: ['Playlists'],
@@ -72,7 +82,7 @@ export const getPlaylistTracks = createRoute({
       content: {
         'application/json': {
           schema: z.object({
-            items: z.array(z.any()), // Track items
+            items: z.array(z.unknown()), // Track items
           }),
         },
       },
@@ -97,6 +107,16 @@ export const getPlaylistTracks = createRoute({
         },
       },
       description: 'Playlist not found',
+    },
+    500: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            error: z.string(),
+          }),
+        },
+      },
+      description: 'Internal server error',
     },
   },
   tags: ['Playlists'],
@@ -130,7 +150,7 @@ export const createPlaylist = createRoute({
     201: {
       content: {
         'application/json': {
-           
+
           schema: SpotifyPlaylistSimpleSchema,
         },
       },
@@ -155,6 +175,16 @@ export const createPlaylist = createRoute({
         },
       },
       description: 'Unauthorized',
+    },
+    500: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            error: z.string(),
+          }),
+        },
+      },
+      description: 'Internal server error',
     },
   },
   tags: ['Playlists'],
@@ -216,6 +246,16 @@ export const modifyPlaylist = createRoute({
         },
       },
       description: 'Unauthorized',
+    },
+    500: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            error: z.string(),
+          }),
+        },
+      },
+      description: 'Internal server error',
     },
   },
   tags: ['Playlists'],

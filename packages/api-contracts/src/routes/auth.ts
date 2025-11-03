@@ -109,6 +109,17 @@ export const exchangeSpotifyToken = createRoute({
       },
       description: 'Invalid request',
     },
+    500: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            error: z.string(),
+            error_description: z.string().optional(),
+          }),
+        },
+      },
+      description: 'Internal server error',
+    },
   },
   tags: ['Auth'],
 })
@@ -143,7 +154,7 @@ export const searchSpotify = createRoute({
           schema: z.object({
             tracks: z
               .object({
-                items: z.array(z.any()), // Use SpotifyTrackSchema from shared-types
+                items: z.array(z.unknown()), // Use SpotifyTrackSchema from shared-types
               })
               .optional(),
           }),
@@ -170,6 +181,16 @@ export const searchSpotify = createRoute({
         },
       },
       description: 'Unauthorized',
+    },
+    500: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            error: z.string(),
+          }),
+        },
+      },
+      description: 'Internal server error',
     },
   },
   tags: ['Spotify'],
