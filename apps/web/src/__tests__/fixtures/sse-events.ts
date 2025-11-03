@@ -285,13 +285,13 @@ export class MockEventSource implements EventSource {
 
   addEventListener(
     type: string,
-    listener: EventListenerOrEventListenerObject,
+    listener: EventListenerOrEventListenerObject | ((this: EventSource, event: MessageEvent) => unknown),
     _options?: AddEventListenerOptions | boolean,
   ): void {
     if (!this.listeners.has(type)) {
       this.listeners.set(type, new Set())
     }
-    this.listeners.get(type)!.add(listener)
+    this.listeners.get(type)!.add(listener as EventListenerOrEventListenerObject)
   }
 
   close(): void {
@@ -318,12 +318,12 @@ export class MockEventSource implements EventSource {
 
   removeEventListener(
     type: string,
-    listener: EventListenerOrEventListenerObject,
+    listener: EventListenerOrEventListenerObject | ((this: EventSource, event: MessageEvent) => unknown),
     _options?: EventListenerOptions | boolean,
   ): void {
     const listeners = this.listeners.get(type)
     if (listeners) {
-      listeners.delete(listener)
+      listeners.delete(listener as EventListenerOrEventListenerObject)
     }
   }
 

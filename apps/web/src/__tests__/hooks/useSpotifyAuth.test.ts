@@ -318,7 +318,7 @@ describe('useSpotifyAuth Hook', () => {
       setMockTokenInLocalStorage()
 
       let abortSignal: AbortSignal | null = null
-      vi.mocked(fetch).mockImplementation((url, options) => {
+      vi.mocked(fetch).mockImplementation((_url, options) => {
         abortSignal = options?.signal as AbortSignal
         return new Promise((resolve, reject) => {
           setTimeout(() => {
@@ -340,7 +340,8 @@ describe('useSpotifyAuth Hook', () => {
 
       await flushPromises()
 
-      expect(abortSignal?.aborted).toBe(true)
+      expect(abortSignal).toBeTruthy()
+      expect((abortSignal as unknown as AbortSignal).aborted).toBe(true)
     })
 
     it('should handle multiple concurrent validations', async () => {
@@ -521,7 +522,7 @@ describe('useSpotifyAuth Hook', () => {
         })
       })
 
-      const {result, unmount} = renderHook(() => useSpotifyAuth())
+      const {result: _result, unmount} = renderHook(() => useSpotifyAuth())
 
       await flushPromises()
 

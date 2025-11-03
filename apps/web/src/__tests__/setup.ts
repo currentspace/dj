@@ -13,7 +13,7 @@ afterEach(() => {
 beforeEach(() => {
   // Reset location mock
   delete (window as {location?: Location}).location
-  window.location = {
+  ;(window as {location: Location}).location = {
     href: 'http://localhost:3000',
     pathname: '/',
     search: '',
