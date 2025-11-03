@@ -27,7 +27,7 @@ import {executeSpotifyTool} from '../lib/spotify-tools'
 import {AudioEnrichmentService} from '../services/AudioEnrichmentService'
 import {LastFmService} from '../services/LastFmService'
 import {getChildLogger, getLogger, runWithLogger} from '../utils/LoggerContext'
-import {rateLimitedAnthropicCall, rateLimitedSpotifyCall} from '../utils/RateLimitedAPIClients'
+import {rateLimitedSpotifyCall} from '../utils/RateLimitedAPIClients'
 import {ServiceLogger} from '../utils/ServiceLogger'
 
 const chatStreamRouter = new Hono<{Bindings: Env}>()
@@ -204,8 +204,8 @@ function convertToAnthropicTools(tools: NativeTool[]): Anthropic.Tool[] {
     return {
       description: tool.description,
       input_schema: {
-        properties: jsonSchema.properties || {},
-        required: jsonSchema.required || [],
+        properties: jsonSchema.properties ?? {},
+        required: jsonSchema.required ?? [],
         type: 'object' as const,
       },
       name: tool.name,
@@ -2727,9 +2727,7 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
                 // Tool input delta - accumulate
                 const currentBlock = contentBlocks[currentBlockIndex]
                 if (currentBlock?.type === 'tool_use') {
-                  if (!currentBlock.input) {
-                    currentBlock.input = ''
-                  }
+                  currentBlock.input ??= ''
                   currentBlock.input += event.delta.partial_json
                 }
               }
@@ -2738,7 +2736,7 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
               const block = contentBlocks[event.index]
               if (block?.type === 'tool_use' && block.id && block.name) {
                 // Parse accumulated JSON and add to tool calls
-                const input = JSON.parse(block.input || '{}')
+                const input = JSON.parse(block.input ?? '{}')
                 toolCalls.push({
                   args: input,
                   id: block.id,
@@ -2904,9 +2902,10 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
 
           getLogger()?.info(`[Stream:${requestId}] Conversation now has ${conversationMessages.length} messages`)
 
+          let nextStream
           try {
             // Create second stream with tool results
-            const nextStream = anthropic.messages.stream({
+            nextStream = anthropic.messages.stream({
               max_tokens: 10000,
               messages: conversationMessages,
               model: 'claude-sonnet-4-5-20250929',
@@ -2991,16 +2990,14 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
                 } else if (event.delta.type === 'input_json_delta') {
                   const currentBlock = nextContentBlocks[nextCurrentBlockIndex]
                   if (currentBlock?.type === 'tool_use') {
-                    if (!currentBlock.input) {
-                      currentBlock.input = ''
-                    }
+                    currentBlock.input ??= ''
                     currentBlock.input += event.delta.partial_json
                   }
                 }
               } else if (event.type === 'content_block_stop') {
                 const block = nextContentBlocks[event.index]
                 if (block?.type === 'tool_use' && block.id && block.name) {
-                  const input = JSON.parse(block.input || '{}')
+                  const input = JSON.parse(block.input ?? '{}')
                   nextToolCalls.push({
                     args: input,
                     id: block.id,
@@ -3056,9 +3053,10 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
             type: 'thinking',
           })
 
+          let finalStream
           try {
             // Create final stream
-            const finalStream = anthropic.messages.stream({
+            finalStream = anthropic.messages.stream({
               max_tokens: 10000,
               messages: conversationMessages,
               model: 'claude-sonnet-4-5-20250929',

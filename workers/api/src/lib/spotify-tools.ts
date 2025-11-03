@@ -699,7 +699,7 @@ async function getAudioFeatures(args: any, token: string, cache?: KVNamespace) {
   }
 
   // Check cache for each track
-  const cachedFeatures: Map<string, any> = new Map()
+  const cachedFeatures = new Map<string, any>()
   const uncachedTrackIds: string[] = []
 
   if (cache) {
@@ -759,7 +759,7 @@ async function getAudioFeatures(args: any, token: string, cache?: KVNamespace) {
     if (cache) {
       await Promise.all(
         freshFeatures.map(async feature => {
-          if (feature && feature.id) {
+          if (feature?.id) {
             const cacheKey = `spotify:audio_features:${feature.id}`
             await cache.put(cacheKey, JSON.stringify(feature), {expirationTtl: CACHE_TTL})
             getLogger()?.info(`[getAudioFeatures] Cached audio features for ${feature.id}`)
@@ -774,7 +774,7 @@ async function getAudioFeatures(args: any, token: string, cache?: KVNamespace) {
     const cached = cachedFeatures.get(trackId)
     if (cached) return cached
 
-    const fresh = freshFeatures.find(f => f && f.id === trackId)
+    const fresh = freshFeatures.find(f => f?.id === trackId)
     return fresh ?? null
   })
 

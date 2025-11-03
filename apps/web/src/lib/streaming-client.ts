@@ -53,7 +53,7 @@ export class ChatStreamClient {
 
     let token: string
     try {
-      const tokenData = JSON.parse(tokenDataStr) as {token: string; expiresAt: null | number}
+      const tokenData = JSON.parse(tokenDataStr) as {expiresAt: null | number; token: string;}
       token = tokenData.token
     } catch {
       callbacks.onError?.('Invalid token data')
