@@ -20,7 +20,7 @@
     "@dj/shared-types": "workspace:*",
     "@hono/zod-openapi": "^1.1.4",
     "hono": "^4.9.0",
-    "zod": "^3.25.0"
+    "zod": "^4.1.12"
   },
   "devDependencies": {
     "tsup": "^8.5.0",
