@@ -393,6 +393,24 @@ export class AudioEnrichmentService {
     artistName: string,
     durationMs: number,
   ): Promise<null | string> {
+    const MUSICBRAINZ_CACHE_TTL = 30 * 24 * 60 * 60 // 30 days in seconds
+
+    // Create cache key from track name, artist, and duration
+    const cacheKey = `musicbrainz:isrc:${trackName}:${artistName}:${Math.floor(durationMs / 1000)}s`
+
+    // Check cache first
+    if (this.cache) {
+      const cached = await this.cache.get(cacheKey, 'text')
+      if (cached !== null) {
+        if (cached === 'null') {
+          getLogger()?.info(`[BPMEnrichment] MusicBrainz cache hit (no ISRC): ${trackName}`)
+          return null
+        }
+        getLogger()?.info(`[BPMEnrichment] MusicBrainz cache hit: ${cached}`)
+        return cached
+      }
+    }
+
     try {
       const query = `recording:"${trackName}" AND artist:"${artistName}"`
       const url = `https://musicbrainz.org/ws/2/recording/?query=${encodeURIComponent(query)}&fmt=json&limit=5`
@@ -421,7 +439,13 @@ export class AudioEnrichmentService {
 
       const recordings = parseResult.data.recordings
 
-      if (recordings.length === 0) return null
+      if (recordings.length === 0) {
+        // Cache null result
+        if (this.cache) {
+          await this.cache.put(cacheKey, 'null', {expirationTtl: MUSICBRAINZ_CACHE_TTL})
+        }
+        return null
+      }
 
       // Find best match by duration
       const targetMs = durationMs
@@ -436,15 +460,25 @@ export class AudioEnrichmentService {
 
       const best = withDuration[0]
 
+      let result: null | string = null
+
       if (best && best.diff < 10000) {
         // Within 10 seconds
         getLogger()?.info(`[BPMEnrichment] Found ISRC via MusicBrainz: ${best.isrc}`)
-        return best.isrc
+        result = best.isrc
+      } else {
+        // If no duration match, just return first ISRC
+        const firstWithISRC = recordings.find((r: MusicBrainzRecording) => r.isrcs && r.isrcs.length > 0)
+        result = firstWithISRC?.isrcs?.[0] ?? null
       }
 
-      // If no duration match, just return first ISRC
-      const firstWithISRC = recordings.find((r: MusicBrainzRecording) => r.isrcs && r.isrcs.length > 0)
-      return firstWithISRC?.isrcs?.[0] ?? null
+      // Cache the result
+      if (this.cache) {
+        await this.cache.put(cacheKey, result ?? 'null', {expirationTtl: MUSICBRAINZ_CACHE_TTL})
+        getLogger()?.info(`[BPMEnrichment] Cached MusicBrainz ISRC: ${result ?? 'null'}`)
+      }
+
+      return result
     } catch (error) {
       getLogger()?.error('[BPMEnrichment] MusicBrainz fetch failed:', error)
       return null
