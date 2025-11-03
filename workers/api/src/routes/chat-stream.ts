@@ -870,7 +870,7 @@ Return ONLY valid JSON:
           // Enable extended thinking for better reasoning
           thinking: {
             type: 'enabled',
-            budget_tokens: 2000,
+            budget_tokens: 4000, // Increased from 2000 for deeper strategic reasoning
           },
         })
 
@@ -2282,7 +2282,7 @@ chatStreamRouter.post('/message', async c => {
             // Enable extended thinking for better reasoning
             thinking: {
               type: 'enabled',
-              budget_tokens: 1024, // Minimum is 1024 tokens
+              budget_tokens: 4000, // Increased from 1024 for deeper tool orchestration reasoning
             },
           })
           return llm.bindTools(tools)
@@ -2425,9 +2425,20 @@ Be concise and helpful. Describe playlists using genres, popularity, era, and de
           type: 'debug',
         })
 
-        // Build messages
+        // Build messages with prompt caching
+        // Cache the system prompt since it's reused across all messages in a conversation
+        // System prompt changes when playlist context changes, which is desired behavior
         const messages = [
-          new SystemMessage(systemPrompt),
+          {
+            role: 'system' as const,
+            content: [
+              {
+                type: 'text' as const,
+                text: systemPrompt,
+                cache_control: {type: 'ephemeral' as const},
+              },
+            ],
+          },
           ...request.conversationHistory.map(m =>
             m.role === 'user' ? new HumanMessage(m.content) : new AIMessage(m.content),
           ),
