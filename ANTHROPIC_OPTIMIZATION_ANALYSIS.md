@@ -511,6 +511,46 @@ Assuming 1000 conversations/month, avg 10 messages each:
 
 ---
 
+## Critical Lessons Learned
+
+### Issue 1: maxTokens Must Exceed thinking.budget_tokens
+
+**Error Encountered:**
+```
+Claude API failed: 400 {
+  "type": "error",
+  "error": {
+    "type": "invalid_request_error",
+    "message": "`max_tokens` must be greater than `thinking.budget_tokens`"
+  }
+}
+```
+
+**Root Cause:**
+- Increased `thinking.budget_tokens` to 4000 in main chat
+- Did NOT update `maxTokens` (remained at 2000)
+- Anthropic requires: `maxTokens > thinking.budget_tokens`
+
+**Why:** The `maxTokens` budget includes BOTH thinking tokens AND response tokens. If you allocate 4000 tokens for thinking but only allow 2000 total tokens, it's mathematically impossible.
+
+**Fix Applied (Commit 1366db3):**
+1. Main chat: `maxTokens: 2000 → 8000` (4000 thinking + 4000 response)
+2. Vibe extraction: Added `maxTokens: 5000` (2000 thinking + 3000 response)
+3. Planning strategy: Added `maxTokens: 8000` (4000 thinking + 4000 response)
+4. Curation: Added `maxTokens: 5000` (2000 thinking + 3000 response)
+
+**Rule of Thumb:**
+```
+maxTokens = thinking.budget_tokens + expected_response_length
+```
+
+For conversational AI: Use `maxTokens = 2 × thinking.budget_tokens` to be safe.
+
+**Documentation Reference:**
+https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking#max-tokens-and-context-window-size
+
+---
+
 ## Conclusion
 
 **Immediate Actions (This Week):**
