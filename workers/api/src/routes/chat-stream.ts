@@ -634,6 +634,11 @@ function createStreamingSpotifyTools(
           apiKey: env.ANTHROPIC_API_KEY,
           maxRetries: 0,
           model: 'claude-sonnet-4-5-20250929',
+          // Enable extended thinking for better reasoning
+          thinking: {
+            type: 'enabled',
+            budget_tokens: 2000,
+          },
         })
 
         const vibePrompt = `You are a music critic analyzing a playlist's vibe. Extract SUBTLE signals that algorithms miss.
@@ -860,6 +865,11 @@ Return ONLY valid JSON:
           apiKey: env.ANTHROPIC_API_KEY,
           maxRetries: 0,
           model: 'claude-sonnet-4-5-20250929',
+          // Enable extended thinking for better reasoning
+          thinking: {
+            type: 'enabled',
+            budget_tokens: 2000,
+          },
         })
 
         const strategyPrompt = `You are a music discovery strategist. Create a smart plan to find interesting tracks.
@@ -1238,6 +1248,11 @@ Return ONLY valid JSON:
           apiKey: env.ANTHROPIC_API_KEY,
           maxRetries: 0,
           model: 'claude-sonnet-4-5-20250929',
+          // Enable extended thinking for better reasoning
+          thinking: {
+            type: 'enabled',
+            budget_tokens: 2000,
+          },
         })
 
         const curationPrompt = `You are a music curator helping select the best track recommendations.
@@ -2261,6 +2276,11 @@ chatStreamRouter.post('/message', async c => {
             streaming: true,
             temperature: 0.2,
             // Note: Cannot use both temperature and topP with Sonnet 4.5
+            // Enable extended thinking for better reasoning
+            thinking: {
+              type: 'enabled',
+              budget_tokens: 1000,
+            },
           })
           return llm.bindTools(tools)
         }
