@@ -8,8 +8,6 @@
  * - Guards onResult so callback errors don't poison the loop
  */
 
-import {z} from 'zod'
-
 import {getLogger} from './LoggerContext'
 
 export interface QueueOptions {
@@ -37,7 +35,8 @@ export class RateLimitedQueue<T> {
 
   private running = 0
   // scheduling
-  private timer: null | number = null
+  // Timer ID can be number (Cloudflare Workers) or NodeJS.Timeout (Node.js)
+  private timer: null | number | NodeJS.Timeout = null
   // token bucket
   private tokens: number
 
@@ -155,14 +154,12 @@ export class RateLimitedQueue<T> {
         return Math.max(this.minTickMs, wait + jitter)
       }
 
-      this.timer = toTimerId(setTimeout(tick, nextWakeMs()))
+      this.timer = setTimeout(tick, nextWakeMs())
     }
 
     const clearIfSet = () => {
       if (this.timer !== null) {
-        if (isValidTimerId(this.timer)) {
-          clearTimeout(this.timer)
-        }
+        clearTimeout(this.timer)
         this.timer = null
       }
     }
@@ -207,7 +204,7 @@ export class RateLimitedQueue<T> {
       }
       // If there are still tasks to issue and we have capacity/tokens, tick with minTickMs
       if (this.running < this.concurrency && issued < total) {
-        this.timer ??= toTimerId(setTimeout(tick, this.minTickMs))
+        this.timer ??= setTimeout(tick, this.minTickMs)
       }
     }
 
@@ -311,14 +308,12 @@ export class RateLimitedQueue<T> {
         return Math.max(this.minTickMs, wait + jitter)
       }
 
-      this.timer = toTimerId(setTimeout(tick, nextWakeMs()))
+      this.timer = setTimeout(tick, nextWakeMs())
     }
 
     const clearIfSet = () => {
       if (this.timer !== null) {
-        if (isValidTimerId(this.timer)) {
-          clearTimeout(this.timer)
-        }
+        clearTimeout(this.timer)
         this.timer = null
       }
     }
@@ -357,7 +352,7 @@ export class RateLimitedQueue<T> {
     const kick = () => {
       // If there are tasks and we have capacity, tick immediately
       if (this.running < this.concurrency && this.queue.length > 0) {
-        this.timer ??= toTimerId(setTimeout(tick, this.minTickMs))
+        this.timer ??= setTimeout(tick, this.minTickMs)
       }
     }
 
@@ -384,16 +379,3 @@ export class RateLimitedQueue<T> {
   }
 }
 
-// Type guard for timer IDs (setTimeout return value in Cloudflare Workers)
-const TimerIdSchema = z.number()
-
-function isValidTimerId(value: unknown): value is number {
-  return TimerIdSchema.safeParse(value).success
-}
-
-function toTimerId(value: unknown): number {
-  if (isValidTimerId(value)) {
-    return value
-  }
-  throw new Error(`Invalid timer ID: ${typeof value}`)
-}
