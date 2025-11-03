@@ -13,11 +13,24 @@
     "lint": "eslint --cache .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "pnpm -r test",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest --coverage",
+    "test:web": "vitest --project web",
+    "test:api": "vitest --project api",
+    "test:watch": "vitest --watch",
+    "test:contracts": "pnpm --filter @dj/api-worker test:contracts",
+    "test:contracts:spotify": "pnpm --filter @dj/api-worker test:contracts -- spotify.contract.test.ts",
+    "test:contracts:deezer": "pnpm --filter @dj/api-worker test:contracts -- deezer.contract.test.ts",
+    "test:contracts:lastfm": "pnpm --filter @dj/api-worker test:contracts -- lastfm.contract.test.ts",
     "deploy": "pnpm build && pnpm --filter @dj/api-worker deploy && pnpm --filter @dj/webhook-worker deploy"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1",
+    "@vitest/ui": "^4.0.6",
     "eslint": "^9.39.0",
     "eslint-plugin-jsx-a11y": "^6.10.2",
     "eslint-plugin-perfectionist": "^4.15.1",
@@ -26,9 +39,12 @@
     "eslint-plugin-react-refresh": "^0.4.24",
     "eslint-plugin-security": "^3.0.1",
     "globals": "^16.5.0",
+    "happy-dom": "^16.8.1",
+    "jsdom": "^25.0.1",
     "prettier": "^3.6.2",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.46.2"
+    "typescript-eslint": "^8.46.2",
+    "vitest": "^4.0.6"
   },
   "dependencies": {
     "zod": "^3.25.76"

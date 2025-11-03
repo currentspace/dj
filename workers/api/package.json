@@ -8,7 +8,8 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "typecheck": "tsc --noEmit",
-    "test": "vitest"
+    "test": "vitest",
+    "test:contracts": "vitest --config vitest.contracts.config.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.68.0",
@@ -25,7 +26,7 @@
     "@cloudflare/workers-types": "^4.20241127.0",
     "@types/node": "^24.9.2",
     "tsup": "^8.3.5",
-    "vitest": "^3.2.0",
+    "vitest": "^4.0.6",
     "wrangler": "^4.38.0"
   }
 }
