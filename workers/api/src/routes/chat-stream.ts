@@ -598,9 +598,7 @@ function createStreamingSpotifyTools(
               if (trackIds.length > 0) {
                 finalArgs.seed_tracks = trackIds
                 const seedCount = isStringArray(finalArgs.seed_tracks) ? finalArgs.seed_tracks.length : 0
-                getLogger()?.info(
-                  `[get_recommendations] Auto-injected ${seedCount} seed tracks from playlist`,
-                )
+                getLogger()?.info(`[get_recommendations] Auto-injected ${seedCount} seed tracks from playlist`)
               }
             }
           } catch (error) {
@@ -825,7 +823,16 @@ CRITICAL: Ensure all JSON is valid. Do not include markdown code blocks, only th
             throw new Error('No JSON found in vibe analysis response')
           }
 
-          const vibeAnalysis = JSON.parse(jsonMatch[0])
+          let vibeAnalysis
+          try {
+            vibeAnalysis = JSON.parse(jsonMatch[0])
+          } catch (parseError) {
+            getLogger()?.error('[extract_playlist_vibe] Failed to parse vibe analysis JSON', {
+              error: parseError instanceof Error ? parseError.message : String(parseError),
+              jsonPreview: jsonMatch[0].substring(0, 200),
+            })
+            throw new Error('Failed to parse vibe analysis response as JSON')
+          }
 
           await sseWriter.write({
             data: `✅ Vibe extracted: ${vibeAnalysis.vibe_profile?.substring(0, 80)}...`,
@@ -846,7 +853,9 @@ CRITICAL: Ensure all JSON is valid. Do not include markdown code blocks, only th
 
           // Fallback: Basic analysis from tags
           const tags =
-            isObject(args.analysis_data) && isObject(args.analysis_data.lastfm_analysis) && Array.isArray(args.analysis_data.lastfm_analysis.crowd_tags)
+            isObject(args.analysis_data) &&
+            isObject(args.analysis_data.lastfm_analysis) &&
+            Array.isArray(args.analysis_data.lastfm_analysis.crowd_tags)
               ? args.analysis_data.lastfm_analysis.crowd_tags
                   .slice(0, 5)
                   .map((t: {count: number; tag: string}) => t.tag)
@@ -1125,7 +1134,16 @@ CRITICAL: Return valid JSON only. No markdown code blocks, no explanatory text o
             throw new Error('No JSON found in strategy response')
           }
 
-          const strategy = JSON.parse(jsonMatch[0])
+          let strategy
+          try {
+            strategy = JSON.parse(jsonMatch[0])
+          } catch (parseError) {
+            getLogger()?.error('[plan_discovery_strategy] Failed to parse strategy JSON', {
+              error: parseError instanceof Error ? parseError.message : String(parseError),
+              jsonPreview: jsonMatch[0].substring(0, 200),
+            })
+            throw new Error('Failed to parse discovery strategy response as JSON')
+          }
 
           await sseWriter.write({
             data: `✅ Strategy: ${strategy.strategy_summary?.substring(0, 80)}...`,
@@ -1588,9 +1606,21 @@ CRITICAL:
             throw new Error('No JSON found in response')
           }
 
-          const curation = JSON.parse(jsonMatch[0]) as {
+          let curation: {
             reasoning?: string
             selected_track_ids?: string[]
+          }
+          try {
+            curation = JSON.parse(jsonMatch[0]) as {
+              reasoning?: string
+              selected_track_ids?: string[]
+            }
+          } catch (parseError) {
+            getLogger()?.error('[curate_recommendations] Failed to parse curation JSON', {
+              error: parseError instanceof Error ? parseError.message : String(parseError),
+              jsonPreview: jsonMatch[0].substring(0, 200),
+            })
+            throw new Error('Failed to parse curation response as JSON')
           }
           const selectedIds = curation.selected_track_ids ?? []
           const reasoning = curation.reasoning ?? 'AI curation complete'
@@ -2759,7 +2789,9 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
               contentBlocks[currentBlockIndex] = event.content_block
 
               if (event.content_block.type === 'tool_use') {
-                // Initialize tool call
+                // Initialize tool input as empty string for JSON accumulation
+                // This prevents "[object Object]" coercion when concatenating deltas
+                event.content_block.input = ''
                 getLogger()?.info(`[Stream:${requestId}] Tool use started: ${event.content_block.name}`)
               }
             } else if (event.type === 'content_block_delta') {
@@ -2787,13 +2819,30 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
               if (block?.type === 'tool_use' && block.id && block.name) {
                 // Parse accumulated JSON and add to tool calls
                 const inputStr = isString(block.input) ? block.input : '{}'
-                const input = JSON.parse(inputStr)
-                toolCalls.push({
-                  args: input,
-                  id: block.id,
-                  name: block.name,
-                })
-                getLogger()?.info(`[Stream:${requestId}] Tool use complete: ${block.name}`)
+                try {
+                  const input = JSON.parse(inputStr)
+                  toolCalls.push({
+                    args: input,
+                    id: block.id,
+                    name: block.name,
+                  })
+                  getLogger()?.info(`[Stream:${requestId}] Tool use complete: ${block.name}`)
+                } catch (parseError) {
+                  getLogger()?.error(
+                    `[Stream:${requestId}] Failed to parse tool input for ${block.name}`,
+                    {
+                      error: parseError instanceof Error ? parseError.message : String(parseError),
+                      inputType: typeof block.input,
+                      inputPreview: inputStr.substring(0, 100),
+                    },
+                  )
+                  // Use empty object as fallback to allow execution to continue
+                  toolCalls.push({
+                    args: {},
+                    id: block.id,
+                    name: block.name,
+                  })
+                }
               }
             }
           }
@@ -2870,10 +2919,9 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
             getLogger()?.info(`[Stream:${requestId}] Looking for tool: ${toolCall.name}`)
             const tool = tools.find(t => t.name === toolCall.name)
             if (tool) {
-              getLogger()?.info(
-                `[Stream:${requestId}] Executing tool: ${toolCall.name} with args:`,
-                {args: JSON.stringify(toolCall.args).substring(0, 200)},
-              )
+              getLogger()?.info(`[Stream:${requestId}] Executing tool: ${toolCall.name} with args:`, {
+                args: JSON.stringify(toolCall.args).substring(0, 200),
+              })
               try {
                 const result = await tool.func(toolCall.args)
                 getLogger()?.info(`[Stream:${requestId}] Tool ${toolCall.name} completed successfully`)
@@ -3026,6 +3074,9 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
                 nextContentBlocks[nextCurrentBlockIndex] = event.content_block
 
                 if (event.content_block.type === 'tool_use') {
+                  // Initialize tool input as empty string for JSON accumulation
+                  // This prevents "[object Object]" coercion when concatenating deltas
+                  event.content_block.input = ''
                   getLogger()?.info(
                     `[Stream:${requestId}] Turn ${turnCount} tool use started: ${event.content_block.name}`,
                   )
@@ -3051,13 +3102,30 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
                 const block = nextContentBlocks[event.index]
                 if (block?.type === 'tool_use' && block.id && block.name) {
                   const inputStr = isString(block.input) ? block.input : '{}'
-                  const input = JSON.parse(inputStr)
-                  nextToolCalls.push({
-                    args: input,
-                    id: block.id,
-                    name: block.name,
-                  })
-                  getLogger()?.info(`[Stream:${requestId}] Turn ${turnCount} tool use complete: ${block.name}`)
+                  try {
+                    const input = JSON.parse(inputStr)
+                    nextToolCalls.push({
+                      args: input,
+                      id: block.id,
+                      name: block.name,
+                    })
+                    getLogger()?.info(`[Stream:${requestId}] Turn ${turnCount} tool use complete: ${block.name}`)
+                  } catch (parseError) {
+                    getLogger()?.error(
+                      `[Stream:${requestId}] Turn ${turnCount} failed to parse tool input for ${block.name}`,
+                      {
+                        error: parseError instanceof Error ? parseError.message : String(parseError),
+                        inputType: typeof block.input,
+                        inputPreview: inputStr.substring(0, 100),
+                      },
+                    )
+                    // Use empty object as fallback to allow execution to continue
+                    nextToolCalls.push({
+                      args: {},
+                      id: block.id,
+                      name: block.name,
+                    })
+                  }
                 }
               }
             }
@@ -3186,41 +3254,41 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
                 }
               }
             } catch (finalChunkError) {
-            const logger = getLogger()
-            logger?.error('Error processing final response events', finalChunkError, {
-              errorMessage: finalChunkError instanceof Error ? finalChunkError.message : String(finalChunkError),
-              errorType: finalChunkError?.constructor?.name,
-              partialResponseLength: fullResponse.length,
-            })
+              const logger = getLogger()
+              logger?.error('Error processing final response events', finalChunkError, {
+                errorMessage: finalChunkError instanceof Error ? finalChunkError.message : String(finalChunkError),
+                errorType: finalChunkError?.constructor?.name,
+                partialResponseLength: fullResponse.length,
+              })
 
-            // If we got no content, provide useful feedback based on tool executions
-            if (fullResponse.length === 0) {
-              const executedTools = conversationMessages
-                .filter(m => m.role === 'assistant')
-                .flatMap(m => {
-                  const content = Array.isArray(m.content) ? m.content : []
-                  return content
-                    .filter(
-                      (block): block is Anthropic.ToolUseBlockParam => 'type' in block && block.type === 'tool_use',
-                    )
-                    .map(block => block.name)
-                })
+              // If we got no content, provide useful feedback based on tool executions
+              if (fullResponse.length === 0) {
+                const executedTools = conversationMessages
+                  .filter(m => m.role === 'assistant')
+                  .flatMap(m => {
+                    const content = Array.isArray(m.content) ? m.content : []
+                    return content
+                      .filter(
+                        (block): block is Anthropic.ToolUseBlockParam => 'type' in block && block.type === 'tool_use',
+                      )
+                      .map(block => block.name)
+                  })
 
-              if (executedTools.length > 0) {
-                const toolSummary = [...new Set(executedTools)].join(', ')
-                await sseWriter.write({
-                  data: `I gathered information using: ${toolSummary}. Please ask me to explain any specific details.`,
-                  type: 'content',
-                })
-                fullResponse = `Executed tools: ${toolSummary}`
-              } else {
-                await sseWriter.write({
-                  data: 'I encountered an error processing the response. Please try again.',
-                  type: 'content',
-                })
-                fullResponse = 'Processing error occurred'
+                if (executedTools.length > 0) {
+                  const toolSummary = [...new Set(executedTools)].join(', ')
+                  await sseWriter.write({
+                    data: `I gathered information using: ${toolSummary}. Please ask me to explain any specific details.`,
+                    type: 'content',
+                  })
+                  fullResponse = `Executed tools: ${toolSummary}`
+                } else {
+                  await sseWriter.write({
+                    data: 'I encountered an error processing the response. Please try again.',
+                    type: 'content',
+                  })
+                  fullResponse = 'Processing error occurred'
+                }
               }
-            }
             }
           }
 

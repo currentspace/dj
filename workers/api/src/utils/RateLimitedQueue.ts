@@ -36,7 +36,7 @@ export class RateLimitedQueue<T> {
   private running = 0
   // scheduling
   // Timer ID can be number (Cloudflare Workers) or NodeJS.Timeout (Node.js)
-  private timer: null | number | NodeJS.Timeout = null
+  private timer: NodeJS.Timeout | null | number = null
   // token bucket
   private tokens: number
 
@@ -378,4 +378,3 @@ export class RateLimitedQueue<T> {
     /* empty */
   }
 }
-
