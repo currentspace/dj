@@ -2940,6 +2940,14 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
               if (event.content_block.type === 'tool_use') {
                 ;(blockCopy as Anthropic.ToolUseBlock).input = '' // Force string type for JSON accumulation
                 getLogger()?.info(`[Stream:${requestId}] Tool use started: ${event.content_block.name}`)
+
+                // Debug logging for tool_use block creation
+                getLogger()?.debug(`[Stream:${requestId}] Created tool_use block`, {
+                  blockIndex: currentBlockIndex,
+                  toolName: event.content_block.name,
+                  toolId: event.content_block.id,
+                  initialInputType: typeof (blockCopy as Anthropic.ToolUseBlock).input,
+                })
               }
               // eslint-disable-next-line security/detect-object-injection
               contentBlocks[currentBlockIndex] = blockCopy
@@ -2956,17 +2964,45 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
                 // Tool input delta - accumulate as string
                 // eslint-disable-next-line security/detect-object-injection
                 const currentBlock = contentBlocks[currentBlockIndex]
+
+                // Debug logging for delta accumulation
+                getLogger()?.debug(`[Stream:${requestId}] input_json_delta received`, {
+                  currentBlockIndex,
+                  hasBlock: !!currentBlock,
+                  blockType: currentBlock?.type,
+                  deltaLength: event.delta.partial_json.length,
+                  deltaPreview: event.delta.partial_json.substring(0, 50),
+                })
+
                 if (currentBlock?.type === 'tool_use') {
                   // Ensure input is a string before concatenating
+                  const beforeLength = typeof currentBlock.input === 'string' ? currentBlock.input.length : 0
                   if (typeof currentBlock.input !== 'string') {
                     currentBlock.input = ''
                   }
                   currentBlock.input += event.delta.partial_json
+
+                  getLogger()?.debug(`[Stream:${requestId}] Accumulated delta for ${currentBlock.name}`, {
+                    beforeLength,
+                    afterLength: currentBlock.input.length,
+                    totalAccumulated: currentBlock.input.length,
+                  })
                 }
               }
             } else if (event.type === 'content_block_stop') {
               // Content block completed
               const block = contentBlocks[event.index]
+
+              // Debug logging for content_block_stop
+              getLogger()?.debug(`[Stream:${requestId}] content_block_stop at index ${event.index}`, {
+                hasBlock: !!block,
+                blockType: block?.type,
+                blockId: block?.type === 'tool_use' ? block.id : undefined,
+                blockName: block?.type === 'tool_use' ? block.name : undefined,
+                inputType: block?.type === 'tool_use' ? typeof block.input : undefined,
+                inputLength: block?.type === 'tool_use' && typeof block.input === 'string' ? block.input.length : undefined,
+              })
+
               if (block?.type === 'tool_use' && block.id && block.name) {
                 // Parse accumulated JSON and add to tool calls
                 const inputStr = isString(block.input) ? block.input : '{}'
