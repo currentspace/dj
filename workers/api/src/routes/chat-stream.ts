@@ -3152,13 +3152,33 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
             })
           } catch (streamError) {
             const logger = getLogger()
-            logger?.error('Claude streaming API call failed', streamError, {
+
+            // Extract full error details, especially for Anthropic API errors
+            const errorDetails: Record<string, unknown> = {
               conversationLength: conversationMessages.length,
               errorMessage: streamError instanceof Error ? streamError.message : String(streamError),
               errorType: streamError?.constructor?.name,
               hasAnyContent,
               turn: turnCount,
-            })
+            }
+
+            // For Anthropic API errors, extract detailed error information
+            if (streamError && typeof streamError === 'object') {
+              if ('status' in streamError) errorDetails.httpStatus = streamError.status
+              if ('statusCode' in streamError) errorDetails.statusCode = streamError.statusCode
+              if ('error' in streamError) {
+                errorDetails.apiError = streamError.error
+                errorDetails.fullErrorJSON = JSON.stringify(streamError, null, 2)
+              }
+              if ('headers' in streamError) errorDetails.headers = streamError.headers
+            }
+
+            // Include stack trace
+            if (streamError instanceof Error && streamError.stack) {
+              errorDetails.stack = streamError.stack.split('\n').slice(0, 10).join('\n')
+            }
+
+            logger?.error('Claude streaming API call failed', streamError, errorDetails)
 
             // If we already have content from any turn (initial or tools), break gracefully
             if (hasAnyContent) {
@@ -3262,12 +3282,33 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
             )
           } catch (chunkError) {
             const logger = getLogger()
-            logger?.error('Error processing Claude stream events', chunkError, {
+
+            // Extract full error details, especially for Anthropic API errors
+            const errorDetails: Record<string, unknown> = {
               errorMessage: chunkError instanceof Error ? chunkError.message : String(chunkError),
               errorType: chunkError?.constructor?.name,
               partialResponseLength: fullResponse.length,
               turn: turnCount,
-            })
+            }
+
+            // For Anthropic API errors, extract detailed error information
+            if (chunkError && typeof chunkError === 'object') {
+              if ('status' in chunkError) errorDetails.httpStatus = chunkError.status
+              if ('statusCode' in chunkError) errorDetails.statusCode = chunkError.statusCode
+              if ('error' in chunkError) {
+                // Anthropic API error structure: { type: "error", error: { type, message } }
+                errorDetails.apiError = chunkError.error
+                errorDetails.fullErrorJSON = JSON.stringify(chunkError, null, 2)
+              }
+              if ('headers' in chunkError) errorDetails.headers = chunkError.headers
+            }
+
+            // Include stack trace for debugging
+            if (chunkError instanceof Error && chunkError.stack) {
+              errorDetails.stack = chunkError.stack.split('\n').slice(0, 10).join('\n')
+            }
+
+            logger?.error('Error processing Claude stream events', chunkError, errorDetails)
 
             // If we got partial content, continue; otherwise break
             if (fullResponse.length === 0) {
