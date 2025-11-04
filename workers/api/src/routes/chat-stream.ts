@@ -3145,10 +3145,9 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
                 },
               ],
               temperature: 1.0,
-              thinking: {
-                budget_tokens: 5000,
-                type: 'enabled' as const,
-              },
+              // NOTE: Extended thinking disabled for agentic loops to prevent 400 errors
+              // Extended thinking can cause message format issues when tool results are sent back
+              // See: https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking
               tools: anthropicTools,
             })
           } catch (streamError) {
