@@ -3228,7 +3228,12 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
               if ('statusCode' in streamError) errorDetails.statusCode = streamError.statusCode
               if ('error' in streamError) {
                 errorDetails.apiError = streamError.error
-                errorDetails.fullErrorJSON = JSON.stringify(streamError, null, 2)
+                // Safely serialize error object (may contain circular references)
+                try {
+                  errorDetails.fullErrorJSON = JSON.stringify(streamError, null, 2)
+                } catch (serError) {
+                  errorDetails.fullErrorJSON = `[Serialization failed: ${serError instanceof Error ? serError.message : 'unknown'}]`
+                }
               }
               if ('headers' in streamError) errorDetails.headers = streamError.headers
             }
@@ -3363,7 +3368,12 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
               if ('error' in chunkError) {
                 // Anthropic API error structure: { type: "error", error: { type, message } }
                 errorDetails.apiError = chunkError.error
-                errorDetails.fullErrorJSON = JSON.stringify(chunkError, null, 2)
+                // Safely serialize error object (may contain circular references)
+                try {
+                  errorDetails.fullErrorJSON = JSON.stringify(chunkError, null, 2)
+                } catch (serError) {
+                  errorDetails.fullErrorJSON = `[Serialization failed: ${serError instanceof Error ? serError.message : 'unknown'}]`
+                }
               }
               if ('headers' in chunkError) errorDetails.headers = chunkError.headers
             }
