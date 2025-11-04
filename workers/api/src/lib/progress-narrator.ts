@@ -24,6 +24,16 @@ interface MessageContext {
   previousMessages?: string[]
   toolName?: string
   userRequest?: string
+  /**
+   * Progress milestone: starting, midpoint, finishing, complete
+   * Helps narrator adjust tone and pacing
+   */
+  milestone?: 'starting' | 'midpoint' | 'finishing' | 'complete'
+  /**
+   * Progress percentage (0-100)
+   * Optional numeric indicator of completion
+   */
+  progressPercent?: number
 }
 
 export class ProgressNarrator {
@@ -201,6 +211,22 @@ export class ProgressNarrator {
     // Add current action
     parts.push(`Current action: ${context.eventType}`)
 
+    // Add milestone context if provided (subtle hints, not explicit stages)
+    if (context.milestone) {
+      const milestoneHints = {
+        starting: 'This is the beginning of the operation',
+        midpoint: 'We are making good progress through the operation',
+        finishing: 'This operation is nearly complete',
+        complete: 'This operation just finished successfully',
+      }
+      parts.push(`\nContext: ${milestoneHints[context.milestone]}`)
+    }
+
+    // Add progress percentage if provided
+    if (context.progressPercent !== undefined) {
+      parts.push(`\nProgress: approximately ${Math.round(context.progressPercent)}% complete`)
+    }
+
     // Add specific details based on event type
     switch (context.eventType) {
       case 'adding_tracks': {
@@ -267,6 +293,56 @@ export class ProgressNarrator {
         }
         if (recentTrack) {
           parts.push(`\nJust analyzed: "${recentTrack}"`)
+        }
+        break
+      }
+
+      case 'enrichment_analysis': {
+        const trackCount = context.metadata?.trackCount ?? 0
+        const playlistName = context.metadata?.playlistName
+        if (playlistName) {
+          parts.push(`\nAnalyzing playlist: "${playlistName}"`)
+        }
+        if (trackCount) {
+          parts.push(`\nTrack count: ${trackCount}`)
+        }
+        break
+      }
+
+      case 'enrichment_deezer': {
+        const cacheHitRate = context.metadata?.cacheHitRate
+        const enrichingCount = context.metadata?.enrichingCount
+        const hasCached = context.metadata?.hasCached
+        if (hasCached && cacheHitRate !== undefined) {
+          parts.push(`\nMost tracks already cached (${Math.round(cacheHitRate)}% hit rate)`)
+        }
+        if (enrichingCount) {
+          parts.push(`\nEnriching ${enrichingCount} new tracks with Deezer data`)
+        }
+        break
+      }
+
+      case 'enrichment_lastfm': {
+        const cacheHitRate = context.metadata?.cacheHitRate
+        const enrichingCount = context.metadata?.enrichingCount
+        const hasCached = context.metadata?.hasCached
+        if (hasCached && cacheHitRate !== undefined) {
+          parts.push(`\nMost tracks already analyzed (${Math.round(cacheHitRate)}% cached)`)
+        }
+        if (enrichingCount) {
+          parts.push(`\nDiscovering tags and signals for ${enrichingCount} tracks`)
+        }
+        break
+      }
+
+      case 'enrichment_complete': {
+        const dataTypes = context.metadata?.dataTypes
+        const enrichedCount = context.metadata?.enrichedCount
+        if (dataTypes) {
+          parts.push(`\nData types found: ${dataTypes}`)
+        }
+        if (enrichedCount) {
+          parts.push(`\nTotal enriched: ${enrichedCount} tracks`)
         }
         break
       }
@@ -411,6 +487,10 @@ Return ONLY the progress message text - no explanations, no meta-commentary, jus
       creating_playlist: 'Creating your playlist...',
       enriching_artists: 'Learning the story behind these artists...',
       enriching_tracks: 'Discovering hidden gems in your collection...',
+      enrichment_analysis: 'Diving into your playlist...',
+      enrichment_complete: 'Analysis complete!',
+      enrichment_deezer: 'Enriching tracks with audio data...',
+      enrichment_lastfm: 'Discovering crowd wisdom and tags...',
       searching_tracks: 'Searching for tracks...',
       started: 'Getting started...',
       thinking: 'Thinking about the best tracks...',

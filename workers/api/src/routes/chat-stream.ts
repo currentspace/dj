@@ -44,6 +44,7 @@ import {executeSpotifyTool} from '../lib/spotify-tools'
 import {AudioEnrichmentService} from '../services/AudioEnrichmentService'
 import {LastFmService} from '../services/LastFmService'
 import {getChildLogger, getLogger, runWithLogger} from '../utils/LoggerContext'
+import {ProgressMessageThrottler} from '../utils/ProgressMessageThrottler'
 import {rateLimitedSpotifyCall} from '../utils/RateLimitedAPIClients'
 import {ServiceLogger} from '../utils/ServiceLogger'
 import {
@@ -1747,30 +1748,25 @@ async function executeSpotifyToolWithProgress(
   if (toolName === 'analyze_playlist') {
     const {playlist_id} = args
 
-    try {
-      // Use narrator if available, otherwise fallback to static message
-      const startMessage = narrator
-        ? await narrator.generateMessage({
-            eventType: 'tool_call_start',
-            parameters: args,
-            previousMessages: recentMessages,
-            toolName: 'analyze_playlist',
-            userRequest,
-          })
-        : '📊 Starting playlist analysis...'
+    // Create throttler for progress messages (5 second minimum interval)
+    const progressThrottler = new ProgressMessageThrottler({minInterval: 5000})
 
-      sseWriter.writeAsync({data: startMessage, type: 'thinking'})
+    try {
+      // Send initial message (throttled to avoid spam at start)
+      if (narrator && progressThrottler.shouldSend()) {
+        const startMessage = await narrator.generateMessage({
+          eventType: 'enrichment_analysis',
+          metadata: {
+            phase: 'initialization',
+          },
+          milestone: 'starting',
+          previousMessages: recentMessages,
+          userRequest,
+        })
+        sseWriter.writeAsync({data: startMessage, type: 'thinking'})
+      }
 
       // Step 1: Get playlist details
-      const fetchMessage = narrator
-        ? await narrator.generateMessage({
-            eventType: 'analyzing_request',
-            previousMessages: recentMessages,
-            userRequest,
-          })
-        : '🔍 Fetching playlist information...'
-      sseWriter.writeAsync({data: fetchMessage, type: 'thinking'})
-
       getLogger()?.info(`[SpotifyAPI] Fetching playlist details: ${playlist_id}`)
       const playlistResponse = await rateLimitedSpotifyCall(
         () =>
@@ -1790,30 +1786,7 @@ async function executeSpotifyToolWithProgress(
       const playlist = SpotifyPlaylistFullSchema.parse(rawPlaylist)
       getLogger()?.info(`[SpotifyAPI] Playlist loaded: "${playlist.name}" with ${playlist.tracks.total} tracks`)
 
-      const foundMessage = narrator
-        ? await narrator.generateMessage({
-            eventType: 'searching_tracks',
-            parameters: {
-              name: playlist.name,
-              trackCount: playlist.tracks.total,
-            },
-            previousMessages: recentMessages,
-            userRequest,
-          })
-        : `🎼 Found "${playlist.name}" with ${playlist.tracks.total} tracks`
-      sseWriter.writeAsync({data: foundMessage, type: 'thinking'})
-
       // Step 2: Get tracks
-      const tracksMessage = narrator
-        ? await narrator.generateMessage({
-            eventType: 'analyzing_audio',
-            metadata: {trackCount: playlist.tracks.total},
-            previousMessages: recentMessages,
-            userRequest,
-          })
-        : '🎵 Fetching track details...'
-      sseWriter.writeAsync({data: tracksMessage, type: 'thinking'})
-
       getLogger()?.info(`[SpotifyAPI] Fetching tracks from playlist: ${playlist_id}`)
       const tracksResponse = await rateLimitedSpotifyCall(
         () =>
@@ -1854,16 +1827,22 @@ async function executeSpotifyToolWithProgress(
         getLogger()?.info(`[SpotifyAPI] ========== END TRACK STRUCTURE DEBUG ==========`)
       }
 
-      sseWriter.writeAsync({
-        data: `✅ Loaded ${tracks.length} tracks successfully`,
-        type: 'thinking',
-      })
-
-      // Step 3: Analyze track metadata (audio features API deprecated)
-      sseWriter.writeAsync({
-        data: '🎵 Analyzing track metadata...',
-        type: 'thinking',
-      })
+      // Send throttled message after track loading
+      if (narrator && progressThrottler.shouldSend()) {
+        const message = await narrator.generateMessage({
+          eventType: 'enrichment_analysis',
+          metadata: {
+            phase: 'metadata',
+            playlistName: playlist.name,
+            trackCount: tracks.length,
+          },
+          milestone: 'starting',
+          progressPercent: 15,
+          previousMessages: recentMessages,
+          userRequest,
+        })
+        sseWriter.writeAsync({data: message, type: 'thinking'})
+      }
 
       // Calculate metadata-based statistics
       const validTracks = tracks // All tracks are now guaranteed to have required fields
@@ -1885,10 +1864,6 @@ async function executeSpotifyToolWithProgress(
       })
 
       // Step 4: Fetch artist genres (batch request, limit to 50 artists)
-      sseWriter.writeAsync({
-        data: '🎸 Fetching artist genres...',
-        type: 'thinking',
-      })
       const artistIdsArray = Array.from(artistIds).slice(0, 50)
       let genres: string[] = []
 
@@ -1931,11 +1906,6 @@ async function executeSpotifyToolWithProgress(
             .sort((a, b) => b[1] - a[1])
             .slice(0, 10)
             .map(([genre]) => genre)
-
-          sseWriter.writeAsync({
-            data: `🎯 Found ${genres.length} genres across ${artistsData.artists.length} artists`,
-            type: 'thinking',
-          })
         }
       }
 
@@ -2033,10 +2003,24 @@ async function executeSpotifyToolWithProgress(
           let enrichedCount = 0
 
           getLogger()?.info(`[DeezerEnrichment] Will attempt to enrich ${tracksToEnrich.length} uncached tracks`)
-          sseWriter.writeAsync({
-            data: `🎵 Deezer enrichment: ${cachedTracks.length} cached (${cacheHitRate.toFixed(0)}% hit rate), enriching ${tracksToEnrich.length} new tracks...`,
-            type: 'thinking',
-          })
+
+          // Send throttled message for Deezer enrichment start
+          if (narrator && progressThrottler.shouldSend()) {
+            const message = await narrator.generateMessage({
+              eventType: 'enrichment_deezer',
+              metadata: {
+                cacheHitRate,
+                cachedCount: cachedTracks.length,
+                enrichCount: tracksToEnrich.length,
+                playlistName: playlist.name,
+              },
+              milestone: 'midpoint',
+              progressPercent: 35,
+              previousMessages: recentMessages,
+              userRequest,
+            })
+            sseWriter.writeAsync({data: message, type: 'thinking'})
+          }
 
           // Debug: Check if tracks have external_ids
           const tracksWithISRC = tracksToEnrich.filter(t => t.external_ids?.isrc).length
@@ -2081,10 +2065,6 @@ async function executeSpotifyToolWithProgress(
           }))
 
           getLogger()?.info(`[BPMEnrichment] Starting PARALLEL enrichment for ${spotifyTracks.length} tracks`)
-          sseWriter.writeAsync({
-            data: `🎵 Enriching ${spotifyTracks.length} tracks in parallel...`,
-            type: 'thinking',
-          })
 
           // Use batchEnrichTracks for parallel processing (up to 10 concurrent via Deezer lane)
           const enrichmentResults = await enrichmentService.batchEnrichTracks(spotifyTracks)
@@ -2118,10 +2098,6 @@ async function executeSpotifyToolWithProgress(
           getLogger()?.info(
             `[BPMEnrichment] Parallel enrichment complete: ${enrichedCount}/${tracksToEnrich.length} tracks enriched`,
           )
-          sseWriter.writeAsync({
-            data: `✅ Enriched ${enrichedCount}/${tracksToEnrich.length} tracks`,
-            type: 'thinking',
-          })
 
           getLogger()?.info(`[DeezerEnrichment] ========== ENRICHMENT COMPLETE ==========`)
           getLogger()?.info(`[DeezerEnrichment] Cache efficiency:`)
@@ -2195,11 +2171,11 @@ async function executeSpotifyToolWithProgress(
               .filter(Boolean)
               .join(', ')
 
-            sseWriter.writeAsync({
-              data: `✅ Deezer enrichment complete! Found ${dataTypes} for ${enrichedCount}/${tracksToEnrich.length} tracks`,
-              type: 'thinking',
-            })
+            getLogger()?.info(
+              `[DeezerEnrichment] Complete! Found ${dataTypes} for ${enrichedCount}/${tracksToEnrich.length} tracks`,
+            )
           } else {
+            // Keep warning message unthrottled
             sseWriter.writeAsync({
               data: '⚠️ No Deezer data available for these tracks',
               type: 'thinking',
@@ -2270,10 +2246,24 @@ async function executeSpotifyToolWithProgress(
 
           // Step 7b: Get track signals (4 API calls per track for uncached) - PARALLEL processing
           getLogger()?.info(`[LastFmEnrichment] Starting PARALLEL enrichment for ${tracksForLastFm.length} tracks`)
-          sseWriter.writeAsync({
-            data: `🎧 Last.fm enrichment: ${cachedLastFmTracks.length} cached (${lastfmCacheHitRate.toFixed(0)}% hit rate), enriching ${tracksForLastFm.length} new tracks in parallel...`,
-            type: 'thinking',
-          })
+
+          // Send throttled message for Last.fm enrichment start
+          if (narrator && progressThrottler.shouldSend()) {
+            const message = await narrator.generateMessage({
+              eventType: 'enrichment_lastfm',
+              metadata: {
+                cacheHitRate: lastfmCacheHitRate,
+                cachedCount: cachedLastFmTracks.length,
+                enrichCount: tracksForLastFm.length,
+                playlistName: playlist.name,
+              },
+              milestone: 'finishing',
+              progressPercent: 65,
+              previousMessages: recentMessages,
+              userRequest,
+            })
+            sseWriter.writeAsync({data: message, type: 'thinking'})
+          }
 
           // Convert to LastFmTrack format
           const lastfmTracks = tracksForLastFm.map(track => ({
@@ -2309,17 +2299,9 @@ async function executeSpotifyToolWithProgress(
           }
 
           getLogger()?.info(`[LastFmEnrichment] Parallel enrichment complete: ${signalsMap.size} tracks processed`)
-          sseWriter.writeAsync({
-            data: `✅ Enriched ${signalsMap.size} tracks in parallel!`,
-            type: 'thinking',
-          })
 
           // Step 7b: Get unique artists and fetch artist info separately (cached + rate-limited queue)
           const uniqueArtists = [...new Set(tracksForLastFm.map(t => t.artists?.[0]?.name).filter(Boolean))]
-          sseWriter.writeAsync({
-            data: `🎤 Fetching artist info for ${uniqueArtists.length} unique artists...`,
-            type: 'thinking',
-          })
 
           const artistInfoMap = await lastfmService.batchGetArtistInfo(uniqueArtists, (current, total) => {
             // Report progress every 10 artists with simple message
@@ -2397,10 +2379,9 @@ async function executeSpotifyToolWithProgress(
               source: 'lastfm',
             }
 
-            sseWriter.writeAsync({
-              data: `✅ Enriched ${signalsMap.size} tracks + ${artistInfoMap.size} artists!`,
-              type: 'thinking',
-            })
+            getLogger()?.info(
+              `[LastFmEnrichment] Complete! Enriched ${signalsMap.size} tracks + ${artistInfoMap.size} artists`,
+            )
           }
         } catch (error) {
           getChildLogger('LastFm').error('Enrichment failed', error)
@@ -2414,10 +2395,23 @@ async function executeSpotifyToolWithProgress(
       // Flush any pending narrator messages before final analysis
       await sseWriter.flush()
 
-      sseWriter.writeAsync({
-        data: '🧮 Computing playlist insights...',
-        type: 'thinking',
-      })
+      // Send final throttled message for completion
+      if (narrator && progressThrottler.shouldSend()) {
+        const message = await narrator.generateMessage({
+          eventType: 'enrichment_complete',
+          metadata: {
+            deezerDataAvailable: !!deezerData,
+            lastfmDataAvailable: !!lastfmData,
+            playlistName: playlist.name,
+            trackCount: tracks.length,
+          },
+          milestone: 'complete',
+          progressPercent: 95,
+          previousMessages: recentMessages,
+          userRequest,
+        })
+        sseWriter.writeAsync({data: message, type: 'thinking'})
+      }
 
       const analysis = {
         deezer_analysis: deezerData, // Deezer BPM, rank, gain if available
