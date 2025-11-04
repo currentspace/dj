@@ -693,6 +693,26 @@ function createStreamingSpotifyTools(
       func: async args => {
         if (abortSignal?.aborted) throw new Error('Request aborted')
 
+        // Debug logging to understand what's being passed
+        const analysisData = args.analysis_data as Record<string, unknown> | undefined
+        getLogger()?.info('[extract_playlist_vibe] Received args:', {
+          has_analysis_data: !!analysisData,
+          is_object: isObject(analysisData),
+          type_of: typeof analysisData,
+          keys: isObject(analysisData) ? Object.keys(analysisData) : [],
+          metadata_exists: isObject(analysisData) && 'metadata_analysis' in analysisData,
+          deezer_exists: isObject(analysisData) && 'deezer_analysis' in analysisData,
+          lastfm_exists: isObject(analysisData) && 'lastfm_analysis' in analysisData,
+        })
+
+        if (isObject(analysisData)) {
+          getLogger()?.info('[extract_playlist_vibe] Metadata analysis:', analysisData.metadata_analysis)
+          getLogger()?.info('[extract_playlist_vibe] Deezer analysis:', analysisData.deezer_analysis)
+          getLogger()?.info('[extract_playlist_vibe] Last.fm analysis:', analysisData.lastfm_analysis)
+        } else {
+          getLogger()?.warn('[extract_playlist_vibe] analysis_data is not an object:', analysisData)
+        }
+
         await sseWriter.write({
           data: {
             args: {has_metadata: !!args.analysis_data},
@@ -940,6 +960,7 @@ CRITICAL: Ensure all JSON is valid. Do not include markdown code blocks, only th
                 total_checked: z.number(),
                 tracks_found: z.number(),
               })
+              .passthrough()
               .optional(),
             lastfm_analysis: z
               .object({
@@ -951,6 +972,7 @@ CRITICAL: Ensure all JSON is valid. Do not include markdown code blocks, only th
                 similar_tracks: z.array(z.string()),
                 source: z.string(),
               })
+              .passthrough()
               .optional(),
             metadata_analysis: z
               .object({
@@ -969,8 +991,10 @@ CRITICAL: Ensure all JSON is valid. Do not include markdown code blocks, only th
                 top_genres: z.array(z.string()),
                 total_artists: z.number(),
               })
+              .passthrough()
               .optional(),
           })
+          .passthrough()
           .describe('Full analysis from analyze_playlist'),
         sample_tracks: z
           .array(
