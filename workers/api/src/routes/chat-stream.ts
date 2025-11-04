@@ -2938,7 +2938,7 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
               // We need a string to accumulate JSON deltas, so forcefully initialize as empty string
               const blockCopy = {...event.content_block}
               if (event.content_block.type === 'tool_use') {
-                blockCopy.input = '' // Force string type for JSON accumulation
+                ;(blockCopy as Anthropic.ToolUseBlock).input = '' // Force string type for JSON accumulation
                 getLogger()?.info(`[Stream:${requestId}] Tool use started: ${event.content_block.name}`)
               }
               // eslint-disable-next-line security/detect-object-injection
@@ -2979,14 +2979,37 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
                   })
                   getLogger()?.info(`[Stream:${requestId}] Tool use complete: ${block.name}`)
                 } catch (parseError) {
-                  getLogger()?.error(
-                    `[Stream:${requestId}] Failed to parse tool input for ${block.name}`,
-                    {
-                      error: parseError instanceof Error ? parseError.message : String(parseError),
-                      inputType: typeof block.input,
-                      inputPreview: inputStr.substring(0, 100),
-                    },
-                  )
+                  // Enhanced logging for debugging tool input parse failures
+                  const debugInfo: Record<string, unknown> = {
+                    error: parseError instanceof Error ? parseError.message : String(parseError),
+                    inputType: typeof block.input,
+                    inputPreview: inputStr.substring(0, 200),
+                    inputLength: inputStr.length,
+                    toolId: block.id,
+                    toolName: block.name,
+                  }
+
+                  // If input is an object (shouldn't be, but let's log it)
+                  if (typeof block.input === 'object' && block.input !== null) {
+                    debugInfo.inputIsObject = true
+                    debugInfo.inputConstructor = block.input.constructor?.name
+                    debugInfo.inputKeys = Object.keys(block.input)
+                    debugInfo.inputPrototype = Object.getPrototypeOf(block.input)?.constructor?.name
+                  }
+
+                  // Check for common JSON parsing issues
+                  if (inputStr.includes('[object Object]')) {
+                    debugInfo.containsObjectString = true
+                    debugInfo.objectStringPositions = []
+                    let pos = inputStr.indexOf('[object Object]')
+                    while (pos !== -1 && (debugInfo.objectStringPositions as number[]).length < 5) {
+                      ;(debugInfo.objectStringPositions as number[]).push(pos)
+                      pos = inputStr.indexOf('[object Object]', pos + 1)
+                    }
+                  }
+
+                  getLogger()?.error(`[Stream:${requestId}] Failed to parse tool input for ${block.name}`, debugInfo)
+
                   // Use empty object as fallback to allow execution to continue
                   toolCalls.push({
                     args: {},
@@ -3232,7 +3255,28 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
                 try {
                   errorDetails.fullErrorJSON = JSON.stringify(streamError, null, 2)
                 } catch (serError) {
-                  errorDetails.fullErrorJSON = `[Serialization failed: ${serError instanceof Error ? serError.message : 'unknown'}]`
+                  // Log detailed info about the object that failed to serialize
+                  const objectInfo = {
+                    errorMessage: serError instanceof Error ? serError.message : String(serError),
+                    objectConstructor: streamError.constructor?.name,
+                    objectKeys: Object.keys(streamError),
+                    objectPrototype: Object.getPrototypeOf(streamError)?.constructor?.name,
+                  }
+                  logger?.error('Failed to serialize streamError object', {
+                    ...objectInfo,
+                    sampleValues: Object.keys(streamError)
+                      .slice(0, 5)
+                      .reduce(
+                        (acc, key) => {
+                          const val = (streamError as Record<string, unknown>)[key]
+                          acc[key] = typeof val === 'object' ? `[object ${val?.constructor?.name ?? 'Unknown'}]` : String(val)
+                          return acc
+                        },
+                        {} as Record<string, string>,
+                      ),
+                  })
+                  errorDetails.fullErrorJSON = `[Serialization failed: ${objectInfo.errorMessage}]`
+                  errorDetails.objectStructure = objectInfo
                 }
               }
               if ('headers' in streamError) errorDetails.headers = streamError.headers
@@ -3288,7 +3332,7 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
                 // We need a string to accumulate JSON deltas, so forcefully initialize as empty string
                 const blockCopy = {...event.content_block}
                 if (event.content_block.type === 'tool_use') {
-                  blockCopy.input = '' // Force string type for JSON accumulation
+                  ;(blockCopy as Anthropic.ToolUseBlock).input = '' // Force string type for JSON accumulation
                   getLogger()?.info(
                     `[Stream:${requestId}] Turn ${turnCount} tool use started: ${event.content_block.name}`,
                   )
@@ -3328,14 +3372,41 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
                     })
                     getLogger()?.info(`[Stream:${requestId}] Turn ${turnCount} tool use complete: ${block.name}`)
                   } catch (parseError) {
+                    // Enhanced logging for debugging tool input parse failures
+                    const debugInfo: Record<string, unknown> = {
+                      error: parseError instanceof Error ? parseError.message : String(parseError),
+                      inputType: typeof block.input,
+                      inputPreview: inputStr.substring(0, 200),
+                      inputLength: inputStr.length,
+                      toolId: block.id,
+                      toolName: block.name,
+                      turnCount,
+                    }
+
+                    // If input is an object (shouldn't be, but let's log it)
+                    if (typeof block.input === 'object' && block.input !== null) {
+                      debugInfo.inputIsObject = true
+                      debugInfo.inputConstructor = block.input.constructor?.name
+                      debugInfo.inputKeys = Object.keys(block.input)
+                      debugInfo.inputPrototype = Object.getPrototypeOf(block.input)?.constructor?.name
+                    }
+
+                    // Check for common JSON parsing issues
+                    if (inputStr.includes('[object Object]')) {
+                      debugInfo.containsObjectString = true
+                      debugInfo.objectStringPositions = []
+                      let pos = inputStr.indexOf('[object Object]')
+                      while (pos !== -1 && (debugInfo.objectStringPositions as number[]).length < 5) {
+                        ;(debugInfo.objectStringPositions as number[]).push(pos)
+                        pos = inputStr.indexOf('[object Object]', pos + 1)
+                      }
+                    }
+
                     getLogger()?.error(
                       `[Stream:${requestId}] Turn ${turnCount} failed to parse tool input for ${block.name}`,
-                      {
-                        error: parseError instanceof Error ? parseError.message : String(parseError),
-                        inputType: typeof block.input,
-                        inputPreview: inputStr.substring(0, 100),
-                      },
+                      debugInfo,
                     )
+
                     // Use empty object as fallback to allow execution to continue
                     nextToolCalls.push({
                       args: {},
@@ -3372,7 +3443,28 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
                 try {
                   errorDetails.fullErrorJSON = JSON.stringify(chunkError, null, 2)
                 } catch (serError) {
-                  errorDetails.fullErrorJSON = `[Serialization failed: ${serError instanceof Error ? serError.message : 'unknown'}]`
+                  // Log detailed info about the object that failed to serialize
+                  const objectInfo = {
+                    errorMessage: serError instanceof Error ? serError.message : String(serError),
+                    objectConstructor: chunkError.constructor?.name,
+                    objectKeys: Object.keys(chunkError),
+                    objectPrototype: Object.getPrototypeOf(chunkError)?.constructor?.name,
+                  }
+                  logger?.error('Failed to serialize chunkError object', {
+                    ...objectInfo,
+                    sampleValues: Object.keys(chunkError)
+                      .slice(0, 5)
+                      .reduce(
+                        (acc, key) => {
+                          const val = (chunkError as Record<string, unknown>)[key]
+                          acc[key] = typeof val === 'object' ? `[object ${val?.constructor?.name ?? 'Unknown'}]` : String(val)
+                          return acc
+                        },
+                        {} as Record<string, string>,
+                      ),
+                  })
+                  errorDetails.fullErrorJSON = `[Serialization failed: ${objectInfo.errorMessage}]`
+                  errorDetails.objectStructure = objectInfo
                 }
               }
               if ('headers' in chunkError) errorDetails.headers = chunkError.headers
