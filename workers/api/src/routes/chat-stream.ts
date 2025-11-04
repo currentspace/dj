@@ -3148,6 +3148,44 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
 
           getLogger()?.info(`[Stream:${requestId}] Conversation now has ${conversationMessages.length} messages`)
 
+          // Debug: Log assistant tool use blocks to detect serialization issues
+          getLogger()?.info(`[Stream:${requestId}] Assistant tool use blocks:`, {
+            blockCount: assistantToolUseBlocks.length,
+            blocks: assistantToolUseBlocks.map(b => ({
+              id: b.id,
+              name: b.name,
+              inputType: typeof b.input,
+              inputIsArray: Array.isArray(b.input),
+              inputKeys: b.input && typeof b.input === 'object' ? Object.keys(b.input) : [],
+            })),
+          })
+
+          // Debug: Test JSON serialization of conversation messages BEFORE sending to Anthropic
+          try {
+            const testSerialization = JSON.stringify(conversationMessages)
+            getLogger()?.info(
+              `[Stream:${requestId}] Conversation serialization test passed (${testSerialization.length} bytes)`,
+            )
+          } catch (serError) {
+            getLogger()?.error(`[Stream:${requestId}] Conversation serialization test FAILED:`, {
+              error: serError instanceof Error ? serError.message : String(serError),
+              messageCount: conversationMessages.length,
+              lastMessage: conversationMessages[conversationMessages.length - 1],
+            })
+            // Try to find which message or block is causing the issue
+            for (let i = 0; i < conversationMessages.length; i++) {
+              try {
+                JSON.stringify(conversationMessages[i])
+              } catch (msgError) {
+                getLogger()?.error(`[Stream:${requestId}] Message ${i} cannot be serialized:`, {
+                  error: msgError instanceof Error ? msgError.message : String(msgError),
+                  messageRole: conversationMessages[i]?.role,
+                  messageContentType: typeof conversationMessages[i]?.content,
+                })
+              }
+            }
+          }
+
           let nextStream
           try {
             // Create second stream with tool results
