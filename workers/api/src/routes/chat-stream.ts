@@ -2933,15 +2933,16 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
 
             if (event.type === 'content_block_start') {
               currentBlockIndex = event.index
-              // eslint-disable-next-line security/detect-object-injection
-              contentBlocks[currentBlockIndex] = event.content_block
-
+              // Create a mutable copy of the content block
+              // IMPORTANT: event.content_block.input might be an object from Anthropic SDK
+              // We need a string to accumulate JSON deltas, so forcefully initialize as empty string
+              const blockCopy = {...event.content_block}
               if (event.content_block.type === 'tool_use') {
-                // Initialize tool input as empty string for JSON accumulation
-                // This prevents "[object Object]" coercion when concatenating deltas
-                event.content_block.input = ''
+                blockCopy.input = '' // Force string type for JSON accumulation
                 getLogger()?.info(`[Stream:${requestId}] Tool use started: ${event.content_block.name}`)
               }
+              // eslint-disable-next-line security/detect-object-injection
+              contentBlocks[currentBlockIndex] = blockCopy
             } else if (event.type === 'content_block_delta') {
               if (event.delta.type === 'text_delta') {
                 // Text content delta
@@ -2952,11 +2953,14 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
                 // Skip Claude's internal reasoning tokens (noisy, not useful for end users)
                 // Meaningful progress messages are sent separately via tool execution handlers
               } else if (event.delta.type === 'input_json_delta') {
-                // Tool input delta - accumulate
+                // Tool input delta - accumulate as string
                 // eslint-disable-next-line security/detect-object-injection
                 const currentBlock = contentBlocks[currentBlockIndex]
                 if (currentBlock?.type === 'tool_use') {
-                  currentBlock.input ??= ''
+                  // Ensure input is a string before concatenating
+                  if (typeof currentBlock.input !== 'string') {
+                    currentBlock.input = ''
+                  }
                   currentBlock.input += event.delta.partial_json
                 }
               }
@@ -3274,17 +3278,18 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
 
               if (event.type === 'content_block_start') {
                 nextCurrentBlockIndex = event.index
-                // eslint-disable-next-line security/detect-object-injection
-                nextContentBlocks[nextCurrentBlockIndex] = event.content_block
-
+                // Create a mutable copy of the content block
+                // IMPORTANT: event.content_block.input might be an object from Anthropic SDK
+                // We need a string to accumulate JSON deltas, so forcefully initialize as empty string
+                const blockCopy = {...event.content_block}
                 if (event.content_block.type === 'tool_use') {
-                  // Initialize tool input as empty string for JSON accumulation
-                  // This prevents "[object Object]" coercion when concatenating deltas
-                  event.content_block.input = ''
+                  blockCopy.input = '' // Force string type for JSON accumulation
                   getLogger()?.info(
                     `[Stream:${requestId}] Turn ${turnCount} tool use started: ${event.content_block.name}`,
                   )
                 }
+                // eslint-disable-next-line security/detect-object-injection
+                nextContentBlocks[nextCurrentBlockIndex] = blockCopy
               } else if (event.type === 'content_block_delta') {
                 if (event.delta.type === 'text_delta') {
                   const text = event.delta.text
@@ -3294,10 +3299,14 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
                 } else if (event.delta.type === 'thinking_delta') {
                   // Skip Claude's internal reasoning tokens (noisy, not useful for end users)
                 } else if (event.delta.type === 'input_json_delta') {
+                  // Tool input delta - accumulate as string
                   // eslint-disable-next-line security/detect-object-injection
                   const currentBlock = nextContentBlocks[nextCurrentBlockIndex]
                   if (currentBlock?.type === 'tool_use') {
-                    currentBlock.input ??= ''
+                    // Ensure input is a string before concatenating
+                    if (typeof currentBlock.input !== 'string') {
+                      currentBlock.input = ''
+                    }
                     currentBlock.input += event.delta.partial_json
                   }
                 }

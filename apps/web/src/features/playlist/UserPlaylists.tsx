@@ -29,7 +29,7 @@ interface UserPlaylistsProps {
 }
 
 function UserPlaylists({onPlaylistSelect, selectedPlaylist}: UserPlaylistsProps) {
-  const {token} = useSpotifyAuth()
+  const {logout, token} = useSpotifyAuth()
   const [playlists, setPlaylists] = useState<SpotifyPlaylist[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<null | string>(null)
@@ -45,6 +45,13 @@ function UserPlaylists({onPlaylistSelect, selectedPlaylist}: UserPlaylistsProps)
         },
       })
 
+      // Handle 401 Unauthorized - token expired
+      if (response.status === 401) {
+        console.log('[UserPlaylists] Token expired (401), logging out...')
+        logout() // Clear expired token and trigger re-auth
+        throw new Error('Session expired. Please log in again.')
+      }
+
       if (!response.ok) {
         throw new Error('Failed to load playlists')
       }
@@ -56,7 +63,7 @@ function UserPlaylists({onPlaylistSelect, selectedPlaylist}: UserPlaylistsProps)
     } finally {
       setLoading(false)
     }
-  }, [token])
+  }, [logout, token])
 
   useEffect(() => {
     if (token) {
