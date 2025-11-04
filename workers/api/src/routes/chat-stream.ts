@@ -2981,7 +2981,6 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
                 } catch (parseError) {
                   // Enhanced logging for debugging tool input parse failures
                   const debugInfo: Record<string, unknown> = {
-                    error: parseError instanceof Error ? parseError.message : String(parseError),
                     inputType: typeof block.input,
                     inputPreview: inputStr.substring(0, 200),
                     inputLength: inputStr.length,
@@ -3008,7 +3007,8 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
                     }
                   }
 
-                  getLogger()?.error(`[Stream:${requestId}] Failed to parse tool input for ${block.name}`, debugInfo)
+                  // Pass parseError as second param, debugInfo as third (per ServiceLogger signature)
+                  getLogger()?.error(`[Stream:${requestId}] Failed to parse tool input for ${block.name}`, parseError, debugInfo)
 
                   // Use empty object as fallback to allow execution to continue
                   toolCalls.push({
@@ -3374,7 +3374,6 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
                   } catch (parseError) {
                     // Enhanced logging for debugging tool input parse failures
                     const debugInfo: Record<string, unknown> = {
-                      error: parseError instanceof Error ? parseError.message : String(parseError),
                       inputType: typeof block.input,
                       inputPreview: inputStr.substring(0, 200),
                       inputLength: inputStr.length,
@@ -3402,8 +3401,10 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
                       }
                     }
 
+                    // Pass parseError as second param, debugInfo as third (per ServiceLogger signature)
                     getLogger()?.error(
                       `[Stream:${requestId}] Turn ${turnCount} failed to parse tool input for ${block.name}`,
+                      parseError,
                       debugInfo,
                     )
 
