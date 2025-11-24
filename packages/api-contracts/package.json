@@ -18,7 +18,7 @@
   },
   "dependencies": {
     "@dj/shared-types": "workspace:*",
-    "@hono/zod-openapi": "^1.1.4",
+    "@hono/zod-openapi": "^1.1.5",
     "hono": "^4.10.4",
     "zod": "^4.1.12"
   },

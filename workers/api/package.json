@@ -18,7 +18,7 @@
     "@dj/api-contracts": "workspace:*",
     "@dj/shared-types": "workspace:*",
     "@hono/swagger-ui": "^0.5.2",
-    "@hono/zod-openapi": "^1.1.4",
+    "@hono/zod-openapi": "^1.1.5",
     "hono": "^4.10.4",
     "nanoid": "^5.1.6",
     "zod": "^4.1.12"
