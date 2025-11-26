@@ -15,6 +15,29 @@
 
 import { beforeAll, afterAll } from 'vitest'
 
+// Get native globals that were stored before mocking in test-setup.ts
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const nativeFetch = (global as any).__nativeFetch as typeof fetch
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const nativeSetTimeout = (global as any).__nativeSetTimeout as typeof setTimeout
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const nativeClearTimeout = (global as any).__nativeClearTimeout as typeof clearTimeout
+
+// Restore native globals for integration tests (they need real network access and timers)
+if (nativeFetch) {
+  global.fetch = nativeFetch
+} else {
+  console.warn('⚠️ Native fetch not available - integration tests may fail')
+}
+
+// Restore native timers (needed for rate limiting)
+if (nativeSetTimeout) {
+  global.setTimeout = nativeSetTimeout
+}
+if (nativeClearTimeout) {
+  global.clearTimeout = nativeClearTimeout
+}
+
 /**
  * Global test timeout (60 seconds for API calls + rate limiting)
  */

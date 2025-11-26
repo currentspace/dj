@@ -10,8 +10,14 @@ export default defineConfig({
     environment: 'node',
     setupFiles: ['./src/test-setup.ts'],
 
-    // API-specific include patterns
+    // API-specific include patterns (exclude contract and integration tests)
     include: ['src/**/*.test.ts', 'src/**/*.spec.ts'],
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      'src/**/*.contract.test.ts',
+      'src/**/*.integration.test.ts',
+    ],
 
     // API-specific coverage
     coverage: {

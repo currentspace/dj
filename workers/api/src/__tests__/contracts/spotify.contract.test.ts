@@ -171,9 +171,11 @@ describe('Spotify API Contracts', () => {
     })
   })
 
-  // NOTE: Some playlist endpoints may require user auth or specific permissions since Nov 2024
+  // NOTE: Playlist endpoints require user OAuth even for public playlists since Nov 2024
+  // Client credentials token returns 404 for playlist endpoints
+  // https://developer.spotify.com/blog/2024-11-27-changes-to-the-web-api
   describe('GET /playlists/{id}', () => {
-    it.skip('matches SpotifyPlaylistFullSchema (may require user auth - Spotify API changed Nov 2024)', async () => {
+    it.skip('matches SpotifyPlaylistFullSchema (requires user OAuth since Nov 2024)', async () => {
       // Fetch Spotify's official "Today's Top Hits" playlist
       const response = await spotifyRequest(`/playlists/${TEST_PLAYLIST_ID}`)
       const data = await response.json()
@@ -204,7 +206,7 @@ describe('Spotify API Contracts', () => {
   })
 
   describe('GET /playlists/{id}/tracks', () => {
-    it.skip('matches SpotifyPlaylistTracksResponseSchema (may require user auth - Spotify API changed Nov 2024)', async () => {
+    it.skip('matches SpotifyPlaylistTracksResponseSchema (requires user OAuth since Nov 2024)', async () => {
       // Fetch playlist tracks with pagination
       const response = await spotifyRequest(`/playlists/${TEST_PLAYLIST_ID}/tracks?limit=10`)
       const data = await response.json()
@@ -236,7 +238,7 @@ describe('Spotify API Contracts', () => {
       }
     })
 
-    it.skip('supports pagination with offset (may require user auth - Spotify API changed Nov 2024)', async () => {
+    it.skip('supports pagination with offset (requires user OAuth since Nov 2024)', async () => {
       // Test pagination by fetching second page
       const response = await spotifyRequest(`/playlists/${TEST_PLAYLIST_ID}/tracks?limit=5&offset=5`)
       const data = await response.json()
