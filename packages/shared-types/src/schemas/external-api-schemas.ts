@@ -158,9 +158,11 @@ export const LastFmTrackCorrectionSchema = z.object({
 
 export const LastFmTrackCorrectionResponseSchema = z.object({
   corrections: z.object({
-    correction: z.object({
-      track: LastFmTrackCorrectionSchema,
-    }),
+    correction: z
+      .object({
+        track: LastFmTrackCorrectionSchema,
+      })
+      .nullable(),
   }),
 })
 

@@ -3,7 +3,11 @@
  * Tests for Last.fm crowd-sourced taste signals service
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+// Vitest 4: Create hoisted fetch mock BEFORE imports are evaluated
+const fetchMock = vi.hoisted(() => vi.fn())
+vi.stubGlobal('fetch', fetchMock)
 
 import { LastFmService, type LastFmSignals } from '../../services/LastFmService'
 import { MockKVNamespace } from '../fixtures/cloudflare-mocks'
@@ -16,61 +20,43 @@ import {
   buildLastFmTrackInfo,
 } from '../fixtures/test-builders'
 
-// Vitest 4.x: Use vi.hoisted() to create mock functions before imports
-const mockRateLimitedLastFmCall = vi.hoisted(() =>
-  vi.fn((fn: () => Promise<Response>) => fn()),
-)
-const mockGetGlobalOrchestrator = vi.hoisted(() =>
-  vi.fn(() => ({
+// Mock the rate-limited API clients
+vi.mock('../../utils/RateLimitedAPIClients', () => ({
+  rateLimitedLastFmCall: vi.fn((fn: () => Promise<Response>) => fn()),
+  getGlobalOrchestrator: vi.fn(() => ({
     execute: vi.fn((fn: () => Promise<unknown>) => fn()),
     executeBatch: vi.fn(async (tasks: (() => Promise<unknown>)[]) => {
       return Promise.all(tasks.map(task => task()))
     }),
   })),
-)
-const mockLogger = vi.hoisted(() => ({
-  info: vi.fn(),
-  error: vi.fn(),
-  debug: vi.fn(),
-}))
-
-// Mock the rate-limited API clients
-vi.mock('../../utils/RateLimitedAPIClients', () => ({
-  rateLimitedLastFmCall: mockRateLimitedLastFmCall,
-  getGlobalOrchestrator: mockGetGlobalOrchestrator,
 }))
 
 // Mock logger
 vi.mock('../../utils/LoggerContext', () => ({
-  getLogger: () => mockLogger,
+  getLogger: () => ({
+    info: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  }),
 }))
 
 describe('LastFmService', () => {
   let service: LastFmService
   let mockCache: MockKVNamespace
-  let fetchSpy: ReturnType<typeof vi.spyOn>
 
   beforeEach(() => {
     mockCache = new MockKVNamespace()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     service = new LastFmService('test-api-key', mockCache as any)
-    vi.clearAllMocks()
-    // Use vi.spyOn for Vitest 4.x compatibility with native fetch
-    fetchSpy = vi.spyOn(globalThis, 'fetch')
+    // Reset the hoisted fetch mock for each test
+    fetchMock.mockReset()
   })
 
-  afterEach(() => {
-    fetchSpy?.mockRestore()
-  })
-
-  // TODO: Fix after Vitest 4.x migration - fetch mocking changed behavior
-  // See: https://vitest.dev/guide/migration.html
-  describe.skip('Track Signal Fetching', () => {
+  describe('Track Signal Fetching', () => {
     it('should successfully fetch track info', async () => {
       const track = buildLastFmTrack()
 
-      // Use fetchSpy for Vitest 4.x compatibility
-      fetchSpy
+      fetchMock
         // Correction
         .mockResolvedValueOnce({
           ok: true,
@@ -101,6 +87,10 @@ describe('LastFmService', () => {
 
       const signals = await service.getTrackSignals(track, true)
 
+      // Debug: Check if mock was called (should be 4 times: correction, info, tags, similar)
+      expect(fetchMock).toHaveBeenCalled()
+      expect(fetchMock.mock.calls.length).toBeGreaterThan(0)
+
       expect(signals).toBeTruthy()
       expect(signals?.listeners).toBe(10000)
       expect(signals?.playcount).toBe(50000)
@@ -109,20 +99,20 @@ describe('LastFmService', () => {
     it('should call track correction API first', async () => {
       const track = buildLastFmTrack({ artist: 'test artist', name: 'test track' })
 
-      global.fetch = vi.fn().mockResolvedValue({
+      fetchMock.mockResolvedValue({
         ok: true,
         json: () => Promise.resolve(buildLastFmCorrection(null)),
       } as Response)
 
       await service.getTrackSignals(track, true)
 
-      expect(global.fetch).toHaveBeenCalledWith(
+      expect(fetchMock).toHaveBeenCalledWith(
         expect.stringContaining('method=track.getCorrection'),
       )
-      expect(global.fetch).toHaveBeenCalledWith(
+      expect(fetchMock).toHaveBeenCalledWith(
         expect.stringContaining('artist=test+artist'),
       )
-      expect(global.fetch).toHaveBeenCalledWith(
+      expect(fetchMock).toHaveBeenCalledWith(
         expect.stringContaining('track=test+track'),
       )
     })
@@ -130,8 +120,7 @@ describe('LastFmService', () => {
     it('should use corrected track name in subsequent calls', async () => {
       const track = buildLastFmTrack({ artist: 'Wrong Artist', name: 'Wrong Track' })
 
-      global.fetch = vi
-        .fn()
+      fetchMock
         // Correction returns corrected names
         .mockResolvedValueOnce({
           ok: true,
@@ -163,8 +152,7 @@ describe('LastFmService', () => {
     it('should extract top tags (up to 15)', async () => {
       const track = buildLastFmTrack()
 
-      global.fetch = vi
-        .fn()
+      fetchMock
         .mockResolvedValueOnce({
           ok: true,
           json: () => Promise.resolve(buildLastFmCorrection(null)),
@@ -206,8 +194,7 @@ describe('LastFmService', () => {
     it('should extract similar tracks array', async () => {
       const track = buildLastFmTrack()
 
-      global.fetch = vi
-        .fn()
+      fetchMock
         .mockResolvedValueOnce({
           ok: true,
           json: () => Promise.resolve(buildLastFmCorrection(null)),
@@ -244,8 +231,7 @@ describe('LastFmService', () => {
     it('should extract listeners and playcount', async () => {
       const track = buildLastFmTrack()
 
-      global.fetch = vi
-        .fn()
+      fetchMock
         .mockResolvedValueOnce({
           ok: true,
           json: () => Promise.resolve(buildLastFmCorrection(null)),
@@ -273,8 +259,7 @@ describe('LastFmService', () => {
     it('should extract album info when available', async () => {
       const track = buildLastFmTrack()
 
-      global.fetch = vi
-        .fn()
+      fetchMock
         .mockResolvedValueOnce({
           ok: true,
           json: () => Promise.resolve(buildLastFmCorrection(null)),
@@ -310,8 +295,7 @@ describe('LastFmService', () => {
         published: '2023-01-01',
       }
 
-      global.fetch = vi
-        .fn()
+      fetchMock
         .mockResolvedValueOnce({
           ok: true,
           json: () => Promise.resolve(buildLastFmCorrection(null)),
@@ -339,8 +323,7 @@ describe('LastFmService', () => {
     it('should handle missing data gracefully (no tags)', async () => {
       const track = buildLastFmTrack()
 
-      global.fetch = vi
-        .fn()
+      fetchMock
         .mockResolvedValueOnce({
           ok: true,
           json: () => Promise.resolve(buildLastFmCorrection(null)),
@@ -367,7 +350,7 @@ describe('LastFmService', () => {
     it('should handle API error gracefully', async () => {
       const track = buildLastFmTrack()
 
-      global.fetch = vi.fn().mockRejectedValue(new Error('API error'))
+      fetchMock.mockRejectedValue(new Error('API error'))
 
       const signals = await service.getTrackSignals(track, true)
 
@@ -411,14 +394,13 @@ describe('LastFmService', () => {
       const signals = await service.getTrackSignals(track, true)
 
       expect(signals).toEqual(cachedSignals)
-      expect(global.fetch).not.toHaveBeenCalled()
+      expect(fetchMock).not.toHaveBeenCalled()
     })
 
     it('should cache signal with 7-day TTL', async () => {
       const track = buildLastFmTrack()
 
-      global.fetch = vi
-        .fn()
+      fetchMock
         .mockResolvedValueOnce({
           ok: true,
           json: () => Promise.resolve(buildLastFmCorrection(null)),
@@ -994,12 +976,11 @@ describe('LastFmService', () => {
     })
   })
 
-  // TODO: Fix after Vitest 4.x migration - fetch mocking changed behavior
-  describe.skip('Artist Info Enrichment', () => {
+  describe('Artist Info Enrichment', () => {
     it('should deduplicate artist IDs before fetching', async () => {
       const artists = ['Artist A', 'Artist B', 'Artist A', 'Artist C', 'Artist B']
 
-      global.fetch = vi.fn().mockResolvedValue({
+      fetchMock.mockResolvedValue({
         ok: true,
         json: () => Promise.resolve(buildLastFmArtistInfo()),
       } as Response)
@@ -1007,13 +988,13 @@ describe('LastFmService', () => {
       await service.batchGetArtistInfo(artists)
 
       // Should only fetch unique artists (3 unique out of 5)
-      expect(global.fetch).toHaveBeenCalledTimes(3)
+      expect(fetchMock).toHaveBeenCalledTimes(3)
     })
 
     it('should batch fetch unique artists', async () => {
       const artists = ['Artist 1', 'Artist 2', 'Artist 3']
 
-      global.fetch = vi.fn().mockResolvedValue({
+      fetchMock.mockResolvedValue({
         ok: true,
         json: () => Promise.resolve(buildLastFmArtistInfo()),
       } as Response)
@@ -1059,7 +1040,7 @@ describe('LastFmService', () => {
     it('should handle missing artist info gracefully', async () => {
       const artists = ['Unknown Artist']
 
-      global.fetch = vi.fn().mockRejectedValue(new Error('Artist not found'))
+      fetchMock.mockRejectedValue(new Error('Artist not found'))
 
       const results = await service.batchGetArtistInfo(artists)
 
@@ -1084,13 +1065,13 @@ describe('LastFmService', () => {
       const results = await service.batchGetArtistInfo(artists)
 
       expect(results.get('cached artist')).toEqual(cachedInfo)
-      expect(global.fetch).not.toHaveBeenCalled()
+      expect(fetchMock).not.toHaveBeenCalled()
     })
 
     it('should report progress via callback', async () => {
       const artists = Array.from({ length: 25 }, (_, i) => `Artist ${i}`)
 
-      global.fetch = vi.fn().mockResolvedValue({
+      fetchMock.mockResolvedValue({
         ok: true,
         json: () => Promise.resolve(buildLastFmArtistInfo()),
       } as Response)
@@ -1106,8 +1087,7 @@ describe('LastFmService', () => {
     })
   })
 
-  // TODO: Fix after Vitest 4.x migration - fetch mocking changed behavior
-  describe.skip('Cache Lifecycle', () => {
+  describe('Cache Lifecycle', () => {
     it('should return cached data on hit (7-day fresh)', async () => {
       const track = buildLastFmTrack({ artist: 'Cached Artist', name: 'Cached Track' })
 
@@ -1140,14 +1120,13 @@ describe('LastFmService', () => {
       const signals = await service.getTrackSignals(track, true)
 
       expect(signals).toEqual(cachedSignals)
-      expect(global.fetch).not.toHaveBeenCalled()
+      expect(fetchMock).not.toHaveBeenCalled()
     })
 
     it('should fetch and store on cache miss', async () => {
       const track = buildLastFmTrack()
 
-      global.fetch = vi
-        .fn()
+      fetchMock
         .mockResolvedValueOnce({
           ok: true,
           json: () => Promise.resolve(buildLastFmCorrection(null)),
@@ -1205,7 +1184,7 @@ describe('LastFmService', () => {
       const signals = await service.getTrackSignals(track, true)
 
       expect(signals).toEqual(recentMiss)
-      expect(global.fetch).not.toHaveBeenCalled()
+      expect(fetchMock).not.toHaveBeenCalled()
     })
 
     it('should retry Last.fm on old miss (> 5min)', async () => {
@@ -1240,8 +1219,7 @@ describe('LastFmService', () => {
         }),
       )
 
-      global.fetch = vi
-        .fn()
+      fetchMock
         .mockResolvedValueOnce({
           ok: true,
           json: () => Promise.resolve(buildLastFmCorrection(null)),
@@ -1262,8 +1240,8 @@ describe('LastFmService', () => {
       const signals = await service.getTrackSignals(track, true)
 
       // Verify fetch was called (retry happened)
-      expect(global.fetch).toHaveBeenCalled()
-      expect(global.fetch).toHaveBeenCalledTimes(4) // correction + track info + tags + similar
+      expect(fetchMock).toHaveBeenCalled()
+      expect(fetchMock).toHaveBeenCalledTimes(4) // correction + track info + tags + similar
 
       // Verify that tags were updated (proving retry happened)
       expect(signals?.topTags).toContain('rock')

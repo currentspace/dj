@@ -513,6 +513,8 @@ export function buildSpotifyTrack(overrides?: {
 
 /**
  * Build a mock Deezer track response
+ * Must match DeezerTrackSchema from shared-types
+ * NOTE: Use explicit undefined check for nullable fields to allow passing null
  */
 export function buildDeezerTrack(overrides?: {
   id?: number
@@ -527,29 +529,48 @@ export function buildDeezerTrack(overrides?: {
     id: overrides?.id ?? 12345,
     title: overrides?.title ?? 'Test Track',
     duration: overrides?.duration ?? 180, // seconds
-    bpm: overrides?.bpm ?? 120,
-    gain: overrides?.gain ?? -8.5,
-    rank: overrides?.rank ?? 500000,
-    release_date: overrides?.release_date ?? '2023-01-15',
+    // Use undefined check (not ??) to allow explicit null to pass through
+    bpm: overrides?.bpm !== undefined ? overrides.bpm : 120,
+    gain: overrides?.gain !== undefined ? overrides.gain : -8.5,
+    rank: overrides?.rank !== undefined ? overrides.rank : 500000,
+    release_date: overrides?.release_date !== undefined ? overrides.release_date : '2023-01-15',
   }
 }
 
 /**
  * Build a mock MusicBrainz recording
+ * Must match MusicBrainzRecordingSchema from shared-types
  */
 export function buildMusicBrainzRecording(overrides?: {
   id?: string
   title?: string
   length?: number
   isrcs?: string[]
-  'artist-credit'?: { name: string }[]
+  'artist-credit'?: { artist: { id: string; name: string }; name: string }[]
 }) {
   return {
     id: overrides?.id ?? 'mbid-12345',
     title: overrides?.title ?? 'Test Track',
     length: overrides?.length ?? 180000, // milliseconds
     isrcs: overrides?.isrcs ?? ['USRC12345678'],
-    'artist-credit': overrides?.['artist-credit'] ?? [{ name: 'Test Artist' }],
+    // artist-credit must match MusicBrainzArtistCreditSchema
+    'artist-credit': overrides?.['artist-credit'] ?? [{
+      artist: { id: 'artist-mbid-123', name: 'Test Artist' },
+      name: 'Test Artist',
+    }],
+  }
+}
+
+/**
+ * Build a mock MusicBrainz search response
+ * Must match MusicBrainzSearchResponseSchema from shared-types
+ * The schema requires count and offset fields, not just recordings!
+ */
+export function buildMusicBrainzSearchResponse(recordings: ReturnType<typeof buildMusicBrainzRecording>[]) {
+  return {
+    count: recordings.length,
+    offset: 0,
+    recordings,
   }
 }
 
@@ -574,6 +595,8 @@ export function buildLastFmTrack(overrides?: {
 
 /**
  * Build a mock Last.fm track info response
+ * Must match LastFmTrackInfoResponseSchema from shared-types
+ * Note: wiki field is optional() not nullable(), so omit it when not provided
  */
 export function buildLastFmTrackInfo(overrides?: {
   listeners?: number
@@ -594,33 +617,38 @@ export function buildLastFmTrackInfo(overrides?: {
     published: string
   }
 }) {
-  return {
-    track: {
-      name: 'Test Track',
-      mbid: overrides?.mbid ?? 'mbid-12345',
-      url: overrides?.url ?? 'https://last.fm/music/test',
-      duration: overrides?.duration ?? 180000,
-      listeners: overrides?.listeners ?? 10000,
-      playcount: overrides?.playcount ?? 50000,
-      artist: {
-        name: 'Test Artist',
-        mbid: 'artist-mbid',
-        url: 'https://last.fm/music/test+artist',
-      },
-      album: overrides?.album ?? {
-        artist: 'Test Artist',
-        title: 'Test Album',
-        mbid: 'album-mbid',
-        url: 'https://last.fm/music/test+album',
-        image: [
-          { '#text': 'http://example.com/small.jpg', size: 'small' },
-          { '#text': 'http://example.com/medium.jpg', size: 'medium' },
-          { '#text': 'http://example.com/large.jpg', size: 'large' },
-        ],
-      },
-      wiki: overrides?.wiki ?? null,
+  // Build base track object
+  const track: Record<string, unknown> = {
+    name: 'Test Track',
+    mbid: overrides?.mbid ?? 'mbid-12345',
+    url: overrides?.url ?? 'https://www.last.fm/music/test',
+    duration: overrides?.duration ?? 180000,
+    listeners: overrides?.listeners ?? 10000,
+    playcount: overrides?.playcount ?? 50000,
+    artist: {
+      name: 'Test Artist',
+      mbid: 'artist-mbid',
+      url: 'https://www.last.fm/music/test+artist',
+    },
+    album: overrides?.album ?? {
+      artist: 'Test Artist',
+      title: 'Test Album',
+      mbid: 'album-mbid',
+      url: 'https://www.last.fm/music/test+album',
+      image: [
+        { '#text': 'https://lastfm.freetls.fastly.net/i/u/34s/small.jpg', size: 'small' },
+        { '#text': 'https://lastfm.freetls.fastly.net/i/u/64s/medium.jpg', size: 'medium' },
+        { '#text': 'https://lastfm.freetls.fastly.net/i/u/174s/large.jpg', size: 'large' },
+      ],
     },
   }
+
+  // Only include wiki if explicitly provided (schema says optional(), not nullable())
+  if (overrides?.wiki) {
+    track.wiki = overrides.wiki
+  }
+
+  return { track }
 }
 
 /**
@@ -636,6 +664,7 @@ export function buildLastFmTopTags(tags: string[]) {
 
 /**
  * Build a mock Last.fm similar tracks response
+ * Must match LastFmTrackSimilarResponseSchema from shared-types
  */
 export function buildLastFmSimilarTracks(
   tracks: { artist: string; name: string; match: number }[],
@@ -645,8 +674,12 @@ export function buildLastFmSimilarTracks(
       track: tracks.map(t => ({
         name: t.name,
         match: t.match,
-        artist: { name: t.artist },
-        url: `https://last.fm/music/${t.artist}/${t.name}`,
+        // artist must include url (required by LastFmArtistSchema)
+        artist: {
+          name: t.artist,
+          url: `https://www.last.fm/music/${encodeURIComponent(t.artist)}`,
+        },
+        url: `https://www.last.fm/music/${encodeURIComponent(t.artist)}/_/${encodeURIComponent(t.name)}`,
       })),
     },
   }
@@ -697,12 +730,14 @@ export function buildLastFmArtistInfo(overrides?: {
 
 /**
  * Build a mock Last.fm track correction response
+ * Must match LastFmTrackCorrectionResponseSchema from shared-types
  */
 export function buildLastFmCorrection(overrides?: {
   artist?: string
   track?: string
 } | null) {
   if (overrides === null) {
+    // No correction available - schema allows null
     return {
       corrections: {
         correction: null,
@@ -710,14 +745,19 @@ export function buildLastFmCorrection(overrides?: {
     }
   }
 
+  const artistName = overrides?.artist ?? 'Corrected Artist'
+  const trackName = overrides?.track ?? 'Corrected Track'
+
   return {
     corrections: {
       correction: {
         track: {
-          name: overrides?.track ?? 'Corrected Track',
           artist: {
-            name: overrides?.artist ?? 'Corrected Artist',
+            name: artistName,
+            url: `https://www.last.fm/music/${encodeURIComponent(artistName)}`,
           },
+          name: trackName,
+          url: `https://www.last.fm/music/${encodeURIComponent(artistName)}/_/${encodeURIComponent(trackName)}`,
         },
       },
     },

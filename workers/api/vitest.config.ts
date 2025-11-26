@@ -1,13 +1,11 @@
 import { defineConfig } from 'vitest/config'
-import { sharedConfig } from '../../vitest.shared'
 
 /**
- * Vitest configuration for @dj/api-worker (Cloudflare Workers)
- * Environment: node (with Cloudflare Workers types)
+ * Vitest configuration for @dj/api-worker
+ * Uses Vitest 4.x with node environment for unit tests
  */
 export default defineConfig({
   test: {
-    ...sharedConfig,
     name: 'api',
     environment: 'node',
     setupFiles: ['./src/test-setup.ts'],
@@ -17,13 +15,13 @@ export default defineConfig({
 
     // API-specific coverage
     coverage: {
-      ...sharedConfig.coverage,
-      include: ['src/**/*.{ts}'],
+      provider: 'v8',
+      include: ['src/**/*.ts'],
       exclude: [
-        ...(sharedConfig.coverage?.exclude || []),
-        'src/**/*.{test,spec}.{ts}',
+        'src/**/*.{test,spec}.ts',
         'src/**/__tests__/**',
         'src/index.ts',
+        'src/test-setup.ts',
       ],
     },
   },
