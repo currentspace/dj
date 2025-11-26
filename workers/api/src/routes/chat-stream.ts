@@ -2534,7 +2534,8 @@ chatStreamRouter.post('/message', async c => {
   c.req.raw.signal.addEventListener('abort', onAbort)
 
   // Create a TransformStream for proper SSE handling in Cloudflare Workers
-  const {readable, writable} = new TransformStream()
+  // Use highWaterMark to prevent memory bloat during slow client consumption
+  const {readable, writable} = new TransformStream(undefined, {highWaterMark: 10})
   const writer = writable.getWriter()
   const sseWriter = new SSEWriter(writer)
 
@@ -3252,8 +3253,10 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
           let nextStream
           try {
             // Create second stream with tool results
+            // Temperature 0.7 for tool execution consistency (1.0 is only required for extended thinking)
+            // max_tokens reduced since no thinking overhead needed
             nextStream = anthropic.messages.stream({
-              max_tokens: 10000,
+              max_tokens: 5000,
               messages: conversationMessages,
               model: 'claude-sonnet-4-5-20250929',
               system: [
@@ -3263,7 +3266,7 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
                   type: 'text' as const,
                 },
               ],
-              temperature: 1.0,
+              temperature: 0.7,
               // NOTE: Extended thinking disabled for agentic loops to prevent 400 errors
               // Extended thinking can cause message format issues when tool results are sent back
               // See: https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking

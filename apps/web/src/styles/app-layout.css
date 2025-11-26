@@ -1,0 +1,67 @@
+/* App layout styles - extracted from inline <style> tag */
+
+.main-content {
+  display: grid;
+  grid-template-columns: 400px 1fr;
+  gap: 2rem;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 1rem;
+  height: calc(100vh - 200px);
+}
+
+.playlists-section {
+  height: 100%;
+  overflow: hidden;
+}
+
+.chat-section {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.no-playlist-selected {
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 12px;
+  padding: 3rem;
+  text-align: center;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.no-playlist-selected h2 {
+  margin: 0 0 1rem 0;
+  color: #e0e0e0;
+  font-size: 2rem;
+}
+
+.no-playlist-selected p {
+  margin: 0;
+  color: #999;
+  font-size: 1.125rem;
+  max-width: 400px;
+  line-height: 1.5;
+}
+
+@media (max-width: 768px) {
+  .main-content {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+    gap: 1.5rem;
+    height: auto;
+  }
+
+  .playlists-section {
+    height: auto;
+    max-height: 300px;
+  }
+
+  .chat-section {
+    height: 500px;
+  }
+}

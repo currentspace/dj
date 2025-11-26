@@ -1,3 +1,5 @@
+import '../../styles/spotify-auth.css'
+
 interface SpotifyAuthProps {
   error: null | string
   isLoading: boolean
@@ -19,19 +21,9 @@ export function SpotifyAuth({error, isLoading, onClearError, onLogin}: SpotifyAu
         <p>Login with your Spotify account to create AI-powered playlists and save them directly to your library.</p>
 
         {error && (
-          <div className="error-message" style={{color: '#ff4444', marginBottom: '1rem'}}>
+          <div className="error-message">
             {error}
-            <button
-              onClick={onClearError}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: '#ff4444',
-                cursor: 'pointer',
-                marginLeft: '0.5rem',
-                textDecoration: 'underline',
-              }}
-              type="button">
+            <button className="dismiss-button" onClick={onClearError} type="button">
               Dismiss
             </button>
           </div>

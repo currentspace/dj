@@ -662,9 +662,26 @@ async function getAlbumInfo(args: Record<string, unknown>, token: string) {
     }
   }
 
+  // Return compact album format to reduce payload size
   return {
-    ...(album as object),
-    track_audio_features: audioFeatures,
+    id: album.id,
+    images: album.images?.slice(0, 1), // Only largest image
+    name: album.name,
+    release_date: album.release_date,
+    total_tracks: album.total_tracks,
+    tracks: album.tracks?.items?.slice(0, 10).map(t => ({
+      id: t.id,
+      name: t.name,
+      artists: t.artists?.map(a => a.name).join(', '),
+      duration_ms: t.duration_ms,
+      track_number: t.track_number,
+    })),
+    track_audio_features: audioFeatures?.slice(0, 10).map(f => f ? {
+      danceability: f.danceability,
+      energy: f.energy,
+      tempo: f.tempo,
+      valence: f.valence,
+    } : null),
   }
 }
 
@@ -711,7 +728,18 @@ async function getArtistTopTracks(args: Record<string, unknown>, token: string) 
     return []
   }
 
-  return result.data.items ?? []
+  // Return compact track format to reduce payload size
+  return (result.data.items ?? []).map(track => ({
+    id: track.id,
+    name: track.name,
+    artists: track.artists?.map(a => a.name).join(', '),
+    popularity: track.popularity,
+    uri: track.uri,
+    album: track.album ? {
+      name: track.album.name,
+      release_date: track.album.release_date,
+    } : undefined,
+  }))
 }
 
 async function getAudioFeatures(args: Record<string, unknown>, token: string, cache?: KVNamespace) {
