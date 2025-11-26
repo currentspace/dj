@@ -10,7 +10,7 @@
  * - Response caching to minimize API calls
  */
 
-import { beforeAll, afterAll, vi } from 'vitest'
+import { beforeAll, afterAll } from 'vitest'
 
 // Get native globals that were stored before mocking in test-setup.ts
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

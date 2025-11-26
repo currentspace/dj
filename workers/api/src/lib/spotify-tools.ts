@@ -1,26 +1,32 @@
+/**
+ * Spotify Tools for Anthropic Function Calling
+ *
+ * NOTE: Several Spotify Web API endpoints were deprecated on November 27, 2024:
+ * - /audio-features (get_audio_features)
+ * - /recommendations (get_recommendations)
+ * - /audio-analysis
+ * - /recommendations/available-genre-seeds
+ *
+ * These endpoints are no longer available for apps created after Nov 27, 2024.
+ * See: https://developer.spotify.com/blog/2024-11-27-changes-to-the-web-api
+ *
+ * This project uses Deezer API for BPM/audio data and Last.fm for recommendations instead.
+ */
 import {
   SpotifyAlbumFullSchema,
-  SpotifyAudioFeaturesBatchSchema,
-  SpotifyAudioFeaturesSchema,
   SpotifyCreatePlaylistResponseSchema,
   SpotifyPagingSchema,
   SpotifyPlaylistFullSchema,
   SpotifyPlaylistTracksResponseSchema,
-  SpotifyRecommendationsResponseSchema,
   SpotifySearchResponseSchema,
   SpotifyTrackFullSchema,
   SpotifyUserSchema,
 } from '@dj/shared-types'
-// Spotify Tools for Anthropic Function Calling
 import {z} from 'zod'
 
 import {getLogger} from '../utils/LoggerContext'
 import {rateLimitedSpotifyCall} from '../utils/RateLimitedAPIClients'
 import {formatZodError, safeParse} from './guards'
-
-function isNumber(value: unknown): value is number {
-  return typeof value === 'number'
-}
 
 function isString(value: unknown): value is string {
   return typeof value === 'string'
@@ -33,31 +39,8 @@ function isStringArray(value: unknown): value is string[] {
 
 // Tool schemas
 export const SearchTracksSchema = z.object({
-  filters: z
-    .object({
-      genre: z.string().optional(),
-      max_energy: z.number().min(0).max(1).optional(),
-      max_tempo: z.number().min(0).max(300).optional(),
-      min_energy: z.number().min(0).max(1).optional(),
-      min_tempo: z.number().min(0).max(300).optional(),
-    })
-    .optional(),
   limit: z.number().min(1).max(50).default(10).describe('Number of results to return'),
   query: z.string().describe('Search query for tracks'),
-})
-
-export const GetAudioFeaturesSchema = z.object({
-  track_ids: z.array(z.string()).max(100).describe('Spotify track IDs to analyze'),
-})
-
-export const GetRecommendationsSchema = z.object({
-  limit: z.number().min(1).max(100).default(20),
-  seed_artists: z.array(z.string()).max(5).optional(),
-  seed_genres: z.array(z.string()).max(5).optional(),
-  seed_tracks: z.array(z.string()).max(5).optional(),
-  target_danceability: z.number().min(0).max(1).optional(),
-  target_energy: z.number().min(0).max(1).optional(),
-  target_valence: z.number().min(0).max(1).optional(),
 })
 
 export const CreatePlaylistSchema = z.object({
@@ -77,19 +60,9 @@ export const ModifyPlaylistSchema = z.object({
 // Tool definitions for Anthropic
 export const spotifyTools = [
   {
-    description: 'Search for tracks on Spotify with optional audio feature filters',
+    description: 'Search for tracks on Spotify by query string',
     input_schema: {
       properties: {
-        filters: {
-          properties: {
-            genre: {type: 'string'},
-            max_energy: {maximum: 1, minimum: 0, type: 'number'},
-            max_tempo: {maximum: 300, minimum: 0, type: 'number'},
-            min_energy: {maximum: 1, minimum: 0, type: 'number'},
-            min_tempo: {maximum: 300, minimum: 0, type: 'number'},
-          },
-          type: 'object',
-        },
         limit: {
           default: 10,
           description: 'Number of results (1-50)',
@@ -104,53 +77,6 @@ export const spotifyTools = [
       type: 'object',
     },
     name: 'search_spotify_tracks',
-  },
-  {
-    description: 'Get detailed audio features for tracks (energy, danceability, tempo, etc.)',
-    input_schema: {
-      properties: {
-        track_ids: {
-          description: 'Array of Spotify track IDs',
-          items: {type: 'string'},
-          maxItems: 100,
-          type: 'array',
-        },
-      },
-      required: ['track_ids'],
-      type: 'object',
-    },
-    name: 'get_audio_features',
-  },
-  {
-    description: 'Get track recommendations based on seeds and target audio features',
-    input_schema: {
-      properties: {
-        limit: {default: 20, maximum: 100, minimum: 1, type: 'number'},
-        seed_artists: {
-          description: 'Seed artist IDs',
-          items: {type: 'string'},
-          maxItems: 5,
-          type: 'array',
-        },
-        seed_genres: {
-          description: 'Seed genres',
-          items: {type: 'string'},
-          maxItems: 5,
-          type: 'array',
-        },
-        seed_tracks: {
-          description: 'Seed track IDs',
-          items: {type: 'string'},
-          maxItems: 5,
-          type: 'array',
-        },
-        target_danceability: {maximum: 1, minimum: 0, type: 'number'},
-        target_energy: {maximum: 1, minimum: 0, type: 'number'},
-        target_valence: {maximum: 1, minimum: 0, type: 'number'},
-      },
-      type: 'object',
-    },
-    name: 'get_recommendations',
   },
   {
     description: 'Create a new Spotify playlist and add tracks',
@@ -263,14 +189,9 @@ export const spotifyTools = [
     name: 'control_playback',
   },
   {
-    description: 'Analyze an existing playlist to understand its characteristics',
+    description: 'Analyze an existing playlist to understand its characteristics (track metadata, artist frequency, genres)',
     input_schema: {
       properties: {
-        include_recommendations: {
-          default: false,
-          description: 'Include AI-generated recommendations',
-          type: 'boolean',
-        },
         playlist_id: {
           description: 'Spotify playlist ID to analyze',
           type: 'string',
@@ -288,7 +209,7 @@ export async function executeSpotifyTool(
   toolName: string,
   args: Record<string, unknown>,
   token: string,
-  cache?: KVNamespace,
+  _cache?: KVNamespace, // eslint-disable-line @typescript-eslint/no-unused-vars -- kept for API compatibility
 ): Promise<unknown> {
   getLogger()?.info(`[Tool] Executing ${toolName} with args:`, {args: JSON.stringify(args).substring(0, 200)})
   const startTime = Date.now()
@@ -310,15 +231,6 @@ export async function executeSpotifyTool(
         break
       case 'get_artist_top_tracks':
         result = await getArtistTopTracks(args, token)
-        break
-      case 'get_audio_features':
-        result = await getAudioFeatures(args, token, cache)
-        break
-      case 'get_available_genres':
-        result = await getAvailableGenres(token)
-        break
-      case 'get_recommendations':
-        result = await getRecommendations(args, token)
         break
       case 'get_related_artists':
         result = await getRelatedArtists(args, token)
@@ -439,79 +351,12 @@ async function analyzePlaylist(args: Record<string, unknown>, token: string) {
   const trackIds = tracks.map(t => t.id).filter(Boolean)
   getLogger()?.info(`[analyzePlaylist] Found ${tracks.length} tracks, ${trackIds.length} with valid IDs`)
 
-  // Log the structure of a single track object to see what Spotify returns
-  if (tracks.length > 0) {
-    const sampleTrack = tracks[0]
-    getLogger()?.info(`[analyzePlaylist] Sample track object keys: ${Object.keys(sampleTrack).join(', ')}`)
-    getLogger()?.info(`[analyzePlaylist] Single track JSON size: ${JSON.stringify(sampleTrack).length} bytes`)
+  // NOTE: Audio features endpoint was deprecated by Spotify on November 27, 2024
+  // See: https://developer.spotify.com/blog/2024-11-27-changes-to-the-web-api
+  // BPM/tempo data is now provided by Deezer via AudioEnrichmentService instead
 
-    // Log size of specific fields
-    if (sampleTrack.album) {
-      getLogger()?.info(`[analyzePlaylist]   - album field size: ${JSON.stringify(sampleTrack.album).length} bytes`)
-      getLogger()?.info(`[analyzePlaylist]   - album keys: ${Object.keys(sampleTrack.album).join(', ')}`)
-    }
-    // Note: available_markets not included in schema to reduce payload size
-    if (sampleTrack.external_ids) {
-      getLogger()?.info(`[analyzePlaylist]   - external_ids: ${JSON.stringify(sampleTrack.external_ids)}`)
-    }
-  }
-
-  // Get audio features
-  let audioFeatures: (null | z.infer<typeof SpotifyAudioFeaturesSchema>)[] = []
-  if (trackIds.length > 0) {
-    getLogger()?.info(`[analyzePlaylist] Fetching audio features for ${trackIds.length} tracks...`)
-    const featuresResponse = await rateLimitedSpotifyCall(
-      () =>
-        fetch(`https://api.spotify.com/v1/audio-features?ids=${trackIds.slice(0, 100).join(',')}`, {
-          headers: {Authorization: `Bearer ${token}`},
-        }),
-      undefined,
-      'audio-features:analyze',
-    )
-
-    getLogger()?.info(`[analyzePlaylist] Audio features API response status: ${featuresResponse.status}`)
-
-    if (featuresResponse.ok) {
-      const featuresJson = await featuresResponse.json()
-      const featuresResult = safeParse(SpotifyAudioFeaturesBatchSchema, featuresJson)
-
-      if (featuresResult.success) {
-        audioFeatures = featuresResult.data.audio_features ?? []
-        getLogger()?.info(`[analyzePlaylist] Got audio features for ${audioFeatures.filter(f => f).length} tracks`)
-      } else {
-        getLogger()?.error('[analyzePlaylist] Failed to parse audio features:', formatZodError(featuresResult.error))
-      }
-    } else {
-      const errorText = await featuresResponse.text()
-      getLogger()?.error(`[analyzePlaylist] Failed to get audio features: ${featuresResponse.status} - ${errorText}`)
-      getLogger()?.error(
-        `[analyzePlaylist] Request URL: https://api.spotify.com/v1/audio-features?ids=${trackIds.slice(0, 100).join(',').substring(0, 200)}...`,
-      )
-      getLogger()?.error(`[analyzePlaylist] Token starts with: ${token.substring(0, 10)}...`)
-    }
-  }
-
-  // Calculate averages
-  getLogger()?.info(`[analyzePlaylist] Calculating audio analysis from ${audioFeatures.length} features...`)
-  const validFeatures = audioFeatures.filter((f): f is z.infer<typeof SpotifyAudioFeaturesSchema> => f !== null)
-  getLogger()?.info(`[analyzePlaylist] Valid features: ${validFeatures.length}/${audioFeatures.length}`)
-
-  // Create a MUCH smaller analysis object for Claude (was 55KB, now ~2KB)
+  // Create analysis object with track metadata
   const analysis = {
-    audio_analysis:
-      validFeatures.length > 0
-        ? {
-            avg_acousticness:
-              validFeatures.reduce((sum: number, f) => sum + f.acousticness, 0) / validFeatures.length,
-            avg_danceability:
-              validFeatures.reduce((sum: number, f) => sum + f.danceability, 0) / validFeatures.length,
-            avg_energy: validFeatures.reduce((sum: number, f) => sum + f.energy, 0) / validFeatures.length,
-            avg_instrumentalness:
-              validFeatures.reduce((sum: number, f) => sum + f.instrumentalness, 0) / validFeatures.length,
-            avg_tempo: validFeatures.reduce((sum: number, f) => sum + f.tempo, 0) / validFeatures.length,
-            avg_valence: validFeatures.reduce((sum: number, f) => sum + f.valence, 0) / validFeatures.length,
-          }
-        : null,
     // Add genre analysis from artists (tracks don't have genres, but artists do)
     // Note: Artist genres may not be available in all responses
     genres: Array.from(
@@ -553,32 +398,10 @@ async function analyzePlaylist(args: Record<string, unknown>, token: string) {
     total_tracks: tracks.length,
   }
 
-  const analysisSize = JSON.stringify(analysis).length
   getLogger()?.info(
-    `[analyzePlaylist] Analysis complete! Playlist: "${analysis.playlist_name}", Tracks: ${analysis.total_tracks}, Audio data: ${analysis.audio_analysis ? 'YES' : 'NO'}`,
+    `[analyzePlaylist] Analysis complete! Playlist: "${analysis.playlist_name}", Tracks: ${analysis.total_tracks}`,
   )
-  getLogger()?.info(`[analyzePlaylist] Analysis object size: ${analysisSize} bytes (reduced from ~55KB)`)
-
-  // Log what would have been sent in the old version
-  const oldAnalysis = {
-    audio_analysis: analysis.audio_analysis,
-    audio_features: audioFeatures.slice(0, 20), // And this!
-    playlist_description: playlist.description,
-    playlist_name: playlist.name,
-    total_tracks: tracks.length,
-    tracks: tracks.slice(0, 20), // This was the problem!
-  }
-  const oldSize = JSON.stringify(oldAnalysis).length
-  getLogger()?.info(`[analyzePlaylist] OLD analysis size would have been: ${oldSize} bytes`)
-  getLogger()?.info(`[analyzePlaylist] Size breakdown of old format:`)
-  getLogger()?.info(`[analyzePlaylist]   - tracks field: ${JSON.stringify(tracks.slice(0, 20)).length} bytes`)
-  getLogger()?.info(`[analyzePlaylist]   - audio_features field: ${JSON.stringify(audioFeatures.slice(0, 20)).length} bytes`)
-  getLogger()?.info(
-    `[analyzePlaylist]   - other fields: ${oldSize - JSON.stringify(tracks.slice(0, 20)).length - JSON.stringify(audioFeatures.slice(0, 20)).length} bytes`,
-  )
-  getLogger()?.info(
-    `[analyzePlaylist] Size reduction: ${oldSize} → ${analysisSize} (${Math.round((1 - analysisSize / oldSize) * 100)}% smaller)`,
-  )
+  getLogger()?.info(`[analyzePlaylist] Analysis object size: ${JSON.stringify(analysis).length} bytes`)
 
   return analysis
 }
@@ -699,31 +522,8 @@ async function getAlbumInfo(args: Record<string, unknown>, token: string) {
 
   const album = albumResult.data
 
-  // Get track IDs for audio features
-  const trackIds = album.tracks?.items?.map(t => t.id).filter(Boolean) ?? []
-
-  let audioFeatures: (null | z.infer<typeof SpotifyAudioFeaturesSchema>)[] = []
-  if (trackIds.length > 0) {
-    const featuresResponse = await rateLimitedSpotifyCall(
-      () =>
-        fetch(`https://api.spotify.com/v1/audio-features?ids=${trackIds.join(',')}`, {
-          headers: {Authorization: `Bearer ${token}`},
-        }),
-      undefined,
-      'audio-features:album',
-    )
-
-    if (featuresResponse.ok) {
-      const featuresJson = await featuresResponse.json()
-      const featuresResult = safeParse(SpotifyAudioFeaturesBatchSchema, featuresJson)
-
-      if (featuresResult.success) {
-        audioFeatures = featuresResult.data.audio_features ?? []
-      } else {
-        getLogger()?.error('[getAlbumInfo] Failed to parse audio features:', formatZodError(featuresResult.error))
-      }
-    }
-  }
+  // NOTE: Audio features endpoint was deprecated by Spotify on November 27, 2024
+  // See: https://developer.spotify.com/blog/2024-11-27-changes-to-the-web-api
 
   // Return compact album format to reduce payload size
   return {
@@ -739,12 +539,6 @@ async function getAlbumInfo(args: Record<string, unknown>, token: string) {
       duration_ms: t.duration_ms,
       track_number: t.track_number,
     })),
-    track_audio_features: audioFeatures?.slice(0, 10).map(f => f ? {
-      danceability: f.danceability,
-      energy: f.energy,
-      tempo: f.tempo,
-      valence: f.valence,
-    } : null),
   }
 }
 
@@ -805,172 +599,6 @@ async function getArtistTopTracks(args: Record<string, unknown>, token: string) 
   }))
 }
 
-async function getAudioFeatures(args: Record<string, unknown>, token: string, cache?: KVNamespace) {
-  const {track_ids} = args
-  const CACHE_TTL = 7 * 24 * 60 * 60 // 7 days in seconds
-
-  getLogger()?.info(`[getAudioFeatures] Starting with args:`, {args: JSON.stringify(args)})
-  getLogger()?.info(`[getAudioFeatures] Extracted track_ids:`, {track_ids})
-
-  if (!track_ids || !Array.isArray(track_ids) || track_ids.length === 0) {
-    getLogger()?.error(`[getAudioFeatures] CRITICAL: track_ids is missing, not an array, or empty!`)
-    throw new Error('track_ids parameter is required and must be a non-empty array')
-  }
-
-  // Check cache for each track
-  const cachedFeatures = new Map<string, null | z.infer<typeof SpotifyAudioFeaturesSchema>>()
-  const uncachedTrackIds: string[] = []
-
-  if (cache) {
-    getLogger()?.info(`[getAudioFeatures] Checking cache for ${track_ids.length} tracks`)
-    await Promise.all(
-      track_ids.map(async (trackId: string) => {
-        const cacheKey = `spotify:audio_features:${trackId}`
-        const cached = await cache.get(cacheKey, 'json')
-        if (cached !== null) {
-          // Validate cached value with Zod schema
-          const parseResult = SpotifyAudioFeaturesSchema.safeParse(cached)
-          if (parseResult.success) {
-            cachedFeatures.set(trackId, parseResult.data)
-            getLogger()?.info(`[getAudioFeatures] Cache hit for ${trackId}`)
-          } else {
-            // Invalid cache entry, treat as miss
-            uncachedTrackIds.push(trackId)
-          }
-        } else {
-          uncachedTrackIds.push(trackId)
-        }
-      }),
-    )
-    getLogger()?.info(
-      `[getAudioFeatures] Cache results: ${cachedFeatures.size} hits, ${uncachedTrackIds.length} misses`,
-    )
-  } else {
-    uncachedTrackIds.push(...track_ids)
-  }
-
-  // Fetch uncached tracks from Spotify
-  let freshFeatures: (null | z.infer<typeof SpotifyAudioFeaturesSchema>)[] = []
-  if (uncachedTrackIds.length > 0) {
-    getLogger()?.info(`[getAudioFeatures] Fetching ${uncachedTrackIds.length} tracks from Spotify API`)
-    const response = await rateLimitedSpotifyCall(
-      () =>
-        fetch(`https://api.spotify.com/v1/audio-features?ids=${uncachedTrackIds.join(',')}`, {
-          headers: {Authorization: `Bearer ${token}`},
-        }),
-      undefined,
-      'audio-features:batch',
-    )
-
-    getLogger()?.info(`[getAudioFeatures] API response status: ${response.status}`)
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      getLogger()?.error(`[getAudioFeatures] Failed to get audio features: ${response.status} - ${errorText}`)
-      throw new Error(`Failed to get audio features: ${response.status}`)
-    }
-
-    const json = await response.json()
-    const result = safeParse(SpotifyAudioFeaturesBatchSchema, json)
-
-    if (!result.success) {
-      getLogger()?.error('[getAudioFeatures] Failed to parse response:', formatZodError(result.error))
-      return []
-    }
-
-    freshFeatures = result.data.audio_features ?? []
-    getLogger()?.info(`[getAudioFeatures] Retrieved ${freshFeatures.length} fresh audio features`)
-
-    // Cache fresh results
-    if (cache) {
-      await Promise.all(
-        freshFeatures.map(async feature => {
-          if (feature?.id) {
-            const cacheKey = `spotify:audio_features:${feature.id}`
-            await cache.put(cacheKey, JSON.stringify(feature), {expirationTtl: CACHE_TTL})
-            getLogger()?.info(`[getAudioFeatures] Cached audio features for ${feature.id}`)
-          }
-        }),
-      )
-    }
-  }
-
-  // Merge cached and fresh results, maintaining original order
-  const allFeatures = track_ids.map((trackId: string) => {
-    const cached = cachedFeatures.get(trackId)
-    if (cached) return cached
-
-    const fresh = freshFeatures.find(f => f?.id === trackId)
-    return fresh ?? null
-  })
-
-  getLogger()?.info(`[getAudioFeatures] Returning ${allFeatures.length} total audio features`)
-  return allFeatures
-}
-
-async function getAvailableGenres(token: string) {
-  const response = await rateLimitedSpotifyCall(
-    () =>
-      fetch('https://api.spotify.com/v1/recommendations/available-genre-seeds', {
-        headers: {Authorization: `Bearer ${token}`},
-      }),
-    undefined,
-    'genres:available',
-  )
-
-  if (!response.ok) {
-    throw new Error(`Failed to get available genres: ${response.status}`)
-  }
-
-  const json = await response.json()
-  const GenresSchema = z.object({genres: z.array(z.string())})
-  const result = safeParse(GenresSchema, json)
-
-  if (!result.success) {
-    getLogger()?.error('[getAvailableGenres] Failed to parse response:', formatZodError(result.error))
-    return []
-  }
-
-  return result.data.genres ?? []
-}
-
-async function getRecommendations(args: Record<string, unknown>, token: string) {
-  const params = new URLSearchParams()
-
-  if (isStringArray(args.seed_tracks)) params.append('seed_tracks', args.seed_tracks.join(','))
-  if (isStringArray(args.seed_artists)) params.append('seed_artists', args.seed_artists.join(','))
-  if (isStringArray(args.seed_genres)) params.append('seed_genres', args.seed_genres.join(','))
-  if (isNumber(args.target_energy)) params.append('target_energy', args.target_energy.toString())
-  if (isNumber(args.target_danceability)) params.append('target_danceability', args.target_danceability.toString())
-  if (isNumber(args.target_valence)) params.append('target_valence', args.target_valence.toString())
-
-  const limit = isNumber(args.limit) ? args.limit : 20
-  params.append('limit', limit.toString())
-
-  const response = await rateLimitedSpotifyCall(
-    () =>
-      fetch(`https://api.spotify.com/v1/recommendations?${params}`, {
-        headers: {Authorization: `Bearer ${token}`},
-      }),
-    undefined,
-    'recommendations',
-  )
-
-  if (!response.ok) {
-    throw new Error(`Failed to get recommendations: ${response.status}`)
-  }
-
-  const json = await response.json()
-  const result = safeParse(SpotifyRecommendationsResponseSchema, json)
-
-  if (!result.success) {
-    getLogger()?.error('[getRecommendations] Failed to parse response:', formatZodError(result.error))
-    return []
-  }
-
-  return result.data.tracks ?? []
-}
-
 async function getRelatedArtists(args: Record<string, unknown>, token: string) {
   const {artist_id} = args
 
@@ -1025,27 +653,8 @@ async function getTrackDetails(args: Record<string, unknown>, token: string) {
 
   const track = trackResult.data
 
-  // Also get audio features for complete info
-  const featuresResponse = await rateLimitedSpotifyCall(
-    () =>
-      fetch(`https://api.spotify.com/v1/audio-features/${track_id}`, {
-        headers: {Authorization: `Bearer ${token}`},
-      }),
-    undefined,
-    'audio-features:single',
-  )
-
-  let audioFeatures = null
-  if (featuresResponse.ok) {
-    const featuresJson = await featuresResponse.json()
-    const featuresResult = safeParse(SpotifyAudioFeaturesSchema, featuresJson)
-
-    if (featuresResult.success) {
-      audioFeatures = featuresResult.data
-    } else {
-      getLogger()?.error('[getTrackDetails] Failed to parse audio features:', formatZodError(featuresResult.error))
-    }
-  }
+  // NOTE: Audio features endpoint was deprecated by Spotify on November 27, 2024
+  // See: https://developer.spotify.com/blog/2024-11-27-changes-to-the-web-api
 
   return {
     album: {
@@ -1055,7 +664,6 @@ async function getTrackDetails(args: Record<string, unknown>, token: string) {
       release_date: track.album.release_date,
     },
     artists: track.artists,
-    audio_features: audioFeatures,
     duration_ms: track.duration_ms,
     explicit: track.explicit,
     id: track.id,
@@ -1156,7 +764,7 @@ async function searchSpotifyTracks(
   args: z.infer<typeof SearchTracksSchema>,
   token: string,
 ): Promise<z.infer<typeof SpotifyTrackFullSchema>[]> {
-  const {filters, limit = 10, query} = args
+  const {limit = 10, query} = args
 
   const response = await rateLimitedSpotifyCall(
     () =>
@@ -1179,28 +787,11 @@ async function searchSpotifyTracks(
     throw new Error(`Invalid search response: ${formatZodError(result.error)}`)
   }
 
-  const tracks = result.data.tracks?.items ?? []
+  // NOTE: Audio features endpoint was deprecated by Spotify on November 27, 2024
+  // Filter by energy/tempo is no longer available. Use Deezer API for BPM filtering instead.
+  // See: https://developer.spotify.com/blog/2024-11-27-changes-to-the-web-api
 
-  // Apply filters if provided
-  if (filters && tracks.length > 0) {
-    const trackIds = tracks.map(track => track.id)
-    const features = await getAudioFeatures({track_ids: trackIds}, token)
-
-    return tracks.filter((_track, index) => {
-      // eslint-disable-next-line security/detect-object-injection
-      const feature = features[index]
-      if (!feature) return true
-
-      if (filters.min_energy && feature.energy < filters.min_energy) return false
-      if (filters.max_energy && feature.energy > filters.max_energy) return false
-      if (filters.min_tempo && feature.tempo < filters.min_tempo) return false
-      if (filters.max_tempo && feature.tempo > filters.max_tempo) return false
-
-      return true
-    })
-  }
-
-  return tracks
+  return result.data.tracks?.items ?? []
 }
 
 // ==================== Queue & Playback Tools (DJ Mode) ====================
