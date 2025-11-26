@@ -3,6 +3,7 @@ import {OpenAPIHono} from '@hono/zod-openapi'
 import {cors} from 'hono/cors'
 
 import {chatStreamRouter} from './routes/chat-stream'
+import {registerPlayerRoutes} from './routes/player-openapi'
 import {registerPlaylistRoutes} from './routes/playlists-openapi'
 import {registerSpotifyAuthRoutes} from './routes/spotify-openapi'
 
@@ -28,6 +29,7 @@ app.get('/health', c => c.json({status: 'healthy'}))
 // Register OpenAPI routes
 registerSpotifyAuthRoutes(app)
 registerPlaylistRoutes(app)
+registerPlayerRoutes(app)
 
 // Configure OpenAPI documentation
 app.doc('/api/openapi.json', {

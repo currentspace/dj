@@ -120,16 +120,12 @@ user-read-private           ✓ Used
 user-read-email             ✓ Used
 playlist-read-private       ✓ Used
 playlist-read-collaborative ✓ Used
-user-read-playback-state    ⚠ Requested but NOT used
-user-read-currently-playing ⚠ Requested but NOT used
+user-read-playback-state    ✓ Used (Player API)
+user-read-currently-playing ✓ Used (Player API)
 user-read-recently-played   ⚠ Requested but NOT used
 user-top-read               ⚠ Requested but NOT used
-```
-
-**Missing for Playback Control:**
-```
-user-modify-playback-state  ❌ Not requested
-streaming                   ❌ Not requested (Premium only)
+user-modify-playback-state  ✓ Used (Player API - play/pause/skip/seek)
+streaming                   ✓ Requested (Premium only, for Web Playback SDK)
 ```
 
 ---

@@ -5,6 +5,7 @@ import {BuildInfo} from './components/BuildInfo'
 import {SpotifyAuth} from './features/auth/SpotifyAuth'
 import {ChatInterface} from './features/chat/ChatInterface'
 import {ScopeDebugger} from './features/debug/ScopeDebugger'
+import {NowPlaying} from './features/playback/NowPlaying'
 import {UserPlaylists} from './features/playlist/UserPlaylists'
 import {useSpotifyAuth} from './hooks/useSpotifyAuth'
 import './styles/app-layout.css'
@@ -32,7 +33,7 @@ interface SpotifyPlaylist {
 }
 
 function App() {
-  const {clearError, error, isAuthenticated, isLoading, login, logout} = useSpotifyAuth()
+  const {clearError, error, isAuthenticated, isLoading, login, logout, token} = useSpotifyAuth()
 
   const [selectedPlaylist, setSelectedPlaylist] = useState<null | SpotifyPlaylist>(null)
   const [showScopeDebug, setShowScopeDebug] = useState(false)
@@ -95,6 +96,8 @@ function App() {
             </PlaylistErrorBoundary>
           )}
         </main>
+
+        {isAuthenticated && <NowPlaying token={token} />}
 
         <footer className="app-footer">
           <p>

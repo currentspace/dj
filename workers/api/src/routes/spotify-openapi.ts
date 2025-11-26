@@ -49,7 +49,7 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       redirect_uri: REDIRECT_URI,
       response_type: 'code',
       scope:
-        'playlist-modify-public playlist-modify-private user-read-private user-read-playback-state user-read-currently-playing user-read-recently-played user-top-read playlist-read-private playlist-read-collaborative',
+        'playlist-modify-public playlist-modify-private user-read-private user-read-playback-state user-read-currently-playing user-read-recently-played user-top-read playlist-read-private playlist-read-collaborative user-modify-playback-state streaming',
       show_dialog: 'true',
       state: state, // Only random state in URL, no secrets
     })

@@ -290,6 +290,8 @@ ENVIRONMENT=development
   - `user-read-currently-playing` - Read currently playing
   - `user-read-recently-played` - Read recently played
   - `user-top-read` - Read top artists and tracks
+  - `user-modify-playback-state` - Control playback (play, pause, skip, seek)
+  - `streaming` - Access streaming API (Premium only, for Web Playback SDK)
 
 ### Iterative Data Fetching Strategy
 
