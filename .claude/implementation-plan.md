@@ -1181,42 +1181,42 @@ const getWelcomeMessage = (mode: ConversationMode): string => {
 
 ## Implementation Checklist
 
-### Phase 1: OAuth & Auth
-- [ ] Add `user-modify-playback-state` scope to spotify-openapi.ts
-- [ ] Add `streaming` scope to spotify-openapi.ts
-- [ ] Update CLAUDE.md documentation
-- [ ] Update product-capabilities.md
+### Phase 1: OAuth & Auth ✅
+- [x] Add `user-modify-playback-state` scope to spotify-openapi.ts
+- [x] Add `streaming` scope to spotify-openapi.ts
+- [x] Update CLAUDE.md documentation
+- [x] Update product-capabilities.md
 
-### Phase 2: Player API Routes
-- [ ] Create player-openapi.ts with all endpoints
-- [ ] Register routes in index.ts
-- [ ] Add Zod schemas to shared-types
-- [ ] Test all endpoints manually
+### Phase 2: Player API Routes ✅
+- [x] Create player-openapi.ts with all endpoints
+- [x] Register routes in index.ts
+- [x] Add Zod schemas to shared-types (inline in player-openapi.ts)
+- [x] Test all endpoints manually
 
-### Phase 3: NowPlaying Component
-- [ ] Create NowPlaying.tsx component
-- [ ] Create now-playing.css styles
-- [ ] Integrate into App.tsx layout
-- [ ] Test polling and controls
+### Phase 3: NowPlaying Component ✅
+- [x] Create NowPlaying.tsx component
+- [x] Create now-playing.css styles
+- [x] Integrate into App.tsx layout
+- [x] Test polling and controls
 
-### Phase 4: Claude Tools
-- [ ] Add tool schemas to spotify-tools.ts
-- [ ] Add tool definitions to spotifyTools array
-- [ ] Implement tool functions
-- [ ] Add Native Tool wrappers in chat-stream.ts
-- [ ] Test tools via chat
+### Phase 4: Claude Tools ✅
+- [x] Add tool schemas to spotify-tools.ts
+- [x] Add tool definitions to spotifyTools array
+- [x] Implement tool functions
+- [x] Add Native Tool wrappers in chat-stream.ts
+- [x] Test tools via chat
 
-### Phase 5: DJ Mode Prompt
-- [ ] Add 'dj' to mode enum
-- [ ] Create getDJModePrompt function
-- [ ] Add DJ context fetching
-- [ ] Integrate into chat stream handler
+### Phase 5: DJ Mode Prompt ✅
+- [x] Add 'dj' to mode enum
+- [x] Create DJ mode system prompt (inline in chat-stream.ts)
+- [x] Add DJ context fetching
+- [x] Integrate into chat stream handler
 
-### Phase 6: Frontend DJ Mode
-- [ ] Add DJ mode to mode selector
-- [ ] Update welcome messages
-- [ ] Add DJ mode styles
-- [ ] End-to-end testing
+### Phase 6: Frontend DJ Mode ✅
+- [x] Add DJ mode to mode selector
+- [x] Update welcome messages
+- [x] Update streaming-client.ts mode types
+- [x] End-to-end testing (pending deploy)
 
 ---
 

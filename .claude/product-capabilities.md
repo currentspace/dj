@@ -6,8 +6,8 @@
 
 DJ is an **AI-powered conversational playlist assistant** that helps users discover, analyze, and curate music through intelligent multi-step workflows. It combines Anthropic Claude with Spotify's catalog and enrichment data from Deezer and Last.fm.
 
-**Current Focus:** Playlist analysis and creation through chat
-**NOT Currently:** Live playback control or real-time DJ functionality
+**Current Focus:** Playlist analysis, creation, and **Live DJ Mode**
+**NEW:** Live playback control and real-time DJ functionality
 
 ---
 
@@ -63,7 +63,24 @@ extract_playlist_vibe → plan_discovery_strategy → curate_recommendations
 | `create_playlist` | Create new playlist, add up to 100 tracks |
 | `modify_playlist` | Add, remove, or reorder tracks |
 
-### 5. Real-Time Streaming
+### 5. Live DJ Mode (NEW)
+
+Real-time playback control and queue management through conversational AI:
+
+| Tool | Purpose |
+|------|---------|
+| `get_now_playing` | Get current track with progress |
+| `get_queue` | View upcoming tracks in queue |
+| `add_to_queue` | Add tracks to playback queue |
+| `control_playback` | Play, pause, skip, or previous |
+
+**DJ Mode Features:**
+- NowPlaying bar with real-time track display and controls
+- Context-aware DJ assistant that knows what's playing
+- Proactive queue management (suggests additions when queue low)
+- Conversational control ("skip this", "add some jazz", "what's playing?")
+
+### 6. Real-Time Streaming
 
 **SSE Event Types:**
 - `thinking` - Claude's reasoning with enrichment progress
@@ -82,24 +99,25 @@ extract_playlist_vibe → plan_discovery_strategy → curate_recommendations
 |------|---------|----------------------|
 | **Analyze** | Question-focused analysis | Playlist ID |
 | **Create** | Generate new playlists | None |
+| **DJ** | Live playback control & queue management | Playlist ID + Current playback state |
 | **Edit** | Modify existing playlists | Playlist ID |
 
 ---
 
 ## Current Limitations
 
-### NOT IMPLEMENTED
+### Implementation Status
 
 | Feature | Status |
 |---------|--------|
-| Playback control (play/pause/skip) | ❌ None |
-| Queue management | ❌ None |
-| Device selection (Spotify Connect) | ❌ None |
-| Real-time playback monitoring | ❌ None |
-| Multi-user collaboration | ❌ None |
-| Session persistence | ❌ None (in-memory only) |
-| Cross-playlist comparison | ❌ None |
-| Feedback/learning system | ❌ None |
+| Playback control (play/pause/skip) | ✅ Implemented (DJ Mode) |
+| Queue management | ✅ Implemented (DJ Mode) |
+| Device selection (Spotify Connect) | ⚠️ Partial (via Player API) |
+| Real-time playback monitoring | ✅ Implemented (NowPlaying bar) |
+| Multi-user collaboration | ❌ Not implemented |
+| Session persistence | ❌ Not implemented (in-memory only) |
+| Cross-playlist comparison | ❌ Not implemented |
+| Feedback/learning system | ❌ Not implemented |
 
 ### Constraints
 
@@ -195,10 +213,12 @@ User: "Analyze this playlist"
 |-----------|------|
 | Main App | `apps/web/src/App.tsx` |
 | Chat Interface | `apps/web/src/features/chat/ChatInterface.tsx` |
+| NowPlaying Bar | `apps/web/src/features/playback/NowPlaying.tsx` |
 | SSE Client | `apps/web/src/lib/streaming-client.ts` |
 | Auth Hook | `apps/web/src/hooks/useSpotifyAuth.ts` |
 | Spotify Tools | `workers/api/src/lib/spotify-tools.ts` |
 | Chat Stream | `workers/api/src/routes/chat-stream.ts` |
+| Player Routes | `workers/api/src/routes/player-openapi.ts` |
 | Audio Enrichment | `workers/api/src/services/AudioEnrichmentService.ts` |
 | Last.fm Service | `workers/api/src/services/LastFmService.ts` |
 | Guidelines | `.claude/guidelines/*.md` |
@@ -215,13 +235,14 @@ User: "Analyze this playlist"
 ✅ Create new playlists with up to 100 tracks
 ✅ Modify existing playlists (add/remove/reorder)
 ✅ Stream real-time progress during analysis
+✅ **Control playback** (play, pause, skip, previous) - DJ Mode
+✅ **Manage the play queue** (add tracks, view queue) - DJ Mode
+✅ **See what's currently playing** (NowPlaying bar + get_now_playing tool)
+✅ **Switch playback devices** (via Player API routes)
 
 ## What Claude Cannot Do Today
 
-❌ Control playback (play, pause, skip)
-❌ Manage the play queue
-❌ See what's currently playing
-❌ Switch playback devices
 ❌ Remember preferences across sessions
 ❌ Collaborate with multiple users
 ❌ Learn from user feedback
+❌ Cross-playlist analysis/comparison
