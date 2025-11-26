@@ -189,6 +189,80 @@ export const spotifyTools = [
     name: 'control_playback',
   },
   {
+    description:
+      "Get full playback state including device info, shuffle/repeat status, and what playlist/album is playing from. More detailed than get_now_playing.",
+    input_schema: {
+      properties: {},
+      required: [],
+      type: 'object',
+    },
+    name: 'get_playback_state',
+  },
+  {
+    description: 'Toggle shuffle mode on or off for playback.',
+    input_schema: {
+      properties: {
+        state: {
+          description: 'Whether shuffle should be on (true) or off (false)',
+          type: 'boolean',
+        },
+      },
+      required: ['state'],
+      type: 'object',
+    },
+    name: 'set_shuffle',
+  },
+  {
+    description: 'Set repeat mode for playback.',
+    input_schema: {
+      properties: {
+        state: {
+          description: 'Repeat mode: "off" (no repeat), "track" (repeat current track), "context" (repeat playlist/album)',
+          enum: ['off', 'track', 'context'],
+          type: 'string',
+        },
+      },
+      required: ['state'],
+      type: 'object',
+    },
+    name: 'set_repeat',
+  },
+  {
+    description: 'Set playback volume (0-100). Only works on devices that support volume control.',
+    input_schema: {
+      properties: {
+        volume_percent: {
+          description: 'Volume level from 0 to 100',
+          maximum: 100,
+          minimum: 0,
+          type: 'number',
+        },
+      },
+      required: ['volume_percent'],
+      type: 'object',
+    },
+    name: 'set_volume',
+  },
+  {
+    description:
+      "Transfer playback to a different device (e.g., from phone to computer). Use get_playback_state first to see available devices.",
+    input_schema: {
+      properties: {
+        device_id: {
+          description: 'The device ID to transfer playback to',
+          type: 'string',
+        },
+        play: {
+          description: 'Whether to start playing on the new device (default: true)',
+          type: 'boolean',
+        },
+      },
+      required: ['device_id'],
+      type: 'object',
+    },
+    name: 'transfer_playback',
+  },
+  {
     description: 'Analyze an existing playlist to understand its characteristics (track metadata, artist frequency, genres)',
     input_schema: {
       properties: {
@@ -259,6 +333,21 @@ export async function executeSpotifyTool(
         break
       case 'control_playback':
         result = await controlPlayback(args, token)
+        break
+      case 'get_playback_state':
+        result = await getPlaybackState(token)
+        break
+      case 'set_shuffle':
+        result = await setShuffle(args, token)
+        break
+      case 'set_repeat':
+        result = await setRepeat(args, token)
+        break
+      case 'set_volume':
+        result = await setVolume(args, token)
+        break
+      case 'transfer_playback':
+        result = await transferPlayback(args, token)
         break
       default:
         getLogger()?.error(`[Tool] Unknown tool: ${toolName}`)
@@ -949,4 +1038,209 @@ async function controlPlayback(args: Record<string, unknown>, token: string) {
 
   const errorText = await response.text()
   throw new Error(`Failed to ${action}: ${response.status} - ${errorText}`)
+}
+
+async function getPlaybackState(token: string) {
+  getLogger()?.info('[Tool:getPlaybackState] Fetching full playback state')
+
+  const response = await rateLimitedSpotifyCall(
+    () =>
+      fetch('https://api.spotify.com/v1/me/player', {
+        headers: {Authorization: `Bearer ${token}`},
+      }),
+    undefined,
+    'player:state'
+  )
+
+  if (response.status === 204) {
+    return {
+      is_playing: false,
+      message: 'No active playback session. Start playing on any device first.',
+    }
+  }
+
+  if (!response.ok) {
+    throw new Error(`Failed to get playback state: ${response.status}`)
+  }
+
+  const data = (await response.json()) as {
+    device: {
+      id: string | null
+      is_active: boolean
+      is_private_session: boolean
+      is_restricted: boolean
+      name: string
+      type: string
+      volume_percent: number | null
+      supports_volume: boolean
+    }
+    repeat_state: 'off' | 'track' | 'context'
+    shuffle_state: boolean
+    context: {
+      type: string
+      href: string
+      uri: string
+    } | null
+    timestamp: number
+    progress_ms: number | null
+    is_playing: boolean
+    item: {
+      album?: {name: string; images?: Array<{url: string}>}
+      artists?: Array<{name: string}>
+      duration_ms: number
+      name: string
+      uri: string
+    } | null
+    currently_playing_type: string
+  }
+
+  return {
+    // Device info
+    device: {
+      id: data.device?.id,
+      name: data.device?.name,
+      type: data.device?.type,
+      volume_percent: data.device?.volume_percent,
+      is_active: data.device?.is_active,
+      supports_volume: data.device?.supports_volume,
+    },
+    // Playback settings
+    shuffle_state: data.shuffle_state,
+    repeat_state: data.repeat_state,
+    // Current track
+    is_playing: data.is_playing,
+    progress_ms: data.progress_ms,
+    track: data.item ? {
+      name: data.item.name,
+      artists: data.item.artists?.map(a => a.name).join(', '),
+      album: data.item.album?.name,
+      duration_ms: data.item.duration_ms,
+      uri: data.item.uri,
+    } : null,
+    // Context (playlist/album being played)
+    context: data.context ? {
+      type: data.context.type,
+      uri: data.context.uri,
+    } : null,
+    currently_playing_type: data.currently_playing_type,
+  }
+}
+
+async function setShuffle(args: Record<string, unknown>, token: string) {
+  const state = typeof args.state === 'boolean' ? args.state : null
+  if (state === null) {
+    throw new Error('state (boolean) is required')
+  }
+
+  getLogger()?.info(`[Tool:setShuffle] Setting shuffle to ${state}`)
+
+  const response = await rateLimitedSpotifyCall(
+    () =>
+      fetch(`https://api.spotify.com/v1/me/player/shuffle?state=${state}`, {
+        headers: {Authorization: `Bearer ${token}`},
+        method: 'PUT',
+      }),
+    undefined,
+    'player:shuffle'
+  )
+
+  if (response.status === 204 || response.ok) {
+    return {success: true, shuffle: state, message: `Shuffle ${state ? 'enabled' : 'disabled'}`}
+  }
+
+  const errorText = await response.text()
+  throw new Error(`Failed to set shuffle: ${response.status} - ${errorText}`)
+}
+
+async function setRepeat(args: Record<string, unknown>, token: string) {
+  const state = isString(args.state) && ['off', 'track', 'context'].includes(args.state) ? args.state : null
+  if (!state) {
+    throw new Error('state is required: "off", "track", or "context"')
+  }
+
+  getLogger()?.info(`[Tool:setRepeat] Setting repeat to ${state}`)
+
+  const response = await rateLimitedSpotifyCall(
+    () =>
+      fetch(`https://api.spotify.com/v1/me/player/repeat?state=${state}`, {
+        headers: {Authorization: `Bearer ${token}`},
+        method: 'PUT',
+      }),
+    undefined,
+    'player:repeat'
+  )
+
+  if (response.status === 204 || response.ok) {
+    const messages: Record<string, string> = {
+      off: 'Repeat disabled',
+      track: 'Repeating current track',
+      context: 'Repeating playlist/album',
+    }
+    // eslint-disable-next-line security/detect-object-injection
+    return {success: true, repeat: state, message: messages[state]}
+  }
+
+  const errorText = await response.text()
+  throw new Error(`Failed to set repeat: ${response.status} - ${errorText}`)
+}
+
+async function setVolume(args: Record<string, unknown>, token: string) {
+  const volumePercent = typeof args.volume_percent === 'number' ? args.volume_percent : null
+  if (volumePercent === null || volumePercent < 0 || volumePercent > 100) {
+    throw new Error('volume_percent (0-100) is required')
+  }
+
+  getLogger()?.info(`[Tool:setVolume] Setting volume to ${volumePercent}%`)
+
+  const response = await rateLimitedSpotifyCall(
+    () =>
+      fetch(`https://api.spotify.com/v1/me/player/volume?volume_percent=${Math.round(volumePercent)}`, {
+        headers: {Authorization: `Bearer ${token}`},
+        method: 'PUT',
+      }),
+    undefined,
+    'player:volume'
+  )
+
+  if (response.status === 204 || response.ok) {
+    return {success: true, volume_percent: volumePercent, message: `Volume set to ${volumePercent}%`}
+  }
+
+  const errorText = await response.text()
+  throw new Error(`Failed to set volume: ${response.status} - ${errorText}`)
+}
+
+async function transferPlayback(args: Record<string, unknown>, token: string) {
+  const deviceId = isString(args.device_id) ? args.device_id : null
+  if (!deviceId) {
+    throw new Error('device_id is required')
+  }
+
+  const play = typeof args.play === 'boolean' ? args.play : true
+
+  getLogger()?.info(`[Tool:transferPlayback] Transferring to device ${deviceId}, play: ${play}`)
+
+  const response = await rateLimitedSpotifyCall(
+    () =>
+      fetch('https://api.spotify.com/v1/me/player', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        method: 'PUT',
+        body: JSON.stringify({
+          device_ids: [deviceId],
+          play,
+        }),
+      }),
+    undefined,
+    'player:transfer'
+  )
+
+  if (response.status === 204 || response.ok) {
+    return {success: true, device_id: deviceId, message: `Playback transferred to device`}
+  }
+
+  const errorText = await response.text()
+  throw new Error(`Failed to transfer playback: ${response.status} - ${errorText}`)
 }
