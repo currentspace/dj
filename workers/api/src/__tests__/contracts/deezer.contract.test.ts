@@ -12,6 +12,8 @@
 
 import { describe, it, expect, beforeAll } from 'vitest'
 import { DeezerTrackSchema } from '@dj/shared-types'
+// Import setup to restore native fetch for contract tests
+import './setup'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type ApiResponse = Record<string, any>
@@ -29,9 +31,9 @@ const TEST_ISRCS = {
 // Rate limiting helper - adds delay between tests
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
-// TODO: Contract tests make real API calls and should be run separately
+// Contract tests make real API calls
 // Run with: pnpm test:contracts
-describe.skip('Deezer API Contracts', () => {
+describe('Deezer API Contracts', () => {
   beforeAll(async () => {
     // Initial delay before test suite starts
     await delay(500)

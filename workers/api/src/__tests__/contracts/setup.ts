@@ -10,7 +10,30 @@
  * - Response caching to minimize API calls
  */
 
-import { beforeAll, afterAll } from 'vitest'
+import { beforeAll, afterAll, vi } from 'vitest'
+
+// Get native globals that were stored before mocking in test-setup.ts
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const nativeFetch = (global as any).__nativeFetch as typeof fetch
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const nativeSetTimeout = (global as any).__nativeSetTimeout as typeof setTimeout
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const nativeClearTimeout = (global as any).__nativeClearTimeout as typeof clearTimeout
+
+// Restore native globals for contract tests (they need real network access and timers)
+if (nativeFetch) {
+  global.fetch = nativeFetch
+} else {
+  console.warn('⚠️ Native fetch not available - contract tests may fail')
+}
+
+// Restore native timers (needed by undici's internal timeout handling)
+if (nativeSetTimeout) {
+  global.setTimeout = nativeSetTimeout
+}
+if (nativeClearTimeout) {
+  global.clearTimeout = nativeClearTimeout
+}
 
 /**
  * Required environment variables for contract tests

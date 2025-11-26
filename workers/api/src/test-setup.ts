@@ -5,7 +5,15 @@
 
 import { beforeEach, vi } from 'vitest'
 
-// Mock global fetch for external API calls
+// Store native globals BEFORE mocking (for contract tests that need real network access)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+;(global as any).__nativeFetch = global.fetch
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+;(global as any).__nativeSetTimeout = global.setTimeout
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+;(global as any).__nativeClearTimeout = global.clearTimeout
+
+// Mock global fetch for external API calls (unit tests don't need real network)
 global.fetch = vi.fn()
 
 // Mock console methods to reduce noise in tests (can be enabled per-test)
