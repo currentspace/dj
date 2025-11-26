@@ -6,7 +6,7 @@ This file provides guidance to Claude Code when working with code in this reposi
 
 DJ is an AI-powered playlist generator that creates personalized Spotify playlists through
 conversational chat. The app combines Anthropic's Claude API with Spotify's Web API, deployed on
-Cloudflare Workers with a React 19.1 frontend.
+Cloudflare Workers with a React 19.2 frontend.
 
 **Key Features:**
 
@@ -16,6 +16,26 @@ Cloudflare Workers with a React 19.1 frontend.
 - Model Context Protocol (MCP) server for advanced tool calling
 - Global edge deployment on Cloudflare Workers
 
+## Modern Guidelines (November 2025)
+
+**IMPORTANT**: Before making changes, consult the detailed guidelines in `.claude/`:
+
+- **[System Overview](.claude/system-overview.md)** - High-level architecture and quick reference
+- **[React 19.2 Guidelines](.claude/guidelines/react-19.md)** - Frontend patterns (NO useEffect for state sync)
+- **[LLM/Prompts Guidelines](.claude/guidelines/llm-prompts.md)** - Claude Sonnet 4.5/Opus 4.5 patterns
+- **[Cloudflare Workers Guidelines](.claude/guidelines/cloudflare-workers.md)** - Async streaming patterns
+- **[Tools/MCP Guidelines](.claude/guidelines/tools-mcp.md)** - Tool architecture and size optimization
+
+### Key Constraints
+
+| Constraint | Value | Why |
+|------------|-------|-----|
+| **No useEffect for state sync** | Direct sync in component body | React 19.2 compiler-friendly |
+| **Tool result size** | <5KB | Context window optimization |
+| **Rate limit** | 40 RPS global | Cloudflare Workers constraint |
+| **Max agentic turns** | 5 | Cost control |
+| **Anthropic concurrency** | 2 | SDK limitation in Workers |
+
 ## Architecture
 
 This is a **pnpm monorepo** organized by architectural layers:
@@ -23,7 +43,7 @@ This is a **pnpm monorepo** organized by architectural layers:
 ```
 dj/
 ├── apps/
-│   └── web/                 # React 19.1 frontend (@dj/web)
+│   └── web/                 # React 19.2 frontend (@dj/web)
 │       ├── src/
 │       │   ├── app/        # App-level components
 │       │   ├── components/ # Shared UI components
@@ -79,7 +99,7 @@ pnpm test                  # Run tests
 
 ### Frontend
 
-- **Framework**: React 19.1 with TypeScript
+- **Framework**: React 19.2 with TypeScript
 - **Build Tool**: Vite 7.1
 - **UI Components**: Ark UI React
 - **Styling**: CSS Modules + Global CSS
@@ -695,6 +715,16 @@ git push
 4. Check TypeScript errors with `pnpm typecheck`
 
 ## Additional Documentation
+
+### Modern Guidelines (.claude/)
+
+- **[System Overview](.claude/system-overview.md)** - Architecture diagram and quick reference
+- **[React 19.2 Guidelines](.claude/guidelines/react-19.md)** - Modern React patterns
+- **[LLM/Prompts Guidelines](.claude/guidelines/llm-prompts.md)** - Claude integration patterns
+- **[Cloudflare Workers Guidelines](.claude/guidelines/cloudflare-workers.md)** - Async streaming patterns
+- **[Tools/MCP Guidelines](.claude/guidelines/tools-mcp.md)** - Tool architecture
+
+### Project Documentation
 
 - **ARCHITECTURE.md** - Detailed monorepo structure and best practices
 - **README.md** - User-facing setup and deployment guide

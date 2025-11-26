@@ -4,6 +4,7 @@ import {useCallback, useMemo, useRef, useState, useTransition} from 'react'
 import {flushSync} from 'react-dom'
 
 import {chatStreamClient} from '../../lib/streaming-client'
+import {hasMarkdownSyntax, MarkdownContent} from '../../lib/markdown-renderer'
 import '../../styles/streaming.css'
 import '../../styles/chat-interface.css'
 
@@ -239,15 +240,8 @@ export function ChatInterface({selectedPlaylist}: ChatInterfaceProps) {
           <div className={`message ${message.role}`} key={index}>
             <div className="message-role">{message.role === 'user' ? '👤' : '🎧'}</div>
             <div className="message-content">
-              {message.content.includes('**') ? (
-                <div
-                  dangerouslySetInnerHTML={{
-                    __html: message.content
-                      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                      .replace(/\n/g, '<br />')
-                      .replace(/• /g, '&bull; '),
-                  }}
-                />
+              {hasMarkdownSyntax(message.content) ? (
+                <MarkdownContent>{message.content}</MarkdownContent>
               ) : (
                 message.content
               )}
