@@ -18,6 +18,9 @@ import {
 } from '@dj/shared-types'
 import {describe, expect, it} from 'vitest'
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ApiResponse = Record<string, any>
+
 const LASTFM_API_BASE = 'https://ws.audioscrobbler.com/2.0/'
 const RATE_LIMIT_DELAY_MS = 200 // Last.fm allows 5 req/s, we use 200ms = 5 req/s
 const hasKey = !!process.env.LASTFM_API_KEY
@@ -48,7 +51,7 @@ describe('Last.fm API Contract Tests', () => {
     const response = await fetch(url)
     expect(response.ok).toBe(true)
 
-    const data = await response.json()
+    const data = await response.json() as ApiResponse
 
     // Validate response structure
     expect(data.track).toBeDefined()
@@ -108,7 +111,7 @@ describe('Last.fm API Contract Tests', () => {
     const response = await fetch(url)
     expect(response.ok).toBe(true)
 
-    const data = await response.json()
+    const data = await response.json() as ApiResponse
 
     // Validate response structure
     expect(data.similartracks).toBeDefined()
@@ -148,7 +151,7 @@ describe('Last.fm API Contract Tests', () => {
     const response = await fetch(url)
     expect(response.ok).toBe(true)
 
-    const data = await response.json()
+    const data = await response.json() as ApiResponse
 
     // Validate response structure
     expect(data.artist).toBeDefined()
@@ -223,7 +226,7 @@ describe('Last.fm API Contract Tests', () => {
     const response = await fetch(url)
     expect(response.ok).toBe(true)
 
-    const data = await response.json()
+    const data = await response.json() as ApiResponse
 
     // Validate response structure
     expect(data.toptags).toBeDefined()
@@ -266,7 +269,7 @@ describe('Last.fm API Contract Tests', () => {
     const response = await fetch(url)
     expect(response.ok).toBe(true)
 
-    const data = await response.json()
+    const data = await response.json() as ApiResponse
 
     // Validate response structure
     expect(data.corrections).toBeDefined()
@@ -307,7 +310,7 @@ describe('Last.fm API Contract Tests', () => {
     const response = await fetch(url)
     expect(response.ok).toBe(true) // Last.fm returns 200 even for errors
 
-    const data = await response.json()
+    const data = await response.json() as ApiResponse
 
     // Last.fm returns error in response body
     if (data.error) {
@@ -334,7 +337,7 @@ describe('Last.fm API Contract Tests', () => {
     const response = await fetch(url)
     expect(response.ok).toBe(true)
 
-    const data = await response.json()
+    const data = await response.json() as ApiResponse
 
     // Last.fm returns numeric fields as actual numbers (not strings)
     expect(data.track.listeners).toBeDefined()
@@ -360,7 +363,7 @@ describe('Last.fm API Contract Tests', () => {
     })
 
     const trackResponse = await fetch(trackUrl)
-    const trackData = await trackResponse.json()
+    const trackData = await trackResponse.json() as ApiResponse
 
     // Last.fm wraps track info in .track
     expect(trackData).toHaveProperty('track')
@@ -376,7 +379,7 @@ describe('Last.fm API Contract Tests', () => {
     })
 
     const artistResponse = await fetch(artistUrl)
-    const artistData = await artistResponse.json()
+    const artistData = await artistResponse.json() as ApiResponse
 
     // Last.fm wraps artist info in .artist
     expect(artistData).toHaveProperty('artist')
@@ -394,7 +397,7 @@ describe('Last.fm API Contract Tests', () => {
     })
 
     const similarResponse = await fetch(similarUrl)
-    const similarData = await similarResponse.json()
+    const similarData = await similarResponse.json() as ApiResponse
 
     // Last.fm wraps similar tracks in .similartracks
     expect(similarData).toHaveProperty('similartracks')

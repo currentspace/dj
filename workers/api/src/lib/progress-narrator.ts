@@ -310,10 +310,10 @@ export class ProgressNarrator {
       }
 
       case 'enrichment_deezer': {
-        const cacheHitRate = context.metadata?.cacheHitRate
+        const cacheHitRate = context.metadata?.cacheHitRate as number | undefined
         const enrichingCount = context.metadata?.enrichingCount
         const hasCached = context.metadata?.hasCached
-        if (hasCached && cacheHitRate !== undefined) {
+        if (hasCached && typeof cacheHitRate === 'number') {
           parts.push(`\nMost tracks already cached (${Math.round(cacheHitRate)}% hit rate)`)
         }
         if (enrichingCount) {
@@ -323,10 +323,10 @@ export class ProgressNarrator {
       }
 
       case 'enrichment_lastfm': {
-        const cacheHitRate = context.metadata?.cacheHitRate
+        const cacheHitRate = context.metadata?.cacheHitRate as number | undefined
         const enrichingCount = context.metadata?.enrichingCount
         const hasCached = context.metadata?.hasCached
-        if (hasCached && cacheHitRate !== undefined) {
+        if (hasCached && typeof cacheHitRate === 'number') {
           parts.push(`\nMost tracks already analyzed (${Math.round(cacheHitRate)}% cached)`)
         }
         if (enrichingCount) {

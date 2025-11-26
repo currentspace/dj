@@ -2,7 +2,7 @@
  * RateLimitedQueue Tests
  * Comprehensive tests for token bucket rate limiter with timing verification
  */
-import {describe, expect, it, vi} from 'vitest'
+import {describe, expect, it} from 'vitest'
 import {RateLimitedQueue} from '../../utils/RateLimitedQueue'
 import {
   measureExecutionTime,
@@ -256,7 +256,7 @@ describe('RateLimitedQueue', () => {
         queue.enqueue(async () => i)
       }
       await queue.processAllWithCallback((result, index, total) => {
-        callbackResults.push({result, index, total})
+        callbackResults.push({result: result as number | null, index, total})
       })
       expect(callbackResults).toHaveLength(10)
       expect(callbackResults[0]).toEqual({result: 0, index: 0, total: 10})
@@ -269,7 +269,7 @@ describe('RateLimitedQueue', () => {
         queue.enqueue(async () => `task-${i}`)
       }
       await queue.processAllWithCallback((result, index, total) => {
-        callbackData.push({result, index, total})
+        callbackData.push({result: result as string | null, index, total})
       })
       // Verify all callbacks received correct parameters
       expect(callbackData).toEqual([
@@ -286,7 +286,7 @@ describe('RateLimitedQueue', () => {
       for (let i = 0; i < 5; i++) {
         queue.enqueue(async () => i)
       }
-      await queue.processAllWithCallback((result, index) => {
+      await queue.processAllWithCallback((_result, index) => {
         callbackCalls.push(index)
         // Throw error on task 2
         if (index === 2) {
@@ -310,7 +310,7 @@ describe('RateLimitedQueue', () => {
       })
       queue.enqueue(async () => 4)
       await queue.processAllWithCallback((result) => {
-        callbackResults.push(result)
+        callbackResults.push(result as number | null)
       })
       expect(callbackResults).toEqual([0, null, 2, null, 4])
     })

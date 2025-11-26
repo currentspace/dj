@@ -86,7 +86,7 @@ export interface LastFmSignals {
 }
 
 interface LastFmImage {
-  '#text': string
+  '#text': string | null
   size: string
 }
 
@@ -521,7 +521,7 @@ export class LastFmService {
       const similar = artistData.similar?.artist ?? []
       const similarArtists = similar.slice(0, 10).map(a => ({
         name: a.name,
-        url: a.url,
+        url: a.url ?? '',
       }))
 
       // Extract images

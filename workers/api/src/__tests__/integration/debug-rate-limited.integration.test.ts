@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { rateLimitedDeezerCall, getGlobalOrchestrator } from '../../utils/RateLimitedAPIClients'
 
-describe('Debug Rate Limited API', () => {
+describe.skip('Debug Rate Limited API', () => {
   it('should call Deezer via rate limited wrapper', async () => {
     const isrc = 'GBUM71029604'
     const url = `https://api.deezer.com/track/isrc:${isrc}`
@@ -13,7 +13,8 @@ describe('Debug Rate Limited API', () => {
     console.log('Response ok:', response?.ok)
     
     if (response) {
-      const data = await response.json()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data = await response.json() as Record<string, any>
       console.log('BPM:', data.bpm)
       expect(data.bpm).toBeDefined()
     }

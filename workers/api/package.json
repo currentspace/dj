@@ -14,21 +14,21 @@
     "test:integration:watch": "vitest --config vitest.integration.config.ts --watch"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.68.0",
+    "@anthropic-ai/sdk": "^0.71.0",
     "@dj/api-contracts": "workspace:*",
     "@dj/shared-types": "workspace:*",
     "@hono/swagger-ui": "^0.5.2",
-    "@hono/zod-openapi": "^1.1.4",
-    "hono": "^4.10.4",
+    "@hono/zod-openapi": "^1.1.5",
+    "hono": "^4.10.7",
     "nanoid": "^5.1.6",
-    "zod": "^4.1.12"
+    "zod": "^4.1.13"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20251014.0",
-    "@types/node": "^24.10.0",
-    "tsup": "^8.5.0",
-    "vitest": "^4.0.6",
-    "wrangler": "^4.45.3",
-    "zod-to-json-schema": "^3.24.6"
+    "@cloudflare/workers-types": "^4.20251126.0",
+    "@types/node": "^24.10.1",
+    "tsup": "^8.5.1",
+    "vitest": "^4.0.14",
+    "wrangler": "^4.51.0",
+    "zod-to-json-schema": "^3.25.0"
   }
 }

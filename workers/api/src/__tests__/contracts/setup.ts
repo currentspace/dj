@@ -24,15 +24,10 @@ const REQUIRED_ENV_VARS = {
 }
 
 /**
- * Optional environment variables
+ * Optional environment variables (for reference)
+ * TEST_PLAYLIST_ID: 'Spotify playlist ID for testing (default: "Today\'s Top Hits")',
+ * TEST_TRACK_ID: 'Spotify track ID for testing (default: "Bohemian Rhapsody")',
  */
-const OPTIONAL_ENV_VARS = {
-  // Test playlist for Spotify contract tests
-  TEST_PLAYLIST_ID: 'Spotify playlist ID for testing (default: "Today\'s Top Hits")',
-
-  // Test track ID for Spotify contract tests
-  TEST_TRACK_ID: 'Spotify track ID for testing (default: "Bohemian Rhapsody")',
-}
 
 /**
  * Global test timeout (30 seconds for API calls)

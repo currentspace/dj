@@ -3,7 +3,7 @@
  * Comprehensive tests for the SSE streaming chat endpoint with Claude integration
  */
 
-import {describe, expect, it, beforeEach, afterEach, vi} from 'vitest'
+import {describe, expect, it, afterEach} from 'vitest'
 import {
   createMockEnv,
   createMockRequest,
@@ -15,19 +15,14 @@ import {
   buildTextResponseStream,
   buildToolCallResponseStream,
   buildMixedResponseStream,
-  type MockStreamEvent,
 } from '../fixtures/anthropic-mocks'
 import {
   buildSpotifyPlaylist,
   buildSpotifyTrack,
   mockSpotifyAPI,
-  mockDeezerAPI,
   mockLastFmAPI,
-  buildDeezerTrack,
   buildLastFmTrack,
-  buildLastFmArtistInfo,
 } from '../fixtures/api-mocks'
-import {buildSSEWriter, buildPlaylistAnalysis} from '../fixtures/test-builders'
 import {AudioEnrichmentService} from '../../services/AudioEnrichmentService'
 import {LastFmService} from '../../services/LastFmService'
 
@@ -847,11 +842,14 @@ describe('chat-stream Route - Enrichment Integration', () => {
 
   it('should call AudioEnrichmentService during analyze_playlist', async () => {
     // This tests service integration - actual enrichment tested in AudioEnrichmentService.test.ts
+    const mockKv = new MockKVNamespace()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const env = createMockEnv({
-      AUDIO_FEATURES_CACHE: new MockKVNamespace(),
+      AUDIO_FEATURES_CACHE: mockKv as any,
     })
 
-    const service = new AudioEnrichmentService(env.AUDIO_FEATURES_CACHE)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const service = new AudioEnrichmentService(env.AUDIO_FEATURES_CACHE as any)
 
     // Service should be instantiable with KV
     expect(service).toBeDefined()
@@ -860,7 +858,8 @@ describe('chat-stream Route - Enrichment Integration', () => {
   it('should run Deezer enrichment if KV available', async () => {
     // This tests KV availability - actual enrichment tested in AudioEnrichmentService.test.ts
     const kv = new MockKVNamespace()
-    const service = new AudioEnrichmentService(kv)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const service = new AudioEnrichmentService(kv as any)
 
     // Service should be instantiable with KV
     expect(service).toBeDefined()
@@ -870,7 +869,8 @@ describe('chat-stream Route - Enrichment Integration', () => {
     // Progress streaming is handled in the route implementation
     // This is tested in integration by checking SSE events
     const kv = new MockKVNamespace()
-    const service = new AudioEnrichmentService(kv)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const service = new AudioEnrichmentService(kv as any)
 
     // Service exists and can be called
     expect(service).toBeDefined()
@@ -880,19 +880,23 @@ describe('chat-stream Route - Enrichment Integration', () => {
     // Error handling tested in AudioEnrichmentService.test.ts
     // Here we verify the route doesn't crash on service errors
     const kv = new MockKVNamespace()
-    const service = new AudioEnrichmentService(kv)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const service = new AudioEnrichmentService(kv as any)
 
     // Service handles errors gracefully
     expect(service).toBeDefined()
   })
 
   it('should call LastFmService during analyze_playlist', async () => {
+    const mockKv = new MockKVNamespace()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const env = createMockEnv({
-      AUDIO_FEATURES_CACHE: new MockKVNamespace(),
+      AUDIO_FEATURES_CACHE: mockKv as any,
       LASTFM_API_KEY: 'test-key',
     })
 
-    const service = new LastFmService(env.LASTFM_API_KEY!, env.AUDIO_FEATURES_CACHE)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const service = new LastFmService(env.LASTFM_API_KEY!, env.AUDIO_FEATURES_CACHE as any)
 
     cleanupFetch = mockLastFmAPI({
       'track.getCorrection': {
@@ -917,7 +921,8 @@ describe('chat-stream Route - Enrichment Integration', () => {
     // Last.fm enrichment behavior tested in LastFmService.test.ts
     // Here we verify API key enables the service
     const kv = new MockKVNamespace()
-    const service = new LastFmService('test-key', kv)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const service = new LastFmService('test-key', kv as any)
 
     // Service should be instantiable with API key
     expect(service).toBeDefined()
@@ -925,7 +930,8 @@ describe('chat-stream Route - Enrichment Integration', () => {
 
   it('should stream Last.fm enrichment progress', async () => {
     const kv = new MockKVNamespace()
-    const service = new LastFmService('test-key', kv)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const service = new LastFmService('test-key', kv as any)
 
     cleanupFetch = mockLastFmAPI({
       'track.getCorrection': {
@@ -945,7 +951,8 @@ describe('chat-stream Route - Enrichment Integration', () => {
 
   it('should not crash on Last.fm enrichment errors', async () => {
     const kv = new MockKVNamespace()
-    const service = new LastFmService('test-key', kv)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const service = new LastFmService('test-key', kv as any)
 
     cleanupFetch = mockLastFmAPI({}) // No tracks found
 
@@ -960,7 +967,9 @@ describe('chat-stream Route - Enrichment Integration', () => {
     // Cache behavior tested in AudioEnrichmentService.test.ts
     // Here we verify cache is available
     const kv = new MockKVNamespace()
-    const service = new AudioEnrichmentService(kv)
+    // Verify service can be constructed with cache (constructor side-effect test)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars
+    void new AudioEnrichmentService(kv as any)
 
     // Can write to cache
     await kv.put('test-key', 'test-value', {expirationTtl: 60})
@@ -1055,8 +1064,6 @@ describe('chat-stream Route - Message Streaming', () => {
     })
     const c = createMockContext({env, request})
 
-    // Create a client that throws an error
-    const anthropic = createMockAnthropicClient()
     // Mock to throw synchronously
     try {
       // Intentionally cause error by passing invalid params
@@ -1066,7 +1073,7 @@ describe('chat-stream Route - Message Streaming', () => {
             throw new Error('Test error')
           },
         },
-      } as ReturnType<typeof createMockAnthropicClient>
+      } as unknown as ReturnType<typeof createMockAnthropicClient>
 
       await simulateChatStreamHandler(c, badClient)
     } catch (e) {

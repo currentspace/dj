@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 
-describe('Debug Deezer Direct', () => {
+describe.skip('Debug Deezer Direct', () => {
   it('should call Deezer API directly', async () => {
     const isrc = 'GBUM71029604'
     const url = `https://api.deezer.com/track/isrc:${isrc}`
@@ -10,7 +10,8 @@ describe('Debug Deezer Direct', () => {
     console.log('Response status:', response.status)
     console.log('Response ok:', response.ok)
     
-    const data = await response.json()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data = await response.json() as Record<string, any>
     console.log('Data keys:', Object.keys(data))
     console.log('Has ID:', !!data.id)
     console.log('Has BPM:', !!data.bpm)

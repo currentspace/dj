@@ -5,7 +5,6 @@
  * match our schema expectations.
  */
 
-import { test } from 'vitest'
 import type { ZodSchema } from 'zod'
 import { getCachedResponse, cacheResponse } from './setup'
 
@@ -103,8 +102,10 @@ export function getTestCredentials() {
  */
 export function skipIfMissingCredentials(envVar: string): void {
   if (!process.env[envVar]) {
-    test.skip()
+    // Note: Use `it.skipIf(!process.env[envVar])` at test definition instead
+    // This function only logs a warning - actual skip must be handled by test runner
     console.warn(`⏭️  Skipping test: ${envVar} not configured`)
+    throw new Error(`Test skipped: ${envVar} not configured`)
   }
 }
 

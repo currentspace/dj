@@ -13,7 +13,7 @@ export default defineConfig({
     setupFiles: ['./src/test-setup.ts'],
 
     // API-specific include patterns
-    include: ['src/**/*.{test,spec}.{ts}'],
+    include: ['src/**/*.test.ts', 'src/**/*.spec.ts'],
 
     // API-specific coverage
     coverage: {

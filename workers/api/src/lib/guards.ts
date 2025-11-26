@@ -22,8 +22,8 @@ export function createTypeGuard<T>(schema: z.ZodSchema<T>) {
 
 // Format Zod error for logging/display
 export function formatZodError(error: z.ZodError): string {
-  return error.errors
-    .map(err => {
+  return error.issues
+    .map((err: z.ZodIssue) => {
       const path = err.path.join('.')
       return `${path ? `${path}: ` : ''}${err.message}`
     })

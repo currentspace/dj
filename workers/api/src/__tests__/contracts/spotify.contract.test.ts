@@ -23,6 +23,9 @@ import {
   SpotifyUserSchema,
 } from '@dj/shared-types'
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ApiResponse = Record<string, any>
+
 // ===== Test Configuration =====
 
 const SPOTIFY_BASE_URL = 'https://api.spotify.com/v1'
@@ -129,7 +132,7 @@ describe('Spotify API Contracts', () => {
       // Fetch multiple tracks at once
       const ids = TEST_TRACK_IDS.join(',')
       const response = await spotifyRequest(`/tracks?ids=${ids}`)
-      const data = await response.json()
+      const data = await response.json() as ApiResponse
 
       // Response should have tracks array
       expect(data.tracks).toBeDefined()
@@ -282,7 +285,7 @@ describe('Spotify API Contracts', () => {
       // Fetch audio features for multiple tracks
       const ids = TEST_TRACK_IDS.join(',')
       const response = await spotifyRequest(`/audio-features?ids=${ids}`)
-      const data = await response.json()
+      const data = await response.json() as ApiResponse
 
       // Response should have audio_features array
       expect(data.audio_features).toBeDefined()

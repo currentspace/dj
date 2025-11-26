@@ -196,7 +196,7 @@ export class AudioEnrichmentService {
       const parseResult = safeParse(DeezerSearchResponseSchema, json)
 
       if (!parseResult.success) {
-        getLogger()?.error('[BPMEnrichment] Deezer search response validation failed:', parseResult.error.errors)
+        getLogger()?.error('[BPMEnrichment] Deezer search response validation failed:', parseResult.error.issues)
         return []
       }
 
@@ -228,7 +228,7 @@ export class AudioEnrichmentService {
       const parseResult = safeParse(DeezerTrackSchema, json)
 
       if (!parseResult.success) {
-        getLogger()?.error('[BPMEnrichment] Deezer ISRC response validation failed:', parseResult.error.errors)
+        getLogger()?.error('[BPMEnrichment] Deezer ISRC response validation failed:', parseResult.error.issues)
         return null
       }
 
@@ -264,7 +264,7 @@ export class AudioEnrichmentService {
       const parseResult = safeParse(DeezerTrackSchema, json)
 
       if (!parseResult.success) {
-        getLogger()?.error('[BPMEnrichment] Deezer track by ID validation failed:', parseResult.error.errors)
+        getLogger()?.error('[BPMEnrichment] Deezer track by ID validation failed:', parseResult.error.issues)
         return null
       }
 
@@ -433,7 +433,7 @@ export class AudioEnrichmentService {
       const parseResult = safeParse(MusicBrainzSearchResponseSchema, json)
 
       if (!parseResult.success) {
-        getLogger()?.error('[BPMEnrichment] MusicBrainz response validation failed:', parseResult.error.errors)
+        getLogger()?.error('[BPMEnrichment] MusicBrainz response validation failed:', parseResult.error.issues)
         return null
       }
 

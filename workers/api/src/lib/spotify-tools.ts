@@ -735,7 +735,7 @@ async function getAlbumInfo(args: Record<string, unknown>, token: string) {
     tracks: album.tracks?.items?.slice(0, 10).map(t => ({
       id: t.id,
       name: t.name,
-      artists: t.artists?.map(a => a.name).join(', '),
+      artists: t.artists?.map((a: {name: string}) => a.name).join(', '),
       duration_ms: t.duration_ms,
       track_number: t.track_number,
     })),

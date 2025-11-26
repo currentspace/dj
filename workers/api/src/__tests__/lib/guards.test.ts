@@ -79,7 +79,7 @@ describe('Safe Parsing', () => {
     expect(result.success).toBe(false)
     expect(result.data).toBeNull()
     expect(result.error).toBeTruthy()
-    expect(result.error?.errors).toBeDefined()
+    expect(result.error?.issues).toBeDefined()
   })
 
   it('formatZodError() formats errors readably', () => {

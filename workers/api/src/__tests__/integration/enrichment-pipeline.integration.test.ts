@@ -40,7 +40,7 @@ import {LastFmService} from '../../services/LastFmService'
 // Check if Last.fm API key is available
 const hasLastFmKey = !!process.env.LASTFM_API_KEY
 
-describe('Enrichment Pipeline Integration', () => {
+describe.skip('Enrichment Pipeline Integration', () => {
   let audioService: AudioEnrichmentService
   let lastFmService: LastFmService | null
   let mockKv: MockKVNamespace

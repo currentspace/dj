@@ -10,14 +10,14 @@ import {
 } from '@dj/shared-types'
 import {Hono} from 'hono'
 import {z} from 'zod'
-import {zodToJsonSchema} from 'zod-to-json-schema'
 
 // Native tool definition (replaces DynamicStructuredTool)
 interface NativeTool {
   description: string
   func: (args: Record<string, unknown>) => Promise<unknown>
   name: string
-  schema: z.ZodObject<z.ZodRawShape>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  schema: z.ZodObject<any>
 }
 
 function isNumber(value: unknown): value is number {
@@ -230,7 +230,7 @@ class SSEWriter {
  */
 function convertToAnthropicTools(tools: NativeTool[]): Anthropic.Tool[] {
   return tools.map(tool => {
-    const jsonSchema = zodToJsonSchema(tool.schema) as Record<string, unknown>
+    const jsonSchema = z.toJSONSchema(tool.schema) as Record<string, unknown>
 
     // Extract properties with type guard
     const properties = isObject(jsonSchema.properties) ? jsonSchema.properties : {}
@@ -706,9 +706,10 @@ function createStreamingSpotifyTools(
         })
 
         if (isObject(analysisData)) {
-          getLogger()?.info('[extract_playlist_vibe] Metadata analysis:', analysisData.metadata_analysis)
-          getLogger()?.info('[extract_playlist_vibe] Deezer analysis:', analysisData.deezer_analysis)
-          getLogger()?.info('[extract_playlist_vibe] Last.fm analysis:', analysisData.lastfm_analysis)
+          const data = analysisData as Record<string, unknown>
+          getLogger()?.info('[extract_playlist_vibe] Metadata analysis:', data.metadata_analysis as Record<string, unknown> | undefined)
+          getLogger()?.info('[extract_playlist_vibe] Deezer analysis:', data.deezer_analysis as Record<string, unknown> | undefined)
+          getLogger()?.info('[extract_playlist_vibe] Last.fm analysis:', data.lastfm_analysis as Record<string, unknown> | undefined)
         } else {
           getLogger()?.warn('[extract_playlist_vibe] analysis_data is not an object:', analysisData)
         }
@@ -1244,7 +1245,7 @@ CRITICAL: Return valid JSON only. No markdown code blocks, no explanatory text o
           .optional()
           .describe('Last.fm similar tracks if available'),
         user_request: z.string().describe("User's original request to understand intent"),
-        vibe_profile: z.record(z.unknown()).describe('Output from extract_playlist_vibe'),
+        vibe_profile: z.record(z.string(), z.unknown()).describe('Output from extract_playlist_vibe'),
       }),
     },
 
@@ -2190,9 +2191,7 @@ async function executeSpotifyToolWithProgress(
           const enrichmentResults = await enrichmentService.batchEnrichTracks(spotifyTracks)
 
           // Process results
-          for (const [trackId, deezerResult] of enrichmentResults.entries()) {
-            const track = tracksToEnrich.find(t => t.id === trackId)
-
+          for (const [, deezerResult] of enrichmentResults.entries()) {
             // Track subrequests (enrichTrack makes 1-2 API calls: Deezer + maybe MusicBrainz)
             const tracker = getSubrequestTracker()
             if (tracker) {
@@ -2859,7 +2858,7 @@ chatStreamRouter.post('/message', async c => {
               djContext = {...djContext, queueDepth: qData.queue?.length ?? 0}
             }
           } catch (e) {
-            getLogger()?.warn(`[Stream:${requestId}] Failed to fetch DJ context:`, e)
+            getLogger()?.warn(`[Stream:${requestId}] Failed to fetch DJ context:`, {error: e instanceof Error ? e.message : String(e)})
           }
         }
 
@@ -3159,12 +3158,13 @@ Be concise, musically knowledgeable, and action-oriented. Describe playlists thr
                   if (typeof currentBlock.input !== 'string') {
                     currentBlock.input = ''
                   }
-                  currentBlock.input += event.delta.partial_json
+                  const inputStr = (currentBlock.input as string) + event.delta.partial_json
+                  currentBlock.input = inputStr
 
                   getLogger()?.debug(`[Stream:${requestId}] Accumulated delta for ${currentBlock.name}`, {
                     beforeLength,
-                    afterLength: currentBlock.input.length,
-                    totalAccumulated: currentBlock.input.length,
+                    afterLength: inputStr.length,
+                    totalAccumulated: inputStr.length,
                   })
                 }
               }
