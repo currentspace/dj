@@ -7,6 +7,71 @@
 
 import type { ZodSchema } from 'zod'
 import { getCachedResponse, cacheResponse } from './setup'
+import { config } from 'dotenv'
+import { resolve } from 'path'
+
+// Load environment variables from .dev.vars (Cloudflare Workers format)
+config({ path: resolve(__dirname, '../../../../.dev.vars') })
+// Also try .env at project root
+config({ path: resolve(__dirname, '../../../../../.env') })
+
+/**
+ * Cached Spotify access token (to avoid fetching on every test)
+ */
+let cachedSpotifyToken: string | null = null
+let tokenExpiresAt: number = 0
+
+/**
+ * Fetch Spotify access token using Client Credentials flow
+ *
+ * Uses SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET from environment
+ * to obtain an access token. Tokens are cached for their lifetime.
+ *
+ * @returns Promise<string | null> - Access token or null if credentials missing
+ */
+export async function getSpotifyAccessToken(): Promise<string | null> {
+  // Return cached token if still valid (with 60s buffer)
+  if (cachedSpotifyToken && Date.now() < tokenExpiresAt - 60000) {
+    return cachedSpotifyToken
+  }
+
+  const clientId = process.env.SPOTIFY_CLIENT_ID
+  const clientSecret = process.env.SPOTIFY_CLIENT_SECRET
+
+  if (!clientId || !clientSecret) {
+    console.warn('⚠️ SPOTIFY_CLIENT_ID or SPOTIFY_CLIENT_SECRET not set')
+    return null
+  }
+
+  try {
+    const response = await fetch('https://accounts.spotify.com/api/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        grant_type: 'client_credentials',
+        client_id: clientId,
+        client_secret: clientSecret,
+      }),
+    })
+
+    if (!response.ok) {
+      console.error(`❌ Failed to get Spotify token: ${response.status}`)
+      return null
+    }
+
+    const data = await response.json() as { access_token: string; expires_in: number }
+    cachedSpotifyToken = data.access_token
+    tokenExpiresAt = Date.now() + (data.expires_in * 1000)
+
+    console.log('✅ Spotify access token obtained (expires in 1 hour)')
+    return cachedSpotifyToken
+  } catch (error) {
+    console.error('❌ Error fetching Spotify token:', error)
+    return null
+  }
+}
 
 /**
  * Last request timestamp for each API (used for rate limiting)

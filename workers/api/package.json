@@ -26,6 +26,7 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20251126.0",
     "@types/node": "^24.10.1",
+    "dotenv": "^17.2.3",
     "tsup": "^8.5.1",
     "vitest": "^4.0.14",
     "wrangler": "^4.51.0",
