@@ -24,7 +24,7 @@ export function ChatInterface({selectedPlaylist}: ChatInterfaceProps) {
   const [conversationsByPlaylist, setConversationsByPlaylist] = useState<Map<string, ChatMessage[]>>(new Map())
   const [currentPlaylistId, setCurrentPlaylistId] = useState<null | string>(null)
   const [input, setInput] = useState('')
-  const [mode, setMode] = useState<'analyze' | 'create' | 'edit'>('analyze')
+  const [mode, setMode] = useState<'analyze' | 'create' | 'dj' | 'edit'>('analyze')
   const [streamingStatus, setStreamingStatus] = useState<StreamingStatus>({
     isStreaming: false,
     toolsUsed: [],
@@ -51,7 +51,7 @@ export function ChatInterface({selectedPlaylist}: ChatInterfaceProps) {
     messagesEndRef.current?.scrollIntoView({behavior: 'smooth'})
   }, [])
 
-  const handleModeChange = useCallback((newMode: 'analyze' | 'create' | 'edit') => {
+  const handleModeChange = useCallback((newMode: 'analyze' | 'create' | 'dj' | 'edit') => {
     startTransition(() => {
       setMode(newMode)
     })
@@ -64,10 +64,10 @@ export function ChatInterface({selectedPlaylist}: ChatInterfaceProps) {
 
       let userMessage = input.trim()
 
-      // Inject playlist ID for analyze/edit modes
+      // Inject playlist ID for analyze/edit/dj modes
       const playlistId = selectedPlaylist?.id
       console.log(`[ChatInterface] Pre-injection - Mode: ${mode}, SelectedID: ${playlistId}`)
-      if ((mode === 'analyze' || mode === 'edit') && playlistId) {
+      if ((mode === 'analyze' || mode === 'edit' || mode === 'dj') && playlistId) {
         userMessage = `[Playlist ID: ${playlistId}] ${userMessage}`
         console.log(`[ChatInterface] Injected playlist ID: ${userMessage}`)
       } else {
@@ -205,11 +205,12 @@ export function ChatInterface({selectedPlaylist}: ChatInterfaceProps) {
             <select onChange={e => handleModeChange(e.target.value as typeof mode)} value={mode}>
               <option value="analyze">Analyze Music</option>
               <option value="create">Create Playlist</option>
+              <option value="dj">DJ Mode</option>
               <option value="edit">Edit Playlist</option>
             </select>
           </label>
 
-          {(mode === 'analyze' || mode === 'edit') && (
+          {(mode === 'analyze' || mode === 'edit' || mode === 'dj') && (
             <div className="selected-playlist-info">
               <span>
                 🎵 {selectedPlaylist.name} ({selectedPlaylist.tracks.total} tracks)
@@ -226,6 +227,7 @@ export function ChatInterface({selectedPlaylist}: ChatInterfaceProps) {
             <ul>
               <li>🎵 Analyze tracks and artists in your playlists</li>
               <li>📝 Create custom playlists based on your taste</li>
+              <li>🎧 DJ Mode - Control playback, queue songs, and get real-time recommendations</li>
               <li>✏️ Edit existing playlists with smart suggestions</li>
             </ul>
             <p>
@@ -265,7 +267,9 @@ export function ChatInterface({selectedPlaylist}: ChatInterfaceProps) {
                 ? 'Describe the playlist you want to create...'
                 : mode === 'analyze'
                   ? 'Ask me about any song, artist, or genre...'
-                  : 'Tell me which playlist to edit and how...'
+                  : mode === 'dj'
+                    ? 'Tell me what to play next, queue songs, or control playback...'
+                    : 'Tell me which playlist to edit and how...'
           }
           type="text"
           value={input}

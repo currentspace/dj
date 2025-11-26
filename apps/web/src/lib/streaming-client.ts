@@ -36,7 +36,7 @@ export class ChatStreamClient {
   async streamMessage(
     message: string,
     conversationHistory: {content: string; role: 'assistant' | 'user'}[],
-    mode: 'analyze' | 'create' | 'edit',
+    mode: 'analyze' | 'create' | 'dj' | 'edit',
     callbacks: StreamCallbacks,
     options?: {signal?: AbortSignal},
   ): Promise<{close: () => void}> {
@@ -129,7 +129,7 @@ export class ChatStreamClient {
   private async streamWithFetch(
     message: string,
     conversationHistory: {content: string; role: 'assistant' | 'user'}[],
-    mode: 'analyze' | 'create' | 'edit',
+    mode: 'analyze' | 'create' | 'dj' | 'edit',
     token: string,
     callbacks: StreamCallbacks,
     options?: {signal?: AbortSignal},

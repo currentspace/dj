@@ -74,7 +74,7 @@ const ChatRequestSchema = z.object({
     .max(20)
     .default([]),
   message: z.string().min(1).max(2000),
-  mode: z.enum(['analyze', 'create', 'edit']).default('analyze'),
+  mode: z.enum(['analyze', 'create', 'dj', 'edit']).default('analyze'),
 })
 
 // Analysis result types
@@ -2823,9 +2823,91 @@ chatStreamRouter.post('/message', async c => {
         // Convert Langchain tools to Anthropic format
         const anthropicTools = convertToAnthropicTools(tools)
 
-        // Build system prompt using Anthropic's 2025 best practices
-        // Structure: XML tags, explicit actions, chain-of-thought, parallel execution emphasis
-        const systemPrompt = `<role>
+        // DJ Mode: Fetch current playback context for real-time DJ assistant
+        let djContext: {nowPlaying?: {artist: string; progress: string; track: string}; queueDepth?: number} | null =
+          null
+        if (request.mode === 'dj') {
+          try {
+            const [nowPlayingRes, queueRes] = await Promise.all([
+              fetch('https://api.spotify.com/v1/me/player/currently-playing', {
+                headers: {Authorization: `Bearer ${spotifyToken}`},
+              }),
+              fetch('https://api.spotify.com/v1/me/player/queue', {
+                headers: {Authorization: `Bearer ${spotifyToken}`},
+              }),
+            ])
+
+            if (nowPlayingRes.ok && nowPlayingRes.status !== 204) {
+              const npData = (await nowPlayingRes.json()) as {
+                is_playing: boolean
+                item?: {artists?: Array<{name: string}>; duration_ms?: number; name?: string}
+                progress_ms?: number
+              }
+              const progress = npData.progress_ms ?? 0
+              const duration = npData.item?.duration_ms ?? 0
+              djContext = {
+                nowPlaying: {
+                  artist: npData.item?.artists?.map(a => a.name).join(', ') ?? 'Unknown',
+                  progress: `${Math.floor(progress / 1000)}s / ${Math.floor(duration / 1000)}s`,
+                  track: npData.item?.name ?? 'Unknown',
+                },
+              }
+            }
+
+            if (queueRes.ok) {
+              const qData = (await queueRes.json()) as {queue?: unknown[]}
+              djContext = {...djContext, queueDepth: qData.queue?.length ?? 0}
+            }
+          } catch (e) {
+            getLogger()?.warn(`[Stream:${requestId}] Failed to fetch DJ context:`, e)
+          }
+        }
+
+        // Build system prompt - DJ mode uses specialized prompt, otherwise standard analysis/create prompt
+        const systemPrompt =
+          request.mode === 'dj'
+            ? `<role>
+You are a LIVE DJ assistant. Music is playing RIGHT NOW. Your job is to:
+1. Keep the vibe going by maintaining queue depth (aim for 5-10 tracks ahead)
+2. React to user requests ("more chill", "add some 90s hip hop", "skip this")
+3. Notice when queue is getting low and proactively suggest additions
+4. Learn from skips - if the user skips a track, note the style for future avoidance
+</role>
+
+<current_state>
+${
+              djContext?.nowPlaying
+                ? `Now Playing: "${djContext.nowPlaying.track}" by ${djContext.nowPlaying.artist} (${djContext.nowPlaying.progress})`
+                : 'Nothing currently playing - start Spotify to enable DJ mode!'
+            }
+${djContext?.queueDepth !== undefined ? `Queue Depth: ${djContext.queueDepth} tracks` : 'Queue: Unknown'}
+</current_state>
+
+<behaviors>
+- When the user says "skip" or "next", use control_playback with action "next", then acknowledge what was skipped
+- When asked "what's playing", use get_now_playing and describe the current track naturally
+- When asked to queue something, search for it first with search_spotify_tracks, then use add_to_queue with the track URI
+- When queue drops below 5 tracks, suggest additions based on the current vibe
+- For vibe changes ("make it more chill", "more upbeat"), add 3-5 tracks that transition gradually - don't hard pivot
+- Always check the queue with get_queue before adding to avoid duplicates
+</behaviors>
+
+<tool_usage>
+- get_now_playing: Check what's currently playing
+- get_queue: See upcoming tracks
+- add_to_queue: Add a track (requires spotify:track:xxx URI - get this from search results)
+- control_playback: Play, pause, skip (next), or go back (previous)
+- search_spotify_tracks: Find tracks to queue
+- get_recommendations: Get algorithmic suggestions based on seed tracks
+</tool_usage>
+
+<response_style>
+Keep responses brief and conversational - you're a DJ, not writing an essay.
+When you queue tracks, just confirm naturally: "Added 'Song' by Artist to your queue"
+When skipping: "Skipping this one - what kind of vibe are you feeling?"
+Don't explain your tool usage - just do it and report the result.
+</response_style>`
+            : `<role>
 You are an AI DJ assistant with direct access to Spotify and music enrichment APIs. Your purpose is to help users discover, analyze, and curate music through intelligent tool use and transparent reasoning.
 </role>
 
