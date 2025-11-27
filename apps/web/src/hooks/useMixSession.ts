@@ -3,8 +3,9 @@
  * Manages mix session state with polling and optimistic updates
  */
 
-import {useCallback, useEffect, useRef, useState} from 'react'
+import {useCallback, useRef, useState, useSyncExternalStore} from 'react'
 import type {MixSession, QueuedTrack, SessionPreferences} from '@dj/shared-types'
+import {TIMING} from '../constants'
 import {mixApiClient} from '../lib/mix-api-client'
 
 interface UseMixSessionReturn {
@@ -24,8 +25,94 @@ interface UseMixSessionReturn {
 
   // Utility
   clearError: () => void
-  refreshSession: () => Promise<void>
+  refreshSession: () => Promise<MixSession | null>
 }
+
+// ============================================================================
+// POLLING EXTERNAL STORE - Manages session polling lifecycle
+// ============================================================================
+
+type PollingListener = () => void
+
+interface PollingState {
+  isPolling: boolean
+  sessionId: null | string
+}
+
+function createPollingStore() {
+  const listeners = new Set<PollingListener>()
+  let pollingInterval: NodeJS.Timeout | null = null
+  let state: PollingState = {isPolling: false, sessionId: null}
+  let fetchCallback: (() => Promise<MixSession | null>) | null = null
+  let updateCallback: ((session: MixSession | null) => void) | null = null
+
+  function notifyListeners(): void {
+    listeners.forEach(listener => listener())
+  }
+
+  return {
+    getState(): PollingState {
+      return state
+    },
+
+    setCallbacks(
+      fetch: () => Promise<MixSession | null>,
+      update: (session: MixSession | null) => void
+    ): void {
+      fetchCallback = fetch
+      updateCallback = update
+    },
+
+    startPolling(sessionId: string): void {
+      // Don't restart if already polling for same session
+      if (state.isPolling && state.sessionId === sessionId) return
+
+      // Stop existing polling
+      if (pollingInterval) {
+        clearInterval(pollingInterval)
+      }
+
+      state = {isPolling: true, sessionId}
+      notifyListeners()
+
+      pollingInterval = setInterval(async () => {
+        if (fetchCallback && updateCallback) {
+          try {
+            const fetchedSession = await fetchCallback()
+            updateCallback(fetchedSession)
+          } catch (err) {
+            console.error('[useMixSession] Polling error:', err)
+          }
+        }
+      }, TIMING.POLLING_INTERVAL_MS)
+    },
+
+    stopPolling(): void {
+      if (pollingInterval) {
+        clearInterval(pollingInterval)
+        pollingInterval = null
+      }
+      state = {isPolling: false, sessionId: null}
+      notifyListeners()
+    },
+
+    subscribe(listener: PollingListener): () => void {
+      listeners.add(listener)
+      return () => {
+        listeners.delete(listener)
+        // Cleanup when last listener unsubscribes
+        if (listeners.size === 0 && pollingInterval) {
+          clearInterval(pollingInterval)
+          pollingInterval = null
+          state = {isPolling: false, sessionId: null}
+        }
+      }
+    },
+  }
+}
+
+// Singleton polling store
+const pollingStore = createPollingStore()
 
 /**
  * Hook to manage mix session state
@@ -40,71 +127,50 @@ export function useMixSession(): UseMixSessionReturn {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<null | string>(null)
 
-  // Track if component is mounted
-  const isMounted = useRef(true)
-  const pollingInterval = useRef<NodeJS.Timeout | null>(null)
+  // Track initial fetch
+  const hasInitialFetchRef = useRef(false)
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      isMounted.current = false
-      if (pollingInterval.current) {
-        clearInterval(pollingInterval.current)
-      }
-    }
-  }, [])
+  // Subscribe to polling state for cleanup
+  const pollingState = useSyncExternalStore(
+    pollingStore.subscribe.bind(pollingStore),
+    pollingStore.getState.bind(pollingStore),
+    () => ({isPolling: false, sessionId: null})
+  )
 
   // Fetch session from API
   const refreshSession = useCallback(async () => {
     try {
       const fetchedSession = await mixApiClient.getCurrentSession()
-      if (isMounted.current) {
-        setSession(fetchedSession)
-        setError(null)
-      }
+      setSession(fetchedSession)
+      setError(null)
+      return fetchedSession
     } catch (err) {
-      if (isMounted.current) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch session')
-      }
+      setError(err instanceof Error ? err.message : 'Failed to fetch session')
+      return null
     }
   }, [])
 
-  // Start polling when session exists
-  useEffect(() => {
-    if (!session) {
-      // Clear polling if no session
-      if (pollingInterval.current) {
-        clearInterval(pollingInterval.current)
-        pollingInterval.current = null
-      }
-      return
-    }
+  // Set up callbacks for polling store
+  pollingStore.setCallbacks(
+    async () => mixApiClient.getCurrentSession(),
+    (fetchedSession) => setSession(fetchedSession)
+  )
 
-    // Start polling for session updates
-    pollingInterval.current = setInterval(async () => {
-      try {
-        const fetchedSession = await mixApiClient.getCurrentSession()
-        if (isMounted.current) {
-          setSession(fetchedSession)
-        }
-      } catch (err) {
-        console.error('[useMixSession] Polling error:', err)
-        // Don't set error state for polling failures - just log
-      }
-    }, 2000)
-
-    return () => {
-      if (pollingInterval.current) {
-        clearInterval(pollingInterval.current)
-        pollingInterval.current = null
-      }
-    }
-  }, [session?.id]) // Re-start polling if session ID changes
-
-  // Initial fetch on mount
-  useEffect(() => {
+  // Direct state sync: initial fetch on first render
+  if (!hasInitialFetchRef.current) {
+    hasInitialFetchRef.current = true
     refreshSession()
-  }, [refreshSession])
+  }
+
+  // Direct state sync: manage polling based on session state
+  if (session?.id && !pollingState.isPolling) {
+    pollingStore.startPolling(session.id)
+  } else if (!session && pollingState.isPolling) {
+    pollingStore.stopPolling()
+  } else if (session?.id && pollingState.sessionId !== session.id) {
+    // Session ID changed, restart polling
+    pollingStore.startPolling(session.id)
+  }
 
   // Start a new session
   const startSession = useCallback(
@@ -114,15 +180,11 @@ export function useMixSession(): UseMixSessionReturn {
 
       try {
         const newSession = await mixApiClient.startSession(preferences, seedPlaylistId)
-        if (isMounted.current) {
-          setSession(newSession)
-          setIsLoading(false)
-        }
+        setSession(newSession)
+        setIsLoading(false)
       } catch (err) {
-        if (isMounted.current) {
-          setError(err instanceof Error ? err.message : 'Failed to start session')
-          setIsLoading(false)
-        }
+        setError(err instanceof Error ? err.message : 'Failed to start session')
+        setIsLoading(false)
       }
     },
     [],
@@ -135,15 +197,12 @@ export function useMixSession(): UseMixSessionReturn {
 
     try {
       await mixApiClient.endSession()
-      if (isMounted.current) {
-        setSession(null)
-        setIsLoading(false)
-      }
+      pollingStore.stopPolling()
+      setSession(null)
+      setIsLoading(false)
     } catch (err) {
-      if (isMounted.current) {
-        setError(err instanceof Error ? err.message : 'Failed to end session')
-        setIsLoading(false)
-      }
+      setError(err instanceof Error ? err.message : 'Failed to end session')
+      setIsLoading(false)
     }
   }, [])
 
@@ -183,15 +242,11 @@ export function useMixSession(): UseMixSessionReturn {
       try {
         // Make API call
         const updatedQueue = await mixApiClient.addToQueue(trackUri, position)
-        if (isMounted.current) {
-          setSession(prev => (prev ? {...prev, queue: updatedQueue} : null))
-        }
+        setSession(prev => (prev ? {...prev, queue: updatedQueue} : null))
       } catch (err) {
         // Revert on error
-        if (isMounted.current) {
-          setSession(prev => (prev ? {...prev, queue: previousQueue} : null))
-          setError(err instanceof Error ? err.message : 'Failed to add to queue')
-        }
+        setSession(prev => (prev ? {...prev, queue: previousQueue} : null))
+        setError(err instanceof Error ? err.message : 'Failed to add to queue')
       }
     },
     [session],
@@ -218,15 +273,11 @@ export function useMixSession(): UseMixSessionReturn {
       try {
         // Make API call
         const updatedQueue = await mixApiClient.removeFromQueue(position)
-        if (isMounted.current) {
-          setSession(prev => (prev ? {...prev, queue: updatedQueue} : null))
-        }
+        setSession(prev => (prev ? {...prev, queue: updatedQueue} : null))
       } catch (err) {
         // Revert on error
-        if (isMounted.current) {
-          setSession(prev => (prev ? {...prev, queue: previousQueue} : null))
-          setError(err instanceof Error ? err.message : 'Failed to remove from queue')
-        }
+        setSession(prev => (prev ? {...prev, queue: previousQueue} : null))
+        setError(err instanceof Error ? err.message : 'Failed to remove from queue')
       }
     },
     [session],
@@ -255,15 +306,11 @@ export function useMixSession(): UseMixSessionReturn {
       try {
         // Make API call
         const updatedQueue = await mixApiClient.reorderQueue(from, to)
-        if (isMounted.current) {
-          setSession(prev => (prev ? {...prev, queue: updatedQueue} : null))
-        }
+        setSession(prev => (prev ? {...prev, queue: updatedQueue} : null))
       } catch (err) {
         // Revert on error
-        if (isMounted.current) {
-          setSession(prev => (prev ? {...prev, queue: previousQueue} : null))
-          setError(err instanceof Error ? err.message : 'Failed to reorder queue')
-        }
+        setSession(prev => (prev ? {...prev, queue: previousQueue} : null))
+        setError(err instanceof Error ? err.message : 'Failed to reorder queue')
       }
     },
     [session],

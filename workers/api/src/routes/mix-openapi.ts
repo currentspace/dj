@@ -21,6 +21,7 @@ import {
 import type {QueuedTrack, SpotifyTrackFull} from '@dj/shared-types'
 import {SpotifyPlaylistFullSchema, SpotifyTrackFullSchema, SpotifyUserSchema} from '@dj/shared-types'
 
+import {HTTP_STATUS, PAGINATION, VIBE_DEFAULTS} from '../constants'
 import type {Env} from '../index'
 import {isSuccessResponse} from '../lib/guards'
 import {AudioEnrichmentService} from '../services/AudioEnrichmentService'
@@ -308,8 +309,8 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
         return c.json({error: 'No active session'}, 404)
       }
 
-      if (session.queue.length >= 10) {
-        return c.json({error: 'Queue is full (max 10 tracks)'}, 400)
+      if (session.queue.length >= PAGINATION.MAX_QUEUE_SIZE) {
+        return c.json({error: `Queue is full (max ${PAGINATION.MAX_QUEUE_SIZE} tracks)`}, HTTP_STATUS.BAD_REQUEST)
       }
 
       // Fetch track details from Spotify
@@ -322,7 +323,7 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       const queuedTrack = createQueuedTrack(
         trackDetails,
         position ?? session.queue.length,
-        50, // Default vibe score for user-added tracks
+        VIBE_DEFAULTS.USER_TRACK_VIBE_SCORE,
         'Manually added',
         'user'
       )
@@ -500,7 +501,7 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       if (energyDirection !== undefined) updates.energyDirection = energyDirection
       if (bpmRange !== undefined) updates.bpmRange = bpmRange
 
-      const updatedVibe = sessionService.blendVibes(session.vibe, updates, 1.0) // 100% weight for user updates
+      const updatedVibe = sessionService.blendVibes(session.vibe, updates, VIBE_DEFAULTS.USER_UPDATE_WEIGHT)
 
       session.vibe = updatedVibe
 

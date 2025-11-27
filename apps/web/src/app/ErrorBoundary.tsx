@@ -1,5 +1,7 @@
 import {Component, type ErrorInfo, type ReactNode} from 'react'
 
+import {storage, STORAGE_KEYS} from '../hooks/useLocalStorage'
+
 interface Props {
   children: ReactNode
   fallback?: ReactNode
@@ -91,7 +93,7 @@ export function PlaylistErrorBoundary({children}: {children: ReactNode}) {
       }
       onReset={() => {
         // Clear any cached playlist data
-        localStorage.removeItem('current_playlist')
+        storage.remove(STORAGE_KEYS.CURRENT_PLAYLIST)
       }}>
       {children}
     </ErrorBoundary>

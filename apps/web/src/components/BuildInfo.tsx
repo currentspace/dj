@@ -1,4 +1,4 @@
-import {useEffect, useState} from 'react'
+import {useRef, useState} from 'react'
 
 // Default build info for development
 const defaultBuildInfo = {
@@ -9,18 +9,29 @@ const defaultBuildInfo = {
   version: 'dev-local',
 }
 
+interface BuildInfoData {
+  branch: string
+  buildTime: string
+  commitHash: string
+  commitMessage: string
+  version: string
+}
+
 export function BuildInfo() {
   const [isOpen, setIsOpen] = useState(false)
-  const [buildInfo, setBuildInfo] = useState(defaultBuildInfo)
+  const [buildInfo, setBuildInfo] = useState<BuildInfoData>(defaultBuildInfo)
+  const hasLoadedRef = useRef(false)
 
-  useEffect(() => {
+  // Direct state sync: load build info on first render
+  if (!hasLoadedRef.current) {
+    hasLoadedRef.current = true
     // Try to load actual build info
     import('../build-info.json')
-      .then(module => setBuildInfo(module.default))
+      .then(module => setBuildInfo(module.default as BuildInfoData))
       .catch(() => {
         console.log('Using default build info (dev mode)')
       })
-  }, [])
+  }
 
   return (
     <>
@@ -33,7 +44,7 @@ export function BuildInfo() {
           <div className="build-info-content">
             <h3>Build Information</h3>
             <button className="close-btn" onClick={() => setIsOpen(false)}>
-              ×
+              x
             </button>
 
             <div className="build-details">
@@ -64,7 +75,7 @@ export function BuildInfo() {
                 href={`https://github.com/currentspace/dj/commit/${buildInfo.commitHash}`}
                 rel="noopener noreferrer"
                 target="_blank">
-                View on GitHub →
+                View on GitHub
               </a>
             </div>
           </div>

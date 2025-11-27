@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useState} from 'react'
+import {useCallback, useRef, useState} from 'react'
 
 import {useSpotifyAuth} from '../../hooks/useSpotifyAuth'
 import '../../styles/user-playlists.css'
@@ -34,6 +34,8 @@ function UserPlaylists({onPlaylistSelect, selectedPlaylist}: UserPlaylistsProps)
   const [playlists, setPlaylists] = useState<SpotifyPlaylist[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<null | string>(null)
+  const hasLoadedRef = useRef(false)
+  const lastTokenRef = useRef<null | string>(null)
 
   const loadPlaylists = useCallback(async () => {
     try {
@@ -66,11 +68,12 @@ function UserPlaylists({onPlaylistSelect, selectedPlaylist}: UserPlaylistsProps)
     }
   }, [logout, token])
 
-  useEffect(() => {
-    if (token) {
-      loadPlaylists()
-    }
-  }, [loadPlaylists, token])
+  // Direct state sync: load playlists when token changes or on initial mount
+  if (token && (!hasLoadedRef.current || lastTokenRef.current !== token)) {
+    hasLoadedRef.current = true
+    lastTokenRef.current = token
+    loadPlaylists()
+  }
 
   if (loading) {
     return (

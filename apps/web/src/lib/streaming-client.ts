@@ -1,6 +1,9 @@
 // SSE streaming client for real-time chat responses
 import type {StreamDebugData, StreamLogData, StreamToolData, StreamToolResult} from '@dj/shared-types'
 
+import {HTTP_STATUS, LIMITS} from '../constants'
+import {storage, STORAGE_KEYS} from '../hooks/useLocalStorage'
+
 export interface StreamCallbacks {
   onContent?: (content: string) => void
   onDebug?: (data: StreamDebugData) => void
@@ -23,7 +26,7 @@ export type StreamEvent =
   | {data: string; type: 'thinking'}
 
 export class ChatStreamClient {
-  private static readonly MAX_BUFFER_SIZE = 2 * 1024 * 1024 // 2MB safety cap
+  private static readonly MAX_BUFFER_SIZE = LIMITS.MAX_BUFFER_SIZE
   private abortController: AbortController | null = null
 
   close() {
@@ -40,9 +43,12 @@ export class ChatStreamClient {
     callbacks: StreamCallbacks,
     options?: {signal?: AbortSignal},
   ): Promise<{close: () => void}> {
-    // Get auth token from new storage format
-    const tokenDataStr = localStorage.getItem('spotify_token_data')
-    if (!tokenDataStr) {
+    // Get auth token from centralized storage
+    const tokenData = storage.get<null | {expiresAt: null | number; token: string}>(
+      STORAGE_KEYS.SPOTIFY_TOKEN_DATA,
+      null,
+    )
+    if (!tokenData?.token) {
       callbacks.onError?.('Not authenticated')
       return {
         close: () => {
@@ -51,18 +57,7 @@ export class ChatStreamClient {
       } // Return no-op handle
     }
 
-    let token: string
-    try {
-      const tokenData = JSON.parse(tokenDataStr) as {expiresAt: null | number; token: string;}
-      token = tokenData.token
-    } catch {
-      callbacks.onError?.('Invalid token data')
-      return {
-        close: () => {
-          /* empty */
-        },
-      }
-    }
+    const token = tokenData.token
 
     // Close any existing connection
     this.close()
@@ -77,9 +72,8 @@ export class ChatStreamClient {
   }
 
   private clearToken(): void {
-    if (typeof window !== 'undefined' && 'localStorage' in window) {
-      localStorage.removeItem('spotify_token')
-    }
+    storage.remove(STORAGE_KEYS.SPOTIFY_TOKEN_DATA)
+    storage.remove(STORAGE_KEYS.SPOTIFY_TOKEN_LEGACY)
   }
 
   private handleEvent(event: StreamEvent, callbacks: StreamCallbacks) {
@@ -100,7 +94,7 @@ export class ChatStreamClient {
           break
         case 'error':
           console.error('[Server Error]', event.data)
-          callbacks.onError?.(event.data)
+          callbacks.onError?.(formatUserFriendlyError(event.data))
           break
         case 'log': {
           // Log to browser console with better formatting
@@ -171,7 +165,7 @@ export class ChatStreamClient {
 
       if (!response.ok) {
         // Special handling for 401 - clear token and notify
-        if (response.status === 401) {
+        if (response.status === HTTP_STATUS.UNAUTHORIZED) {
           console.error('[ChatStream] 401 Unauthorized - clearing token')
           this.clearToken()
           callbacks.onError?.('Authentication expired. Please log in again.')
@@ -182,7 +176,7 @@ export class ChatStreamClient {
         const errorText = await response.text().catch(() => '')
         console.error('[ChatStream] Error response:', errorText)
         throw new Error(
-          `HTTP ${response.status}: ${response.statusText}${errorText ? ` - ${errorText.slice(0, 300)}` : ''}`,
+          `HTTP ${response.status}: ${response.statusText}${errorText ? ` - ${errorText.slice(0, LIMITS.ERROR_TEXT_SLICE_LENGTH)}` : ''}`,
         )
       }
 
@@ -200,7 +194,7 @@ export class ChatStreamClient {
           throw new Error(errorMessage)
         } catch {
           throw new Error(
-            `Unexpected content-type: ${contentType}${errorText ? `. Response: ${errorText.slice(0, 300)}` : ''}`,
+            `Unexpected content-type: ${contentType}${errorText ? `. Response: ${errorText.slice(0, LIMITS.ERROR_TEXT_SLICE_LENGTH)}` : ''}`,
           )
         }
       }
@@ -277,7 +271,8 @@ export class ChatStreamClient {
 
                 // Check for error event - terminate stream
                 if (event.type === 'error') {
-                  callbacks.onError?.(typeof event.data === 'string' ? event.data : 'Stream error')
+                  const rawMessage = typeof event.data === 'string' ? event.data : 'Stream error'
+                  callbacks.onError?.(formatUserFriendlyError(rawMessage))
                   finished = true
                   this.abortController?.abort('Server error')
                   return true // Signal to stop processing
@@ -316,7 +311,7 @@ export class ChatStreamClient {
           `%c[SSE Chunk #${chunkCount}]`,
           'color: #888; font-size: 10px',
           `${chunk.length} bytes:`,
-          chunk.slice(0, 200),
+          chunk.slice(0, LIMITS.CHUNK_PREVIEW_LENGTH),
         )
         buffer += chunk
 
@@ -352,12 +347,65 @@ export class ChatStreamClient {
       }
       console.error('[ChatStream] Stream error:', error)
       if (!finished) {
-        callbacks.onError?.(error instanceof Error ? error.message : 'Stream failed')
+        const rawMessage = error instanceof Error ? error.message : 'Stream failed'
+        callbacks.onError?.(formatUserFriendlyError(rawMessage))
       }
     } finally {
       this.abortController = null
     }
   }
+}
+
+/**
+ * Convert technical error messages into user-friendly versions.
+ */
+function formatUserFriendlyError(message: string): string {
+  // Network errors
+  if (
+    message.includes('fetch') ||
+    message.includes('network') ||
+    message.includes('Network') ||
+    message.includes('Failed to fetch')
+  ) {
+    return 'Unable to connect to the server. Please check your internet connection.'
+  }
+
+  // Rate limiting
+  if (message.includes('429') || message.includes('rate limit') || message.includes('Too Many')) {
+    return 'Too many requests. Please wait a moment and try again.'
+  }
+
+  // Server errors
+  if (message.includes('500') || message.includes('Internal Server')) {
+    return 'Something went wrong on our end. Please try again later.'
+  }
+
+  // Bad gateway / service unavailable
+  if (
+    message.includes('502') ||
+    message.includes('503') ||
+    message.includes('Bad Gateway') ||
+    message.includes('Service Unavailable')
+  ) {
+    return 'The service is temporarily unavailable. Please try again in a few moments.'
+  }
+
+  // Timeout errors
+  if (message.includes('timeout') || message.includes('Timeout') || message.includes('ETIMEDOUT')) {
+    return 'The request took too long. Please try again.'
+  }
+
+  // Stream cancelled (user action, keep as-is)
+  if (message === 'Stream cancelled') {
+    return message
+  }
+
+  // Return original if no transformation needed, but truncate if too long
+  if (message.length > 150) {
+    return message.slice(0, 147) + '...'
+  }
+
+  return message
 }
 
 // Singleton instance

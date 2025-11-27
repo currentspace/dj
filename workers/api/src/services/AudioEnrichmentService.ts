@@ -16,6 +16,7 @@ import {
   MusicBrainzSearchResponseSchema,
 } from '@dj/shared-types'
 
+import {BPM_RANGE, CACHE_TTL, DURATION_MATCH} from '../constants'
 import {safeParse} from '../lib/guards'
 import {getLogger} from '../utils/LoggerContext'
 import {getGlobalOrchestrator, rateLimitedDeezerCall} from '../utils/RateLimitedAPIClients'
@@ -45,8 +46,8 @@ interface SpotifyTrack {
 
 export class AudioEnrichmentService {
   private cache: KVNamespace | null
-  private cacheTTL: number = 90 * 24 * 60 * 60 // 90 days for hits
-  private missCacheTTL: number = 5 * 60 // 5 minutes for misses (retry very soon)
+  private cacheTTL: number = CACHE_TTL.DEEZER_HIT_SECONDS
+  private missCacheTTL: number = CACHE_TTL.MISS_SECONDS
 
   constructor(cache?: KVNamespace) {
     this.cache = cache ?? null
@@ -57,7 +58,7 @@ export class AudioEnrichmentService {
    */
   static isValidBPM(bpm: null | number): boolean {
     if (bpm === null) return false
-    return bpm >= 45 && bpm <= 220
+    return bpm >= BPM_RANGE.MIN && bpm <= BPM_RANGE.MAX
   }
 
   /**
@@ -393,7 +394,7 @@ export class AudioEnrichmentService {
     artistName: string,
     durationMs: number,
   ): Promise<null | string> {
-    const MUSICBRAINZ_CACHE_TTL = 30 * 24 * 60 * 60 // 30 days in seconds
+    const MUSICBRAINZ_CACHE_TTL = CACHE_TTL.MUSICBRAINZ_SECONDS
 
     // Create cache key from track name, artist, and duration
     const cacheKey = `musicbrainz:isrc:${trackName}:${artistName}:${Math.floor(durationMs / 1000)}s`
@@ -462,8 +463,8 @@ export class AudioEnrichmentService {
 
       let result: null | string = null
 
-      if (best && best.diff < 10000) {
-        // Within 10 seconds
+      if (best && best.diff < DURATION_MATCH.TOLERANCE_MS) {
+        // Within tolerance
         getLogger()?.info(`[BPMEnrichment] Found ISRC via MusicBrainz: ${best.isrc}`)
         result = best.isrc
       } else {

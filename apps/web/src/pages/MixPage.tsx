@@ -1,6 +1,10 @@
-import {useState} from 'react'
 import type {SessionPreferences} from '@dj/shared-types'
+
+import {useState} from 'react'
+
+import {ErrorDisplay} from '../components/ErrorDisplay'
 import {MixInterface} from '../features/mix'
+import {useError} from '../hooks/useError'
 import {useMixSession} from '../hooks/useMixSession'
 import {useSuggestions} from '../hooks/useSuggestions'
 import {useVibeControls} from '../hooks/useVibeControls'
@@ -13,38 +17,41 @@ interface MixPageProps {
 export function MixPage({onBackToChat, seedPlaylistId}: MixPageProps) {
   const [showStartDialog, setShowStartDialog] = useState(true)
 
+  // Local error state for action-specific errors
+  const {clearError: clearLocalError, error: localError, handleError} = useError()
+
   // Mix session hook
   const {
-    session,
-    isLoading: sessionLoading,
-    error: sessionError,
-    startSession,
-    endSession,
     addToQueue,
+    clearError: clearSessionError,
+    endSession,
+    error: sessionError,
+    isLoading: sessionLoading,
     removeFromQueue,
     reorderQueue,
-    clearError: clearSessionError,
+    session,
+    startSession,
   } = useMixSession()
 
   // Suggestions hook
   const {
-    isLoading: suggestionsLoading,
-    error: suggestionsError,
-    refresh: refreshSuggestions,
     clearError: clearSuggestionsError,
-  } = useSuggestions({session, autoRefreshOnVibeChange: true})
+    error: suggestionsError,
+    isLoading: suggestionsLoading,
+    refresh: refreshSuggestions,
+  } = useSuggestions({autoRefreshOnVibeChange: true, session})
 
   // Vibe controls hook
   const {
-    steerVibe,
-    setEnergyLevel,
     clearError: clearVibeError,
     error: vibeError,
+    setEnergyLevel,
+    steerVibe,
   } = useVibeControls({
-    session,
     onVibeUpdate: vibe => {
       console.log('Vibe updated:', vibe)
     },
+    session,
   })
 
   const handleStartSession = async () => {
@@ -58,8 +65,8 @@ export function MixPage({onBackToChat, seedPlaylistId}: MixPageProps) {
     try {
       await startSession(preferences, seedPlaylistId)
       setShowStartDialog(false)
-    } catch (error) {
-      console.error('Failed to start session:', error)
+    } catch (err) {
+      handleError(err, 'Failed to start session')
     }
   }
 
@@ -67,8 +74,8 @@ export function MixPage({onBackToChat, seedPlaylistId}: MixPageProps) {
     try {
       await endSession()
       setShowStartDialog(true)
-    } catch (error) {
-      console.error('Failed to end session:', error)
+    } catch (err) {
+      handleError(err, 'Failed to end session')
     }
   }
 
@@ -77,8 +84,8 @@ export function MixPage({onBackToChat, seedPlaylistId}: MixPageProps) {
       await addToQueue(trackUri)
       // Refresh suggestions after adding
       await refreshSuggestions()
-    } catch (error) {
-      console.error('Failed to add to queue:', error)
+    } catch (err) {
+      handleError(err, 'Failed to add track to queue')
     }
   }
 
@@ -87,8 +94,8 @@ export function MixPage({onBackToChat, seedPlaylistId}: MixPageProps) {
       await steerVibe(direction)
       // Refresh suggestions after vibe change
       await refreshSuggestions()
-    } catch (error) {
-      console.error('Failed to steer vibe:', error)
+    } catch (err) {
+      handleError(err, 'Failed to adjust vibe')
     }
   }
 
@@ -103,35 +110,29 @@ export function MixPage({onBackToChat, seedPlaylistId}: MixPageProps) {
     clearSessionError()
     clearSuggestionsError()
     clearVibeError()
+    clearLocalError()
   }
 
-  // Show error state
-  const error = sessionError || suggestionsError || vibeError
-  if (error) {
-    return (
-      <div style={{padding: '2rem', textAlign: 'center'}}>
-        <h2>Error</h2>
-        <p style={{color: 'red'}}>{error}</p>
-        <button onClick={clearAllErrors} style={{marginTop: '1rem'}}>
-          Clear Error
-        </button>
-        <button onClick={onBackToChat} style={{marginTop: '1rem', marginLeft: '1rem'}}>
-          Back to Chat
-        </button>
-      </div>
-    )
-  }
+  // Combine all error sources
+  const combinedError = sessionError ?? suggestionsError ?? vibeError ?? localError
 
   // Show start dialog if no session
   if (!session || showStartDialog) {
     return (
-      <div style={{padding: '2rem', textAlign: 'center'}}>
+      <div style={{margin: '0 auto', maxWidth: '500px', padding: '2rem', textAlign: 'center'}}>
         <h1>Live DJ Mode</h1>
         <p>
           Create a dynamic, AI-powered music mix with real-time vibe control and intelligent suggestions.
         </p>
+        {combinedError && (
+          <ErrorDisplay
+            error={combinedError}
+            onDismiss={clearAllErrors}
+            variant="inline"
+          />
+        )}
         <div style={{marginTop: '2rem'}}>
-          <button onClick={handleStartSession} disabled={sessionLoading} style={{fontSize: '1.2rem', padding: '1rem 2rem'}}>
+          <button disabled={sessionLoading} onClick={handleStartSession} style={{fontSize: '1.2rem', padding: '1rem 2rem'}}>
             {sessionLoading ? 'Starting...' : 'Start Mix Session'}
           </button>
         </div>
@@ -147,10 +148,10 @@ export function MixPage({onBackToChat, seedPlaylistId}: MixPageProps) {
   // Show mix interface
   return (
     <div>
-      <div style={{display: 'flex', justifyContent: 'space-between', padding: '1rem', background: '#f5f5f5'}}>
+      <div style={{background: '#f5f5f5', display: 'flex', justifyContent: 'space-between', padding: '1rem'}}>
         <h2>Live DJ Mode</h2>
         <div style={{display: 'flex', gap: '1rem'}}>
-          <button onClick={handleEndSession} disabled={sessionLoading}>
+          <button disabled={sessionLoading} onClick={handleEndSession}>
             End Session
           </button>
           <button onClick={onBackToChat}>Back to Chat</button>
@@ -158,30 +159,39 @@ export function MixPage({onBackToChat, seedPlaylistId}: MixPageProps) {
       </div>
 
       <MixInterface
-        session={session}
         onAddToQueue={handleAddToQueue}
+        onEnergyChange={handleEnergyChange}
+        onRefreshSuggestions={refreshSuggestions}
         onRemoveFromQueue={removeFromQueue}
         onReorderQueue={reorderQueue}
-        onEnergyChange={handleEnergyChange}
         onSteerVibe={handleSteerVibe}
-        onRefreshSuggestions={refreshSuggestions}
+        session={session}
       />
 
       {/* Show loading overlay */}
       {(sessionLoading || suggestionsLoading) && (
         <div
           style={{
-            position: 'fixed',
-            bottom: '1rem',
-            right: '1rem',
             background: 'rgba(0, 0, 0, 0.8)',
+            borderRadius: '0.5rem',
+            bottom: '1rem',
             color: 'white',
             padding: '1rem',
-            borderRadius: '0.5rem',
+            position: 'fixed',
+            right: '1rem',
           }}
         >
           Loading...
         </div>
+      )}
+
+      {/* Show error toast */}
+      {combinedError && (
+        <ErrorDisplay
+          error={combinedError}
+          onDismiss={clearAllErrors}
+          variant="toast"
+        />
       )}
     </div>
   )

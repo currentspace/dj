@@ -3,7 +3,8 @@
  * Phase 1 of DJ Live Mode implementation
  */
 
-import {memo, useCallback, useEffect, useRef, useState} from 'react'
+import {memo, useCallback, useRef, useState, useSyncExternalStore} from 'react'
+import {HTTP_STATUS, TIMING} from '../../constants'
 
 import '../../styles/now-playing.css'
 
@@ -21,18 +22,109 @@ interface NowPlayingProps {
   token: string | null
 }
 
+// ============================================================================
+// POLLING EXTERNAL STORE - Manages playback polling lifecycle
+// ============================================================================
+
+type PollingListener = () => void
+
+interface PollingState {
+  isPolling: boolean
+  token: null | string
+}
+
+function createPlaybackPollingStore() {
+  const listeners = new Set<PollingListener>()
+  let pollingInterval: NodeJS.Timeout | null = null
+  let state: PollingState = {isPolling: false, token: null}
+  let fetchCallback: (() => Promise<void>) | null = null
+
+  function notifyListeners(): void {
+    listeners.forEach(listener => listener())
+  }
+
+  return {
+    getState(): PollingState {
+      return state
+    },
+
+    setFetchCallback(callback: () => Promise<void>): void {
+      fetchCallback = callback
+    },
+
+    startPolling(token: string): void {
+      // Don't restart if already polling for same token
+      if (state.isPolling && state.token === token) return
+
+      // Stop existing polling
+      if (pollingInterval) {
+        clearInterval(pollingInterval)
+      }
+
+      state = {isPolling: true, token}
+      notifyListeners()
+
+      // Initial fetch
+      if (fetchCallback) {
+        fetchCallback()
+      }
+
+      pollingInterval = setInterval(async () => {
+        if (fetchCallback) {
+          try {
+            await fetchCallback()
+          } catch (err) {
+            console.error('[NowPlaying] Polling error:', err)
+          }
+        }
+      }, TIMING.PLAYBACK_POLLING_INTERVAL_MS)
+    },
+
+    stopPolling(): void {
+      if (pollingInterval) {
+        clearInterval(pollingInterval)
+        pollingInterval = null
+      }
+      state = {isPolling: false, token: null}
+      notifyListeners()
+    },
+
+    subscribe(listener: PollingListener): () => void {
+      listeners.add(listener)
+      return () => {
+        listeners.delete(listener)
+        // Cleanup when last listener unsubscribes
+        if (listeners.size === 0 && pollingInterval) {
+          clearInterval(pollingInterval)
+          pollingInterval = null
+          state = {isPolling: false, token: null}
+        }
+      }
+    },
+  }
+}
+
+// Singleton polling store
+const playbackPollingStore = createPlaybackPollingStore()
+
 export const NowPlaying = memo(function NowPlaying({token}: NowPlayingProps) {
   const [playback, setPlayback] = useState<PlaybackState | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const lastFetchRef = useRef<number>(0)
+
+  // Subscribe to polling state for cleanup
+  const pollingState = useSyncExternalStore(
+    playbackPollingStore.subscribe.bind(playbackPollingStore),
+    playbackPollingStore.getState.bind(playbackPollingStore),
+    () => ({isPolling: false, token: null})
+  )
 
   const fetchPlaybackState = useCallback(async () => {
     if (!token) return
 
     // Debounce rapid calls
     const now = Date.now()
-    if (now - lastFetchRef.current < 500) return
+    if (now - lastFetchRef.current < TIMING.FETCH_DEBOUNCE_MS) return
     lastFetchRef.current = now
 
     try {
@@ -40,7 +132,7 @@ export const NowPlaying = memo(function NowPlaying({token}: NowPlayingProps) {
         headers: {Authorization: `Bearer ${token}`},
       })
 
-      if (response.status === 401) {
+      if (response.status === HTTP_STATUS.UNAUTHORIZED) {
         setError('Session expired')
         return
       }
@@ -83,22 +175,18 @@ export const NowPlaying = memo(function NowPlaying({token}: NowPlayingProps) {
     }
   }, [token])
 
-  // Polling effect - fetches playback state every second
-  useEffect(() => {
-    if (!token) return
+  // Set up fetch callback for polling store
+  playbackPollingStore.setFetchCallback(fetchPlaybackState)
 
-    // Initial fetch
-    fetchPlaybackState()
-
-    // Set up polling (every 1 second)
-    pollIntervalRef.current = setInterval(fetchPlaybackState, 1000)
-
-    return () => {
-      if (pollIntervalRef.current) {
-        clearInterval(pollIntervalRef.current)
-      }
-    }
-  }, [token, fetchPlaybackState])
+  // Direct state sync: manage polling based on token
+  if (token && !pollingState.isPolling) {
+    playbackPollingStore.startPolling(token)
+  } else if (!token && pollingState.isPolling) {
+    playbackPollingStore.stopPolling()
+  } else if (token && pollingState.token !== token) {
+    // Token changed, restart polling
+    playbackPollingStore.startPolling(token)
+  }
 
   const handlePlayPause = useCallback(async () => {
     if (!token) return
@@ -126,7 +214,7 @@ export const NowPlaying = memo(function NowPlaying({token}: NowPlayingProps) {
         method: 'POST',
       })
       // Fetch new state after short delay
-      setTimeout(fetchPlaybackState, 300)
+      setTimeout(fetchPlaybackState, TIMING.PLAYBACK_REFRESH_DELAY_MS)
     } catch (err) {
       console.error('[NowPlaying] Next error:', err)
     }
@@ -140,7 +228,7 @@ export const NowPlaying = memo(function NowPlaying({token}: NowPlayingProps) {
         headers: {Authorization: `Bearer ${token}`},
         method: 'POST',
       })
-      setTimeout(fetchPlaybackState, 300)
+      setTimeout(fetchPlaybackState, TIMING.PLAYBACK_REFRESH_DELAY_MS)
     } catch (err) {
       console.error('[NowPlaying] Previous error:', err)
     }
@@ -216,7 +304,7 @@ export const NowPlaying = memo(function NowPlaying({token}: NowPlayingProps) {
       <div className="now-playing__center">
         <div className="now-playing__controls">
           <button className="now-playing__control-btn" onClick={handlePrevious} title="Previous" type="button">
-            ⏮
+            Previous
           </button>
           <button
             className="now-playing__control-btn now-playing__control-btn--play"
@@ -224,10 +312,10 @@ export const NowPlaying = memo(function NowPlaying({token}: NowPlayingProps) {
             title={playback.isPlaying ? 'Pause' : 'Play'}
             type="button"
           >
-            {playback.isPlaying ? '⏸' : '▶'}
+            {playback.isPlaying ? 'Pause' : 'Play'}
           </button>
           <button className="now-playing__control-btn" onClick={handleNext} title="Next" type="button">
-            ⏭
+            Next
           </button>
         </div>
 
@@ -241,7 +329,7 @@ export const NowPlaying = memo(function NowPlaying({token}: NowPlayingProps) {
       </div>
 
       <div className="now-playing__device">
-        <span className="now-playing__device-icon">🔊</span>
+        <span className="now-playing__device-icon">Speaker</span>
         <span className="now-playing__device-name">{playback.deviceName}</span>
       </div>
     </div>

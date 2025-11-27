@@ -20,6 +20,7 @@ export default defineConfig({
           root: './apps/web',
           environment: 'jsdom',
           setupFiles: ['./src/test-setup.ts'],
+          exclude: ['**/e2e/**', '**/node_modules/**'],
         },
       },
       {

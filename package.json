@@ -25,6 +25,9 @@
     "test:contracts:lastfm": "pnpm --filter @dj/api-worker test:contracts -- lastfm.contract.test.ts",
     "test:integration": "pnpm --filter @dj/api-worker test:integration",
     "test:integration:watch": "pnpm --filter @dj/api-worker test:integration:watch",
+    "test:e2e": "pnpm --filter @dj/web test:e2e",
+    "test:e2e:ui": "pnpm --filter @dj/web test:e2e:ui",
+    "test:e2e:headed": "pnpm --filter @dj/web test:e2e:headed",
     "deploy": "pnpm build && pnpm --filter @dj/api-worker deploy && pnpm --filter @dj/webhook-worker deploy"
   },
   "devDependencies": {

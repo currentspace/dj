@@ -1,5 +1,6 @@
-import {useEffect, useState} from 'react'
+import {useCallback, useRef, useState} from 'react'
 
+import {storage, STORAGE_KEYS} from '../../hooks/useLocalStorage'
 import '../../styles/scope-debugger.css'
 
 interface ScopeDebugData {
@@ -32,20 +33,21 @@ export function ScopeDebugger() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<null | string>(null)
   const [data, setData] = useState<null | ScopeDebugData>(null)
+  const hasInitialFetchRef = useRef(false)
 
-  useEffect(() => {
-    fetchScopeDebugInfo()
-  }, [])
-
-  const fetchScopeDebugInfo = async () => {
+  const fetchScopeDebugInfo = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
 
-      const token = localStorage.getItem('spotify_token')
-      if (!token) {
+      const tokenData = storage.get<null | {expiresAt: null | number; token: string}>(
+        STORAGE_KEYS.SPOTIFY_TOKEN_DATA,
+        null,
+      )
+      if (!tokenData?.token) {
         throw new Error('No Spotify token found')
       }
+      const token = tokenData.token
 
       const response = await fetch('/api/spotify/debug/scopes', {
         headers: {
@@ -64,12 +66,18 @@ export function ScopeDebugger() {
     } finally {
       setLoading(false)
     }
+  }, [])
+
+  // Direct state sync: fetch on first render
+  if (!hasInitialFetchRef.current) {
+    hasInitialFetchRef.current = true
+    fetchScopeDebugInfo()
   }
 
   if (loading) {
     return (
       <div className="scope-debugger">
-        <h2>🔍 Scope Debugger</h2>
+        <h2>Scope Debugger</h2>
         <div className="loading">Loading scope information...</div>
       </div>
     )
@@ -78,9 +86,9 @@ export function ScopeDebugger() {
   if (error) {
     return (
       <div className="scope-debugger">
-        <h2>🔍 Scope Debugger</h2>
+        <h2>Scope Debugger</h2>
         <div className="error">
-          <p>❌ Error: {error}</p>
+          <p>Error: {error}</p>
           <button className="retry-button" onClick={fetchScopeDebugInfo}>
             Retry
           </button>
@@ -97,7 +105,7 @@ export function ScopeDebugger() {
 
   return (
     <div className="scope-debugger">
-      <h2>🔍 Scope Debugger</h2>
+      <h2>Scope Debugger</h2>
 
       <section className="debug-section">
         <h3>User Information</h3>
@@ -129,19 +137,19 @@ export function ScopeDebugger() {
         <h3>Permission Tests</h3>
         <div className="scope-tests">
           <div className={`scope-test ${data.scope_tests['user-read-private'] ? 'success' : 'failure'}`}>
-            <span className="scope-icon">{data.scope_tests['user-read-private'] ? '✅' : '❌'}</span>
+            <span className="scope-icon">{data.scope_tests['user-read-private'] ? 'OK' : 'FAIL'}</span>
             <span className="scope-name">user-read-private</span>
             <span className="scope-status">{data.scope_tests['user-read-private'] ? 'Working' : 'Failed'}</span>
           </div>
 
           <div className={`scope-test ${data.scope_tests['playlist-read-private'] ? 'success' : 'failure'}`}>
-            <span className="scope-icon">{data.scope_tests['playlist-read-private'] ? '✅' : '❌'}</span>
+            <span className="scope-icon">{data.scope_tests['playlist-read-private'] ? 'OK' : 'FAIL'}</span>
             <span className="scope-name">playlist-read-private</span>
             <span className="scope-status">{data.scope_tests['playlist-read-private'] ? 'Working' : 'Failed'}</span>
           </div>
 
           <div className={`scope-test ${hasAudioFeaturesAccess ? 'success' : 'failure'}`}>
-            <span className="scope-icon">{hasAudioFeaturesAccess ? '✅' : '❌'}</span>
+            <span className="scope-icon">{hasAudioFeaturesAccess ? 'OK' : 'FAIL'}</span>
             <span className="scope-name">audio-features</span>
             <span className="scope-status">
               {data.scope_tests['audio-features'].note}
@@ -153,7 +161,7 @@ export function ScopeDebugger() {
 
       {!hasAudioFeaturesAccess && (
         <section className="debug-section warning-section">
-          <h3>⚠️ Action Required</h3>
+          <h3>Action Required</h3>
           <div className="warning-content">
             <p>
               <strong>{data.instructions.if_audio_features_forbidden}</strong>
@@ -175,7 +183,7 @@ export function ScopeDebugger() {
       </section>
 
       <button className="refresh-button" onClick={fetchScopeDebugInfo}>
-        🔄 Refresh
+        Refresh
       </button>
     </div>
   )

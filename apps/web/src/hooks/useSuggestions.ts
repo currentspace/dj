@@ -3,7 +3,7 @@
  * Manages track suggestions based on current mix session
  */
 
-import {useCallback, useEffect, useRef, useState} from 'react'
+import {useCallback, useRef, useState} from 'react'
 import type {MixSession, Suggestion} from '@dj/shared-types'
 import {mixApiClient} from '../lib/mix-api-client'
 
@@ -41,16 +41,9 @@ export function useSuggestions(options: UseSuggestionsOptions): UseSuggestionsRe
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<null | string>(null)
 
-  // Track previous vibe to detect significant changes
+  // Track previous session ID and vibe for direct state sync
+  const previousSessionIdRef = useRef<null | string>(null)
   const previousVibeRef = useRef<null | string>(null)
-  const isMounted = useRef(true)
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      isMounted.current = false
-    }
-  }, [])
 
   // Fetch suggestions
   const refresh = useCallback(async () => {
@@ -64,33 +57,29 @@ export function useSuggestions(options: UseSuggestionsOptions): UseSuggestionsRe
 
     try {
       const fetchedSuggestions = await mixApiClient.getSuggestions()
-      if (isMounted.current) {
-        setSuggestions(fetchedSuggestions)
-        setIsLoading(false)
-      }
+      setSuggestions(fetchedSuggestions)
+      setIsLoading(false)
     } catch (err) {
-      if (isMounted.current) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch suggestions')
-        setIsLoading(false)
-      }
+      setError(err instanceof Error ? err.message : 'Failed to fetch suggestions')
+      setIsLoading(false)
     }
   }, [session])
 
-  // Initial fetch when session starts
-  useEffect(() => {
+  // Direct state sync: fetch when session changes
+  if (session?.id !== previousSessionIdRef.current) {
+    previousSessionIdRef.current = session?.id ?? null
     if (session) {
       refresh()
     } else {
-      setSuggestions([])
+      // Session ended, clear suggestions synchronously
+      if (suggestions.length > 0) {
+        setSuggestions([])
+      }
     }
-  }, [session?.id, refresh])
+  }
 
-  // Auto-refresh when vibe changes significantly
-  useEffect(() => {
-    if (!autoRefreshOnVibeChange || !session) {
-      return
-    }
-
+  // Direct state sync: auto-refresh when vibe changes significantly
+  if (autoRefreshOnVibeChange && session) {
     // Create a simple hash of vibe for comparison
     const vibeHash = JSON.stringify({
       bpmRange: session.vibe.bpmRange,
@@ -101,14 +90,16 @@ export function useSuggestions(options: UseSuggestionsOptions): UseSuggestionsRe
       mood: session.vibe.mood,
     })
 
-    // Check if vibe changed significantly
-    if (previousVibeRef.current && previousVibeRef.current !== vibeHash) {
+    // Check if vibe changed significantly (only after initial fetch)
+    if (previousVibeRef.current !== null && previousVibeRef.current !== vibeHash) {
       console.log('[useSuggestions] Vibe changed, refreshing suggestions...')
+      previousVibeRef.current = vibeHash
       refresh()
+    } else if (previousVibeRef.current === null) {
+      // Initialize vibe hash on first render with session
+      previousVibeRef.current = vibeHash
     }
-
-    previousVibeRef.current = vibeHash
-  }, [session?.vibe, autoRefreshOnVibeChange, refresh])
+  }
 
   // Clear error
   const clearError = useCallback(() => {

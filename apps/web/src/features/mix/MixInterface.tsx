@@ -1,6 +1,7 @@
 import type {MixSession, PlayedTrack, QueuedTrack, Suggestion, VibeProfile} from '@dj/shared-types'
 
 import {useCallback, useState, useTransition} from 'react'
+import {TIMING} from '../../constants'
 
 import {NowPlayingHero} from './NowPlayingHero'
 import {QueuePanel} from './QueuePanel'
@@ -86,7 +87,7 @@ export function MixInterface({
     startTransition(() => {
       onRefreshSuggestions?.()
       // In a real implementation, this would be updated by the API response
-      setTimeout(() => setIsLoadingSuggestions(false), 500)
+      setTimeout(() => setIsLoadingSuggestions(false), TIMING.SUGGESTIONS_LOADING_DELAY_MS)
     })
   }, [onRefreshSuggestions])
 

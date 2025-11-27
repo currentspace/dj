@@ -22,6 +22,7 @@ import {
 } from '@dj/shared-types'
 import {z} from 'zod'
 
+import {AGGREGATION, CACHE_TTL, PROGRESS} from '../constants'
 import {getLogger} from '../utils/LoggerContext'
 import {getGlobalOrchestrator, rateLimitedLastFmCall} from '../utils/RateLimitedAPIClients'
 
@@ -100,8 +101,8 @@ export class LastFmService {
   private apiBaseUrl = 'https://ws.audioscrobbler.com/2.0/'
   private apiKey: string
   private cache: KVNamespace | null
-  private cacheTTL: number = 7 * 24 * 60 * 60 // 7 days for hits (refresh weekly)
-  private missCacheTTL: number = 5 * 60 // 5 minutes for misses (retry very soon)
+  private cacheTTL: number = CACHE_TTL.LASTFM_HIT_SECONDS
+  private missCacheTTL: number = CACHE_TTL.MISS_SECONDS
 
   constructor(apiKey: string, cache?: KVNamespace) {
     this.apiKey = apiKey
@@ -123,7 +124,7 @@ export class LastFmService {
     return Array.from(tagCounts.entries())
       .map(([tag, count]) => ({count, tag}))
       .sort((a, b) => b.count - a.count)
-      .slice(0, 15)
+      .slice(0, AGGREGATION.MAX_CROWD_TAGS)
   }
 
   /**
@@ -253,7 +254,7 @@ export class LastFmService {
     const wrappedTasks = tasks.map(task => async () => {
       const result = await task()
       completed++
-      if (onProgress && completed % 10 === 0) {
+      if (onProgress && completed % PROGRESS.ARTIST_REPORT_INTERVAL === 0) {
         onProgress(completed, uniqueArtists.length)
       }
       return result
@@ -515,11 +516,11 @@ export class LastFmService {
 
       // Extract tags
       const tags = artistData.tags?.tag ?? []
-      const tagNames: string[] = tags.slice(0, 10).map((t: LastFmTag) => t.name)
+      const tagNames: string[] = tags.slice(0, AGGREGATION.MAX_ARTIST_TAGS).map((t: LastFmTag) => t.name)
 
       // Extract similar artists
       const similar = artistData.similar?.artist ?? []
-      const similarArtists = similar.slice(0, 10).map(a => ({
+      const similarArtists = similar.slice(0, AGGREGATION.MAX_SIMILAR_ARTISTS).map(a => ({
         name: a.name,
         url: a.url ?? '',
       }))
@@ -583,7 +584,7 @@ export class LastFmService {
    * Get track correction (canonical names)
    */
   private async getCorrection(artist: string, track: string): Promise<null | {artist: string; track: string}> {
-    const CORRECTION_CACHE_TTL = 30 * 24 * 60 * 60 // 30 days in seconds
+    const CORRECTION_CACHE_TTL = CACHE_TTL.LASTFM_CORRECTION_SECONDS
 
     // Create cache key from artist and track name
     const cacheKey = `lastfm:correction:${artist}:${track}`
@@ -685,7 +686,7 @@ export class LastFmService {
       const tags: LastFmTag[] = data.toptags.tag
       if (!tags || !Array.isArray(tags)) return []
 
-      return tags.slice(0, 10).map(t => t.name)
+      return tags.slice(0, AGGREGATION.MAX_ARTIST_TAGS).map(t => t.name)
     } catch (error) {
       getLogger()?.error('[LastFm] Top tags failed:', error)
       return []

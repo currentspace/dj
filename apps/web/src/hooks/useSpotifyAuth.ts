@@ -1,4 +1,6 @@
-import {useCallback, useEffect, useRef, useSyncExternalStore} from 'react'
+import {useCallback, useRef, useSyncExternalStore} from 'react'
+
+import {storage, STORAGE_KEYS} from './useLocalStorage'
 
 type AuthListener = () => void
 
@@ -58,46 +60,16 @@ function createSpotifyAuthStore() {
   }
 
   function loadTokenData(): null | TokenData {
-    if (typeof window === 'undefined') {
-      return null
-    }
-
-    const stored = localStorage.getItem('spotify_token_data')
-    if (!stored) {
-      // Try legacy format for backwards compatibility
-      const legacyToken = localStorage.getItem('spotify_token')
-      if (legacyToken) {
-        // Migrate to new format (no expiry info, will validate on first use)
-        const tokenData: TokenData = {
-          createdAt: Date.now(),
-          expiresAt: null,
-          token: legacyToken,
-        }
-        saveTokenData(tokenData)
-        localStorage.removeItem('spotify_token')
-        return tokenData
-      }
-      return null
-    }
-
-    try {
-      return JSON.parse(stored) as TokenData
-    } catch {
-      return null
-    }
+    return storage.get<null | TokenData>(STORAGE_KEYS.SPOTIFY_TOKEN_DATA, null)
   }
 
   function saveTokenData(tokenData: TokenData): void {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('spotify_token_data', JSON.stringify(tokenData))
-    }
+    storage.set(STORAGE_KEYS.SPOTIFY_TOKEN_DATA, tokenData)
   }
 
   function clearTokenData(): void {
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('spotify_token_data')
-      localStorage.removeItem('spotify_token') // Legacy cleanup
-    }
+    storage.remove(STORAGE_KEYS.SPOTIFY_TOKEN_DATA)
+    storage.remove(STORAGE_KEYS.SPOTIFY_TOKEN_LEGACY)
   }
 
   function isTokenExpired(tokenData: TokenData): boolean {
@@ -112,7 +84,7 @@ function createSpotifyAuthStore() {
   }
 
   function handleStorageChange(event: StorageEvent): void {
-    if (event.key === 'spotify_token_data') {
+    if (event.key === STORAGE_KEYS.SPOTIFY_TOKEN_DATA) {
       if (!event.newValue) {
         // Token cleared
         state = {
@@ -398,10 +370,11 @@ export function useSpotifyAuth(): UseSpotifyAuthReturn {
     () => ({error: null, isLoading: false, isValidating: false}), // SSR fallback
   )
 
-  // Handle OAuth callback from URL (only once globally, not per component)
-  useEffect(() => {
-    if (typeof window === 'undefined' || oauthCallbackProcessed) return
+  // Refs for tracking state changes
+  const lastTokenRef = useRef<null | string>(null)
 
+  // Direct state sync: Handle OAuth callback from URL (only once globally)
+  if (typeof window !== 'undefined' && !oauthCallbackProcessed) {
     const urlParams = new URLSearchParams(window.location.search)
     const urlError = urlParams.get('error')
     const spotifyToken = urlParams.get('spotify_token')
@@ -415,76 +388,59 @@ export function useSpotifyAuth(): UseSpotifyAuthReturn {
         asyncStateManager.setError(`Authentication failed: ${urlError}`)
         window.history.replaceState({}, document.title, window.location.pathname)
       } else if (spotifyToken && authSuccess) {
-        console.log('🎉 Server-side OAuth success! Storing token...')
+        console.log('[useSpotifyAuth] Server-side OAuth success! Storing token...')
         // Store token (no expiry info from OAuth callback, will validate on first use)
         authStore.setToken(spotifyToken)
         window.history.replaceState({}, document.title, window.location.pathname)
       }
     }
-  }, []) // Only run once on mount - asyncStateManager is singleton
+  }
 
-  // Automatic token validation on mount
-  useEffect(() => {
-    if (typeof window === 'undefined' || !authState.token) {
-      return
-    }
+  // Direct state sync: Automatic token validation when token changes
+  if (typeof window !== 'undefined' && authState.token && lastTokenRef.current !== authState.token) {
+    lastTokenRef.current = authState.token
 
     // Check if token is expired first
     if (authStore.isTokenExpired()) {
       authStore.markTokenInvalid()
       asyncStateManager.setError('Session expired. Please log in again.')
-      return
-    }
+    } else if (!tokenValidationInProgress) {
+      // Validate token with API if not already validating
+      tokenValidationInProgress = true
+      const signal = asyncStateManager.createAbortSignal()
 
-    // Validate token with API if not already validating
-    if (tokenValidationInProgress) {
-      return
-    }
+      asyncStateManager.setValidating(true)
+      asyncStateManager.setError(null)
 
-    tokenValidationInProgress = true
-    const signal = asyncStateManager.createAbortSignal()
+      validateTokenWithAPI(authState.token, signal)
+        .then(isValid => {
+          if (!asyncStateManager.isAborted()) {
+            tokenValidationInProgress = false
+            asyncStateManager.setValidating(false)
 
-    asyncStateManager.setValidating(true)
-    asyncStateManager.setError(null)
-
-    validateTokenWithAPI(authState.token, signal)
-      .then(isValid => {
-        if (isMountedRef.current && !asyncStateManager.isAborted()) {
-          tokenValidationInProgress = false
-          asyncStateManager.setValidating(false)
-
-          if (!isValid) {
-            authStore.markTokenInvalid()
-            asyncStateManager.setError('Session expired. Please log in again.')
+            if (!isValid) {
+              authStore.markTokenInvalid()
+              asyncStateManager.setError('Session expired. Please log in again.')
+            }
           }
-        }
-      })
-      .catch((err: unknown) => {
-        if (isMountedRef.current && !asyncStateManager.isAborted()) {
-          tokenValidationInProgress = false
-          asyncStateManager.setValidating(false)
+        })
+        .catch((err: unknown) => {
+          if (!asyncStateManager.isAborted()) {
+            tokenValidationInProgress = false
+            asyncStateManager.setValidating(false)
 
-          // Only show error if it's an abort error
-          if (err instanceof Error && err.name === 'AbortError') {
-            // Aborted, don't show error
-            return
+            // Only show error if it's an abort error
+            if (err instanceof Error && err.name === 'AbortError') {
+              // Aborted, don't show error
+              return
+            }
+
+            // Other errors - don't clear token, just log
+            console.warn('Token validation failed:', err)
           }
-
-          // Other errors - don't clear token, just log
-          console.warn('Token validation failed:', err)
-        }
-      })
-  }, [authState.token])
-
-  // Refs for cleanup
-  const isMountedRef = useRef(true)
-
-  useEffect(() => {
-    return () => {
-      isMountedRef.current = false
-      asyncStateManager.abort() // Cleaner!
+        })
     }
-  }, [])
+  }
 
   // Synchronous login function
   const login = useCallback(() => {
@@ -494,7 +450,7 @@ export function useSpotifyAuth(): UseSpotifyAuthReturn {
     asyncStateManager.setLoading(true)
 
     performLogin(signal).catch((err: unknown) => {
-      if (isMountedRef.current && !asyncStateManager.isAborted()) {
+      if (!asyncStateManager.isAborted()) {
         asyncStateManager.setError(err instanceof Error ? err.message : 'Failed to start authentication')
         asyncStateManager.setLoading(false)
       }

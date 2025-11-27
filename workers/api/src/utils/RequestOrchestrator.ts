@@ -19,6 +19,7 @@
  * 2. Batch: await orchestrator.executeBatch('id', tasks, 'spotify')
  */
 
+import {CONCURRENCY_LIMITS, RATE_LIMITS} from '../constants'
 import {getLogger} from './LoggerContext'
 import {RateLimitedQueue} from './RateLimitedQueue'
 
@@ -32,11 +33,11 @@ type LaneKey = 'anthropic' | 'deezer' | 'default' | 'lastfm' | 'spotify'
 type Task<T> = () => Promise<T>
 
 const LANE_LIMITS: Record<LaneKey, number> = {
-  anthropic: 2, // Critical: Anthropic SDK can't handle >2 concurrent in Workers
-  deezer: 10,
-  default: 3,
-  lastfm: 10,
-  spotify: 5,
+  anthropic: CONCURRENCY_LIMITS.ANTHROPIC,
+  deezer: CONCURRENCY_LIMITS.DEEZER,
+  default: CONCURRENCY_LIMITS.DEFAULT,
+  lastfm: CONCURRENCY_LIMITS.LASTFM,
+  spotify: CONCURRENCY_LIMITS.SPOTIFY,
 }
 
 export class RequestOrchestrator {
@@ -44,16 +45,16 @@ export class RequestOrchestrator {
   private rateLimiter: RateLimitedQueue<unknown>
 
   constructor(options?: {
-    jitterMs?: number // Jitter in ms (default: 5)
-    minTickMs?: number // Minimum tick delay (default: 1-2ms)
-    rate?: number // Requests per second (default: 40)
+    jitterMs?: number // Jitter in ms (default: RATE_LIMITS.JITTER_MS)
+    minTickMs?: number // Minimum tick delay (default: RATE_LIMITS.MIN_TICK_MS)
+    rate?: number // Requests per second (default: RATE_LIMITS.GLOBAL_RPS)
   }) {
-    // Initialize rate limiter (40 RPS global, no global concurrency limit)
+    // Initialize rate limiter (global RPS, no global concurrency limit)
     this.rateLimiter = new RateLimitedQueue({
       concurrency: 999, // No global concurrency limit, per-lane only
-      jitterMs: options?.jitterMs ?? 5,
-      minTickMs: options?.minTickMs ?? 2,
-      rate: options?.rate ?? 40,
+      jitterMs: options?.jitterMs ?? RATE_LIMITS.JITTER_MS,
+      minTickMs: options?.minTickMs ?? RATE_LIMITS.MIN_TICK_MS,
+      rate: options?.rate ?? RATE_LIMITS.GLOBAL_RPS,
     })
 
     // Initialize lane configurations
@@ -157,6 +158,6 @@ export class RequestOrchestrator {
  * All API calls in the worker go through this
  */
 export const globalOrchestrator = new RequestOrchestrator({
-  jitterMs: 5, // 0-5ms jitter
-  rate: 40, // 40 RPS (Cloudflare Workers limit)
+  jitterMs: RATE_LIMITS.JITTER_MS,
+  rate: RATE_LIMITS.GLOBAL_RPS,
 })

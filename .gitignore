@@ -38,3 +38,5 @@ apps/web/tsconfig.node.tsbuildinfo
 
 # ESLint cache
 .eslintcache
+apps/web/playwright-report/
+apps/web/test-results/

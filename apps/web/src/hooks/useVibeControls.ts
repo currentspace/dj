@@ -5,6 +5,7 @@
 
 import {useCallback, useRef, useState} from 'react'
 import type {MixSession, SteerVibeResponse, VibeProfile} from '@dj/shared-types'
+import {TIMING} from '../constants'
 import {mixApiClient} from '../lib/mix-api-client'
 
 interface UseVibeControlsOptions {
@@ -76,7 +77,7 @@ export function useVibeControls(options: UseVibeControlsOptions): UseVibeControl
           setError(err instanceof Error ? err.message : 'Failed to update energy level')
           setIsUpdating(false)
         }
-      }, 300) // 300ms debounce
+      }, TIMING.DEBOUNCE_MS)
     },
     [session, onVibeUpdate],
   )

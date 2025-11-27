@@ -1,6 +1,7 @@
 import {swaggerUI} from '@hono/swagger-ui'
 import {OpenAPIHono} from '@hono/zod-openapi'
 import {cors} from 'hono/cors'
+import {secureHeaders} from 'hono/secure-headers'
 
 import {chatStreamRouter} from './routes/chat-stream'
 import {registerMixRoutes} from './routes/mix-openapi'
@@ -23,7 +24,32 @@ export interface Env {
 
 const app = new OpenAPIHono<{Bindings: Env}>()
 
-app.use('*', cors())
+// Security headers middleware
+app.use(
+  '*',
+  secureHeaders({
+    permissionsPolicy: {
+      camera: [],
+      geolocation: [],
+      microphone: [],
+    },
+    referrerPolicy: 'strict-origin-when-cross-origin',
+    xContentTypeOptions: 'nosniff',
+    xFrameOptions: 'DENY',
+    xXssProtection: '1; mode=block',
+  })
+)
+
+// CORS middleware with environment-based origin
+app.use(
+  '*',
+  cors({
+    allowHeaders: ['Content-Type', 'Authorization'],
+    allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    credentials: true,
+    origin: (_, c) => c.env.FRONTEND_URL ?? 'https://dj.current.space',
+  })
+)
 
 // Health check
 app.get('/health', c => c.json({status: 'healthy'}))
