@@ -83,7 +83,7 @@ export const mixApiClient = {
       throw new Error('Not authenticated')
     }
 
-    const response = await fetch('/api/mix/session/start', {
+    const response = await fetch('/api/mix/start', {
       body: JSON.stringify({
         preferences,
         seedPlaylistId,
@@ -109,7 +109,7 @@ export const mixApiClient = {
       throw new Error('Not authenticated')
     }
 
-    const response = await fetch('/api/mix/session/current', {
+    const response = await fetch('/api/mix/current', {
       headers: {
         Authorization: `Bearer ${token}`,
       },
@@ -130,7 +130,7 @@ export const mixApiClient = {
       throw new Error('Not authenticated')
     }
 
-    const response = await fetch('/api/mix/session/end', {
+    const response = await fetch('/api/mix/end', {
       headers: {
         Authorization: `Bearer ${token}`,
       },
@@ -202,15 +202,11 @@ export const mixApiClient = {
       throw new Error('Not authenticated')
     }
 
-    const response = await fetch('/api/mix/queue/remove', {
-      body: JSON.stringify({
-        position,
-      }),
+    const response = await fetch(`/api/mix/queue/${position}`, {
       headers: {
         Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
       },
-      method: 'POST',
+      method: 'DELETE',
     })
 
     const data = await handleResponse<RemoveFromQueueResponse>(response)
@@ -238,7 +234,7 @@ export const mixApiClient = {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      method: 'POST',
+      method: 'PUT',
     })
 
     const data = await handleResponse<ReorderQueueResponse>(response)
@@ -279,13 +275,13 @@ export const mixApiClient = {
       throw new Error('Not authenticated')
     }
 
-    const response = await fetch('/api/mix/vibe/update', {
+    const response = await fetch('/api/mix/vibe', {
       body: JSON.stringify(updates),
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      method: 'POST',
+      method: 'PUT',
     })
 
     const data = await handleResponse<UpdateVibeResponse>(response)
