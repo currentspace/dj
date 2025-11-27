@@ -10,6 +10,10 @@ import type {
   SpotifyAuthResponse,
 } from '@dj/shared-types'
 
+// Export type-safe fetch utilities
+export {createApiClient, createTypedFetch} from './typed-fetch'
+export type {ApiClientConfig} from './typed-fetch'
+
 export class DJApiClient {
   private baseUrl: string
   private token: null | string = null

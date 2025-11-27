@@ -78,6 +78,9 @@ importers:
       '@dj/api-client':
         specifier: workspace:*
         version: link:../../packages/api-client
+      '@dj/api-contracts':
+        specifier: workspace:*
+        version: link:../../packages/api-contracts
       '@dj/shared-types':
         specifier: workspace:*
         version: link:../../packages/shared-types

@@ -8,7 +8,9 @@ import {
   AddToQueueResponseSchema,
   EndMixResponseSchema,
   GetMixSessionResponseSchema,
+  GetQueueResponseSchema,
   GetSuggestionsResponseSchema,
+  GetVibeResponseSchema,
   RemoveFromQueueResponseSchema,
   ReorderQueueRequestSchema,
   ReorderQueueResponseSchema,
@@ -20,7 +22,6 @@ import {
   SteerVibeResponseSchema,
   UpdateVibeRequestSchema,
   UpdateVibeResponseSchema,
-  VibeProfileSchema,
 } from '@dj/shared-types'
 import {createRoute, z} from '@hono/zod-openapi'
 
@@ -190,9 +191,7 @@ export const getQueue = createRoute({
     200: {
       content: {
         'application/json': {
-          schema: z.object({
-            queue: z.array(z.unknown()), // QueuedTrack array
-          }),
+          schema: GetQueueResponseSchema,
         },
       },
       description: 'Current queue',
@@ -425,9 +424,7 @@ export const getVibe = createRoute({
     200: {
       content: {
         'application/json': {
-          schema: z.object({
-            vibe: VibeProfileSchema,
-          }),
+          schema: GetVibeResponseSchema,
         },
       },
       description: 'Current vibe profile',

@@ -13,6 +13,7 @@
   "dependencies": {
     "@ark-ui/react": "^5.29.1",
     "@dj/api-client": "workspace:*",
+    "@dj/api-contracts": "workspace:*",
     "@dj/shared-types": "workspace:*",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

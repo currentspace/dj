@@ -118,6 +118,10 @@ export const AddToQueueRequestSchema = z.object({
   position: z.number().int().min(0).optional(),
 })
 
+export const GetQueueResponseSchema = z.object({
+  queue: z.array(QueuedTrackSchema),
+})
+
 export const AddToQueueResponseSchema = z.object({
   success: z.boolean(),
   queue: z.array(QueuedTrackSchema),
@@ -152,6 +156,10 @@ export const UpdateVibeRequestSchema = z.object({
     min: z.number().min(45).max(220),
     max: z.number().min(45).max(220),
   }).optional(),
+})
+
+export const GetVibeResponseSchema = z.object({
+  vibe: VibeProfileSchema,
 })
 
 export const UpdateVibeResponseSchema = z.object({
@@ -211,6 +219,7 @@ export type MixSession = z.infer<typeof MixSessionSchema>
 export type StartMixRequest = z.infer<typeof StartMixRequestSchema>
 export type StartMixResponse = z.infer<typeof StartMixResponseSchema>
 export type GetMixSessionResponse = z.infer<typeof GetMixSessionResponseSchema>
+export type GetQueueResponse = z.infer<typeof GetQueueResponseSchema>
 export type AddToQueueRequest = z.infer<typeof AddToQueueRequestSchema>
 export type AddToQueueResponse = z.infer<typeof AddToQueueResponseSchema>
 export type RemoveFromQueueRequest = z.infer<typeof RemoveFromQueueRequestSchema>
@@ -218,6 +227,7 @@ export type RemoveFromQueueResponse = z.infer<typeof RemoveFromQueueResponseSche
 export type ReorderQueueRequest = z.infer<typeof ReorderQueueRequestSchema>
 export type ReorderQueueResponse = z.infer<typeof ReorderQueueResponseSchema>
 export type UpdateVibeRequest = z.infer<typeof UpdateVibeRequestSchema>
+export type GetVibeResponse = z.infer<typeof GetVibeResponseSchema>
 export type UpdateVibeResponse = z.infer<typeof UpdateVibeResponseSchema>
 export type SteerVibeRequest = z.infer<typeof SteerVibeRequestSchema>
 export type SteerVibeResponse = z.infer<typeof SteerVibeResponseSchema>

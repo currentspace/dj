@@ -1,30 +1,43 @@
 /**
- * API client for Mix Session (Live DJ Mode)
- * Handles all communication with /api/mix/* endpoints
+ * Type-safe API client for Mix Session (Live DJ Mode)
+ *
+ * Uses route definitions from @dj/api-contracts to ensure:
+ * - Paths are compile-time checked
+ * - HTTP methods are enforced
+ * - Request/response types match schemas
+ *
+ * If a route path or method changes in the contract, this file
+ * will fail to compile, preventing runtime mismatches.
  */
 
+import {createApiClient} from '@dj/api-client'
+import {
+  addToQueue,
+  endMix,
+  getCurrentMix,
+  getQueue,
+  getSuggestions,
+  getVibe,
+  removeFromQueue,
+  reorderQueue,
+  saveMix,
+  startMix,
+  steerVibe,
+  updateVibe,
+} from '@dj/api-contracts'
 import type {
-  AddToQueueResponse,
-  EndMixResponse,
-  GetMixSessionResponse,
-  GetSuggestionsResponse,
   MixSession,
   QueuedTrack,
-  RemoveFromQueueResponse,
-  ReorderQueueResponse,
   SessionPreferences,
-  StartMixResponse,
   SteerVibeResponse,
   Suggestion,
-  UpdateVibeResponse,
   VibeProfile,
 } from '@dj/shared-types'
 
 /**
  * Get Spotify token from localStorage
- * @returns Token string or null
  */
-function getSpotifyToken(): null | string {
+function getSpotifyToken(): string | null {
   if (typeof window === 'undefined') {
     return null
   }
@@ -43,340 +56,164 @@ function getSpotifyToken(): null | string {
 }
 
 /**
- * Handle API response with error checking
+ * Create type-safe API client with auth handling
  */
-async function handleResponse<T>(response: Response): Promise<T> {
-  if (!response.ok) {
-    // Handle 401 specially
-    if (response.status === 401) {
-      // Redirect to login
-      window.location.href = '/login'
-      throw new Error('Authentication required')
-    }
-
-    // Try to get error details
-    const errorText = await response.text().catch(() => '')
-    throw new Error(
-      `HTTP ${response.status}: ${response.statusText}${errorText ? ` - ${errorText.slice(0, 300)}` : ''}`,
-    )
-  }
-
-  return response.json() as Promise<T>
-}
+const api = createApiClient({
+  getAuthToken: getSpotifyToken,
+  onUnauthorized: () => {
+    window.location.href = '/login'
+  },
+})
 
 /**
  * Mix API Client
- * Provides methods for all mix session operations
+ *
+ * All methods use route definitions from @dj/api-contracts, which means:
+ * - Path strings come directly from the contract (e.g., startMix.path = '/api/mix/start')
+ * - HTTP methods come from the contract (e.g., startMix.method = 'post')
+ * - Request/response types are inferred from the Zod schemas
+ *
+ * If the contract changes, TypeScript will catch any mismatches at compile time.
  */
 export const mixApiClient = {
   // ===== Session Management =====
 
   /**
    * Start a new mix session
-   * @param preferences Optional session preferences
-   * @param seedPlaylistId Optional playlist to seed the session
-   * @returns MixSession object
+   * Route: POST /api/mix/start (from startMix contract)
    */
   async startSession(preferences?: SessionPreferences, seedPlaylistId?: string): Promise<MixSession> {
-    const token = getSpotifyToken()
-    if (!token) {
-      throw new Error('Not authenticated')
-    }
-
-    const response = await fetch('/api/mix/start', {
-      body: JSON.stringify({
-        preferences,
-        seedPlaylistId,
-      }),
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      method: 'POST',
+    const response = await api(startMix)({
+      body: {preferences, seedPlaylistId},
     })
-
-    const data = await handleResponse<StartMixResponse>(response)
-    return data.session
+    return response.session
   },
 
   /**
    * Get current mix session
-   * @returns MixSession or null if no active session
+   * Route: GET /api/mix/current (from getCurrentMix contract)
    */
   async getCurrentSession(): Promise<MixSession | null> {
-    const token = getSpotifyToken()
-    if (!token) {
-      throw new Error('Not authenticated')
-    }
-
-    const response = await fetch('/api/mix/current', {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-      method: 'GET',
-    })
-
-    const data = await handleResponse<GetMixSessionResponse>(response)
-    return data.session
+    const response = await api(getCurrentMix)()
+    return response.session
   },
 
   /**
    * End the current mix session
-   * @returns Session statistics
+   * Route: POST /api/mix/end (from endMix contract)
    */
-  async endSession(): Promise<EndMixResponse> {
-    const token = getSpotifyToken()
-    if (!token) {
-      throw new Error('Not authenticated')
-    }
-
-    const response = await fetch('/api/mix/end', {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-      method: 'POST',
-    })
-
-    return handleResponse<EndMixResponse>(response)
+  async endSession() {
+    return api(endMix)()
   },
 
   // ===== Queue Management =====
 
   /**
    * Get current queue
-   * @returns Array of queued tracks
+   * Route: GET /api/mix/queue (from getQueue contract)
    */
   async getQueue(): Promise<QueuedTrack[]> {
-    const token = getSpotifyToken()
-    if (!token) {
-      throw new Error('Not authenticated')
-    }
-
-    const response = await fetch('/api/mix/queue', {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-      method: 'GET',
-    })
-
-    const data = await handleResponse<{queue: QueuedTrack[]}>(response)
-    return data.queue
+    const response = await api(getQueue)()
+    return response.queue
   },
 
   /**
    * Add a track to the queue
-   * @param trackUri Spotify track URI
-   * @param position Optional position in queue (default: end)
-   * @returns Updated queue
+   * Route: POST /api/mix/queue/add (from addToQueue contract)
    */
   async addToQueue(trackUri: string, position?: number): Promise<QueuedTrack[]> {
-    const token = getSpotifyToken()
-    if (!token) {
-      throw new Error('Not authenticated')
-    }
-
-    const response = await fetch('/api/mix/queue/add', {
-      body: JSON.stringify({
-        position,
-        trackUri,
-      }),
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      method: 'POST',
+    const response = await api(addToQueue)({
+      body: {position, trackUri},
     })
-
-    const data = await handleResponse<AddToQueueResponse>(response)
-    return data.queue
+    return response.queue
   },
 
   /**
    * Remove a track from the queue
-   * @param position Position in queue to remove
-   * @returns Updated queue
+   * Route: DELETE /api/mix/queue/{position} (from removeFromQueue contract)
    */
   async removeFromQueue(position: number): Promise<QueuedTrack[]> {
-    const token = getSpotifyToken()
-    if (!token) {
-      throw new Error('Not authenticated')
-    }
-
-    const response = await fetch(`/api/mix/queue/${position}`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-      method: 'DELETE',
+    const response = await api(removeFromQueue)({
+      pathParams: {position},
     })
-
-    const data = await handleResponse<RemoveFromQueueResponse>(response)
-    return data.queue
+    return response.queue
   },
 
   /**
    * Reorder queue (move track from one position to another)
-   * @param from Source position
-   * @param to Destination position
-   * @returns Updated queue
+   * Route: PUT /api/mix/queue/reorder (from reorderQueue contract)
    */
   async reorderQueue(from: number, to: number): Promise<QueuedTrack[]> {
-    const token = getSpotifyToken()
-    if (!token) {
-      throw new Error('Not authenticated')
-    }
-
-    const response = await fetch('/api/mix/queue/reorder', {
-      body: JSON.stringify({
-        from,
-        to,
-      }),
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      method: 'PUT',
+    const response = await api(reorderQueue)({
+      body: {from, to},
     })
-
-    const data = await handleResponse<ReorderQueueResponse>(response)
-    return data.queue
+    return response.queue
   },
 
   // ===== Vibe Management =====
 
   /**
    * Get current vibe profile
-   * @returns Current vibe profile
+   * Route: GET /api/mix/vibe (from getVibe contract)
    */
   async getVibe(): Promise<VibeProfile> {
-    const token = getSpotifyToken()
-    if (!token) {
-      throw new Error('Not authenticated')
-    }
-
-    const response = await fetch('/api/mix/vibe', {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-      method: 'GET',
-    })
-
-    const data = await handleResponse<{vibe: VibeProfile}>(response)
-    return data.vibe
+    const response = await api(getVibe)()
+    return response.vibe
   },
 
   /**
    * Update vibe profile with specific values
-   * @param updates Partial vibe profile updates
-   * @returns Updated vibe profile
+   * Route: PUT /api/mix/vibe (from updateVibe contract)
    */
   async updateVibe(updates: Partial<VibeProfile>): Promise<VibeProfile> {
-    const token = getSpotifyToken()
-    if (!token) {
-      throw new Error('Not authenticated')
-    }
-
-    const response = await fetch('/api/mix/vibe', {
-      body: JSON.stringify(updates),
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      method: 'PUT',
+    const response = await api(updateVibe)({
+      body: updates,
     })
-
-    const data = await handleResponse<UpdateVibeResponse>(response)
-    return data.vibe
+    return response.vibe
   },
 
   /**
    * Steer vibe using natural language
-   * @param direction Natural language direction (e.g., "more energetic", "slower")
-   * @param intensity Intensity of change (1-10, default 5)
-   * @returns Updated vibe profile and applied changes
+   * Route: POST /api/mix/vibe/steer (from steerVibe contract)
    */
   async steerVibe(direction: string, intensity?: number): Promise<SteerVibeResponse> {
-    const token = getSpotifyToken()
-    if (!token) {
-      throw new Error('Not authenticated')
-    }
-
-    const response = await fetch('/api/mix/vibe/steer', {
-      body: JSON.stringify({
-        direction,
-        intensity: intensity ?? 5,
-      }),
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      method: 'POST',
+    return api(steerVibe)({
+      body: {direction, intensity: intensity ?? 5},
     })
-
-    return handleResponse<SteerVibeResponse>(response)
   },
 
   // ===== Suggestions =====
 
   /**
    * Get track suggestions based on current session
-   * @returns Array of suggested tracks
+   * Route: GET /api/mix/suggestions (from getSuggestions contract)
    */
   async getSuggestions(): Promise<Suggestion[]> {
-    const token = getSpotifyToken()
-    if (!token) {
-      throw new Error('Not authenticated')
-    }
-
-    const response = await fetch('/api/mix/suggestions', {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-      method: 'GET',
-    })
-
-    const data = await handleResponse<GetSuggestionsResponse>(response)
-    return data.suggestions
+    const response = await api(getSuggestions)()
+    return response.suggestions
   },
 
   // ===== Save =====
 
   /**
    * Save the current mix as a Spotify playlist
-   * @param name Playlist name
-   * @param description Optional playlist description
-   * @returns Playlist ID and URL
+   * Route: POST /api/mix/save (from saveMix contract)
    */
   async saveMixAsPlaylist(
     name: string,
     description?: string,
   ): Promise<{playlistId: string; playlistUrl: string}> {
-    const token = getSpotifyToken()
-    if (!token) {
-      throw new Error('Not authenticated')
-    }
-
-    const response = await fetch('/api/mix/save', {
-      body: JSON.stringify({
-        description,
-        includeQueue: true,
-        name,
-      }),
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      method: 'POST',
+    const response = await api(saveMix)({
+      body: {description, includeQueue: true, name},
     })
 
-    const data = await handleResponse<{playlistId?: string; playlistUrl?: string; success: boolean}>(response)
-
-    if (!data.success || !data.playlistId || !data.playlistUrl) {
+    if (!response.success || !response.playlistId || !response.playlistUrl) {
       throw new Error('Failed to save playlist')
     }
 
     return {
-      playlistId: data.playlistId,
-      playlistUrl: data.playlistUrl,
+      playlistId: response.playlistId,
+      playlistUrl: response.playlistUrl,
     }
   },
 }
