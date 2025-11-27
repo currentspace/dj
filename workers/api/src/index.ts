@@ -3,6 +3,7 @@ import {OpenAPIHono} from '@hono/zod-openapi'
 import {cors} from 'hono/cors'
 
 import {chatStreamRouter} from './routes/chat-stream'
+import {registerMixRoutes} from './routes/mix-openapi'
 import {registerPlayerRoutes} from './routes/player-openapi'
 import {registerPlaylistRoutes} from './routes/playlists-openapi'
 import {registerSpotifyAuthRoutes} from './routes/spotify-openapi'
@@ -14,6 +15,7 @@ export interface Env {
   ENVIRONMENT: string
   FRONTEND_URL?: string // Frontend URL for OAuth redirects
   LASTFM_API_KEY?: string // For Last.fm tags, popularity, and similarity
+  MIX_SESSIONS?: KVNamespace // KV namespace for mix session storage
   SESSIONS?: KVNamespace // KV namespace for session storage
   SPOTIFY_CLIENT_ID: string
   SPOTIFY_CLIENT_SECRET: string
@@ -30,6 +32,7 @@ app.get('/health', c => c.json({status: 'healthy'}))
 registerSpotifyAuthRoutes(app)
 registerPlaylistRoutes(app)
 registerPlayerRoutes(app)
+registerMixRoutes(app)
 
 // Configure OpenAPI documentation
 app.doc('/api/openapi.json', {

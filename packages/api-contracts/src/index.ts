@@ -8,6 +8,7 @@ import {OpenAPIHono} from '@hono/zod-openapi'
 // Export route definitions
 export * from './routes/auth'
 export * from './routes/chat'
+export * from './routes/mix'
 export * from './routes/playlists'
 
 /**

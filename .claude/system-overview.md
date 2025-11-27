@@ -283,6 +283,20 @@ See: `SSE_DEBUGGING_GUIDE.md` for comprehensive SSE troubleshooting.
 - [LLM/Prompts Guidelines](guidelines/llm-prompts.md) - Claude integration
 - [Cloudflare Workers Guidelines](guidelines/cloudflare-workers.md) - Backend patterns
 - [Tools/MCP Guidelines](guidelines/tools-mcp.md) - Tool architecture
+- [Testing Guidelines](guidelines/testing.md) - Vitest 4.x patterns, contract tests, integration tests
+
+## Testing Commands
+
+```bash
+# Unit tests (fast, mocked - default)
+pnpm --filter @dj/api-worker test --run
+
+# Contract tests (real API schema validation)
+pnpm test:contracts --run
+
+# Integration tests (real API service behavior)
+pnpm test:integration --run
+```
 
 ## Last Updated
 

@@ -12,7 +12,7 @@ export default defineConfig({
     environment: 'node',
 
     // Types-specific include patterns
-    include: ['src/**/*.{test,spec}.{ts}'],
+    include: ['src/**/*.test.ts', 'src/**/*.spec.ts'],
 
     // Types-specific coverage (target 90% for type utilities)
     coverage: {

@@ -8,6 +8,7 @@ import {ScopeDebugger} from './features/debug/ScopeDebugger'
 import {NowPlaying} from './features/playback/NowPlaying'
 import {UserPlaylists} from './features/playlist/UserPlaylists'
 import {useSpotifyAuth} from './hooks/useSpotifyAuth'
+import {MixPage} from './pages/MixPage'
 import './styles/app-layout.css'
 import './styles/build-info.css'
 
@@ -37,6 +38,7 @@ function App() {
 
   const [selectedPlaylist, setSelectedPlaylist] = useState<null | SpotifyPlaylist>(null)
   const [showScopeDebug, setShowScopeDebug] = useState(false)
+  const [showMixMode, setShowMixMode] = useState(false)
 
   const handlePlaylistSelect = (playlist: SpotifyPlaylist) => {
     setSelectedPlaylist(playlist)
@@ -51,7 +53,19 @@ function App() {
           <div className="header-buttons">
             {isAuthenticated && (
               <>
-                <button className="test-button" onClick={() => setShowScopeDebug(!showScopeDebug)}>
+                <button
+                  className="test-button"
+                  onClick={() => {
+                    setShowMixMode(!showMixMode)
+                    setShowScopeDebug(false)
+                  }}
+                >
+                  {showMixMode ? '💬 Back to Chat' : '🎧 Live DJ Mode'}
+                </button>
+                <button className="test-button" onClick={() => {
+                  setShowScopeDebug(!showScopeDebug)
+                  setShowMixMode(false)
+                }}>
                   {showScopeDebug ? '🎵 Back to Chat' : '🔍 Scope Debug'}
                 </button>
                 <button className="logout-button" onClick={logout}>
@@ -63,7 +77,14 @@ function App() {
         </header>
 
         <main className="app-main">
-          {showScopeDebug && isAuthenticated ? (
+          {showMixMode && isAuthenticated ? (
+            <Suspense fallback={<div className="loading">Loading Live DJ Mode...</div>}>
+              <MixPage
+                onBackToChat={() => setShowMixMode(false)}
+                seedPlaylistId={selectedPlaylist?.id}
+              />
+            </Suspense>
+          ) : showScopeDebug && isAuthenticated ? (
             <Suspense fallback={<div className="loading">Loading scope debugger...</div>}>
               <ScopeDebugger />
             </Suspense>

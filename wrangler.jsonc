@@ -18,6 +18,11 @@
       "id": "eb3657a3d4f045edb31efba6567eca0f",
       "preview_id": "96833dd43ab34769be127f648d29e116",
     },
+    {
+      "binding": "MIX_SESSIONS",
+      "id": "22309365382940e88166ad7d741bed4b",
+      "preview_id": "52c88ad374f94b63a1aaa9a568ccd1c6",
+    },
   ],
 
   // Enable logging and observability

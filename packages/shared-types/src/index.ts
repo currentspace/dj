@@ -155,6 +155,7 @@ export interface WebhookEvent {
 
 export * from './schemas/api-schemas'
 export * from './schemas/external-api-schemas'
+export * from './schemas/mix-session-schemas'
 export * from './schemas/spotify-schemas'
 export * from './schemas/sse-schemas'
 // Note: validation.ts contains runtime code, so it's not exported

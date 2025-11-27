@@ -153,6 +153,9 @@ export function createMockEnv(overrides?: {
     SPOTIFY_CLIENT_SECRET: 'test-spotify-secret',
     ASSETS: {
       fetch: async () => new Response('Not found', {status: 404}),
+      connect: () => {
+        throw new Error('Socket connect not supported in tests')
+      },
     },
     ...overrides,
   }
