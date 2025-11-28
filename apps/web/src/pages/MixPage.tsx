@@ -33,6 +33,7 @@ export function MixPage({onBackToChat, seedPlaylistId, token}: MixPageProps) {
     removeFromQueue,
     reorderQueue,
     session,
+    setSession,
     startSession,
   } = useMixSession()
 
@@ -114,8 +115,10 @@ export function MixPage({onBackToChat, seedPlaylistId, token}: MixPageProps) {
       console.log('[MixPage] Track played:', trackId)
       const response = await mixApiClient.notifyTrackPlayed(trackId, trackUri)
       if (response.movedToHistory) {
-        console.log('[MixPage] Track moved to history, refreshing session')
-        // Session will be updated via polling, but refresh suggestions
+        console.log('[MixPage] Track moved to history, updating session from response')
+        // Update session directly from the API response (no polling needed)
+        setSession(response.session)
+        // Refresh suggestions for the new track
         await refreshSuggestions()
       }
     } catch (err) {

@@ -7,7 +7,6 @@ import type {MixSession, QueuedTrack, SessionPreferences, SteerVibeResponse, Sug
 import {create} from 'zustand'
 import {subscribeWithSelector} from 'zustand/middleware'
 
-import {TIMING} from '../constants'
 import {mixApiClient} from '../lib/mix-api-client'
 
 // =============================================================================
@@ -33,6 +32,7 @@ interface MixStoreState {
   clearError: () => void
   endSession: () => Promise<void>
   refreshSession: () => Promise<MixSession | null>
+  setSession: (session: MixSession | null) => void
   startSession: (preferences?: SessionPreferences, seedPlaylistId?: string) => Promise<void>
 
   // Queue actions
@@ -56,42 +56,12 @@ interface MixStoreState {
 // STORE
 // =============================================================================
 
-// Private state for polling and debouncing
-let pollingInterval: ReturnType<typeof setInterval> | null = null
+// Private state for debouncing
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
 let initialFetchDone = false
 
 export const useMixStore = create<MixStoreState>()(
   subscribeWithSelector((set, get) => {
-    // ==========================================================================
-    // POLLING HELPERS
-    // ==========================================================================
-
-    function startPolling(sessionId: string): void {
-      if (pollingInterval) return
-
-      pollingInterval = setInterval(async () => {
-        try {
-          const fetchedSession = await mixApiClient.getCurrentSession()
-          if (fetchedSession !== null) {
-            set({session: fetchedSession})
-          }
-        } catch (err) {
-          console.error('[mixStore] Polling error:', err)
-        }
-      }, TIMING.POLLING_INTERVAL_MS)
-
-      console.log('[mixStore] Started polling for session:', sessionId)
-    }
-
-    function stopPolling(): void {
-      if (pollingInterval) {
-        clearInterval(pollingInterval)
-        pollingInterval = null
-        console.log('[mixStore] Stopped polling')
-      }
-    }
-
     // ==========================================================================
     // ACTIONS
     // ==========================================================================
@@ -115,7 +85,6 @@ export const useMixStore = create<MixStoreState>()(
 
         try {
           await mixApiClient.endSession()
-          stopPolling()
           set({session: null, suggestions: [], isLoading: false})
         } catch (err) {
           set({
@@ -129,12 +98,6 @@ export const useMixStore = create<MixStoreState>()(
         try {
           const fetchedSession = await mixApiClient.getCurrentSession()
           set({session: fetchedSession, error: null})
-
-          // Start polling if we have a session
-          if (fetchedSession?.id) {
-            startPolling(fetchedSession.id)
-          }
-
           return fetchedSession
         } catch (err) {
           set({error: err instanceof Error ? err.message : 'Failed to fetch session'})
@@ -149,11 +112,6 @@ export const useMixStore = create<MixStoreState>()(
           const newSession = await mixApiClient.startSession(preferences, seedPlaylistId)
           set({session: newSession, isLoading: false})
 
-          // Start polling for this session
-          if (newSession?.id) {
-            startPolling(newSession.id)
-          }
-
           // Fetch initial suggestions
           get().refreshSuggestions()
         } catch (err) {
@@ -162,6 +120,11 @@ export const useMixStore = create<MixStoreState>()(
             isLoading: false,
           })
         }
+      },
+
+      // Direct session update (for use when API responses include updated session)
+      setSession: (session) => {
+        set({session, error: null})
       },
 
       // Queue actions
@@ -367,7 +330,7 @@ export const useMixStore = create<MixStoreState>()(
               vibeUpdating: false,
             })
           }
-        }, TIMING.DEBOUNCE_MS)
+        }, 300) // debounce energy level changes
       },
 
       steerVibe: async (direction, intensity) => {

@@ -1,7 +1,7 @@
 /**
  * useMixSession Hook - Zustand Store Wrapper
  *
- * Manages mix session state with polling and optimistic updates.
+ * Manages mix session state.
  *
  * For new code, prefer using useMixStore directly with atomic selectors:
  *
@@ -29,6 +29,7 @@ interface UseMixSessionReturn {
 
   // Session actions
   endSession: () => Promise<void>
+  setSession: (session: MixSession | null) => void
   startSession: (preferences?: SessionPreferences, seedPlaylistId?: string) => Promise<void>
 
   // Queue actions
@@ -52,6 +53,7 @@ export function useMixSession(): UseMixSessionReturn {
   // Actions (stable references)
   const startSession = useMixStore((s) => s.startSession)
   const endSession = useMixStore((s) => s.endSession)
+  const setSession = useMixStore((s) => s.setSession)
   const addToQueue = useMixStore((s) => s.addToQueue)
   const removeFromQueue = useMixStore((s) => s.removeFromQueue)
   const reorderQueue = useMixStore((s) => s.reorderQueue)
@@ -74,6 +76,7 @@ export function useMixSession(): UseMixSessionReturn {
 
     // Session actions
     endSession,
+    setSession,
     startSession,
 
     // Queue actions
