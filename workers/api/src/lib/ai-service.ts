@@ -1,0 +1,164 @@
+/**
+ * AI Service - Centralized Claude/Anthropic integration
+ *
+ * Provides common utilities for AI-powered features across the app:
+ * - Client management
+ * - Response parsing
+ * - Prompt templates
+ */
+
+import Anthropic from '@anthropic-ai/sdk'
+import { getLogger } from '../utils/LoggerContext'
+
+// =============================================================================
+// TYPES
+// =============================================================================
+
+export interface AIServiceConfig {
+  apiKey: string
+  defaultModel?: string
+  defaultTemperature?: number
+}
+
+export interface AIRequestOptions {
+  /** Override the default model */
+  model?: string
+  /** Temperature for response creativity (0-1) */
+  temperature?: number
+  /** Maximum tokens in response */
+  maxTokens?: number
+  /** System prompt */
+  system?: string
+}
+
+export interface AIResponse<T> {
+  data: T | null
+  error: string | null
+  rawText: string
+}
+
+// =============================================================================
+// AI SERVICE CLASS
+// =============================================================================
+
+export class AIService {
+  private client: Anthropic
+  private defaultModel: string
+  private defaultTemperature: number
+
+  constructor(config: AIServiceConfig) {
+    this.client = new Anthropic({ apiKey: config.apiKey })
+    this.defaultModel = config.defaultModel || 'claude-sonnet-4-5-20250929'
+    this.defaultTemperature = config.defaultTemperature || 0.7
+  }
+
+  /**
+   * Send a prompt to Claude and get a JSON response
+   */
+  async promptForJSON<T>(prompt: string, options: AIRequestOptions = {}): Promise<AIResponse<T>> {
+    try {
+      const response = await this.client.messages.create({
+        model: options.model || this.defaultModel,
+        max_tokens: options.maxTokens || 2000,
+        temperature: options.temperature ?? this.defaultTemperature,
+        system: options.system || 'You are an AI assistant. Return only valid JSON.',
+        messages: [{ role: 'user', content: prompt }],
+      })
+
+      // Extract text from response blocks
+      const rawText = response.content
+        .filter((block): block is Anthropic.TextBlock => block.type === 'text')
+        .map(block => block.text)
+        .join('')
+
+      // Parse JSON from response
+      const data = this.extractJSON<T>(rawText)
+
+      return {
+        data,
+        error: data === null ? 'Failed to parse JSON from response' : null,
+        rawText,
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      getLogger()?.error('[AIService] API call failed:', errorMessage)
+
+      return {
+        data: null,
+        error: errorMessage,
+        rawText: '',
+      }
+    }
+  }
+
+  /**
+   * Send a prompt and get a text response (no JSON parsing)
+   */
+  async promptForText(prompt: string, options: AIRequestOptions = {}): Promise<string> {
+    try {
+      const response = await this.client.messages.create({
+        model: options.model || this.defaultModel,
+        max_tokens: options.maxTokens || 2000,
+        temperature: options.temperature ?? this.defaultTemperature,
+        system: options.system || 'You are an AI assistant.',
+        messages: [{ role: 'user', content: prompt }],
+      })
+
+      return response.content
+        .filter((block): block is Anthropic.TextBlock => block.type === 'text')
+        .map(block => block.text)
+        .join('')
+    } catch (error) {
+      getLogger()?.error('[AIService] API call failed:', error)
+      return ''
+    }
+  }
+
+  /**
+   * Extract JSON from a text response (handles markdown code blocks, etc.)
+   */
+  extractJSON<T>(text: string): T | null {
+    try {
+      // Try to find JSON object or array
+      const jsonMatch = /\{[\s\S]*\}|\[[\s\S]*\]/.exec(text)
+      if (!jsonMatch) {
+        getLogger()?.warn('[AIService] No JSON found in response')
+        return null
+      }
+
+      return JSON.parse(jsonMatch[0]) as T
+    } catch (error) {
+      getLogger()?.error('[AIService] JSON parse error:', error)
+      return null
+    }
+  }
+}
+
+// =============================================================================
+// SINGLETON FACTORY
+// =============================================================================
+
+let aiServiceInstance: AIService | null = null
+
+/**
+ * Get or create the AI service instance
+ */
+export function getAIService(apiKey?: string): AIService | null {
+  if (aiServiceInstance) {
+    return aiServiceInstance
+  }
+
+  if (!apiKey) {
+    return null
+  }
+
+  aiServiceInstance = new AIService({ apiKey })
+  return aiServiceInstance
+}
+
+/**
+ * Create a new AI service instance (for when you need fresh config)
+ */
+export function createAIService(config: AIServiceConfig): AIService {
+  return new AIService(config)
+}

@@ -1,11 +1,14 @@
 /**
  * SuggestionEngine
  * Generates track suggestions for Mix Sessions based on vibe profile and history
+ * Uses AI/Claude for intelligent recommendations when no history exists
  */
 
 import type { MixSession, PlayedTrack, Suggestion } from '@dj/shared-types'
 import type { AudioEnrichmentService } from './AudioEnrichmentService'
 import type { LastFmService } from './LastFmService'
+import { AIService, createAIService } from '../lib/ai-service'
+import { buildVibeDescription, buildInitialSuggestionsPrompt, SYSTEM_PROMPTS } from '../lib/ai-prompts'
 import { getLogger } from '../utils/LoggerContext'
 
 interface SpotifyTrack {
@@ -24,11 +27,18 @@ interface SpotifyTrack {
 }
 
 export class SuggestionEngine {
+  private aiService: AIService | null = null
+
   constructor(
     private lastFmService: LastFmService,
     private audioService: AudioEnrichmentService,
-    private spotifyToken: string
-  ) {}
+    private spotifyToken: string,
+    anthropicApiKey?: string
+  ) {
+    if (anthropicApiKey) {
+      this.aiService = createAIService({ apiKey: anthropicApiKey })
+    }
+  }
 
   /**
    * Generate suggestions based on current vibe
@@ -335,8 +345,8 @@ export class SuggestionEngine {
   }
 
   /**
-   * Generate initial suggestions using Spotify recommendations when no history exists
-   * Uses vibe genres, energy level, and BPM range as seeds
+   * Generate initial suggestions using AI when no history exists
+   * Uses Claude to suggest tracks that match the vibe profile
    */
   private async generateInitialSuggestions(
     session: MixSession,
@@ -345,68 +355,63 @@ export class SuggestionEngine {
     try {
       const { vibe } = session
 
-      // Build Spotify recommendations URL with vibe parameters
-      const params = new URLSearchParams({
-        limit: String(count * 2), // Request extra to account for filtering
-      })
-
-      // Use vibe genres as seeds (Spotify allows up to 5 seed genres)
-      if (vibe.genres.length > 0) {
-        // Spotify genre seeds need to be lowercase with hyphens
-        const seedGenres = vibe.genres
-          .slice(0, 5)
-          .map(g => g.toLowerCase().replace(/\s+/g, '-'))
-          .join(',')
-        params.set('seed_genres', seedGenres)
-      } else {
-        // Fallback to broad genres based on mood (use first mood if available)
-        const primaryMood = vibe.mood[0] || 'energetic'
-        params.set('seed_genres', this.getMoodBasedGenres(primaryMood))
-      }
-
-      // Target energy (Spotify uses 0-1 scale, vibe uses 1-10)
-      const targetEnergy = vibe.energyLevel / 10
-      params.set('target_energy', String(targetEnergy))
-      params.set('min_energy', String(Math.max(0, targetEnergy - 0.2)))
-      params.set('max_energy', String(Math.min(1, targetEnergy + 0.2)))
-
-      // BPM range
-      if (vibe.bpmRange) {
-        params.set('min_tempo', String(vibe.bpmRange.min))
-        params.set('max_tempo', String(vibe.bpmRange.max))
-        params.set('target_tempo', String((vibe.bpmRange.min + vibe.bpmRange.max) / 2))
-      }
-
-      const url = `https://api.spotify.com/v1/recommendations?${params.toString()}`
-      getLogger()?.info(`[SuggestionEngine] Fetching initial recommendations: ${url}`)
-
-      const response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${this.spotifyToken}`,
-        },
-      })
-
-      if (!response.ok) {
-        getLogger()?.error(`[SuggestionEngine] Recommendations failed: ${response.status}`)
+      if (!this.aiService) {
+        getLogger()?.warn('[SuggestionEngine] No AI service available, cannot generate suggestions')
         return []
       }
 
-      const data = await response.json() as { tracks?: SpotifyTrack[] }
-      const tracks = data.tracks || []
+      // Build prompt using common prompts module
+      const vibeDescription = buildVibeDescription(vibe)
+      const prompt = buildInitialSuggestionsPrompt(vibeDescription, count * 2)
 
-      if (tracks.length === 0) {
-        getLogger()?.info('[SuggestionEngine] No recommendations returned')
+      getLogger()?.info('[SuggestionEngine] Asking AI for initial track suggestions...')
+
+      // Use common AI service for the request
+      const response = await this.aiService.promptForJSON<{
+        tracks: Array<{ artist: string; name: string; reason: string }>
+      }>(prompt, {
+        temperature: 0.8, // Higher temperature for creative suggestions
+        system: SYSTEM_PROMPTS.DJ,
+      })
+
+      if (response.error || !response.data?.tracks) {
+        getLogger()?.error('[SuggestionEngine] AI request failed:', response.error)
+        return []
+      }
+
+      const aiSuggestions = response.data
+
+      if (aiSuggestions.tracks.length === 0) {
+        getLogger()?.info('[SuggestionEngine] AI returned no track suggestions')
+        return []
+      }
+
+      getLogger()?.info(`[SuggestionEngine] AI suggested ${aiSuggestions.tracks.length} tracks, searching Spotify...`)
+
+      // Search Spotify for each suggested track
+      const spotifyTracks: SpotifyTrack[] = []
+      for (const suggestion of aiSuggestions.tracks) {
+        const track = await this.searchSpotifyTrack(suggestion.artist, suggestion.name)
+        if (track) {
+          spotifyTracks.push(track)
+        }
+        if (spotifyTracks.length >= count) break
+      }
+
+      if (spotifyTracks.length === 0) {
+        getLogger()?.info('[SuggestionEngine] No Spotify tracks found for AI suggestions')
         return []
       }
 
       // Filter out any tracks already in queue
-      const filtered = this.filterAlreadyPlayed(tracks, session)
+      const filtered = this.filterAlreadyPlayed(spotifyTracks, session)
 
-      // Enrich with BPM data and build suggestions
+      // Build suggestions with AI-provided reasons
       const suggestions: Suggestion[] = await Promise.all(
-        filtered.slice(0, count).map(async (track) => {
+        filtered.slice(0, count).map(async (track, index) => {
           const enrichment = await this.audioService.enrichTrack(track)
           const vibeScore = this.scoreSuggestion(track, vibe, undefined, enrichment.bpm, null, [])
+          const aiReason = aiSuggestions.tracks[index]?.reason || 'AI-recommended for your vibe'
 
           return {
             trackId: track.id,
@@ -415,7 +420,7 @@ export class SuggestionEngine {
             artist: track.artists[0]?.name || 'Unknown Artist',
             albumArt: track.album.images[0]?.url,
             vibeScore,
-            reason: this.buildInitialReason(vibe, enrichment.bpm),
+            reason: aiReason,
             bpm: enrichment.bpm,
           }
         })
@@ -424,53 +429,11 @@ export class SuggestionEngine {
       // Sort by vibe score
       suggestions.sort((a, b) => b.vibeScore - a.vibeScore)
 
-      getLogger()?.info(`[SuggestionEngine] Generated ${suggestions.length} initial suggestions`)
+      getLogger()?.info(`[SuggestionEngine] Generated ${suggestions.length} AI-powered initial suggestions`)
       return suggestions
     } catch (error) {
-      getLogger()?.error('[SuggestionEngine] Failed to generate initial suggestions:', error)
+      getLogger()?.error('[SuggestionEngine] Failed to generate AI suggestions:', error)
       return []
     }
-  }
-
-  /**
-   * Build a reason string for initial suggestions
-   */
-  private buildInitialReason(vibe: MixSession['vibe'], bpm: number | null): string {
-    const reasons: string[] = []
-
-    if (vibe.genres.length > 0) {
-      reasons.push(`Matches ${vibe.genres.slice(0, 2).join(', ')} vibe`)
-    }
-
-    if (bpm && vibe.bpmRange) {
-      const targetBpm = (vibe.bpmRange.min + vibe.bpmRange.max) / 2
-      if (Math.abs(bpm - targetBpm) < 10) {
-        reasons.push(`${bpm} BPM`)
-      }
-    }
-
-    const energyDesc = vibe.energyLevel <= 3 ? 'chill' : vibe.energyLevel <= 6 ? 'medium' : 'high'
-    reasons.push(`${energyDesc} energy`)
-
-    return reasons.join(' • ') || 'Matches your vibe'
-  }
-
-  /**
-   * Get fallback genres based on mood when no genres are specified
-   * Returns comma-separated string ready for Spotify API
-   */
-  private getMoodBasedGenres(mood: string): string {
-    const moodGenreMap: Record<string, string> = {
-      chill: 'chill,ambient,acoustic',
-      energetic: 'dance,electronic,pop',
-      happy: 'pop,funk,disco',
-      sad: 'acoustic,indie,singer-songwriter',
-      focused: 'ambient,classical,electronic',
-      party: 'dance,edm,hip-hop',
-      romantic: 'r-n-b,soul,jazz',
-      workout: 'hip-hop,electronic,rock',
-    }
-
-    return moodGenreMap[mood.toLowerCase()] || 'pop,rock,indie'
   }
 }

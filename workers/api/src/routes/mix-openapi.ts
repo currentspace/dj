@@ -658,7 +658,7 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       // Initialize services
       const lastFmService = new LastFmService(c.env.LASTFM_API_KEY || '', c.env.AUDIO_FEATURES_CACHE)
       const audioService = new AudioEnrichmentService(c.env.AUDIO_FEATURES_CACHE)
-      const suggestionEngine = new SuggestionEngine(lastFmService, audioService, token)
+      const suggestionEngine = new SuggestionEngine(lastFmService, audioService, token, c.env.ANTHROPIC_API_KEY)
 
       // Generate suggestions
       const suggestions = await suggestionEngine.generateSuggestions(session, count)
