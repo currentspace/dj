@@ -2,26 +2,33 @@
  * usePlaybackStream Hook
  * Connects to SSE stream for real-time Spotify playback state
  * with client-side progress interpolation for smooth UI updates
+ *
+ * Optimized to avoid unnecessary re-renders:
+ * - Progress updates only notify progress-specific listeners
+ * - Core playback data changes notify all listeners
  */
 
 import {useCallback, useRef, useSyncExternalStore} from 'react'
 
 import {HTTP_STATUS} from '../constants'
 
-/** Playback state from server */
-export interface PlaybackState {
+/** Core playback state (changes infrequently) */
+export interface PlaybackCore {
   albumArt: string | null
   artistName: string
   deviceId: string | null
   deviceName: string
   duration: number
   isPlaying: boolean
-  progress: number
   trackId: string | null
   trackName: string
   trackUri: string | null
-  /** Server timestamp when state was fetched */
   timestamp: number
+}
+
+/** Full playback state including progress */
+export interface PlaybackState extends PlaybackCore {
+  progress: number
 }
 
 /** Connection status */
@@ -29,7 +36,10 @@ type ConnectionStatus = 'connected' | 'connecting' | 'disconnected' | 'error'
 
 interface PlaybackStreamState {
   error: string | null
-  playback: PlaybackState | null
+  /** Core playback data (track info, device) - changes infrequently */
+  playbackCore: PlaybackCore | null
+  /** Progress in ms - changes frequently during playback */
+  progress: number
   status: ConnectionStatus
 }
 
@@ -43,7 +53,9 @@ type StreamListener = () => void
 type TrackChangeCallback = (previousTrackId: string, previousTrackUri: string, newTrackId: string) => void
 
 function createPlaybackStreamStore() {
-  const listeners = new Set<StreamListener>()
+  // Separate listeners for different data types
+  const coreListeners = new Set<StreamListener>()  // For track/device changes
+  const progressListeners = new Set<StreamListener>()  // For progress updates only
   const trackChangeCallbacks = new Set<TrackChangeCallback>()
   let eventSource: EventSource | null = null
   let reconnectTimeout: ReturnType<typeof setTimeout> | null = null
@@ -51,7 +63,8 @@ function createPlaybackStreamStore() {
 
   let state: PlaybackStreamState = {
     error: null,
-    playback: null,
+    playbackCore: null,
+    progress: 0,
     status: 'disconnected',
   }
 
@@ -62,41 +75,51 @@ function createPlaybackStreamStore() {
   let previousTrackId: string | null = null
   let previousTrackUri: string | null = null
 
-  function notifyListeners(): void {
-    listeners.forEach(listener => listener())
+  function notifyCoreListeners(): void {
+    coreListeners.forEach(listener => listener())
   }
 
-  function setState(updates: Partial<PlaybackStreamState>): void {
+  function notifyProgressListeners(): void {
+    progressListeners.forEach(listener => listener())
+  }
+
+  function notifyAllListeners(): void {
+    notifyCoreListeners()
+    notifyProgressListeners()
+  }
+
+  function setCoreState(updates: Partial<Omit<PlaybackStreamState, 'progress'>>): void {
     state = {...state, ...updates}
-    notifyListeners()
+    notifyAllListeners()
+  }
+
+  function setProgressOnly(progress: number): void {
+    state = {...state, progress}
+    notifyProgressListeners()
   }
 
   /**
    * Interpolate progress between server updates
-   * Updates progress every 100ms when playing
+   * Updates progress every 250ms when playing
+   * Only notifies progress listeners to minimize re-renders
    */
   function startInterpolation(): void {
     if (interpolationInterval) return
 
     interpolationInterval = setInterval(() => {
-      if (!state.playback || !state.playback.isPlaying) return
+      if (!state.playbackCore || !state.playbackCore.isPlaying) return
 
       const elapsed = Date.now() - lastServerUpdate
       const interpolatedProgress = Math.min(
         lastServerProgress + elapsed,
-        state.playback.duration
+        state.playbackCore.duration
       )
 
-      // Only update if progress actually changed
-      if (Math.abs(interpolatedProgress - state.playback.progress) > 100) {
-        setState({
-          playback: {
-            ...state.playback,
-            progress: interpolatedProgress,
-          },
-        })
+      // Only update if progress changed by at least 200ms
+      if (Math.abs(interpolatedProgress - state.progress) > 200) {
+        setProgressOnly(interpolatedProgress)
       }
-    }, 100)
+    }, 250)
   }
 
   function stopInterpolation(): void {
@@ -115,11 +138,10 @@ function createPlaybackStreamStore() {
       eventSource.close()
     }
 
-    setState({status: 'connecting', error: null})
+    setCoreState({status: 'connecting', error: null})
 
     // Create SSE connection with auth header via query param
-    // Note: EventSource doesn't support custom headers, so we use a different approach
-    // We'll use fetch with credentials instead
+    // Note: EventSource doesn't support custom headers, so we use fetch
     const url = `/api/player/stream`
 
     // Use fetch for SSE with custom headers
@@ -132,7 +154,7 @@ function createPlaybackStreamStore() {
       .then(response => {
         if (!response.ok) {
           if (response.status === HTTP_STATUS.UNAUTHORIZED) {
-            setState({status: 'error', error: 'Session expired'})
+            setCoreState({status: 'error', error: 'Session expired'})
             return
           }
           throw new Error(`HTTP ${response.status}`)
@@ -142,7 +164,7 @@ function createPlaybackStreamStore() {
           throw new Error('No response body')
         }
 
-        setState({status: 'connected'})
+        setCoreState({status: 'connected'})
         startInterpolation()
 
         // Read the stream
@@ -194,7 +216,7 @@ function createPlaybackStreamStore() {
       })
       .catch(err => {
         console.error('[PlaybackStream] Connection error:', err)
-        setState({
+        setCoreState({
           status: 'error',
           error: err instanceof Error ? err.message : 'Connection failed',
         })
@@ -236,10 +258,28 @@ function createPlaybackStreamStore() {
           previousTrackId = newTrackId
           previousTrackUri = newTrackUri
 
-          setState({
-            playback: parsed as PlaybackState,
+          // Separate core playback data from progress
+          const playbackCore: PlaybackCore = {
+            albumArt: parsed.albumArt,
+            artistName: parsed.artistName,
+            deviceId: parsed.deviceId,
+            deviceName: parsed.deviceName,
+            duration: parsed.duration,
+            isPlaying: parsed.isPlaying,
+            trackId: parsed.trackId,
+            trackName: parsed.trackName,
+            trackUri: parsed.trackUri,
+            timestamp: parsed.timestamp,
+          }
+
+          // Update core state and progress together
+          state = {
+            ...state,
+            playbackCore,
+            progress: parsed.progress,
             error: null,
-          })
+          }
+          notifyAllListeners()
 
           // Start/stop interpolation based on playing state
           if (parsed.isPlaying) {
@@ -253,7 +293,7 @@ function createPlaybackStreamStore() {
         case 'error':
           console.warn('[PlaybackStream] Server error:', parsed.message)
           if (parsed.retriesRemaining !== undefined) {
-            setState({error: `Error: ${parsed.message} (${parsed.retriesRemaining} retries left)`})
+            setCoreState({error: `Error: ${parsed.message} (${parsed.retriesRemaining} retries left)`})
           }
           break
 
@@ -273,7 +313,7 @@ function createPlaybackStreamStore() {
 
   function scheduleReconnect(token: string): void {
     stopInterpolation()
-    setState({status: 'disconnected'})
+    setCoreState({status: 'disconnected'})
 
     if (reconnectTimeout) {
       clearTimeout(reconnectTimeout)
@@ -281,7 +321,7 @@ function createPlaybackStreamStore() {
 
     // Reconnect after 2 seconds
     reconnectTimeout = setTimeout(() => {
-      if (listeners.size > 0) {
+      if (coreListeners.size > 0 || progressListeners.size > 0) {
         connect(token)
       }
     }, 2000)
@@ -297,23 +337,55 @@ function createPlaybackStreamStore() {
       reconnectTimeout = null
     }
     stopInterpolation()
-    setState({
+    state = {
       status: 'disconnected',
-      playback: null,
+      playbackCore: null,
+      progress: 0,
       error: null,
-    })
+    }
+    notifyAllListeners()
+  }
+
+  // Combine core and progress into full PlaybackState for backward compatibility
+  function getPlaybackState(): PlaybackState | null {
+    if (!state.playbackCore) return null
+    return {
+      ...state.playbackCore,
+      progress: state.progress,
+    }
   }
 
   return {
     connect,
     disconnect,
     getState: () => state,
-    subscribe: (listener: StreamListener) => {
-      listeners.add(listener)
+    getPlaybackState,
+    subscribeToCore: (listener: StreamListener) => {
+      coreListeners.add(listener)
       return () => {
-        listeners.delete(listener)
-        // Disconnect when no listeners
-        if (listeners.size === 0) {
+        coreListeners.delete(listener)
+        if (coreListeners.size === 0 && progressListeners.size === 0) {
+          disconnect()
+        }
+      }
+    },
+    subscribeToProgress: (listener: StreamListener) => {
+      progressListeners.add(listener)
+      return () => {
+        progressListeners.delete(listener)
+        if (coreListeners.size === 0 && progressListeners.size === 0) {
+          disconnect()
+        }
+      }
+    },
+    // Legacy subscribe that listens to everything
+    subscribe: (listener: StreamListener) => {
+      coreListeners.add(listener)
+      progressListeners.add(listener)
+      return () => {
+        coreListeners.delete(listener)
+        progressListeners.delete(listener)
+        if (coreListeners.size === 0 && progressListeners.size === 0) {
           disconnect()
         }
       }
@@ -388,11 +460,11 @@ export function usePlaybackStream(
   // Keep ref updated
   onTrackChangeRef.current = onTrackChange
 
-  // Subscribe to store
+  // Subscribe to store - uses getPlaybackState for backward compatibility
   const state = useSyncExternalStore(
     playbackStreamStore.subscribe,
     playbackStreamStore.getState,
-    () => ({status: 'disconnected' as const, playback: null, error: null})
+    () => ({status: 'disconnected' as const, playbackCore: null, progress: 0, error: null})
   )
 
   // Manual connect
@@ -437,9 +509,12 @@ export function usePlaybackStream(
     disconnect()
   }
 
+  // Combine core and progress for backward compatible return
+  const playback = playbackStreamStore.getPlaybackState()
+
   return {
     status: state.status,
-    playback: state.playback,
+    playback,
     error: state.error,
     connect,
     disconnect,

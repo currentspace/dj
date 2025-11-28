@@ -151,9 +151,14 @@ export function useMixSession(): UseMixSessionReturn {
   }, [])
 
   // Set up callbacks for polling store
+  // Only update session if we get a valid response - don't reset to null during polling
   pollingStore.setCallbacks(
     async () => mixApiClient.getCurrentSession(),
-    (fetchedSession) => setSession(fetchedSession)
+    (fetchedSession) => {
+      if (fetchedSession !== null) {
+        setSession(fetchedSession)
+      }
+    }
   )
 
   // Direct state sync: initial fetch on first render

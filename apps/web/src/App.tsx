@@ -7,6 +7,7 @@ import {ChatInterface} from './features/chat/ChatInterface'
 import {ScopeDebugger} from './features/debug/ScopeDebugger'
 import {NowPlaying} from './features/playback/NowPlaying'
 import {UserPlaylists} from './features/playlist/UserPlaylists'
+import {useNavigation} from './hooks/useNavigation'
 import {useSpotifyAuth} from './hooks/useSpotifyAuth'
 import {MixPage} from './pages/MixPage'
 import './styles/app-layout.css'
@@ -35,10 +36,9 @@ interface SpotifyPlaylist {
 
 function App() {
   const {clearError, error, isAuthenticated, isLoading, login, logout, token} = useSpotifyAuth()
+  const {navigate, route} = useNavigation()
 
   const [selectedPlaylist, setSelectedPlaylist] = useState<null | SpotifyPlaylist>(null)
-  const [showScopeDebug, setShowScopeDebug] = useState(false)
-  const [showMixMode, setShowMixMode] = useState(false)
 
   const handlePlaylistSelect = (playlist: SpotifyPlaylist) => {
     setSelectedPlaylist(playlist)
@@ -54,19 +54,16 @@ function App() {
             {isAuthenticated && (
               <>
                 <button
-                  className="test-button"
-                  onClick={() => {
-                    setShowMixMode(!showMixMode)
-                    setShowScopeDebug(false)
-                  }}
+                  className={`test-button ${route === 'mix' ? 'active' : ''}`}
+                  onClick={() => navigate(route === 'mix' ? 'chat' : 'mix')}
                 >
-                  {showMixMode ? '💬 Back to Chat' : '🎧 Live DJ Mode'}
+                  {route === 'mix' ? '💬 Back to Chat' : '🎧 Live DJ Mode'}
                 </button>
-                <button className="test-button" onClick={() => {
-                  setShowScopeDebug(!showScopeDebug)
-                  setShowMixMode(false)
-                }}>
-                  {showScopeDebug ? '🎵 Back to Chat' : '🔍 Scope Debug'}
+                <button
+                  className={`test-button ${route === 'debug' ? 'active' : ''}`}
+                  onClick={() => navigate(route === 'debug' ? 'chat' : 'debug')}
+                >
+                  {route === 'debug' ? '🎵 Back to Chat' : '🔍 Scope Debug'}
                 </button>
                 <button className="logout-button" onClick={logout}>
                   Logout from Spotify
@@ -77,15 +74,15 @@ function App() {
         </header>
 
         <main className="app-main">
-          {showMixMode && isAuthenticated ? (
+          {route === 'mix' && isAuthenticated ? (
             <Suspense fallback={<div className="loading">Loading Live DJ Mode...</div>}>
               <MixPage
-                onBackToChat={() => setShowMixMode(false)}
+                onBackToChat={() => navigate('chat')}
                 seedPlaylistId={selectedPlaylist?.id}
                 token={token}
               />
             </Suspense>
-          ) : showScopeDebug && isAuthenticated ? (
+          ) : route === 'debug' && isAuthenticated ? (
             <Suspense fallback={<div className="loading">Loading scope debugger...</div>}>
               <ScopeDebugger />
             </Suspense>
@@ -119,7 +116,7 @@ function App() {
           )}
         </main>
 
-        {isAuthenticated && !showMixMode && <NowPlaying token={token} />}
+        {isAuthenticated && route !== 'mix' && <NowPlaying token={token} />}
 
         <footer className="app-footer">
           <p>

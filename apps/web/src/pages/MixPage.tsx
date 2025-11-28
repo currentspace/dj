@@ -57,6 +57,11 @@ export function MixPage({onBackToChat, seedPlaylistId, token}: MixPageProps) {
     session,
   })
 
+  // Direct state sync: hide start dialog when existing session is detected
+  if (session && showStartDialog) {
+    setShowStartDialog(false)
+  }
+
   const handleStartSession = async () => {
     const preferences: SessionPreferences = {
       autoFill: true,
