@@ -32,7 +32,7 @@ export function MixInterface({
   onReorderQueue,
   onEnergyChange,
   onSteerVibe,
-  onRefreshSuggestions,
+  onRefreshSuggestions: _onRefreshSuggestions, // Unused - store handles refresh directly
   onTrackPlayed,
 }: MixInterfaceProps) {
   const [_isPending, startTransition] = useTransition()
@@ -45,8 +45,10 @@ export function MixInterface({
   // Handle track change - notify parent when the track being played changes
   const handleTrackChange = useCallback(
     (previousTrackId: string, previousTrackUri: string, _newTrackId: string) => {
-      // The previous track finished playing, notify the parent
-      onTrackPlayed?.(previousTrackId, previousTrackUri)
+      // Only notify if we have valid track info (not empty strings)
+      if (previousTrackId && previousTrackUri) {
+        onTrackPlayed?.(previousTrackId, previousTrackUri)
+      }
     },
     [onTrackPlayed]
   )
@@ -108,11 +110,11 @@ export function MixInterface({
 
   const handleRefreshSuggestions = useCallback(() => {
     startTransition(() => {
-      // Use store's refreshSuggestions - loading state is handled by the store
+      // Use store's refreshSuggestions only - onRefreshSuggestions prop is redundant
+      // since it also calls the same store action via useSuggestions hook
       refreshSuggestions()
-      onRefreshSuggestions?.()
     })
-  }, [refreshSuggestions, onRefreshSuggestions])
+  }, [refreshSuggestions])
 
   if (!session) {
     return (

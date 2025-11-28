@@ -822,6 +822,12 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       const body = await c.req.json()
       const {trackId, trackUri} = body
 
+      // Validate required fields - return 500 as that's what the contract supports
+      if (!trackId || typeof trackId !== 'string' || !trackUri || typeof trackUri !== 'string') {
+        getLogger()?.error('track-played: Missing or invalid trackId/trackUri', { trackId, trackUri })
+        return c.json({error: 'Missing or invalid track data'}, 500)
+      }
+
       if (!c.env.MIX_SESSIONS) {
         return c.json({error: 'Mix sessions not available'}, 500)
       }
@@ -842,15 +848,18 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
         // Remove from queue
         sessionService.removeFromQueue(session, queuedTrack.position)
 
-        // Try to get audio features for BPM/energy
+        // Try to get audio features for BPM/energy by fetching track details
         let bpm: number | null = null
         let energy: number | null = null
 
         if (c.env.AUDIO_FEATURES_CACHE) {
-          const audioService = new AudioEnrichmentService(c.env.AUDIO_FEATURES_CACHE)
-          const enrichment = await audioService.enrichTrack(trackId)
-          if (enrichment) {
-            bpm = enrichment.bpm ?? null
+          const trackDetails = await fetchTrackDetails(trackUri, token)
+          if (trackDetails) {
+            const audioService = new AudioEnrichmentService(c.env.AUDIO_FEATURES_CACHE)
+            const enrichment = await audioService.enrichTrack(trackDetails)
+            if (enrichment) {
+              bpm = enrichment.bpm ?? null
+            }
           }
         }
 
@@ -877,7 +886,7 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
           let bpm: number | null = null
           if (c.env.AUDIO_FEATURES_CACHE) {
             const audioService = new AudioEnrichmentService(c.env.AUDIO_FEATURES_CACHE)
-            const enrichment = await audioService.enrichTrack(trackId)
+            const enrichment = await audioService.enrichTrack(trackDetails)
             if (enrichment) {
               bpm = enrichment.bpm ?? null
             }
