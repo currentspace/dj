@@ -185,12 +185,12 @@ export const NowPlaying = memo(function NowPlaying({token}: NowPlayingProps) {
 
   const handleSeek = useCallback(
     async (e: React.MouseEvent<HTMLDivElement>) => {
-      if (!token || !playbackCore) return
+      if (!token || !playbackCore?.track) return
 
       const bar = e.currentTarget
       const rect = bar.getBoundingClientRect()
       const percent = (e.clientX - rect.left) / rect.width
-      const positionMs = Math.floor(percent * playbackCore.duration)
+      const positionMs = Math.floor(percent * playbackCore.track.duration)
 
       try {
         await fetch('/api/player/seek', {
@@ -260,15 +260,19 @@ export const NowPlaying = memo(function NowPlaying({token}: NowPlayingProps) {
     )
   }
 
-  const progressPercent = playbackCore.duration > 0 ? (progress / playbackCore.duration) * 100 : 0
+  // Extract nested values for easier access
+  const track = playbackCore.track
+  const device = playbackCore.device
+  const duration = track?.duration ?? 0
+  const progressPercent = duration > 0 ? (progress / duration) * 100 : 0
 
   return (
     <div className="now-playing">
       <div className="now-playing__track">
-        {playbackCore.albumArt && <img alt="Album art" className="now-playing__album-art" src={playbackCore.albumArt} />}
+        {track?.albumArt && <img alt="Album art" className="now-playing__album-art" src={track.albumArt} />}
         <div className="now-playing__info">
-          <span className="now-playing__track-name">{playbackCore.trackName}</span>
-          <span className="now-playing__artist-name">{playbackCore.artistName}</span>
+          <span className="now-playing__track-name">{track?.name ?? 'Unknown'}</span>
+          <span className="now-playing__artist-name">{track?.artist ?? ''}</span>
         </div>
       </div>
 
@@ -295,7 +299,7 @@ export const NowPlaying = memo(function NowPlaying({token}: NowPlayingProps) {
           <div className="now-playing__progress" onClick={handleSeek} role="slider" tabIndex={0}>
             <div className="now-playing__progress-bar" style={{width: `${progressPercent}%`}} />
           </div>
-          <span className="now-playing__time">{formatTime(playbackCore.duration)}</span>
+          <span className="now-playing__time">{formatTime(duration)}</span>
         </div>
       </div>
 
@@ -310,7 +314,7 @@ export const NowPlaying = memo(function NowPlaying({token}: NowPlayingProps) {
         </button>
         <div className="now-playing__device">
           <span className="now-playing__device-icon">Speaker</span>
-          <span className="now-playing__device-name">{playbackCore.deviceName}</span>
+          <span className="now-playing__device-name">{device.name}</span>
         </div>
       </div>
 

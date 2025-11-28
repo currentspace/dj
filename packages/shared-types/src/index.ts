@@ -150,6 +150,134 @@ export interface WebhookEvent {
   type: string
 }
 
+// ===== Playback Stream Protocol (Delta-based SSE) =====
+
+/** Repeat mode states */
+export type RepeatState = 'off' | 'track' | 'context'
+
+/** Device type from Spotify */
+export type DeviceType = 'computer' | 'smartphone' | 'speaker' | 'tv' | 'avr' | 'stb' | 'audio_dongle' | 'game_console' | 'cast_video' | 'cast_audio' | 'automobile' | 'unknown'
+
+/** Playback context type */
+export type ContextType = 'album' | 'artist' | 'playlist' | 'show' | 'collection'
+
+/** Currently playing item type */
+export type PlayingType = 'track' | 'episode' | 'ad' | 'unknown'
+
+/** Track info in playback stream */
+export interface PlaybackTrack {
+  id: string
+  uri: string
+  name: string
+  artist: string
+  albumArt: string | null
+  albumName: string
+  duration: number
+  explicit: boolean
+  popularity: number
+  isLocal: boolean
+  previewUrl: string | null
+}
+
+/** Device info in playback stream */
+export interface PlaybackDevice {
+  id: string | null
+  name: string
+  type: DeviceType
+  volumePercent: number | null
+  supportsVolume: boolean
+  isPrivateSession: boolean
+  isRestricted: boolean
+}
+
+/** Playback context (what's being played from) */
+export interface PlaybackContext {
+  type: ContextType
+  uri: string
+  name: string | null
+  href: string | null
+}
+
+/** Playback modes (shuffle/repeat) */
+export interface PlaybackModes {
+  shuffle: boolean
+  repeat: RepeatState
+}
+
+/** Full playback state (sent on init) */
+export interface PlaybackStateInit {
+  track: PlaybackTrack | null
+  device: PlaybackDevice
+  context: PlaybackContext | null
+  modes: PlaybackModes
+  playingType: PlayingType
+  isPlaying: boolean
+  progress: number
+  timestamp: number
+  seq: number
+}
+
+/** Tick event - minimal progress update */
+export interface PlaybackTickEvent {
+  /** Progress in milliseconds */
+  p: number
+  /** Server timestamp */
+  ts: number
+}
+
+/** State change event (play/pause) */
+export interface PlaybackStateEvent {
+  isPlaying: boolean
+  seq: number
+}
+
+/** Track change event */
+export interface PlaybackTrackEvent extends PlaybackTrack {
+  seq: number
+}
+
+/** Device change event */
+export interface PlaybackDeviceEvent extends PlaybackDevice {
+  seq: number
+}
+
+/** Modes change event (shuffle/repeat) */
+export interface PlaybackModesEvent extends PlaybackModes {
+  seq: number
+}
+
+/** Volume change event */
+export interface PlaybackVolumeEvent {
+  percent: number
+  seq: number
+}
+
+/** Context change event */
+export interface PlaybackContextEvent {
+  context: PlaybackContext | null
+  seq: number
+}
+
+/** Idle event (no active playback) */
+export interface PlaybackIdleEvent {
+  seq: number
+}
+
+/** All possible playback stream event types */
+export type PlaybackStreamEventType =
+  | 'init'
+  | 'tick'
+  | 'state'
+  | 'track'
+  | 'device'
+  | 'modes'
+  | 'volume'
+  | 'context'
+  | 'idle'
+  | 'error'
+  | 'reconnect'
+  | 'connected'
+
 // ===== Zod Schemas and Validation =====
 // Export all Zod schemas for runtime validation
 

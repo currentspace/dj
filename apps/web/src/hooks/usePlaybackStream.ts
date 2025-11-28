@@ -101,9 +101,21 @@ export function usePlaybackStream(
     storeDisconnect()
   }, [storeDisconnect])
 
-  // Combine core and progress for backward compatible return
+  // Convert new PlaybackCore structure to legacy PlaybackState for backward compatibility
   const playback: PlaybackState | null = playbackCore
-    ? {...playbackCore, progress}
+    ? {
+        albumArt: playbackCore.track?.albumArt ?? null,
+        artistName: playbackCore.track?.artist ?? '',
+        deviceId: playbackCore.device.id,
+        deviceName: playbackCore.device.name,
+        duration: playbackCore.track?.duration ?? 0,
+        isPlaying: playbackCore.isPlaying,
+        progress,
+        timestamp: playbackCore.timestamp,
+        trackId: playbackCore.track?.id ?? null,
+        trackName: playbackCore.track?.name ?? 'Unknown',
+        trackUri: playbackCore.track?.uri ?? null,
+      }
     : null
 
   return {
