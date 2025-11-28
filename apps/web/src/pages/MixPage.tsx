@@ -8,6 +8,7 @@ import {useError} from '../hooks/useError'
 import {useMixSession} from '../hooks/useMixSession'
 import {useSuggestions} from '../hooks/useSuggestions'
 import {useVibeControls} from '../hooks/useVibeControls'
+import {mixApiClient} from '../lib/mix-api-client'
 
 interface MixPageProps {
   onBackToChat: () => void
@@ -84,10 +85,37 @@ export function MixPage({onBackToChat, seedPlaylistId, token}: MixPageProps) {
   const handleAddToQueue = async (trackUri: string) => {
     try {
       await addToQueue(trackUri)
+
+      // Also queue to Spotify's playback queue (best effort, don't fail if this doesn't work)
+      try {
+        await mixApiClient.queueToSpotify(trackUri)
+        console.log('[MixPage] Track queued to Spotify:', trackUri)
+      } catch (spotifyErr) {
+        // Non-fatal - log but don't show error to user
+        // This might fail if no active device or not Premium
+        console.warn('[MixPage] Could not queue to Spotify:', spotifyErr)
+      }
+
       // Refresh suggestions after adding
       await refreshSuggestions()
     } catch (err) {
       handleError(err, 'Failed to add track to queue')
+    }
+  }
+
+  // Handle track played event - when Spotify plays a new track
+  const handleTrackPlayed = async (trackId: string, trackUri: string) => {
+    try {
+      console.log('[MixPage] Track played:', trackId)
+      const response = await mixApiClient.notifyTrackPlayed(trackId, trackUri)
+      if (response.movedToHistory) {
+        console.log('[MixPage] Track moved to history, refreshing session')
+        // Session will be updated via polling, but refresh suggestions
+        await refreshSuggestions()
+      }
+    } catch (err) {
+      // Non-fatal error - just log
+      console.warn('[MixPage] Failed to notify track played:', err)
     }
   }
 
@@ -167,6 +195,7 @@ export function MixPage({onBackToChat, seedPlaylistId, token}: MixPageProps) {
         onRemoveFromQueue={removeFromQueue}
         onReorderQueue={reorderQueue}
         onSteerVibe={handleSteerVibe}
+        onTrackPlayed={handleTrackPlayed}
         session={session}
         token={token}
       />

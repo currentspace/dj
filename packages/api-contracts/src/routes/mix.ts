@@ -11,6 +11,8 @@ import {
   GetQueueResponseSchema,
   GetSuggestionsResponseSchema,
   GetVibeResponseSchema,
+  QueueToSpotifyRequestSchema,
+  QueueToSpotifyResponseSchema,
   RemoveFromQueueResponseSchema,
   ReorderQueueRequestSchema,
   ReorderQueueResponseSchema,
@@ -20,6 +22,8 @@ import {
   StartMixResponseSchema,
   SteerVibeRequestSchema,
   SteerVibeResponseSchema,
+  TrackPlayedRequestSchema,
+  TrackPlayedResponseSchema,
   UpdateVibeRequestSchema,
   UpdateVibeResponseSchema,
 } from '@dj/shared-types'
@@ -692,6 +696,116 @@ export const saveMix = createRoute({
         },
       },
       description: 'No active session',
+    },
+    500: {
+      content: {
+        'application/json': {
+          schema: ErrorResponseSchema,
+        },
+      },
+      description: 'Internal server error',
+    },
+  },
+  tags: ['Mix'],
+})
+
+/**
+ * POST /api/mix/playback/track-played
+ * Notify that a track has finished playing (detect track change)
+ */
+export const trackPlayed = createRoute({
+  description: 'Notify that a track has finished playing, move from queue to history',
+  method: 'post',
+  path: '/api/mix/playback/track-played',
+  request: {
+    body: {
+      content: {
+        'application/json': {
+          schema: TrackPlayedRequestSchema,
+        },
+      },
+    },
+    headers: authHeaders,
+  },
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: TrackPlayedResponseSchema,
+        },
+      },
+      description: 'Track played notification processed',
+    },
+    401: {
+      content: {
+        'application/json': {
+          schema: ErrorResponseSchema,
+        },
+      },
+      description: 'Unauthorized',
+    },
+    404: {
+      content: {
+        'application/json': {
+          schema: ErrorResponseSchema,
+        },
+      },
+      description: 'No active session',
+    },
+    500: {
+      content: {
+        'application/json': {
+          schema: ErrorResponseSchema,
+        },
+      },
+      description: 'Internal server error',
+    },
+  },
+  tags: ['Mix'],
+})
+
+/**
+ * POST /api/mix/queue/spotify
+ * Add a track to Spotify's playback queue
+ */
+export const queueToSpotify = createRoute({
+  description: 'Add a track to Spotify playback queue (requires Premium)',
+  method: 'post',
+  path: '/api/mix/queue/spotify',
+  request: {
+    body: {
+      content: {
+        'application/json': {
+          schema: QueueToSpotifyRequestSchema,
+        },
+      },
+    },
+    headers: authHeaders,
+  },
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: QueueToSpotifyResponseSchema,
+        },
+      },
+      description: 'Track queued to Spotify successfully',
+    },
+    401: {
+      content: {
+        'application/json': {
+          schema: ErrorResponseSchema,
+        },
+      },
+      description: 'Unauthorized',
+    },
+    403: {
+      content: {
+        'application/json': {
+          schema: ErrorResponseSchema,
+        },
+      },
+      description: 'Spotify Premium required or no active device',
     },
     500: {
       content: {

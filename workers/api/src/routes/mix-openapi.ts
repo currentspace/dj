@@ -11,14 +11,16 @@ import {
   getQueue,
   getSuggestions,
   getVibe,
+  queueToSpotify,
   removeFromQueue,
   reorderQueue,
   saveMix,
   startMix,
   steerVibe,
+  trackPlayed,
   updateVibe,
 } from '@dj/api-contracts'
-import type {QueuedTrack, SpotifyTrackFull} from '@dj/shared-types'
+import type {PlayedTrack, QueuedTrack, SpotifyTrackFull} from '@dj/shared-types'
 import {SpotifyPlaylistFullSchema, SpotifyTrackFullSchema, SpotifyUserSchema} from '@dj/shared-types'
 
 import {HTTP_STATUS, PAGINATION, VIBE_DEFAULTS} from '../constants'
@@ -121,23 +123,45 @@ function createQueuedTrack(
   }
 }
 
-// Note: createPlayedTrack is not currently used but is available for future track history management
-// function createPlayedTrack(
-//   track: SpotifyTrackFull,
-//   bpm: number | null,
-//   energy: number | null
-// ): PlayedTrack {
-//   return {
-//     trackId: track.id,
-//     trackUri: track.uri,
-//     name: track.name,
-//     artist: track.artists[0]?.name || 'Unknown Artist',
-//     albumArt: track.album.images[0]?.url,
-//     playedAt: new Date().toISOString(),
-//     bpm,
-//     energy,
-//   }
-// }
+/**
+ * Helper to create PlayedTrack from SpotifyTrackFull
+ */
+function createPlayedTrack(
+  track: SpotifyTrackFull,
+  bpm: number | null,
+  energy: number | null
+): PlayedTrack {
+  return {
+    trackId: track.id,
+    trackUri: track.uri,
+    name: track.name,
+    artist: track.artists[0]?.name || 'Unknown Artist',
+    albumArt: track.album.images[0]?.url,
+    playedAt: new Date().toISOString(),
+    bpm,
+    energy,
+  }
+}
+
+/**
+ * Helper to create PlayedTrack from QueuedTrack (when moving from queue to history)
+ */
+function queuedTrackToPlayedTrack(
+  queued: QueuedTrack,
+  bpm: number | null = null,
+  energy: number | null = null
+): PlayedTrack {
+  return {
+    trackId: queued.trackId,
+    trackUri: queued.trackUri,
+    name: queued.name,
+    artist: queued.artist,
+    albumArt: queued.albumArt,
+    playedAt: new Date().toISOString(),
+    bpm,
+    energy,
+  }
+}
 
 /**
  * Register mix routes on the provided OpenAPI app
@@ -778,6 +802,158 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
     } catch (error) {
       getLogger()?.error('Save mix error:', error)
       const message = error instanceof Error ? error.message : 'Failed to save mix'
+      return c.json({error: message}, 500)
+    }
+  })
+
+  // POST /api/mix/playback/track-played - Notify that a track was played
+  app.openapi(trackPlayed, async c => {
+    try {
+      const token = c.req.header('authorization')?.replace('Bearer ', '')
+      if (!token) {
+        return c.json({error: 'No authorization token'}, 401)
+      }
+
+      const userId = await getUserIdFromToken(token)
+      if (!userId) {
+        return c.json({error: 'Invalid authorization token'}, 401)
+      }
+
+      const body = await c.req.json()
+      const {trackId, trackUri} = body
+
+      if (!c.env.MIX_SESSIONS) {
+        return c.json({error: 'Mix sessions not available'}, 500)
+      }
+
+      const sessionService = new MixSessionService(c.env.MIX_SESSIONS)
+      const session = await sessionService.getSession(userId)
+
+      if (!session) {
+        return c.json({error: 'No active session'}, 404)
+      }
+
+      let movedToHistory = false
+
+      // Check if this track is in our queue (at position 0)
+      const queuedTrack = session.queue.find(t => t.trackId === trackId || t.trackUri === trackUri)
+
+      if (queuedTrack) {
+        // Remove from queue
+        sessionService.removeFromQueue(session, queuedTrack.position)
+
+        // Try to get audio features for BPM/energy
+        let bpm: number | null = null
+        let energy: number | null = null
+
+        if (c.env.AUDIO_FEATURES_CACHE) {
+          const audioService = new AudioEnrichmentService(c.env.AUDIO_FEATURES_CACHE)
+          const enrichment = await audioService.enrichTrack(trackId)
+          if (enrichment) {
+            bpm = enrichment.bpm ?? null
+          }
+        }
+
+        // Create played track and add to history
+        const playedTrack = queuedTrackToPlayedTrack(queuedTrack, bpm, energy)
+        sessionService.addToHistory(session, playedTrack)
+
+        // Update vibe from the played track
+        sessionService.updateVibeFromTrack(session, playedTrack)
+
+        movedToHistory = true
+
+        getLogger()?.info('Moved track from queue to history', {
+          userId,
+          trackId,
+          queueLength: session.queue.length,
+          historyLength: session.history.length,
+        })
+      } else {
+        // Track wasn't in our queue - user might be playing something else
+        // Still add to history if we can get track details
+        const trackDetails = await fetchTrackDetails(trackUri, token)
+        if (trackDetails) {
+          let bpm: number | null = null
+          if (c.env.AUDIO_FEATURES_CACHE) {
+            const audioService = new AudioEnrichmentService(c.env.AUDIO_FEATURES_CACHE)
+            const enrichment = await audioService.enrichTrack(trackId)
+            if (enrichment) {
+              bpm = enrichment.bpm ?? null
+            }
+          }
+
+          const playedTrack = createPlayedTrack(trackDetails, bpm, null)
+          sessionService.addToHistory(session, playedTrack)
+          sessionService.updateVibeFromTrack(session, playedTrack)
+          movedToHistory = true
+        }
+      }
+
+      // Save updated session
+      await sessionService.updateSession(session)
+
+      return c.json({success: true, movedToHistory, session}, 200)
+    } catch (error) {
+      getLogger()?.error('Track played error:', error)
+      const message = error instanceof Error ? error.message : 'Failed to process track played'
+      return c.json({error: message}, 500)
+    }
+  })
+
+  // POST /api/mix/queue/spotify - Add track to Spotify's playback queue
+  app.openapi(queueToSpotify, async c => {
+    try {
+      const token = c.req.header('authorization')?.replace('Bearer ', '')
+      if (!token) {
+        return c.json({error: 'No authorization token'}, 401)
+      }
+
+      const body = await c.req.json()
+      const {trackUri} = body
+
+      // Call Spotify's Queue API
+      // POST https://api.spotify.com/v1/me/player/queue?uri={uri}
+      const response = await fetch(
+        `https://api.spotify.com/v1/me/player/queue?uri=${encodeURIComponent(trackUri)}`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      )
+
+      if (response.status === 204) {
+        // Success - no content
+        getLogger()?.info('Track queued to Spotify', {trackUri})
+        return c.json({success: true, queued: true}, 200)
+      }
+
+      if (response.status === 404) {
+        // No active device
+        return c.json(
+          {error: 'No active Spotify device. Start playing on a device first.'},
+          403
+        )
+      }
+
+      if (response.status === 403) {
+        // Premium required or other restriction
+        const errorData = await response.json().catch(() => ({}))
+        const errorMessage = (errorData as {error?: {message?: string}}).error?.message || 'Spotify Premium required'
+        return c.json({error: errorMessage}, 403)
+      }
+
+      if (!isSuccessResponse(response)) {
+        getLogger()?.error(`Spotify queue failed: ${response.status}`)
+        return c.json({error: `Spotify API error: ${response.status}`}, 500)
+      }
+
+      return c.json({success: true, queued: true}, 200)
+    } catch (error) {
+      getLogger()?.error('Queue to Spotify error:', error)
+      const message = error instanceof Error ? error.message : 'Failed to queue to Spotify'
       return c.json({error: message}, 500)
     }
   })

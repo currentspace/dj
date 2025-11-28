@@ -207,6 +207,29 @@ export const EndMixResponseSchema = z.object({
   sessionDuration: z.number().int().min(0), // in seconds
 })
 
+// Track Played Request (notify that a track was played/changed)
+export const TrackPlayedRequestSchema = z.object({
+  trackId: z.string(),
+  trackUri: z.string(),
+})
+
+export const TrackPlayedResponseSchema = z.object({
+  success: z.boolean(),
+  movedToHistory: z.boolean(),
+  session: MixSessionSchema,
+})
+
+// Queue to Spotify Request
+export const QueueToSpotifyRequestSchema = z.object({
+  trackUri: z.string(),
+})
+
+export const QueueToSpotifyResponseSchema = z.object({
+  success: z.boolean(),
+  queued: z.boolean(),
+  message: z.string().optional(),
+})
+
 // ===== Type Exports =====
 
 export type VibeProfile = z.infer<typeof VibeProfileSchema>
@@ -235,3 +258,7 @@ export type GetSuggestionsResponse = z.infer<typeof GetSuggestionsResponseSchema
 export type SaveMixRequest = z.infer<typeof SaveMixRequestSchema>
 export type SaveMixResponse = z.infer<typeof SaveMixResponseSchema>
 export type EndMixResponse = z.infer<typeof EndMixResponseSchema>
+export type TrackPlayedRequest = z.infer<typeof TrackPlayedRequestSchema>
+export type TrackPlayedResponse = z.infer<typeof TrackPlayedResponseSchema>
+export type QueueToSpotifyRequest = z.infer<typeof QueueToSpotifyRequestSchema>
+export type QueueToSpotifyResponse = z.infer<typeof QueueToSpotifyResponseSchema>

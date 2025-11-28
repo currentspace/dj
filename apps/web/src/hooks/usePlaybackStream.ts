@@ -39,8 +39,12 @@ type StreamListener = () => void
 // PLAYBACK STREAM EXTERNAL STORE
 // =============================================================================
 
+/** Track change callback type */
+type TrackChangeCallback = (previousTrackId: string, previousTrackUri: string, newTrackId: string) => void
+
 function createPlaybackStreamStore() {
   const listeners = new Set<StreamListener>()
+  const trackChangeCallbacks = new Set<TrackChangeCallback>()
   let eventSource: EventSource | null = null
   let reconnectTimeout: ReturnType<typeof setTimeout> | null = null
   let interpolationInterval: ReturnType<typeof setInterval> | null = null
@@ -54,6 +58,9 @@ function createPlaybackStreamStore() {
   // Track last server update for interpolation
   let lastServerUpdate = 0
   let lastServerProgress = 0
+  // Track previous track ID for change detection
+  let previousTrackId: string | null = null
+  let previousTrackUri: string | null = null
 
   function notifyListeners(): void {
     listeners.forEach(listener => listener())
@@ -204,10 +211,30 @@ function createPlaybackStreamStore() {
           console.log('[PlaybackStream] Connected:', parsed.message)
           break
 
-        case 'playback':
+        case 'playback': {
           // Update playback state and interpolation baseline
           lastServerUpdate = Date.now()
           lastServerProgress = parsed.progress
+
+          // Detect track change
+          const newTrackId = parsed.trackId as string | null
+          const newTrackUri = parsed.trackUri as string | null
+
+          if (previousTrackId && newTrackId && previousTrackId !== newTrackId) {
+            // Track changed! Notify all callbacks
+            console.log('[PlaybackStream] Track changed:', previousTrackId, '->', newTrackId)
+            trackChangeCallbacks.forEach(cb => {
+              try {
+                cb(previousTrackId!, previousTrackUri!, newTrackId)
+              } catch (err) {
+                console.error('[PlaybackStream] Track change callback error:', err)
+              }
+            })
+          }
+
+          // Update previous track tracking
+          previousTrackId = newTrackId
+          previousTrackUri = newTrackUri
 
           setState({
             playback: parsed as PlaybackState,
@@ -221,6 +248,7 @@ function createPlaybackStreamStore() {
             stopInterpolation()
           }
           break
+        }
 
         case 'error':
           console.warn('[PlaybackStream] Server error:', parsed.message)
@@ -290,6 +318,12 @@ function createPlaybackStreamStore() {
         }
       }
     },
+    subscribeToTrackChange: (callback: TrackChangeCallback) => {
+      trackChangeCallbacks.add(callback)
+      return () => {
+        trackChangeCallbacks.delete(callback)
+      }
+    },
   }
 }
 
@@ -303,6 +337,8 @@ const playbackStreamStore = createPlaybackStreamStore()
 interface UsePlaybackStreamOptions {
   /** Whether to auto-connect when token is available */
   autoConnect?: boolean
+  /** Callback when track changes (previous track ID, previous URI, new track ID) */
+  onTrackChange?: (previousTrackId: string, previousTrackUri: string, newTrackId: string) => void
 }
 
 interface UsePlaybackStreamReturn {
@@ -343,9 +379,14 @@ export function usePlaybackStream(
   token: string | null,
   options: UsePlaybackStreamOptions = {}
 ): UsePlaybackStreamReturn {
-  const {autoConnect = true} = options
+  const {autoConnect = true, onTrackChange} = options
   const tokenRef = useRef(token)
   const hasConnectedRef = useRef(false)
+  const onTrackChangeRef = useRef(onTrackChange)
+  const trackChangeUnsubRef = useRef<(() => void) | null>(null)
+
+  // Keep ref updated
+  onTrackChangeRef.current = onTrackChange
 
   // Subscribe to store
   const state = useSyncExternalStore(
@@ -369,6 +410,21 @@ export function usePlaybackStream(
 
   // Update token ref
   tokenRef.current = token
+
+  // Subscribe to track changes when callback is provided
+  if (onTrackChange && !trackChangeUnsubRef.current) {
+    trackChangeUnsubRef.current = playbackStreamStore.subscribeToTrackChange(
+      (prevId, prevUri, newId) => {
+        onTrackChangeRef.current?.(prevId, prevUri, newId)
+      }
+    )
+  }
+
+  // Unsubscribe when callback is removed
+  if (!onTrackChange && trackChangeUnsubRef.current) {
+    trackChangeUnsubRef.current()
+    trackChangeUnsubRef.current = null
+  }
 
   // Auto-connect when token becomes available
   if (autoConnect && token && !hasConnectedRef.current && state.status === 'disconnected') {

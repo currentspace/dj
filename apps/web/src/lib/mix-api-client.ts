@@ -13,9 +13,11 @@
 import type {
   MixSession,
   QueuedTrack,
+  QueueToSpotifyResponse,
   SessionPreferences,
   SteerVibeResponse,
   Suggestion,
+  TrackPlayedResponse,
   VibeProfile,
 } from '@dj/shared-types'
 
@@ -27,11 +29,13 @@ import {
   getQueue,
   getSuggestions,
   getVibe,
+  queueToSpotify,
   removeFromQueue,
   reorderQueue,
   saveMix,
   startMix,
   steerVibe,
+  trackPlayed,
   updateVibe,
 } from '@dj/api-contracts'
 
@@ -208,5 +212,27 @@ export const mixApiClient = {
       body: updates,
     })
     return response.vibe
+  },
+
+  // ===== Playback Integration =====
+
+  /**
+   * Notify that a track was played (track changed)
+   * Route: POST /api/mix/playback/track-played (from trackPlayed contract)
+   */
+  async notifyTrackPlayed(trackId: string, trackUri: string): Promise<TrackPlayedResponse> {
+    return api(trackPlayed)({
+      body: {trackId, trackUri},
+    })
+  },
+
+  /**
+   * Add a track to Spotify's playback queue
+   * Route: POST /api/mix/queue/spotify (from queueToSpotify contract)
+   */
+  async queueToSpotify(trackUri: string): Promise<QueueToSpotifyResponse> {
+    return api(queueToSpotify)({
+      body: {trackUri},
+    })
   },
 }
