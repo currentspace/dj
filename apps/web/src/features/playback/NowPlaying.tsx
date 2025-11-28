@@ -18,6 +18,9 @@ interface PlaybackState {
   trackName: string
 }
 
+/** Progress interpolation interval (ms) */
+const INTERPOLATION_INTERVAL_MS = 100
+
 interface NowPlayingProps {
   token: string | null
 }
@@ -36,11 +39,33 @@ interface PollingState {
 function createPlaybackPollingStore() {
   const listeners = new Set<PollingListener>()
   let pollingInterval: NodeJS.Timeout | null = null
+  let interpolationInterval: NodeJS.Timeout | null = null
   let state: PollingState = {isPolling: false, token: null}
   let fetchCallback: (() => Promise<void>) | null = null
+  let interpolationCallback: ((elapsed: number) => void) | null = null
+  let lastFetchTime = 0
 
   function notifyListeners(): void {
     listeners.forEach(listener => listener())
+  }
+
+  function startInterpolation(): void {
+    if (interpolationInterval) return
+    lastFetchTime = Date.now()
+
+    interpolationInterval = setInterval(() => {
+      if (interpolationCallback) {
+        const elapsed = Date.now() - lastFetchTime
+        interpolationCallback(elapsed)
+      }
+    }, INTERPOLATION_INTERVAL_MS)
+  }
+
+  function stopInterpolation(): void {
+    if (interpolationInterval) {
+      clearInterval(interpolationInterval)
+      interpolationInterval = null
+    }
   }
 
   return {
@@ -50,6 +75,14 @@ function createPlaybackPollingStore() {
 
     setFetchCallback(callback: () => Promise<void>): void {
       fetchCallback = callback
+    },
+
+    setInterpolationCallback(callback: (elapsed: number) => void): void {
+      interpolationCallback = callback
+    },
+
+    resetFetchTime(): void {
+      lastFetchTime = Date.now()
     },
 
     startPolling(token: string): void {
@@ -69,10 +102,14 @@ function createPlaybackPollingStore() {
         fetchCallback()
       }
 
+      // Start interpolation for smooth progress updates
+      startInterpolation()
+
       pollingInterval = setInterval(async () => {
         if (fetchCallback) {
           try {
             await fetchCallback()
+            lastFetchTime = Date.now()
           } catch (err) {
             console.error('[NowPlaying] Polling error:', err)
           }
@@ -85,6 +122,7 @@ function createPlaybackPollingStore() {
         clearInterval(pollingInterval)
         pollingInterval = null
       }
+      stopInterpolation()
       state = {isPolling: false, token: null}
       notifyListeners()
     },
@@ -97,6 +135,7 @@ function createPlaybackPollingStore() {
         if (listeners.size === 0 && pollingInterval) {
           clearInterval(pollingInterval)
           pollingInterval = null
+          stopInterpolation()
           state = {isPolling: false, token: null}
         }
       }
@@ -111,6 +150,7 @@ export const NowPlaying = memo(function NowPlaying({token}: NowPlayingProps) {
   const [playback, setPlayback] = useState<PlaybackState | null>(null)
   const [error, setError] = useState<string | null>(null)
   const lastFetchRef = useRef<number>(0)
+  const lastServerProgressRef = useRef<number>(0)
 
   // Subscribe to polling state for cleanup
   const pollingState = useSyncExternalStore(
@@ -118,6 +158,23 @@ export const NowPlaying = memo(function NowPlaying({token}: NowPlayingProps) {
     playbackPollingStore.getState.bind(playbackPollingStore),
     () => ({isPolling: false, token: null})
   )
+
+  // Set up interpolation callback for smooth progress updates
+  playbackPollingStore.setInterpolationCallback((elapsed: number) => {
+    setPlayback(prev => {
+      if (!prev || !prev.isPlaying) return prev
+
+      const interpolatedProgress = Math.min(
+        lastServerProgressRef.current + elapsed,
+        prev.duration
+      )
+
+      // Only update if progress actually changed significantly
+      if (Math.abs(interpolatedProgress - prev.progress) < 50) return prev
+
+      return {...prev, progress: interpolatedProgress}
+    })
+  })
 
   const fetchPlaybackState = useCallback(async () => {
     if (!token) return
@@ -160,13 +217,17 @@ export const NowPlaying = memo(function NowPlaying({token}: NowPlayingProps) {
         return
       }
 
+      const progress = data.progress_ms ?? 0
+      lastServerProgressRef.current = progress
+      playbackPollingStore.resetFetchTime()
+
       setPlayback({
         albumArt: data.item?.album?.images?.[0]?.url ?? null,
         artistName: data.item?.artists?.map(a => a.name).join(', ') ?? '',
         deviceName: data.device?.name ?? 'Unknown',
         duration: data.item?.duration_ms ?? 0,
         isPlaying: data.is_playing ?? false,
-        progress: data.progress_ms ?? 0,
+        progress,
         trackName: data.item?.name ?? 'Unknown',
       })
       setError(null)
