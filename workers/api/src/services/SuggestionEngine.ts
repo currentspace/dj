@@ -8,7 +8,7 @@ import type { MixSession, PlayedTrack, Suggestion } from '@dj/shared-types'
 import type { AudioEnrichmentService } from './AudioEnrichmentService'
 import type { LastFmService } from './LastFmService'
 import { AIService, createAIService } from '../lib/ai-service'
-import { buildVibeDescription, buildInitialSuggestionsPrompt, SYSTEM_PROMPTS } from '../lib/ai-prompts'
+import { buildVibeDescription, buildInitialSuggestionsPrompt, buildNextTrackPrompt, SYSTEM_PROMPTS } from '../lib/ai-prompts'
 import { getLogger } from '../utils/LoggerContext'
 
 interface SpotifyTrack {
@@ -42,15 +42,130 @@ export class SuggestionEngine {
 
   /**
    * Generate suggestions based on current vibe
+   * Uses AI for both initial suggestions (no history) and context-aware suggestions (with history)
    */
   async generateSuggestions(session: MixSession, count: number = 5): Promise<Suggestion[]> {
     try {
-      // If no history, use Spotify recommendations based on vibe genres
+      // If no history, use AI to generate initial suggestions based on vibe
       if (session.history.length === 0) {
-        getLogger()?.info('[SuggestionEngine] No history, using vibe-based recommendations')
+        getLogger()?.info('[SuggestionEngine] No history, using AI for initial vibe-based recommendations')
         return this.generateInitialSuggestions(session, count)
       }
 
+      // With history, use AI to generate context-aware suggestions based on vibe AND recent tracks
+      getLogger()?.info('[SuggestionEngine] Has history, using AI for context-aware recommendations')
+      return this.generateContextAwareSuggestions(session, count)
+    } catch (error) {
+      getLogger()?.error('[SuggestionEngine] Failed to generate suggestions:', error)
+      return []
+    }
+  }
+
+  /**
+   * Generate context-aware suggestions using AI when there's play history
+   * Uses vibe profile AND recent tracks to suggest what comes next
+   */
+  private async generateContextAwareSuggestions(
+    session: MixSession,
+    count: number
+  ): Promise<Suggestion[]> {
+    try {
+      const { vibe, history } = session
+
+      if (!this.aiService) {
+        getLogger()?.warn('[SuggestionEngine] No AI service available, falling back to Last.fm similarity')
+        return this.generateLastFmFallbackSuggestions(session, count)
+      }
+
+      // Build prompt using vibe and recent history
+      const vibeDescription = buildVibeDescription(vibe)
+      const recentTracks = history.slice(-5).map(t => ({ name: t.name, artist: t.artist }))
+      const prompt = buildNextTrackPrompt(vibeDescription, recentTracks, count * 2)
+
+      getLogger()?.info('[SuggestionEngine] Asking AI for context-aware track suggestions...')
+
+      // Use AI service for the request
+      const response = await this.aiService.promptForJSON<{
+        tracks: Array<{ artist: string; name: string; reason: string }>
+      }>(prompt, {
+        temperature: 0.8,
+        system: SYSTEM_PROMPTS.DJ,
+      })
+
+      if (response.error || !response.data?.tracks) {
+        getLogger()?.error('[SuggestionEngine] AI request failed:', response.error)
+        // Fallback to Last.fm-based suggestions
+        return this.generateLastFmFallbackSuggestions(session, count)
+      }
+
+      const aiSuggestions = response.data
+
+      if (aiSuggestions.tracks.length === 0) {
+        getLogger()?.info('[SuggestionEngine] AI returned no track suggestions')
+        return this.generateLastFmFallbackSuggestions(session, count)
+      }
+
+      getLogger()?.info(`[SuggestionEngine] AI suggested ${aiSuggestions.tracks.length} tracks, searching Spotify...`)
+
+      // Search Spotify for each suggested track
+      const spotifyTracks: SpotifyTrack[] = []
+      for (const suggestion of aiSuggestions.tracks) {
+        const track = await this.searchSpotifyTrack(suggestion.artist, suggestion.name)
+        if (track) {
+          spotifyTracks.push(track)
+        }
+        if (spotifyTracks.length >= count * 2) break
+      }
+
+      if (spotifyTracks.length === 0) {
+        getLogger()?.info('[SuggestionEngine] No Spotify tracks found for AI suggestions, falling back to Last.fm')
+        return this.generateLastFmFallbackSuggestions(session, count)
+      }
+
+      // Filter out tracks already in queue/history
+      const filtered = this.filterAlreadyPlayed(spotifyTracks, session)
+
+      // Build suggestions with AI-provided reasons and enrichment data
+      const lastTrack = history[history.length - 1]
+      const suggestions: Suggestion[] = await Promise.all(
+        filtered.slice(0, count).map(async (track, index) => {
+          const enrichment = await this.audioService.enrichTrack(track)
+          const vibeScore = this.scoreSuggestion(track, vibe, lastTrack, enrichment.bpm, null, [])
+          const transitionScore = lastTrack ? this.scoreTransition(lastTrack, { bpm: enrichment.bpm, energy: null }) : 50
+          const aiReason = aiSuggestions.tracks[index]?.reason || 'AI-recommended for your vibe and recent tracks'
+
+          return {
+            trackId: track.id,
+            trackUri: track.uri,
+            name: track.name,
+            artist: track.artists[0]?.name || 'Unknown Artist',
+            albumArt: track.album.images[0]?.url,
+            vibeScore: Math.round((vibeScore + transitionScore) / 2),
+            reason: aiReason,
+            bpm: enrichment.bpm,
+          }
+        })
+      )
+
+      // Sort by vibe score
+      suggestions.sort((a, b) => b.vibeScore - a.vibeScore)
+
+      getLogger()?.info(`[SuggestionEngine] Generated ${suggestions.length} AI-powered context-aware suggestions`)
+      return suggestions
+    } catch (error) {
+      getLogger()?.error('[SuggestionEngine] Failed to generate AI context-aware suggestions:', error)
+      return this.generateLastFmFallbackSuggestions(session, count)
+    }
+  }
+
+  /**
+   * Fallback to Last.fm similarity-based suggestions when AI is unavailable
+   */
+  private async generateLastFmFallbackSuggestions(
+    session: MixSession,
+    count: number
+  ): Promise<Suggestion[]> {
+    try {
       // Find similar candidates using Last.fm
       const candidates = await this.findSimilarCandidates(session.history, count * 3)
 
@@ -74,8 +189,8 @@ export class SuggestionEngine {
           return {
             track,
             bpm: enrichment.bpm,
-            energy: null, // We don't have Spotify audio features API anymore
-            genres: [], // Would need to extract from Last.fm tags
+            energy: null,
+            genres: [],
           }
         })
       )
@@ -126,10 +241,10 @@ export class SuggestionEngine {
         .sort((a, b) => b.vibeScore - a.vibeScore)
         .slice(0, count)
 
-      getLogger()?.info(`[SuggestionEngine] Generated ${topSuggestions.length} suggestions`)
+      getLogger()?.info(`[SuggestionEngine] Generated ${topSuggestions.length} Last.fm fallback suggestions`)
       return topSuggestions
     } catch (error) {
-      getLogger()?.error('[SuggestionEngine] Failed to generate suggestions:', error)
+      getLogger()?.error('[SuggestionEngine] Failed to generate Last.fm fallback suggestions:', error)
       return []
     }
   }
