@@ -3,26 +3,21 @@ import type {Suggestion} from '@dj/shared-types'
 import styles from './mix.module.css'
 
 interface SuggestionsPanelProps {
-  autoFilling?: boolean
   isLoading: boolean
   onRefresh?: () => void
   suggestions: Suggestion[]
 }
 
-export function SuggestionsPanel({suggestions, onRefresh, isLoading, autoFilling}: SuggestionsPanelProps) {
+export function SuggestionsPanel({suggestions, onRefresh, isLoading}: SuggestionsPanelProps) {
   return (
     <div className={styles.suggestionsPanel}>
       <div className={styles.panelHeader}>
         <h2>Coming Up</h2>
-        {autoFilling ? (
-          <span className={styles.autoFillStatus}>Adding...</span>
-        ) : (
-          <button className={styles.refreshButton} disabled={isLoading} onClick={onRefresh} title="Refresh suggestions" type="button">
-            <svg className={isLoading ? styles.refreshSpinning : ''} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </button>
-        )}
+        <button className={styles.refreshButton} disabled={isLoading} onClick={onRefresh} title="Refresh suggestions" type="button">
+          <svg className={isLoading ? styles.refreshSpinning : ''} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
       </div>
 
       <div className={styles.suggestionsList}>

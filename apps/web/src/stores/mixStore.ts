@@ -13,16 +13,13 @@ import {mixApiClient} from '../lib/mix-api-client'
 // TYPES
 // =============================================================================
 
-// Auto-queue configuration
-const TARGET_QUEUE_SIZE = 5
-
 interface MixStoreState {
   // Session state
   error: string | null
   isLoading: boolean
   session: MixSession | null
 
-  // Suggestions state
+  // Suggestions state (preview of what server will add)
   suggestions: Suggestion[]
   suggestionsLoading: boolean
   suggestionsError: string | null
@@ -31,10 +28,6 @@ interface MixStoreState {
   vibeUpdating: boolean
   vibeError: string | null
 
-  // Auto-queue state
-  autoQueueEnabled: boolean
-  autoQueueInProgress: boolean
-
   // Session actions
   clearError: () => void
   endSession: () => Promise<void>
@@ -42,10 +35,8 @@ interface MixStoreState {
   setSession: (session: MixSession | null) => void
   startSession: (preferences?: SessionPreferences, seedPlaylistId?: string) => Promise<void>
 
-  // Queue actions
+  // Queue actions (server handles auto-fill)
   addToQueue: (trackUri: string, position?: number) => Promise<void>
-  autoFillQueue: () => Promise<void>
-  clearAndRebuildQueue: () => Promise<void>
   removeFromQueue: (position: number) => Promise<void>
   reorderQueue: (from: number, to: number) => Promise<void>
 
@@ -77,8 +68,6 @@ export const useMixStore = create<MixStoreState>()(
 
     return {
       // Initial state
-      autoQueueEnabled: true,
-      autoQueueInProgress: false,
       error: null,
       isLoading: false,
       session: null,
@@ -244,96 +233,6 @@ export const useMixStore = create<MixStoreState>()(
         }
       },
 
-      // Auto-queue actions
-      autoFillQueue: async () => {
-        const {session, suggestions, autoQueueEnabled, autoQueueInProgress, suggestionsLoading} = get()
-        if (!session || !autoQueueEnabled || autoQueueInProgress || suggestionsLoading) return
-
-        const queueSize = session.queue.length
-        const tracksNeeded = TARGET_QUEUE_SIZE - queueSize
-
-        if (tracksNeeded <= 0 || suggestions.length === 0) return
-
-        // Get URIs already in queue to avoid duplicates
-        const queuedUris = new Set(session.queue.map((t) => t.trackUri))
-        const historyUris = new Set(session.history.map((t) => t.trackUri))
-
-        // Find suggestions not already in queue or history
-        const availableSuggestions = suggestions.filter(
-          (s) => !queuedUris.has(s.trackUri) && !historyUris.has(s.trackUri)
-        )
-
-        if (availableSuggestions.length === 0) {
-          console.log('[mixStore] No available suggestions to add, refreshing...')
-          get().refreshSuggestions()
-          return
-        }
-
-        const toAdd = availableSuggestions.slice(0, tracksNeeded)
-        console.log(`[mixStore] Auto-filling queue with ${toAdd.length} tracks`)
-
-        set({autoQueueInProgress: true})
-
-        try {
-          // Add tracks sequentially to both our queue and Spotify's playback queue
-          for (const suggestion of toAdd) {
-            await mixApiClient.addToQueue(suggestion.trackUri)
-
-            // Also queue to Spotify's playback queue (best effort)
-            try {
-              await mixApiClient.queueToSpotify(suggestion.trackUri)
-              console.log('[mixStore] Track queued to Spotify:', suggestion.name)
-            } catch {
-              // Non-fatal - might fail if no active device or not Premium
-              console.warn('[mixStore] Could not queue to Spotify')
-            }
-          }
-
-          // Refresh session to get updated queue
-          const updatedSession = await mixApiClient.getCurrentSession()
-          set({session: updatedSession, autoQueueInProgress: false})
-
-          // Remove added tracks from suggestions
-          const addedUris = new Set(toAdd.map((s) => s.trackUri))
-          set({suggestions: suggestions.filter((s) => !addedUris.has(s.trackUri))})
-
-          // If we still need more suggestions, fetch them
-          if (availableSuggestions.length <= tracksNeeded) {
-            get().refreshSuggestions()
-          }
-        } catch (err) {
-          console.error('[mixStore] Auto-fill error:', err)
-          set({autoQueueInProgress: false})
-        }
-      },
-
-      clearAndRebuildQueue: async () => {
-        const {session} = get()
-        if (!session) return
-
-        console.log('[mixStore] Clearing and rebuilding queue for vibe change')
-
-        // Clear current queue
-        const currentQueue = [...session.queue]
-        for (const track of currentQueue) {
-          try {
-            await mixApiClient.removeFromQueue(track.position)
-          } catch {
-            // Ignore errors, queue may have shifted
-          }
-        }
-
-        // Refresh session and suggestions
-        const [updatedSession] = await Promise.all([
-          mixApiClient.getCurrentSession(),
-          get().refreshSuggestions(),
-        ])
-
-        set({session: updatedSession})
-
-        // Auto-fill will be triggered by the subscription
-      },
-
       // Suggestions actions
       clearSuggestionsError: () => set({suggestionsError: null}),
 
@@ -473,12 +372,12 @@ export function initializeMixStore(): void {
 }
 
 // =============================================================================
-// SUBSCRIPTIONS - Auto-queue management
+// SUBSCRIPTIONS - Refresh suggestions on vibe change (server handles queue auto-fill)
 // =============================================================================
 
 let previousVibeHash: string | null = null
 
-// Vibe change → Clear queue and rebuild with new suggestions
+// Vibe change → Refresh suggestions (server rebuilds queue automatically)
 useMixStore.subscribe(
   (s) => s.session?.vibe,
   (vibe) => {
@@ -497,37 +396,10 @@ useMixStore.subscribe(
     })
 
     if (previousVibeHash !== null && previousVibeHash !== vibeHash) {
-      console.log('[mixStore] Vibe changed, clearing and rebuilding queue...')
-      useMixStore.getState().clearAndRebuildQueue()
+      console.log('[mixStore] Vibe changed, refreshing suggestions...')
+      useMixStore.getState().refreshSuggestions()
     }
 
     previousVibeHash = vibeHash
-  }
-)
-
-// Suggestions loaded → Auto-fill queue if needed
-useMixStore.subscribe(
-  (s) => ({suggestions: s.suggestions, loading: s.suggestionsLoading}),
-  ({suggestions, loading}) => {
-    if (!loading && suggestions.length > 0) {
-      // Small delay to avoid race conditions with other updates
-      setTimeout(() => {
-        useMixStore.getState().autoFillQueue()
-      }, 100)
-    }
-  }
-)
-
-// Queue size changed → Auto-fill if below target
-useMixStore.subscribe(
-  (s) => s.session?.queue.length ?? 0,
-  (queueSize, previousQueueSize) => {
-    if (queueSize < TARGET_QUEUE_SIZE && queueSize < previousQueueSize) {
-      console.log(`[mixStore] Queue shrunk to ${queueSize}, auto-filling...`)
-      // Small delay to avoid race conditions
-      setTimeout(() => {
-        useMixStore.getState().autoFillQueue()
-      }, 500)
-    }
   }
 )

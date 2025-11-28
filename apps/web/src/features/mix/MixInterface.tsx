@@ -33,10 +33,9 @@ export function MixInterface({
 }: MixInterfaceProps) {
   const [_isPending, startTransition] = useTransition()
 
-  // Get suggestions and auto-queue state from store
+  // Get suggestions from store (server handles queue auto-fill)
   const suggestions = useMixStore((s) => s.suggestions)
   const isLoadingSuggestions = useMixStore((s) => s.suggestionsLoading)
-  const autoQueueInProgress = useMixStore((s) => s.autoQueueInProgress)
   const refreshSuggestions = useMixStore((s) => s.refreshSuggestions)
 
   // Handle track change - notify parent when the track being played changes
@@ -127,7 +126,6 @@ export function MixInterface({
       <div className={styles.panels}>
         <QueuePanel queue={queue} onRemove={handleRemoveFromQueue} onReorder={handleReorderQueue} />
         <SuggestionsPanel
-          autoFilling={autoQueueInProgress}
           isLoading={isLoadingSuggestions}
           onRefresh={handleRefreshSuggestions}
           suggestions={suggestions}

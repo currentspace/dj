@@ -289,6 +289,14 @@ export class MixSessionService {
   }
 
   /**
+   * Clear all tracks from queue
+   */
+  clearQueue(session: MixSession): void {
+    session.queue = []
+    logger?.debug('Cleared queue', { userId: session.userId })
+  }
+
+  /**
    * Add track to history (max 20 tracks, newest first)
    */
   addToHistory(session: MixSession, track: PlayedTrack): void {

@@ -163,6 +163,108 @@ function queuedTrackToPlayedTrack(
   }
 }
 
+// Auto-queue configuration
+const TARGET_QUEUE_SIZE = 5
+
+/**
+ * Auto-fill queue to target size with AI suggestions
+ * This is the server-side implementation of automatic queue management.
+ * Returns the number of tracks added.
+ */
+async function autoFillQueue(
+  env: Env,
+  token: string,
+  session: import('@dj/shared-types').MixSession,
+  sessionService: MixSessionService
+): Promise<number> {
+  const queueSize = session.queue.length
+  const tracksNeeded = TARGET_QUEUE_SIZE - queueSize
+
+  if (tracksNeeded <= 0) {
+    return 0
+  }
+
+  getLogger()?.info(`Auto-filling queue: ${queueSize} → ${TARGET_QUEUE_SIZE} (need ${tracksNeeded} tracks)`)
+
+  try {
+    // Initialize suggestion engine
+    const lastFmService = new LastFmService(env.LASTFM_API_KEY || '', env.AUDIO_FEATURES_CACHE)
+    const audioService = new AudioEnrichmentService(env.AUDIO_FEATURES_CACHE)
+    const suggestionEngine = new SuggestionEngine(lastFmService, audioService, token, env.ANTHROPIC_API_KEY)
+
+    // Generate suggestions (fetch a few extra in case of duplicates)
+    const suggestions = await suggestionEngine.generateSuggestions(session, tracksNeeded + 3)
+
+    if (suggestions.length === 0) {
+      getLogger()?.info('No suggestions generated for auto-fill')
+      return 0
+    }
+
+    // Get URIs already in queue and history to avoid duplicates
+    const existingUris = new Set([
+      ...session.queue.map((t) => t.trackUri),
+      ...session.history.map((t) => t.trackUri),
+    ])
+
+    // Filter out duplicates
+    const availableSuggestions = suggestions.filter((s) => !existingUris.has(s.trackUri))
+
+    if (availableSuggestions.length === 0) {
+      getLogger()?.info('All suggestions are duplicates, skipping auto-fill')
+      return 0
+    }
+
+    // Take only what we need
+    const toAdd = availableSuggestions.slice(0, tracksNeeded)
+    let addedCount = 0
+
+    for (const suggestion of toAdd) {
+      const position = session.queue.length
+
+      const queuedTrack: QueuedTrack = {
+        trackId: suggestion.trackId,
+        trackUri: suggestion.trackUri,
+        name: suggestion.name,
+        artist: suggestion.artist,
+        albumArt: suggestion.albumArt,
+        addedBy: 'ai',
+        vibeScore: suggestion.vibeScore,
+        reason: suggestion.reason,
+        position,
+      }
+
+      sessionService.addToQueue(session, queuedTrack)
+      addedCount++
+
+      // Also queue to Spotify's playback queue (best effort)
+      try {
+        const spotifyResponse = await fetch(
+          `https://api.spotify.com/v1/me/player/queue?uri=${encodeURIComponent(suggestion.trackUri)}`,
+          {
+            method: 'POST',
+            headers: {Authorization: `Bearer ${token}`},
+          }
+        )
+        if (spotifyResponse.status === 204) {
+          getLogger()?.info(`Queued to Spotify: ${suggestion.name}`)
+        }
+      } catch {
+        // Non-fatal - might fail if no active device or not Premium
+        getLogger()?.warn(`Could not queue to Spotify: ${suggestion.name}`)
+      }
+    }
+
+    // Save updated session
+    await sessionService.updateSession(session)
+
+    getLogger()?.info(`Auto-fill complete: added ${addedCount} tracks, queue now has ${session.queue.length} tracks`)
+    return addedCount
+  } catch (error) {
+    getLogger()?.error('Auto-fill error:', error)
+    return 0
+  }
+}
+
 /**
  * Register mix routes on the provided OpenAPI app
  */
@@ -205,6 +307,11 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       const session = await sessionService.createSession(userId, preferences)
 
       getLogger()?.info(`Started mix session for user ${userId}`, {sessionId: session.id})
+
+      // Auto-fill initial queue (non-blocking)
+      autoFillQueue(c.env, token, session, sessionService).catch((err) => {
+        getLogger()?.error('Initial auto-fill failed:', err)
+      })
 
       return c.json({session}, 200)
     } catch (error) {
@@ -529,8 +636,16 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
 
       session.vibe = updatedVibe
 
+      // Clear existing queue and rebuild with new vibe
+      sessionService.clearQueue(session)
+
       // Save updated session
       await sessionService.updateSession(session)
+
+      // Rebuild queue with new vibe (non-blocking)
+      autoFillQueue(c.env, token, session, sessionService).catch((err) => {
+        getLogger()?.error('Queue rebuild after vibe update failed:', err)
+      })
 
       return c.json({vibe: updatedVibe}, 200)
     } catch (error) {
@@ -612,7 +727,16 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
 
       // Update session with new vibe
       session.vibe = updatedVibe
+
+      // Clear existing queue and rebuild with new vibe
+      sessionService.clearQueue(session)
+
       await sessionService.updateSession(session)
+
+      // Rebuild queue with new vibe (non-blocking)
+      autoFillQueue(c.env, token, session, sessionService).catch((err) => {
+        getLogger()?.error('Queue rebuild after vibe steer failed:', err)
+      })
 
       getLogger()?.info('Steered vibe for session', {
         userId,
@@ -901,6 +1025,14 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
 
       // Save updated session
       await sessionService.updateSession(session)
+
+      // Auto-fill queue if needed (non-blocking, runs after response)
+      if (movedToHistory) {
+        // Run auto-fill in background (don't await)
+        autoFillQueue(c.env, token, session, sessionService).catch((err) => {
+          getLogger()?.error('Background auto-fill failed:', err)
+        })
+      }
 
       return c.json({success: true, movedToHistory, session}, 200)
     } catch (error) {
