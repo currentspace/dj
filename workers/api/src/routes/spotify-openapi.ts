@@ -5,7 +5,14 @@
 
 import type {OpenAPIHono} from '@hono/zod-openapi'
 
-import {exchangeSpotifyToken, getSpotifyAuthUrl, handleSpotifyCallback, searchSpotify} from '@dj/api-contracts'
+import {
+  exchangeSpotifyToken,
+  getSpotifyAuthUrl,
+  getSpotifyDebugScopes,
+  getSpotifyMe,
+  handleSpotifyCallback,
+  searchSpotify,
+} from '@dj/api-contracts'
 import {SpotifySearchResponseSchema, SpotifyTokenResponseSchema} from '@dj/shared-types'
 
 import type {Env} from '../index'
@@ -278,6 +285,131 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       getLogger()?.error('Spotify search error:', error)
       const message = error instanceof Error ? error.message : 'Search failed'
       return c.json({error: message}, 401)
+    }
+  })
+
+  // GET /api/spotify/me - Get current user profile (token validation)
+  app.openapi(getSpotifyMe, async (c) => {
+    try {
+      const token = c.req.header('authorization')?.replace('Bearer ', '')
+
+      if (!token) {
+        return c.json({error: 'No authorization token'}, 401)
+      }
+
+      const response = await fetch('https://api.spotify.com/v1/me', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+
+      if (!isSuccessResponse(response)) {
+        getLogger()?.error(`Get user profile failed: ${response.status}`)
+        return c.json({error: 'Invalid or expired token'}, 401)
+      }
+
+      const data = await response.json() as {
+        country?: string
+        display_name: string | null
+        email?: string
+        id: string
+        product?: string
+      }
+
+      return c.json({
+        country: data.country,
+        display_name: data.display_name,
+        email: data.email,
+        id: data.id,
+        product: data.product,
+      }, 200)
+    } catch (error) {
+      getLogger()?.error('Get user profile error:', error)
+      return c.json({error: 'Failed to get user profile'}, 401)
+    }
+  })
+
+  // GET /api/spotify/debug/scopes - Debug OAuth scopes
+  app.openapi(getSpotifyDebugScopes, async (c) => {
+    try {
+      const token = c.req.header('authorization')?.replace('Bearer ', '')
+
+      if (!token) {
+        return c.json({error: 'No authorization token'}, 401)
+      }
+
+      // Test user-read-private scope
+      const userResponse = await fetch('https://api.spotify.com/v1/me', {
+        headers: {Authorization: `Bearer ${token}`},
+      })
+
+      if (!isSuccessResponse(userResponse)) {
+        return c.json({error: 'Invalid or expired token'}, 401)
+      }
+
+      const userData = await userResponse.json() as {
+        country?: string
+        display_name?: string
+        email?: string
+        id: string
+        product?: string
+      }
+
+      // Test playlist-read-private scope
+      const playlistResponse = await fetch('https://api.spotify.com/v1/me/playlists?limit=1', {
+        headers: {Authorization: `Bearer ${token}`},
+      })
+
+      // Test audio-features scope (requires user-read-private and potentially premium)
+      // Use a known track ID to test
+      const audioFeaturesResponse = await fetch(
+        'https://api.spotify.com/v1/audio-features/4iV5W9uYEdYUVa79Axb7Rh',
+        {headers: {Authorization: `Bearer ${token}`}},
+      )
+
+      const requiredScopes = [
+        'playlist-modify-public',
+        'playlist-modify-private',
+        'user-read-private',
+        'user-read-playback-state',
+        'user-read-currently-playing',
+        'user-read-recently-played',
+        'user-top-read',
+        'playlist-read-private',
+        'playlist-read-collaborative',
+        'user-modify-playback-state',
+        'streaming',
+      ]
+
+      return c.json({
+        instructions: {
+          if_audio_features_forbidden:
+            'Audio features API may require app authorization. Contact Spotify developer support if needed.',
+          logout_method: 'Click the logout button in the app header to clear your session.',
+        },
+        required_scopes: requiredScopes,
+        scope_tests: {
+          'audio-features': {
+            accessible: audioFeaturesResponse.ok,
+            note: audioFeaturesResponse.ok
+              ? 'Audio features accessible'
+              : `Status ${audioFeaturesResponse.status}: ${audioFeaturesResponse.status === 403 ? 'Forbidden - may need app authorization' : 'Not accessible'}`,
+            status: audioFeaturesResponse.status,
+          },
+          'playlist-read-private': playlistResponse.ok,
+          'user-read-private': userResponse.ok,
+        },
+        token_info: {
+          country: userData.country ?? 'Unknown',
+          display_name: userData.display_name ?? 'Unknown',
+          email: userData.email ?? 'Not provided',
+          product: userData.product ?? 'Unknown',
+          user_id: userData.id,
+        },
+      }, 200)
+    } catch (error) {
+      getLogger()?.error('Scope debug error:', error)
+      return c.json({error: 'Failed to check scopes'}, 401)
     }
   })
 }

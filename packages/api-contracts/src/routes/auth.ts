@@ -125,6 +125,106 @@ export const exchangeSpotifyToken = createRoute({
 })
 
 /**
+ * GET /api/spotify/me
+ * Get current user's Spotify profile (for token validation)
+ */
+export const getSpotifyMe = createRoute({
+  description: 'Get current user profile (validates token)',
+  method: 'get',
+  path: '/api/spotify/me',
+  request: {
+    headers: z.object({
+      authorization: z.string().regex(/^Bearer .+$/),
+    }),
+  },
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            country: z.string().optional(),
+            display_name: z.string().nullable(),
+            email: z.string().optional(),
+            id: z.string(),
+            product: z.string().optional(),
+          }),
+        },
+      },
+      description: 'User profile retrieved successfully',
+    },
+    401: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            error: z.string(),
+          }),
+        },
+      },
+      description: 'Invalid or expired token',
+    },
+  },
+  tags: ['Auth'],
+})
+
+/**
+ * GET /api/spotify/debug/scopes
+ * Debug endpoint to check OAuth scopes and permissions
+ */
+export const getSpotifyDebugScopes = createRoute({
+  description: 'Debug endpoint to check OAuth scopes and permissions',
+  method: 'get',
+  path: '/api/spotify/debug/scopes',
+  request: {
+    headers: z.object({
+      authorization: z.string().regex(/^Bearer .+$/),
+    }),
+  },
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            instructions: z.object({
+              if_audio_features_forbidden: z.string(),
+              logout_method: z.string(),
+            }),
+            required_scopes: z.array(z.string()),
+            scope_tests: z.object({
+              'audio-features': z.object({
+                accessible: z.boolean(),
+                note: z.string(),
+                status: z.number(),
+              }),
+              'playlist-read-private': z.boolean(),
+              'user-read-private': z.boolean(),
+            }),
+            token_info: z.object({
+              country: z.string(),
+              display_name: z.string(),
+              email: z.string(),
+              product: z.string(),
+              user_id: z.string(),
+            }),
+          }),
+        },
+      },
+      description: 'Scope debug information',
+    },
+    401: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            error: z.string(),
+          }),
+        },
+      },
+      description: 'Invalid or expired token',
+    },
+  },
+  tags: ['Auth'],
+})
+
+/**
  * POST /api/spotify/search
  * Search Spotify catalog
  */
