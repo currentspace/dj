@@ -191,8 +191,7 @@ export function registerPlayerStreamRoute(app: OpenAPIHono<{Bindings: Env}>) {
     })
 
     // Cleanup when client disconnects
-    // Note: In Cloudflare Workers, we can't detect client disconnect directly
-    // The stream will error when trying to write to a closed connection
+    // Note: In Cloudflare Workers, we detect client disconnect via writer.closed
     c.executionCtx.waitUntil(
       new Promise<void>(resolve => {
         // Set a max lifetime for the stream (5 minutes)
@@ -206,15 +205,24 @@ export function registerPlayerStreamRoute(app: OpenAPIHono<{Bindings: Env}>) {
           resolve()
         }, 5 * 60 * 1000)
 
-        // Also cleanup when intervals are cleared
-        readable.pipeTo(new WritableStream()).catch(() => {
-          // Client disconnected
-          isStreamClosed = true
-          clearInterval(pollInterval)
-          clearInterval(heartbeatInterval)
-          clearTimeout(maxLifetime)
-          resolve()
-        })
+        // Detect client disconnect via writer's closed promise
+        // This resolves when the underlying sink closes (client disconnects)
+        writer.closed
+          .then(() => {
+            isStreamClosed = true
+            clearInterval(pollInterval)
+            clearInterval(heartbeatInterval)
+            clearTimeout(maxLifetime)
+            resolve()
+          })
+          .catch(() => {
+            // Client disconnected abruptly
+            isStreamClosed = true
+            clearInterval(pollInterval)
+            clearInterval(heartbeatInterval)
+            clearTimeout(maxLifetime)
+            resolve()
+          })
       }),
     )
 
