@@ -12,9 +12,11 @@ import {useVibeControls} from '../hooks/useVibeControls'
 interface MixPageProps {
   onBackToChat: () => void
   seedPlaylistId?: string
+  /** Spotify access token for playback stream */
+  token?: string | null
 }
 
-export function MixPage({onBackToChat, seedPlaylistId}: MixPageProps) {
+export function MixPage({onBackToChat, seedPlaylistId, token}: MixPageProps) {
   const [showStartDialog, setShowStartDialog] = useState(true)
 
   // Local error state for action-specific errors
@@ -166,6 +168,7 @@ export function MixPage({onBackToChat, seedPlaylistId}: MixPageProps) {
         onReorderQueue={reorderQueue}
         onSteerVibe={handleSteerVibe}
         session={session}
+        token={token}
       />
 
       {/* Show loading overlay */}

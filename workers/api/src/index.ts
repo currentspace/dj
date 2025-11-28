@@ -6,6 +6,7 @@ import {secureHeaders} from 'hono/secure-headers'
 import {chatStreamRouter} from './routes/chat-stream'
 import {registerMixRoutes} from './routes/mix-openapi'
 import {registerPlayerRoutes} from './routes/player-openapi'
+import {registerPlayerStreamRoute} from './routes/player-stream'
 import {registerPlaylistRoutes} from './routes/playlists-openapi'
 import {registerSpotifyAuthRoutes} from './routes/spotify-openapi'
 
@@ -58,6 +59,7 @@ app.get('/health', c => c.json({status: 'healthy'}))
 registerSpotifyAuthRoutes(app)
 registerPlaylistRoutes(app)
 registerPlayerRoutes(app)
+registerPlayerStreamRoute(app)
 registerMixRoutes(app)
 
 // Configure OpenAPI documentation

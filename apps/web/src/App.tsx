@@ -82,6 +82,7 @@ function App() {
               <MixPage
                 onBackToChat={() => setShowMixMode(false)}
                 seedPlaylistId={selectedPlaylist?.id}
+                token={token}
               />
             </Suspense>
           ) : showScopeDebug && isAuthenticated ? (

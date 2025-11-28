@@ -2,6 +2,7 @@ import type {MixSession, PlayedTrack, QueuedTrack, Suggestion, VibeProfile} from
 
 import {useCallback, useState, useTransition} from 'react'
 import {TIMING} from '../../constants'
+import {usePlaybackStream} from '../../hooks/usePlaybackStream'
 
 import {NowPlayingHero} from './NowPlayingHero'
 import {QueuePanel} from './QueuePanel'
@@ -17,10 +18,13 @@ interface MixInterfaceProps {
   onReorderQueue?: (from: number, to: number) => void
   onSteerVibe?: (direction: string) => void
   session: MixSession | null
+  /** Spotify access token for playback stream */
+  token?: string | null
 }
 
 export function MixInterface({
   session,
+  token,
   onAddToQueue,
   onRemoveFromQueue,
   onReorderQueue,
@@ -31,6 +35,9 @@ export function MixInterface({
   const [_isPending, startTransition] = useTransition()
   const [suggestions, _setSuggestions] = useState<Suggestion[]>([])
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false)
+
+  // Real-time playback state from SSE stream
+  const {playback, status: playbackStatus} = usePlaybackStream(token ?? null)
 
   // Direct state derivation (NOT useEffect)
   const currentTrack: PlayedTrack | null = session?.history[0] ?? null
@@ -104,7 +111,12 @@ export function MixInterface({
 
   return (
     <div className={styles.container}>
-      <NowPlayingHero track={currentTrack} />
+      {/* Show connection status if not connected */}
+      {playbackStatus === 'connecting' && (
+        <div className={styles.connectionStatus}>Connecting to Spotify...</div>
+      )}
+
+      <NowPlayingHero playback={playback} track={currentTrack} />
 
       <div className={styles.panels}>
         <QueuePanel queue={queue} onRemove={handleRemoveFromQueue} onReorder={handleReorderQueue} />
