@@ -1,8 +1,8 @@
-import type {MixSession, PlayedTrack, QueuedTrack, Suggestion, VibeProfile} from '@dj/shared-types'
+import type {MixSession, PlayedTrack, QueuedTrack, VibeProfile} from '@dj/shared-types'
 
-import {useCallback, useState, useTransition} from 'react'
-import {TIMING} from '../../constants'
+import {useCallback, useTransition} from 'react'
 import {usePlaybackStream} from '../../hooks/usePlaybackStream'
+import {useMixStore} from '../../stores'
 
 import {NowPlayingHero} from './NowPlayingHero'
 import {QueuePanel} from './QueuePanel'
@@ -36,8 +36,11 @@ export function MixInterface({
   onTrackPlayed,
 }: MixInterfaceProps) {
   const [_isPending, startTransition] = useTransition()
-  const [suggestions, _setSuggestions] = useState<Suggestion[]>([])
-  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false)
+
+  // Get suggestions from store (centralized state)
+  const suggestions = useMixStore((s) => s.suggestions)
+  const isLoadingSuggestions = useMixStore((s) => s.suggestionsLoading)
+  const refreshSuggestions = useMixStore((s) => s.refreshSuggestions)
 
   // Handle track change - notify parent when the track being played changes
   const handleTrackChange = useCallback(
@@ -104,13 +107,12 @@ export function MixInterface({
   )
 
   const handleRefreshSuggestions = useCallback(() => {
-    setIsLoadingSuggestions(true)
     startTransition(() => {
+      // Use store's refreshSuggestions - loading state is handled by the store
+      refreshSuggestions()
       onRefreshSuggestions?.()
-      // In a real implementation, this would be updated by the API response
-      setTimeout(() => setIsLoadingSuggestions(false), TIMING.SUGGESTIONS_LOADING_DELAY_MS)
     })
-  }, [onRefreshSuggestions])
+  }, [refreshSuggestions, onRefreshSuggestions])
 
   if (!session) {
     return (
