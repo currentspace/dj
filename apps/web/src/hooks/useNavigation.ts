@@ -1,112 +1,27 @@
 /**
- * useNavigation Hook
- * Simple URL-based navigation using History API
- * Updates URL when navigating and syncs state from URL on load
- */
-
-import {useSyncExternalStore} from 'react'
-
-type Route = 'chat' | 'mix' | 'debug'
-
-interface NavigationState {
-  route: Route
-}
-
-type NavigationListener = () => void
-
-function createNavigationStore() {
-  const listeners = new Set<NavigationListener>()
-  let state: NavigationState = {route: 'chat'}
-
-  function notifyListeners(): void {
-    listeners.forEach(listener => listener())
-  }
-
-  function getRouteFromPath(pathname: string): Route {
-    if (pathname === '/mix' || pathname === '/dj') return 'mix'
-    if (pathname === '/debug') return 'debug'
-    return 'chat'
-  }
-
-  function getPathFromRoute(route: Route): string {
-    switch (route) {
-      case 'mix':
-        return '/mix'
-      case 'debug':
-        return '/debug'
-      case 'chat':
-      default:
-        return '/'
-    }
-  }
-
-  // Initialize from current URL
-  if (typeof window !== 'undefined') {
-    state = {route: getRouteFromPath(window.location.pathname)}
-
-    // Listen for browser back/forward
-    window.addEventListener('popstate', () => {
-      state = {route: getRouteFromPath(window.location.pathname)}
-      notifyListeners()
-    })
-  }
-
-  return {
-    getState(): NavigationState {
-      return state
-    },
-
-    navigate(route: Route): void {
-      if (state.route === route) return
-
-      state = {route}
-      const path = getPathFromRoute(route)
-      window.history.pushState({route}, '', path)
-      notifyListeners()
-    },
-
-    subscribe(listener: NavigationListener): () => void {
-      listeners.add(listener)
-      return () => {
-        listeners.delete(listener)
-      }
-    },
-  }
-}
-
-// Singleton store
-const navigationStore = createNavigationStore()
-
-/**
- * Hook for URL-based navigation
+ * useNavigation Hook - Zustand Store Wrapper
+ *
+ * This hook wraps the Zustand navigation store for backward compatibility.
+ * For new code, prefer using useNavigationStore directly with atomic selectors:
  *
  * @example
- * ```tsx
- * function App() {
- *   const { route, navigate } = useNavigation()
+ * // New pattern (recommended)
+ * import { useNavigationStore } from '../stores'
+ * const route = useNavigationStore((s) => s.route)
+ * const navigate = useNavigationStore((s) => s.navigate)
  *
- *   return (
- *     <div>
- *       <nav>
- *         <button onClick={() => navigate('chat')}>Chat</button>
- *         <button onClick={() => navigate('mix')}>DJ Mode</button>
- *       </nav>
- *       {route === 'chat' && <ChatPage />}
- *       {route === 'mix' && <MixPage />}
- *     </div>
- *   )
- * }
- * ```
+ * // Legacy pattern (this hook)
+ * const { route, navigate } = useNavigation()
  */
-export function useNavigation() {
-  const state = useSyncExternalStore(
-    navigationStore.subscribe,
-    navigationStore.getState,
-    () => ({route: 'chat' as Route})
-  )
 
-  return {
-    route: state.route,
-    navigate: navigationStore.navigate.bind(navigationStore),
-  }
+import {useNavigationStore, type Route} from '../stores'
+
+export type {Route}
+
+export function useNavigation() {
+  // Two atomic selectors are better than one object selector for primitives
+  const route = useNavigationStore((s) => s.route)
+  const navigate = useNavigationStore((s) => s.navigate)
+
+  return {navigate, route}
 }

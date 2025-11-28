@@ -403,6 +403,235 @@ babel: {
 
 The codebase is already compiler-friendly (no forbidden patterns detected).
 
+## Zustand 5 State Management (November 2025)
+
+This section documents Zustand 5.0.8 patterns for minimal re-renders with SSE streaming.
+
+### Store Setup with subscribeWithSelector
+
+```typescript
+import { create } from 'zustand'
+import { subscribeWithSelector } from 'zustand/middleware'
+import { useShallow } from 'zustand/react/shallow'
+
+interface Store {
+  // Normalized state (by ID for O(1) access)
+  messages: Record<string, Message>
+  messageIds: string[]
+  connectionStatus: 'connected' | 'disconnected' | 'connecting'
+
+  // Actions (always at end of interface)
+  addMessage: (msg: Message) => void
+  setStatus: (status: Store['connectionStatus']) => void
+}
+
+const useStore = create<Store>()(
+  subscribeWithSelector((set) => ({
+    messages: {},
+    messageIds: [],
+    connectionStatus: 'disconnected',
+
+    addMessage: (msg) => set((s) => ({
+      messages: { ...s.messages, [msg.id]: msg },
+      messageIds: [...s.messageIds, msg.id],
+    })),
+
+    setStatus: (status) => set({ connectionStatus: status }),
+  }))
+)
+```
+
+### Selector Patterns
+
+| Selector Type | Pattern | When to Use |
+|---------------|---------|-------------|
+| **Primitive** | `useStore((s) => s.count)` | Single string/number/boolean |
+| **Single by ID** | `useStore((s) => s.items[id])` | Per-item subscriptions |
+| **Multiple primitives** | Two separate `useStore()` calls | Independent values |
+| **Object/array** | `useStore(useShallow((s) => ({})))` | Multi-value selections |
+| **Filtered array** | `useStore(useShallow((s) => arr.filter(...)))` | Derived arrays |
+| **Actions only** | `useStore((s) => s.actionName)` | Always stable |
+
+### ❌ DON'T: Subscribe to Entire Store
+
+```typescript
+// BAD - Rerenders on ANY state change
+function BadComponent() {
+  const store = useStore()
+  return <div>{store.unreadCount}</div>
+}
+```
+
+### ✅ DO: Atomic Selectors for Primitives
+
+```typescript
+// GOOD - Only rerenders when unreadCount changes
+function GoodComponent() {
+  const count = useStore((s) => s.unreadCount)
+  return <div>{count}</div>
+}
+```
+
+### ❌ DON'T: Create New Objects/Arrays in Selector
+
+```typescript
+// BAD - New array every render = infinite rerenders
+function BadComponent() {
+  const messages = useStore((s) => Object.values(s.messages))
+  return <div>{messages.length}</div>
+}
+```
+
+### ✅ DO: useShallow for Objects/Arrays
+
+```typescript
+// GOOD - Shallow comparison prevents unnecessary rerenders
+function GoodComponent() {
+  const messageIds = useStore(useShallow((s) => s.messageIds))
+  return (
+    <div>
+      {messageIds.map((id) => <MessageItem key={id} id={id} />)}
+    </div>
+  )
+}
+
+// Item-level selector for list items
+const MessageItem = memo(({ id }: { id: string }) => {
+  const message = useStore((s) => s.messages[id])
+  if (!message) return null
+  return <div>{message.text}</div>
+})
+```
+
+### ✅ DO: Separate Primitives Over Object Selectors
+
+```typescript
+// BEST - Two atomic subscriptions
+function BestComponent() {
+  const status = useStore((s) => s.connectionStatus)
+  const count = useStore((s) => s.unreadCount)
+  return <div>{status}: {count}</div>
+}
+
+// GOOD - If you must select multiple, use useShallow
+function GoodComponent() {
+  const { status, count } = useStore(
+    useShallow((s) => ({
+      status: s.connectionStatus,
+      count: s.unreadCount,
+    }))
+  )
+  return <div>{status}: {count}</div>
+}
+```
+
+### SSE Handler Pattern with useEffectEvent (React 19.2)
+
+```typescript
+import { useEffect, useEffectEvent } from 'react'
+
+function useSSEConnection(url: string) {
+  const setStatus = useStore((s) => s.setStatus)
+  const addMessage = useStore((s) => s.addMessage)
+
+  // useEffectEvent: always reads latest state, never stale
+  const onMessage = useEffectEvent((e: MessageEvent) => {
+    const { type, payload } = JSON.parse(e.data)
+    if (type === 'message') addMessage(payload)
+  })
+
+  const onOpen = useEffectEvent(() => setStatus('connected'))
+  const onError = useEffectEvent(() => setStatus('disconnected'))
+
+  // Effect only depends on URL - handlers are stable via useEffectEvent
+  useEffect(() => {
+    setStatus('connecting')
+    const es = new EventSource(url)
+    es.onmessage = onMessage
+    es.onopen = onOpen
+    es.onerror = onError
+    return () => es.close()
+  }, [url])
+}
+```
+
+**Note**: If `useEffectEvent` is not available, use refs with current pattern:
+
+```typescript
+const onMessageRef = useRef(onMessage)
+onMessageRef.current = onMessage
+
+useEffect(() => {
+  const handler = (e: MessageEvent) => onMessageRef.current(e)
+  // ...
+}, [url])
+```
+
+### External Subscriptions with subscribeWithSelector
+
+```typescript
+import { shallow } from 'zustand/shallow'
+
+// Subscribe to specific slice
+useStore.subscribe(
+  (s) => s.connectionStatus,
+  (status, prevStatus) => {
+    console.log(`Status: ${prevStatus} → ${status}`)
+  }
+)
+
+// With equality function for arrays
+useStore.subscribe(
+  (s) => s.messageIds,
+  (ids) => console.log('New message count:', ids.length),
+  { equalityFn: shallow }
+)
+```
+
+### Actions Selector (Always Stable)
+
+```typescript
+// Actions never change identity, safe to select together
+const useActions = () => useStore((s) => ({
+  addMessage: s.addMessage,
+  updateUser: s.updateUser,
+  setStatus: s.setStatus,
+}))
+```
+
+### Quick Reference Table
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ SELECTOR TYPE          │ PATTERN                           │
+├─────────────────────────────────────────────────────────────┤
+│ Primitive (string/num) │ useStore((s) => s.count)          │
+│ Single object by ID    │ useStore((s) => s.items[id])      │
+│ Multiple primitives    │ Two separate useStore() calls     │
+│ Object with multi keys │ useStore(useShallow((s) => ({})   │
+│ Array of IDs           │ useStore(useShallow((s) => s.ids))│
+│ Filtered array         │ useStore(useShallow((s) => ...))  │
+│ Actions only           │ useStore((s) => s.actionName)     │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│ SSE HANDLER PATTERN (React 19.2)                            │
+├─────────────────────────────────────────────────────────────┤
+│ const handler = useEffectEvent((e) => {                     │
+│   // Always sees latest state, no stale closures            │
+│   doSomething(e.data)                                       │
+│ })                                                          │
+│                                                             │
+│ useEffect(() => {                                           │
+│   const es = new EventSource(url)                           │
+│   es.onmessage = handler // Stable reference                │
+│   return () => es.close()                                   │
+│ }, [url]) // Handler NOT in deps!                           │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Reference**: `apps/web/src/stores/*.ts`
+
 ## Testing Guidelines
 
 ### Test Async State with flushPromises
