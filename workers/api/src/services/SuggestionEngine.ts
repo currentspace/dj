@@ -35,10 +35,10 @@ export class SuggestionEngine {
    */
   async generateSuggestions(session: MixSession, count: number = 5): Promise<Suggestion[]> {
     try {
-      // Need at least one track in history to generate suggestions
+      // If no history, use Spotify recommendations based on vibe genres
       if (session.history.length === 0) {
-        getLogger()?.info('[SuggestionEngine] No history available, cannot generate suggestions')
-        return []
+        getLogger()?.info('[SuggestionEngine] No history, using vibe-based recommendations')
+        return this.generateInitialSuggestions(session, count)
       }
 
       // Find similar candidates using Last.fm
@@ -332,5 +332,145 @@ export class SuggestionEngine {
     return candidates.filter(track => {
       return !playedIds.has(track.id) && !queuedIds.has(track.id)
     })
+  }
+
+  /**
+   * Generate initial suggestions using Spotify recommendations when no history exists
+   * Uses vibe genres, energy level, and BPM range as seeds
+   */
+  private async generateInitialSuggestions(
+    session: MixSession,
+    count: number
+  ): Promise<Suggestion[]> {
+    try {
+      const { vibe } = session
+
+      // Build Spotify recommendations URL with vibe parameters
+      const params = new URLSearchParams({
+        limit: String(count * 2), // Request extra to account for filtering
+      })
+
+      // Use vibe genres as seeds (Spotify allows up to 5 seed genres)
+      if (vibe.genres.length > 0) {
+        // Spotify genre seeds need to be lowercase with hyphens
+        const seedGenres = vibe.genres
+          .slice(0, 5)
+          .map(g => g.toLowerCase().replace(/\s+/g, '-'))
+          .join(',')
+        params.set('seed_genres', seedGenres)
+      } else {
+        // Fallback to broad genres based on mood (use first mood if available)
+        const primaryMood = vibe.mood[0] || 'energetic'
+        params.set('seed_genres', this.getMoodBasedGenres(primaryMood))
+      }
+
+      // Target energy (Spotify uses 0-1 scale, vibe uses 1-10)
+      const targetEnergy = vibe.energyLevel / 10
+      params.set('target_energy', String(targetEnergy))
+      params.set('min_energy', String(Math.max(0, targetEnergy - 0.2)))
+      params.set('max_energy', String(Math.min(1, targetEnergy + 0.2)))
+
+      // BPM range
+      if (vibe.bpmRange) {
+        params.set('min_tempo', String(vibe.bpmRange.min))
+        params.set('max_tempo', String(vibe.bpmRange.max))
+        params.set('target_tempo', String((vibe.bpmRange.min + vibe.bpmRange.max) / 2))
+      }
+
+      const url = `https://api.spotify.com/v1/recommendations?${params.toString()}`
+      getLogger()?.info(`[SuggestionEngine] Fetching initial recommendations: ${url}`)
+
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${this.spotifyToken}`,
+        },
+      })
+
+      if (!response.ok) {
+        getLogger()?.error(`[SuggestionEngine] Recommendations failed: ${response.status}`)
+        return []
+      }
+
+      const data = await response.json() as { tracks?: SpotifyTrack[] }
+      const tracks = data.tracks || []
+
+      if (tracks.length === 0) {
+        getLogger()?.info('[SuggestionEngine] No recommendations returned')
+        return []
+      }
+
+      // Filter out any tracks already in queue
+      const filtered = this.filterAlreadyPlayed(tracks, session)
+
+      // Enrich with BPM data and build suggestions
+      const suggestions: Suggestion[] = await Promise.all(
+        filtered.slice(0, count).map(async (track) => {
+          const enrichment = await this.audioService.enrichTrack(track)
+          const vibeScore = this.scoreSuggestion(track, vibe, undefined, enrichment.bpm, null, [])
+
+          return {
+            trackId: track.id,
+            trackUri: track.uri,
+            name: track.name,
+            artist: track.artists[0]?.name || 'Unknown Artist',
+            albumArt: track.album.images[0]?.url,
+            vibeScore,
+            reason: this.buildInitialReason(vibe, enrichment.bpm),
+            bpm: enrichment.bpm,
+          }
+        })
+      )
+
+      // Sort by vibe score
+      suggestions.sort((a, b) => b.vibeScore - a.vibeScore)
+
+      getLogger()?.info(`[SuggestionEngine] Generated ${suggestions.length} initial suggestions`)
+      return suggestions
+    } catch (error) {
+      getLogger()?.error('[SuggestionEngine] Failed to generate initial suggestions:', error)
+      return []
+    }
+  }
+
+  /**
+   * Build a reason string for initial suggestions
+   */
+  private buildInitialReason(vibe: MixSession['vibe'], bpm: number | null): string {
+    const reasons: string[] = []
+
+    if (vibe.genres.length > 0) {
+      reasons.push(`Matches ${vibe.genres.slice(0, 2).join(', ')} vibe`)
+    }
+
+    if (bpm && vibe.bpmRange) {
+      const targetBpm = (vibe.bpmRange.min + vibe.bpmRange.max) / 2
+      if (Math.abs(bpm - targetBpm) < 10) {
+        reasons.push(`${bpm} BPM`)
+      }
+    }
+
+    const energyDesc = vibe.energyLevel <= 3 ? 'chill' : vibe.energyLevel <= 6 ? 'medium' : 'high'
+    reasons.push(`${energyDesc} energy`)
+
+    return reasons.join(' • ') || 'Matches your vibe'
+  }
+
+  /**
+   * Get fallback genres based on mood when no genres are specified
+   * Returns comma-separated string ready for Spotify API
+   */
+  private getMoodBasedGenres(mood: string): string {
+    const moodGenreMap: Record<string, string> = {
+      chill: 'chill,ambient,acoustic',
+      energetic: 'dance,electronic,pop',
+      happy: 'pop,funk,disco',
+      sad: 'acoustic,indie,singer-songwriter',
+      focused: 'ambient,classical,electronic',
+      party: 'dance,edm,hip-hop',
+      romantic: 'r-n-b,soul,jazz',
+      workout: 'hip-hop,electronic,rock',
+    }
+
+    return moodGenreMap[mood.toLowerCase()] || 'pop,rock,indie'
   }
 }
