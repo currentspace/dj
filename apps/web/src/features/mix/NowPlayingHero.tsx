@@ -1,4 +1,4 @@
-import type {PlayedTrack} from '@dj/shared-types'
+import type {PlayedTrack, QueuedTrack} from '@dj/shared-types'
 
 import type {PlaybackState} from '../../hooks/usePlaybackStream'
 
@@ -7,6 +7,8 @@ import styles from './mix.module.css'
 interface NowPlayingHeroProps {
   /** Real-time playback state from Spotify (preferred) */
   playback?: PlaybackState | null
+  /** The current queue */
+  queue?: QueuedTrack[]
   /** Fallback track from mix session history */
   track?: PlayedTrack | null
 }
@@ -21,7 +23,7 @@ function formatTime(ms: number): string {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`
 }
 
-export function NowPlayingHero({playback, track}: NowPlayingHeroProps) {
+export function NowPlayingHero({playback, queue, track}: NowPlayingHeroProps) {
   // Prefer real-time playback state over session history
   const hasPlayback = playback && playback.trackId
   const hasTrack = track
@@ -54,6 +56,9 @@ export function NowPlayingHero({playback, track}: NowPlayingHeroProps) {
 
   // Calculate progress percentage
   const progressPercent = duration > 0 ? (progress / duration) * 100 : 0
+
+  // Get next track in queue (first item is next up)
+  const upNext = queue && queue.length > 0 ? queue[0] : null
 
   return (
     <div className={styles.nowPlayingHero}>
@@ -96,6 +101,28 @@ export function NowPlayingHero({playback, track}: NowPlayingHeroProps) {
           <span className={styles.progressTime}>{formatTime(duration)}</span>
         )}
       </div>
+
+      {upNext && (
+        <div className={styles.upNextContainer}>
+          <span className={styles.upNextLabel}>Up Next</span>
+          <div className={styles.upNextTrack}>
+            {upNext.albumArt && (
+              <img
+                alt={`${upNext.name} album art`}
+                className={styles.upNextAlbumArt}
+                src={upNext.albumArt}
+              />
+            )}
+            <div className={styles.upNextInfo}>
+              <span className={styles.upNextName}>{upNext.name}</span>
+              <span className={styles.upNextArtist}>{upNext.artist}</span>
+            </div>
+            {queue && queue.length > 1 && (
+              <span className={styles.upNextMore}>+{queue.length - 1} more</span>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

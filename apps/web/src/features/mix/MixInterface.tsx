@@ -130,7 +130,7 @@ export function MixInterface({
         <div className={styles.connectionStatus}>Connecting to Spotify...</div>
       )}
 
-      <NowPlayingHero playback={playback} track={currentTrack} />
+      <NowPlayingHero playback={playback} queue={queue} track={currentTrack} />
 
       <div className={styles.panels}>
         <QueuePanel queue={queue} onRemove={handleRemoveFromQueue} onReorder={handleReorderQueue} />
