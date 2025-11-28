@@ -2,6 +2,7 @@ import type {PlayedTrack, QueuedTrack} from '@dj/shared-types'
 
 import type {PlaybackState} from '../../hooks/usePlaybackStream'
 
+import {DevicePicker} from './DevicePicker'
 import styles from './mix.module.css'
 
 interface NowPlayingHeroProps {
@@ -9,6 +10,8 @@ interface NowPlayingHeroProps {
   playback?: PlaybackState | null
   /** The current queue */
   queue?: QueuedTrack[]
+  /** Auth token for device picker */
+  token?: string | null
   /** Fallback track from mix session history */
   track?: PlayedTrack | null
 }
@@ -23,7 +26,7 @@ function formatTime(ms: number): string {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`
 }
 
-export function NowPlayingHero({playback, queue, track}: NowPlayingHeroProps) {
+export function NowPlayingHero({playback, queue, token, track}: NowPlayingHeroProps) {
   // Prefer real-time playback state over session history
   const hasPlayback = playback && playback.trackId
   const hasTrack = track
@@ -53,6 +56,7 @@ export function NowPlayingHero({playback, queue, track}: NowPlayingHeroProps) {
   const duration = hasPlayback ? playback.duration : 0
   const isPlaying = hasPlayback ? playback.isPlaying : false
   const deviceName = hasPlayback ? playback.deviceName : null
+  const deviceId = hasPlayback ? playback.deviceId : null
 
   // Calculate progress percentage
   const progressPercent = duration > 0 ? (progress / duration) * 100 : 0
@@ -101,6 +105,12 @@ export function NowPlayingHero({playback, queue, track}: NowPlayingHeroProps) {
           <span className={styles.progressTime}>{formatTime(duration)}</span>
         )}
       </div>
+
+      <DevicePicker
+        currentDeviceId={deviceId}
+        currentDeviceName={deviceName ?? undefined}
+        token={token ?? null}
+      />
 
       {upNext && (
         <div className={styles.upNextContainer}>

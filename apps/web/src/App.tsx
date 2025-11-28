@@ -119,7 +119,7 @@ function App() {
           )}
         </main>
 
-        {isAuthenticated && <NowPlaying token={token} />}
+        {isAuthenticated && !showMixMode && <NowPlaying token={token} />}
 
         <footer className="app-footer">
           <p>
