@@ -3,20 +3,26 @@ import type {Suggestion} from '@dj/shared-types'
 import styles from './mix.module.css'
 
 interface SuggestionsPanelProps {
+  autoFilling?: boolean
   isLoading: boolean
-  onAdd: (trackUri: string) => void
   onRefresh?: () => void
   suggestions: Suggestion[]
 }
 
-export function SuggestionsPanel({suggestions, onAdd, onRefresh, isLoading}: SuggestionsPanelProps) {
+export function SuggestionsPanel({suggestions, onRefresh, isLoading, autoFilling}: SuggestionsPanelProps) {
   return (
     <div className={styles.suggestionsPanel}>
       <div className={styles.panelHeader}>
-        <h2>AI Suggestions</h2>
-        <button className={styles.refreshButton} disabled={isLoading} onClick={onRefresh} type="button">
-          <span className={isLoading ? styles.refreshSpinning : ''}>🔄</span>
-        </button>
+        <h2>Coming Up</h2>
+        {autoFilling ? (
+          <span className={styles.autoFillStatus}>Adding...</span>
+        ) : (
+          <button className={styles.refreshButton} disabled={isLoading} onClick={onRefresh} title="Refresh suggestions" type="button">
+            <svg className={isLoading ? styles.refreshSpinning : ''} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        )}
       </div>
 
       <div className={styles.suggestionsList}>
@@ -28,8 +34,8 @@ export function SuggestionsPanel({suggestions, onAdd, onRefresh, isLoading}: Sug
         ) : suggestions.length === 0 ? (
           <div className={styles.emptyState}>
             <span className={styles.emptyIcon}>🎧</span>
-            <p>No suggestions yet</p>
-            <p className={styles.emptyHint}>Play a track to get AI recommendations</p>
+            <p>Queue is full</p>
+            <p className={styles.emptyHint}>More tracks will be added as the queue plays</p>
           </div>
         ) : (
           suggestions.map(suggestion => (
@@ -49,10 +55,6 @@ export function SuggestionsPanel({suggestions, onAdd, onRefresh, isLoading}: Sug
 
                 {suggestion.reason && <div className={styles.suggestionReason}>{suggestion.reason}</div>}
               </div>
-
-              <button className={styles.addButton} onClick={() => onAdd(suggestion.trackUri)} type="button">
-                +
-              </button>
             </div>
           ))
         )}

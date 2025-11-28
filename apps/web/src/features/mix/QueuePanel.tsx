@@ -52,8 +52,10 @@ export function QueuePanel({queue, onRemove, onReorder: _onReorder}: QueuePanelP
                 </div>
               </div>
 
-              <button className={styles.removeButton} onClick={() => onRemove(track.position)} type="button">
-                ✕
+              <button className={styles.removeButton} onClick={() => onRemove(track.position)} title="Remove from queue" type="button">
+                <svg fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                  <path d="M6 18L18 6M6 6l12 12" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
               </button>
             </div>
           ))

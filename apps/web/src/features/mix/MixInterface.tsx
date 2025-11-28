@@ -11,9 +11,7 @@ import {VibeControls} from './VibeControls'
 import styles from './mix.module.css'
 
 interface MixInterfaceProps {
-  onAddToQueue?: (trackUri: string) => void
   onEnergyChange?: (level: number) => void
-  onRefreshSuggestions?: () => void
   onRemoveFromQueue?: (position: number) => void
   onReorderQueue?: (from: number, to: number) => void
   onSteerVibe?: (direction: string) => void
@@ -27,19 +25,18 @@ interface MixInterfaceProps {
 export function MixInterface({
   session,
   token,
-  onAddToQueue,
   onRemoveFromQueue,
   onReorderQueue,
   onEnergyChange,
   onSteerVibe,
-  onRefreshSuggestions: _onRefreshSuggestions, // Unused - store handles refresh directly
   onTrackPlayed,
 }: MixInterfaceProps) {
   const [_isPending, startTransition] = useTransition()
 
-  // Get suggestions from store (centralized state)
+  // Get suggestions and auto-queue state from store
   const suggestions = useMixStore((s) => s.suggestions)
   const isLoadingSuggestions = useMixStore((s) => s.suggestionsLoading)
+  const autoQueueInProgress = useMixStore((s) => s.autoQueueInProgress)
   const refreshSuggestions = useMixStore((s) => s.refreshSuggestions)
 
   // Handle track change - notify parent when the track being played changes
@@ -62,15 +59,6 @@ export function MixInterface({
   const currentTrack: PlayedTrack | null = session?.history[0] ?? null
   const queue: QueuedTrack[] = session?.queue ?? []
   const vibe: VibeProfile | null = session?.vibe ?? null
-
-  const handleAddToQueue = useCallback(
-    (trackUri: string) => {
-      startTransition(() => {
-        onAddToQueue?.(trackUri)
-      })
-    },
-    [onAddToQueue],
-  )
 
   const handleRemoveFromQueue = useCallback(
     (position: number) => {
@@ -139,8 +127,8 @@ export function MixInterface({
       <div className={styles.panels}>
         <QueuePanel queue={queue} onRemove={handleRemoveFromQueue} onReorder={handleReorderQueue} />
         <SuggestionsPanel
+          autoFilling={autoQueueInProgress}
           isLoading={isLoadingSuggestions}
-          onAdd={handleAddToQueue}
           onRefresh={handleRefreshSuggestions}
           suggestions={suggestions}
         />

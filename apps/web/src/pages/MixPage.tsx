@@ -25,7 +25,6 @@ export function MixPage({onBackToChat, seedPlaylistId, token}: MixPageProps) {
 
   // Mix session hook
   const {
-    addToQueue,
     clearError: clearSessionError,
     endSession,
     error: sessionError,
@@ -85,27 +84,6 @@ export function MixPage({onBackToChat, seedPlaylistId, token}: MixPageProps) {
       setShowStartDialog(true)
     } catch (err) {
       handleError(err, 'Failed to end session')
-    }
-  }
-
-  const handleAddToQueue = async (trackUri: string) => {
-    try {
-      await addToQueue(trackUri)
-
-      // Also queue to Spotify's playback queue (best effort, don't fail if this doesn't work)
-      try {
-        await mixApiClient.queueToSpotify(trackUri)
-        console.log('[MixPage] Track queued to Spotify:', trackUri)
-      } catch (spotifyErr) {
-        // Non-fatal - log but don't show error to user
-        // This might fail if no active device or not Premium
-        console.warn('[MixPage] Could not queue to Spotify:', spotifyErr)
-      }
-
-      // Refresh suggestions after adding
-      await refreshSuggestions()
-    } catch (err) {
-      handleError(err, 'Failed to add track to queue')
     }
   }
 
@@ -197,9 +175,7 @@ export function MixPage({onBackToChat, seedPlaylistId, token}: MixPageProps) {
       </div>
 
       <MixInterface
-        onAddToQueue={handleAddToQueue}
         onEnergyChange={handleEnergyChange}
-        onRefreshSuggestions={refreshSuggestions}
         onRemoveFromQueue={removeFromQueue}
         onReorderQueue={reorderQueue}
         onSteerVibe={handleSteerVibe}
