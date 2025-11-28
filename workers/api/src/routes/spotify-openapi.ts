@@ -360,13 +360,6 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
         headers: {Authorization: `Bearer ${token}`},
       })
 
-      // Test audio-features scope (requires user-read-private and potentially premium)
-      // Use a known track ID to test
-      const audioFeaturesResponse = await fetch(
-        'https://api.spotify.com/v1/audio-features/4iV5W9uYEdYUVa79Axb7Rh',
-        {headers: {Authorization: `Bearer ${token}`}},
-      )
-
       const requiredScopes = [
         'playlist-modify-public',
         'playlist-modify-private',
@@ -382,20 +375,8 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       ]
 
       return c.json({
-        instructions: {
-          if_audio_features_forbidden:
-            'Audio features API may require app authorization. Contact Spotify developer support if needed.',
-          logout_method: 'Click the logout button in the app header to clear your session.',
-        },
         required_scopes: requiredScopes,
         scope_tests: {
-          'audio-features': {
-            accessible: audioFeaturesResponse.ok,
-            note: audioFeaturesResponse.ok
-              ? 'Audio features accessible'
-              : `Status ${audioFeaturesResponse.status}: ${audioFeaturesResponse.status === 403 ? 'Forbidden - may need app authorization' : 'Not accessible'}`,
-            status: audioFeaturesResponse.status,
-          },
           'playlist-read-private': playlistResponse.ok,
           'user-read-private': userResponse.ok,
         },

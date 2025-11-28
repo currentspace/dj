@@ -184,17 +184,8 @@ export const getSpotifyDebugScopes = createRoute({
       content: {
         'application/json': {
           schema: z.object({
-            instructions: z.object({
-              if_audio_features_forbidden: z.string(),
-              logout_method: z.string(),
-            }),
             required_scopes: z.array(z.string()),
             scope_tests: z.object({
-              'audio-features': z.object({
-                accessible: z.boolean(),
-                note: z.string(),
-                status: z.number(),
-              }),
               'playlist-read-private': z.boolean(),
               'user-read-private': z.boolean(),
             }),

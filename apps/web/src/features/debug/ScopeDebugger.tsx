@@ -4,13 +4,8 @@ import {storage, STORAGE_KEYS} from '../../hooks/useLocalStorage'
 import '../../styles/scope-debugger.css'
 
 interface ScopeDebugData {
-  instructions: {
-    if_audio_features_forbidden: string
-    logout_method: string
-  }
   required_scopes: string[]
   scope_tests: {
-    'audio-features': ScopeTestResult
     'playlist-read-private': boolean
     'user-read-private': boolean
   }
@@ -21,12 +16,6 @@ interface ScopeDebugData {
     product: string
     user_id: string
   }
-}
-
-interface ScopeTestResult {
-  accessible: boolean
-  note: string
-  status: number
 }
 
 export function ScopeDebugger() {
@@ -101,8 +90,6 @@ export function ScopeDebugger() {
     return null
   }
 
-  const hasAudioFeaturesAccess = data.scope_tests['audio-features'].accessible
-
   return (
     <div className="scope-debugger">
       <h2>Scope Debugger</h2>
@@ -147,29 +134,8 @@ export function ScopeDebugger() {
             <span className="scope-name">playlist-read-private</span>
             <span className="scope-status">{data.scope_tests['playlist-read-private'] ? 'Working' : 'Failed'}</span>
           </div>
-
-          <div className={`scope-test ${hasAudioFeaturesAccess ? 'success' : 'failure'}`}>
-            <span className="scope-icon">{hasAudioFeaturesAccess ? 'OK' : 'FAIL'}</span>
-            <span className="scope-name">audio-features</span>
-            <span className="scope-status">
-              {data.scope_tests['audio-features'].note}
-              {!hasAudioFeaturesAccess && ` (Status: ${data.scope_tests['audio-features'].status})`}
-            </span>
-          </div>
         </div>
       </section>
-
-      {!hasAudioFeaturesAccess && (
-        <section className="debug-section warning-section">
-          <h3>Action Required</h3>
-          <div className="warning-content">
-            <p>
-              <strong>{data.instructions.if_audio_features_forbidden}</strong>
-            </p>
-            <p>How to logout: {data.instructions.logout_method}</p>
-          </div>
-        </section>
-      )}
 
       <section className="debug-section">
         <h3>Required Scopes</h3>
