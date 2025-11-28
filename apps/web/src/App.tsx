@@ -7,9 +7,9 @@ import {ChatInterface} from './features/chat/ChatInterface'
 import {ScopeDebugger} from './features/debug/ScopeDebugger'
 import {NowPlaying} from './features/playback/NowPlaying'
 import {UserPlaylists} from './features/playlist/UserPlaylists'
-import {useNavigation} from './hooks/useNavigation'
 import {useSpotifyAuth} from './hooks/useSpotifyAuth'
 import {MixPage} from './pages/MixPage'
+import {useNavigationStore} from './stores'
 import './styles/app-layout.css'
 import './styles/build-info.css'
 
@@ -36,7 +36,8 @@ interface SpotifyPlaylist {
 
 function App() {
   const {clearError, error, isAuthenticated, isLoading, login, logout, token} = useSpotifyAuth()
-  const {navigate, route} = useNavigation()
+  const route = useNavigationStore((s) => s.route)
+  const navigate = useNavigationStore((s) => s.navigate)
 
   const [selectedPlaylist, setSelectedPlaylist] = useState<null | SpotifyPlaylist>(null)
 

@@ -6,9 +6,8 @@ import {ErrorDisplay} from '../components/ErrorDisplay'
 import {MixInterface} from '../features/mix'
 import {useError} from '../hooks/useError'
 import {useMixSession} from '../hooks/useMixSession'
-import {useSuggestions} from '../hooks/useSuggestions'
-import {useVibeControls} from '../hooks/useVibeControls'
 import {mixApiClient} from '../lib/mix-api-client'
+import {useMixStore} from '../stores'
 
 interface MixPageProps {
   onBackToChat: () => void
@@ -23,7 +22,7 @@ export function MixPage({onBackToChat, seedPlaylistId, token}: MixPageProps) {
   // Local error state for action-specific errors
   const {clearError: clearLocalError, error: localError, handleError} = useError()
 
-  // Mix session hook
+  // Mix session from store
   const {
     clearError: clearSessionError,
     endSession,
@@ -36,26 +35,17 @@ export function MixPage({onBackToChat, seedPlaylistId, token}: MixPageProps) {
     startSession,
   } = useMixSession()
 
-  // Suggestions hook
-  const {
-    clearError: clearSuggestionsError,
-    error: suggestionsError,
-    isLoading: suggestionsLoading,
-    refresh: refreshSuggestions,
-  } = useSuggestions({autoRefreshOnVibeChange: true, session})
+  // Suggestions from store (atomic selectors)
+  const suggestionsError = useMixStore((s) => s.suggestionsError)
+  const suggestionsLoading = useMixStore((s) => s.suggestionsLoading)
+  const refreshSuggestions = useMixStore((s) => s.refreshSuggestions)
+  const clearSuggestionsError = useMixStore((s) => s.clearSuggestionsError)
 
-  // Vibe controls hook
-  const {
-    clearError: clearVibeError,
-    error: vibeError,
-    setEnergyLevel,
-    steerVibe,
-  } = useVibeControls({
-    onVibeUpdate: vibe => {
-      console.log('Vibe updated:', vibe)
-    },
-    session,
-  })
+  // Vibe controls from store (atomic selectors)
+  const vibeError = useMixStore((s) => s.vibeError)
+  const setEnergyLevel = useMixStore((s) => s.setEnergyLevel)
+  const steerVibe = useMixStore((s) => s.steerVibe)
+  const clearVibeError = useMixStore((s) => s.clearVibeError)
 
   // Direct state sync: hide start dialog when existing session is detected
   if (session && showStartDialog) {

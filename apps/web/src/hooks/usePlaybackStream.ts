@@ -1,27 +1,20 @@
 /**
- * usePlaybackStream Hook - Zustand Store Wrapper
+ * usePlaybackStream Hook
  *
  * Connects to SSE stream for real-time Spotify playback state
  * with client-side progress interpolation for smooth UI updates.
  *
- * For new code, prefer using usePlaybackStore directly with atomic selectors:
- *
- * @example
- * // New pattern (recommended) - Only subscribe to what you need
- * import { usePlaybackStore } from '../stores'
- * const status = usePlaybackStore((s) => s.status)
- * const playbackCore = usePlaybackStore((s) => s.playbackCore)
- * const progress = usePlaybackStore((s) => s.progress)
- *
- * // Legacy pattern (this hook)
- * const { status, playback, error } = usePlaybackStream(token)
+ * Features:
+ * - Auto-connects when token is provided
+ * - Disconnects when token is removed
+ * - Track change callbacks for queue management
+ * - Returns simplified PlaybackState for UI components
  */
 
 import {useCallback, useEffect, useRef} from 'react'
 
 import {usePlaybackStore, type ConnectionStatus, type PlaybackState} from '../stores'
 
-// Re-export types for backward compatibility
 export type {ConnectionStatus, PlaybackState}
 export type {PlaybackCore} from '../stores'
 
@@ -101,7 +94,7 @@ export function usePlaybackStream(
     storeDisconnect()
   }, [storeDisconnect])
 
-  // Convert new PlaybackCore structure to legacy PlaybackState for backward compatibility
+  // Convert PlaybackCore to simplified PlaybackState for UI
   const playback: PlaybackState | null = playbackCore
     ? {
         albumArt: playbackCore.track?.albumArt ?? null,

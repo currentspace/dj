@@ -1,22 +1,10 @@
 /**
- * useMixSession Hook - Zustand Store Wrapper
+ * useMixSession Hook
  *
- * Manages mix session state.
- *
- * For new code, prefer using useMixStore directly with atomic selectors:
- *
- * @example
- * // New pattern (recommended)
- * import { useMixStore } from '../stores'
- * const session = useMixStore((s) => s.session)
- * const isLoading = useMixStore((s) => s.isLoading)
- * const startSession = useMixStore((s) => s.startSession)
- *
- * // Legacy pattern (this hook)
- * const { session, isLoading, startSession } = useMixSession()
+ * Manages mix session state with automatic initialization.
  */
 
-import {useEffect, useRef} from 'react'
+import {useRef} from 'react'
 import type {MixSession, SessionPreferences} from '@dj/shared-types'
 
 import {initializeMixStore, useMixStore} from '../stores'
@@ -60,13 +48,11 @@ export function useMixSession(): UseMixSessionReturn {
   const clearError = useMixStore((s) => s.clearError)
   const refreshSession = useMixStore((s) => s.refreshSession)
 
-  // Initialize store on first mount
-  useEffect(() => {
-    if (!hasInitialized.current) {
-      hasInitialized.current = true
-      initializeMixStore()
-    }
-  }, [])
+  // Direct state sync: Initialize store on first render (React 19 pattern)
+  if (!hasInitialized.current) {
+    hasInitialized.current = true
+    initializeMixStore()
+  }
 
   return {
     // State

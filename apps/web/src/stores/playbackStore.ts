@@ -48,7 +48,7 @@ export interface PlaybackCore {
   seq: number
 }
 
-/** Legacy interface for backward compatibility */
+/** Simplified playback state for UI components */
 export interface PlaybackState {
   albumArt: string | null
   artistName: string
@@ -312,61 +312,6 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
             console.log('[playbackStore] Server requested reconnect')
             scheduleReconnect(token)
             break
-
-          // Legacy event support (for backward compatibility during rollout)
-          case 'playback': {
-            console.log('[playbackStore] Received legacy playback event, converting...')
-            lastServerUpdate = Date.now()
-            lastServerProgress = parsed.progress
-
-            const newTrackId = parsed.trackId as string | null
-            const newTrackUri = parsed.trackUri as string | null
-
-            if (newTrackId && newTrackUri) {
-              notifyTrackChange(newTrackId, newTrackUri)
-            }
-
-            // Convert legacy format to new format
-            const legacyCore: PlaybackCore = {
-              track: parsed.trackId ? {
-                id: parsed.trackId,
-                uri: parsed.trackUri ?? '',
-                name: parsed.trackName ?? 'Unknown',
-                artist: parsed.artistName ?? '',
-                albumArt: parsed.albumArt ?? null,
-                albumName: '',
-                duration: parsed.duration ?? 0,
-                explicit: false,
-                popularity: 0,
-                isLocal: false,
-                previewUrl: null,
-              } : null,
-              device: {
-                id: parsed.deviceId ?? null,
-                name: parsed.deviceName ?? 'Unknown',
-                type: 'unknown',
-                volumePercent: null,
-                supportsVolume: false,
-                isPrivateSession: false,
-                isRestricted: false,
-              },
-              context: null,
-              modes: { shuffle: false, repeat: 'off' },
-              playingType: 'track',
-              isPlaying: parsed.isPlaying ?? false,
-              timestamp: parsed.timestamp ?? Date.now(),
-              seq: 0,
-            }
-
-            set({ playbackCore: legacyCore, progress: parsed.progress, error: null })
-
-            if (parsed.isPlaying) {
-              startInterpolation()
-            } else {
-              stopInterpolation()
-            }
-            break
-          }
         }
       } catch (err) {
         console.error('[playbackStore] Parse error:', err, data)
@@ -488,11 +433,11 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
 )
 
 // =============================================================================
-// DERIVED SELECTORS & BACKWARD COMPATIBILITY
+// DERIVED SELECTORS
 // =============================================================================
 
 /**
- * Get legacy PlaybackState for backward compatibility
+ * Get simplified PlaybackState for UI components
  */
 export function getPlaybackState(): PlaybackState | null {
   const { playbackCore, progress } = usePlaybackStore.getState()

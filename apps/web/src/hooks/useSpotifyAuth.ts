@@ -1,21 +1,11 @@
 /**
- * useSpotifyAuth Hook - Zustand Store Wrapper
+ * useSpotifyAuth Hook
  *
- * This hook wraps the Zustand auth store for backward compatibility.
- * For new code, prefer using useAuthStore directly with atomic selectors:
- *
- * @example
- * // New pattern (recommended)
- * import { useAuthStore } from '../stores'
- * const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
- * const token = useAuthStore((s) => s.token)
- * const login = useAuthStore((s) => s.login)
- *
- * // Legacy pattern (this hook)
- * const { isAuthenticated, token, login } = useSpotifyAuth()
+ * Handles Spotify OAuth authentication state and initialization.
+ * Processes OAuth callbacks and validates tokens on mount.
  */
 
-import {useEffect, useRef} from 'react'
+import {useRef} from 'react'
 import {useShallow} from 'zustand/react/shallow'
 
 import {processOAuthCallback, useAuthStore} from '../stores'
@@ -50,18 +40,20 @@ export function useSpotifyAuth(): UseSpotifyAuthReturn {
     }))
   )
 
-  // Process OAuth callback on mount (once)
-  useEffect(() => {
-    if (!hasInitialized.current) {
-      hasInitialized.current = true
-      processOAuthCallback()
+  // Direct state sync: Process OAuth callback on first render (React 19 pattern)
+  if (!hasInitialized.current) {
+    hasInitialized.current = true
+    processOAuthCallback()
 
-      // Validate token if we have one
-      if (state.token && !state.isValidating) {
-        state.validateToken()
-      }
+    // Schedule token validation after render (if we have a token)
+    const {token: currentToken, isValidating: currentIsValidating, validateToken} = useAuthStore.getState()
+    if (currentToken && !currentIsValidating) {
+      // Use queueMicrotask to run after render without blocking
+      queueMicrotask(() => {
+        validateToken()
+      })
     }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }
 
   return state
 }
