@@ -18,6 +18,19 @@ interface PlaybackState {
   trackName: string
 }
 
+interface QueueTrack {
+  albumArt: string | null
+  artistName: string
+  duration: number
+  name: string
+  uri: string
+}
+
+interface SpotifyQueue {
+  currently_playing: QueueTrack | null
+  queue: QueueTrack[]
+}
+
 /** Progress interpolation interval (ms) */
 const INTERPOLATION_INTERVAL_MS = 100
 
@@ -148,9 +161,13 @@ const playbackPollingStore = createPlaybackPollingStore()
 
 export const NowPlaying = memo(function NowPlaying({token}: NowPlayingProps) {
   const [playback, setPlayback] = useState<PlaybackState | null>(null)
+  const [queue, setQueue] = useState<SpotifyQueue | null>(null)
+  const [showQueue, setShowQueue] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const lastFetchRef = useRef<number>(0)
   const lastServerProgressRef = useRef<number>(0)
+  const lastQueueFetchRef = useRef<number>(0)
+  const showQueueRef = useRef(false)
 
   // Subscribe to polling state for cleanup
   const pollingState = useSyncExternalStore(
@@ -175,6 +192,64 @@ export const NowPlaying = memo(function NowPlaying({token}: NowPlayingProps) {
       return {...prev, progress: interpolatedProgress}
     })
   })
+
+  const fetchQueue = useCallback(async () => {
+    if (!token) return
+
+    const now = Date.now()
+    // Debounce queue fetches (every 5 seconds max)
+    if (now - lastQueueFetchRef.current < 5000) return
+    lastQueueFetchRef.current = now
+
+    try {
+      const response = await fetch('/api/player/queue', {
+        headers: {Authorization: `Bearer ${token}`},
+      })
+
+      if (!response.ok) {
+        console.error('[NowPlaying] Queue fetch failed:', response.status)
+        return
+      }
+
+      const data = (await response.json()) as {
+        currently_playing?: {
+          album?: {images?: Array<{url: string}>}
+          artists?: Array<{name: string}>
+          duration_ms?: number
+          name?: string
+          uri?: string
+        } | null
+        queue?: Array<{
+          album?: {images?: Array<{url: string}>}
+          artists?: Array<{name: string}>
+          duration_ms?: number
+          name?: string
+          uri?: string
+        }>
+      }
+
+      setQueue({
+        currently_playing: data.currently_playing
+          ? {
+              albumArt: data.currently_playing.album?.images?.[0]?.url ?? null,
+              artistName: data.currently_playing.artists?.map(a => a.name).join(', ') ?? '',
+              duration: data.currently_playing.duration_ms ?? 0,
+              name: data.currently_playing.name ?? 'Unknown',
+              uri: data.currently_playing.uri ?? '',
+            }
+          : null,
+        queue: (data.queue ?? []).slice(0, 10).map(track => ({
+          albumArt: track.album?.images?.[0]?.url ?? null,
+          artistName: track.artists?.map(a => a.name).join(', ') ?? '',
+          duration: track.duration_ms ?? 0,
+          name: track.name ?? 'Unknown',
+          uri: track.uri ?? '',
+        })),
+      })
+    } catch (err) {
+      console.error('[NowPlaying] Queue fetch error:', err)
+    }
+  }, [token])
 
   const fetchPlaybackState = useCallback(async () => {
     if (!token) return
@@ -236,8 +311,14 @@ export const NowPlaying = memo(function NowPlaying({token}: NowPlayingProps) {
     }
   }, [token])
 
-  // Set up fetch callback for polling store
-  playbackPollingStore.setFetchCallback(fetchPlaybackState)
+  // Set up fetch callback for polling store - also fetch queue when open
+  playbackPollingStore.setFetchCallback(async () => {
+    await fetchPlaybackState()
+    // Refresh queue periodically when panel is open (use ref to avoid stale closure)
+    if (showQueueRef.current) {
+      fetchQueue()
+    }
+  })
 
   // Direct state sync: manage polling based on token
   if (token && !pollingState.isPolling) {
@@ -322,6 +403,17 @@ export const NowPlaying = memo(function NowPlaying({token}: NowPlayingProps) {
     [token, playback]
   )
 
+  const handleToggleQueue = useCallback(() => {
+    const newShowQueue = !showQueue
+    setShowQueue(newShowQueue)
+    showQueueRef.current = newShowQueue
+    if (newShowQueue) {
+      // Force refresh queue when opening
+      lastQueueFetchRef.current = 0
+      fetchQueue()
+    }
+  }, [showQueue, fetchQueue])
+
   // Format time as m:ss
   const formatTime = (ms: number): string => {
     const totalSeconds = Math.floor(ms / 1000)
@@ -389,10 +481,60 @@ export const NowPlaying = memo(function NowPlaying({token}: NowPlayingProps) {
         </div>
       </div>
 
-      <div className="now-playing__device">
-        <span className="now-playing__device-icon">Speaker</span>
-        <span className="now-playing__device-name">{playback.deviceName}</span>
+      <div className="now-playing__right">
+        <button
+          className={`now-playing__queue-btn ${showQueue ? 'now-playing__queue-btn--active' : ''}`}
+          onClick={handleToggleQueue}
+          title="Show queue"
+          type="button"
+        >
+          Queue
+        </button>
+        <div className="now-playing__device">
+          <span className="now-playing__device-icon">Speaker</span>
+          <span className="now-playing__device-name">{playback.deviceName}</span>
+        </div>
       </div>
+
+      {showQueue && queue && (
+        <div className="now-playing__queue-panel">
+          <div className="now-playing__queue-header">
+            <span className="now-playing__queue-title">Up Next</span>
+            <button
+              className="now-playing__queue-close"
+              onClick={() => {
+                setShowQueue(false)
+                showQueueRef.current = false
+              }}
+              type="button"
+            >
+              Close
+            </button>
+          </div>
+          {queue.queue.length === 0 ? (
+            <div className="now-playing__queue-empty">Queue is empty</div>
+          ) : (
+            <div className="now-playing__queue-list">
+              {queue.queue.map((track, index) => (
+                <div className="now-playing__queue-item" key={`${track.uri}-${index}`}>
+                  {track.albumArt && (
+                    <img
+                      alt="Album art"
+                      className="now-playing__queue-item-art"
+                      src={track.albumArt}
+                    />
+                  )}
+                  <div className="now-playing__queue-item-info">
+                    <span className="now-playing__queue-item-name">{track.name}</span>
+                    <span className="now-playing__queue-item-artist">{track.artistName}</span>
+                  </div>
+                  <span className="now-playing__queue-item-duration">{formatTime(track.duration)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 })
