@@ -11,6 +11,7 @@ import {
   getSpotifyDebugScopes,
   getSpotifyMe,
   handleSpotifyCallback,
+  refreshSpotifyToken,
   searchSpotify,
 } from '@dj/api-contracts'
 import {SpotifySearchResponseSchema, SpotifyTokenResponseSchema} from '@dj/shared-types'
@@ -161,12 +162,28 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
         return c.redirect(`${env.FRONTEND_URL ?? 'https://dj.current.space'}?error=invalid_token_response`)
       }
 
-      // Clear the OAuth cookie
-      c.header('Set-Cookie', `spotify_oauth=; Max-Age=0; Secure; SameSite=Lax; Path=/; HttpOnly`)
+      // Clear the OAuth cookie and set refresh token cookie
+      // Multiple Set-Cookie headers are allowed and needed here
+      const cookies: string[] = [
+        // Clear OAuth state cookie
+        'spotify_oauth=; Max-Age=0; Secure; SameSite=Lax; Path=/; HttpOnly',
+      ]
+
+      // Store refresh token in HttpOnly cookie (if provided)
+      // Max-Age: 30 days (refresh tokens don't expire but we set reasonable limit)
+      if (tokenData.refresh_token) {
+        cookies.push(
+          `spotify_refresh=${tokenData.refresh_token}; Max-Age=2592000; Secure; SameSite=Lax; Path=/api/spotify; HttpOnly`
+        )
+      }
+
+      // Set all cookies (Hono supports multiple Set-Cookie via append)
+      cookies.forEach(cookie => c.header('Set-Cookie', cookie, { append: true }))
 
       // Redirect back to SPA with success and token
       const redirectUrl = new URL(env.FRONTEND_URL ?? 'https://dj.current.space')
       redirectUrl.searchParams.set('spotify_token', tokenData.access_token)
+      redirectUrl.searchParams.set('expires_in', String(tokenData.expires_in))
       redirectUrl.searchParams.set('auth_success', 'true')
 
       return c.redirect(redirectUrl.toString())
@@ -391,6 +408,74 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
     } catch (error) {
       getLogger()?.error('Scope debug error:', error)
       return c.json({error: 'Failed to check scopes'}, 401)
+    }
+  })
+
+  // POST /api/spotify/refresh - Refresh access token using HttpOnly cookie
+  app.openapi(refreshSpotifyToken, async (c) => {
+    const env = c.env
+
+    try {
+      // Extract refresh token from HttpOnly cookie
+      const cookieHeader = c.req.header('Cookie')
+      const refreshMatch = cookieHeader?.match(/spotify_refresh=([^;]+)/)
+      const refreshToken = refreshMatch?.[1]
+
+      if (!refreshToken) {
+        getLogger()?.info('No refresh token cookie found')
+        return c.json({error: 'No refresh token available'}, 401)
+      }
+
+      // Call Spotify token endpoint with refresh_token grant
+      // PKCE flow only requires client_id, not client_secret
+      const response = await fetch(SPOTIFY_TOKEN_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          grant_type: 'refresh_token',
+          refresh_token: refreshToken,
+          client_id: env.SPOTIFY_CLIENT_ID,
+        }),
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        getLogger()?.error('Token refresh failed:', response.status, {errorText})
+
+        // Clear invalid refresh token cookie
+        c.header('Set-Cookie', 'spotify_refresh=; Max-Age=0; Secure; SameSite=Lax; Path=/api/spotify; HttpOnly')
+
+        return c.json({error: 'Token refresh failed - please log in again'}, 401)
+      }
+
+      const data = await response.json()
+      let tokenData
+      try {
+        tokenData = parse(SpotifyTokenResponseSchema, data)
+      } catch (error) {
+        getLogger()?.error('Invalid refresh response format:', error)
+        return c.json({error: 'Invalid response from Spotify'}, 401)
+      }
+
+      // If Spotify returned a new refresh token, update the cookie
+      if (tokenData.refresh_token) {
+        c.header(
+          'Set-Cookie',
+          `spotify_refresh=${tokenData.refresh_token}; Max-Age=2592000; Secure; SameSite=Lax; Path=/api/spotify; HttpOnly`
+        )
+      }
+
+      getLogger()?.info('Token refreshed successfully')
+
+      return c.json({
+        access_token: tokenData.access_token,
+        expires_in: tokenData.expires_in,
+      }, 200)
+    } catch (error) {
+      getLogger()?.error('Token refresh error:', error)
+      return c.json({error: 'Token refresh failed'}, 401)
     }
   })
 }

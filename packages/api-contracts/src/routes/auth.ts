@@ -216,6 +216,41 @@ export const getSpotifyDebugScopes = createRoute({
 })
 
 /**
+ * POST /api/spotify/refresh
+ * Refresh access token using refresh token stored in HttpOnly cookie
+ * No request body needed - refresh token is read from cookie
+ */
+export const refreshSpotifyToken = createRoute({
+  description: 'Refresh Spotify access token using stored refresh token',
+  method: 'post',
+  path: '/api/spotify/refresh',
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            access_token: z.string(),
+            expires_in: z.number(),
+          }),
+        },
+      },
+      description: 'Token refreshed successfully',
+    },
+    401: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            error: z.string(),
+          }),
+        },
+      },
+      description: 'No refresh token available or refresh failed - user must re-authenticate',
+    },
+  },
+  tags: ['Auth'],
+})
+
+/**
  * POST /api/spotify/search
  * Search Spotify catalog
  */

@@ -23,6 +23,7 @@ interface AuthState {
   error: string | null
   isAuthenticated: boolean
   isLoading: boolean
+  isRefreshing: boolean
   isValidating: boolean
   token: string | null
 
@@ -32,6 +33,7 @@ interface AuthState {
   login: () => void
   logout: () => void
   markTokenInvalid: () => void
+  refreshToken: () => Promise<boolean>
   setError: (error: string | null) => void
   setLoading: (loading: boolean) => void
   setToken: (token: string, expiresIn?: number) => void
@@ -112,6 +114,57 @@ async function validateTokenWithAPI(token: string, signal: AbortSignal): Promise
   }
 }
 
+// Refresh token helper - calls server endpoint which reads HttpOnly cookie
+async function refreshTokenWithAPI(signal: AbortSignal): Promise<{access_token: string; expires_in: number} | null> {
+  try {
+    const response = await fetch('/api/spotify/refresh', {
+      method: 'POST',
+      credentials: 'include', // Important: include cookies
+      signal,
+    })
+
+    if (!response.ok) {
+      console.log('[authStore] Refresh failed:', response.status)
+      return null
+    }
+
+    return await response.json() as {access_token: string; expires_in: number}
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') throw err
+    console.warn('[authStore] Refresh error:', err)
+    return null
+  }
+}
+
+// Check if token is near expiration (within 5 minutes)
+function isTokenNearExpiration(tokenData: TokenData): boolean {
+  if (!tokenData.expiresAt) return false
+  const fiveMinutes = 5 * 60 * 1000
+  return Date.now() >= tokenData.expiresAt - fiveMinutes
+}
+
+// Proactive refresh timer
+let refreshTimer: ReturnType<typeof setTimeout> | null = null
+
+function scheduleProactiveRefresh(expiresAt: number, refreshFn: () => Promise<boolean>): void {
+  if (refreshTimer) {
+    clearTimeout(refreshTimer)
+    refreshTimer = null
+  }
+
+  // Refresh 5 minutes before expiration
+  const fiveMinutes = 5 * 60 * 1000
+  const refreshTime = expiresAt - fiveMinutes - Date.now()
+
+  if (refreshTime > 0) {
+    console.log(`[authStore] Scheduling proactive refresh in ${Math.round(refreshTime / 1000 / 60)} minutes`)
+    refreshTimer = setTimeout(() => {
+      console.log('[authStore] Proactive refresh triggered')
+      refreshFn()
+    }, refreshTime)
+  }
+}
+
 // =============================================================================
 // STORE
 // =============================================================================
@@ -127,6 +180,7 @@ export const useAuthStore = create<AuthState>()(
     error: null,
     isAuthenticated: initial.isAuthenticated,
     isLoading: false,
+    isRefreshing: false,
     isValidating: false,
     token: initial.token,
 
@@ -134,6 +188,10 @@ export const useAuthStore = create<AuthState>()(
     clearError: () => set({error: null}),
 
     clearToken: () => {
+      if (refreshTimer) {
+        clearTimeout(refreshTimer)
+        refreshTimer = null
+      }
       clearTokenData()
       set({isAuthenticated: false, token: null, error: null})
     },
@@ -156,19 +214,63 @@ export const useAuthStore = create<AuthState>()(
     logout: () => {
       abortController?.abort()
       abortController = null
+      if (refreshTimer) {
+        clearTimeout(refreshTimer)
+        refreshTimer = null
+      }
       clearTokenData()
       set({
         error: null,
         isAuthenticated: false,
         isLoading: false,
+        isRefreshing: false,
         isValidating: false,
         token: null,
       })
     },
 
     markTokenInvalid: () => {
+      if (refreshTimer) {
+        clearTimeout(refreshTimer)
+        refreshTimer = null
+      }
       clearTokenData()
       set({isAuthenticated: false, token: null})
+    },
+
+    refreshToken: async () => {
+      const {isRefreshing, setToken, markTokenInvalid} = get()
+
+      // Prevent concurrent refresh attempts
+      if (isRefreshing) {
+        console.log('[authStore] Refresh already in progress')
+        return false
+      }
+
+      abortController?.abort()
+      abortController = new AbortController()
+
+      set({isRefreshing: true, error: null})
+
+      try {
+        const result = await refreshTokenWithAPI(abortController.signal)
+        set({isRefreshing: false})
+
+        if (!result) {
+          console.log('[authStore] Refresh returned null, marking token invalid')
+          markTokenInvalid()
+          return false
+        }
+
+        console.log('[authStore] Token refreshed successfully')
+        setToken(result.access_token, result.expires_in)
+        return true
+      } catch (err: unknown) {
+        set({isRefreshing: false})
+        if (err instanceof Error && err.name === 'AbortError') return false
+        console.warn('[authStore] Refresh failed:', err)
+        return false
+      }
     },
 
     setError: (error) => set({error}),
@@ -176,24 +278,37 @@ export const useAuthStore = create<AuthState>()(
     setLoading: (isLoading) => set({isLoading}),
 
     setToken: (token, expiresIn) => {
+      const expiresAt = expiresIn ? Date.now() + expiresIn * 1000 : null
       const tokenData: TokenData = {
         createdAt: Date.now(),
-        expiresAt: expiresIn ? Date.now() + expiresIn * 1000 : null,
+        expiresAt,
         token,
       }
       saveTokenData(tokenData)
       set({isAuthenticated: true, token, error: null})
+
+      // Schedule proactive refresh if we have expiration info
+      if (expiresAt) {
+        scheduleProactiveRefresh(expiresAt, () => get().refreshToken())
+      }
     },
 
     setValidating: (isValidating) => set({isValidating}),
 
     validateToken: async () => {
-      const {token, markTokenInvalid, setError} = get()
+      const {token, refreshToken, markTokenInvalid, setError} = get()
       if (!token) return false
 
       const tokenData = loadTokenData()
-      if (tokenData && isTokenExpired(tokenData)) {
-        markTokenInvalid()
+
+      // If token is expired or near expiration, try to refresh first
+      if (tokenData && (isTokenExpired(tokenData) || isTokenNearExpiration(tokenData))) {
+        console.log('[authStore] Token expired or near expiration, attempting refresh')
+        const refreshed = await refreshToken()
+        if (refreshed) {
+          return true
+        }
+        // Refresh failed, token is invalid
         setError('Session expired. Please log in again.')
         return false
       }
@@ -208,9 +323,20 @@ export const useAuthStore = create<AuthState>()(
         set({isValidating: false})
 
         if (!isValid) {
+          // Token validation failed, try to refresh
+          console.log('[authStore] Token validation failed, attempting refresh')
+          const refreshed = await refreshToken()
+          if (refreshed) {
+            return true
+          }
           markTokenInvalid()
           setError('Session expired. Please log in again.')
           return false
+        }
+
+        // Token is valid, schedule proactive refresh if we have expiration data
+        if (tokenData?.expiresAt) {
+          scheduleProactiveRefresh(tokenData.expiresAt, () => get().refreshToken())
         }
 
         return true
@@ -237,6 +363,7 @@ export function processOAuthCallback(): void {
   const urlError = urlParams.get('error')
   const spotifyToken = urlParams.get('spotify_token')
   const authSuccess = urlParams.get('auth_success')
+  const expiresIn = urlParams.get('expires_in')
 
   if (!urlError && !(spotifyToken && authSuccess)) return
 
@@ -247,7 +374,9 @@ export function processOAuthCallback(): void {
     window.history.replaceState({}, document.title, window.location.pathname)
   } else if (spotifyToken && authSuccess) {
     console.log('[authStore] OAuth success, storing token')
-    useAuthStore.getState().setToken(spotifyToken)
+    // Pass expires_in to enable proactive token refresh
+    const expiresInSeconds = expiresIn ? parseInt(expiresIn, 10) : undefined
+    useAuthStore.getState().setToken(spotifyToken, expiresInSeconds)
     window.history.replaceState({}, document.title, window.location.pathname)
   }
 }
