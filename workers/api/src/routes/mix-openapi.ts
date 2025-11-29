@@ -125,6 +125,16 @@ function createQueuedTrack(
 }
 
 /**
+ * Clamp BPM to valid schema range (20-220) or return null if outside bounds
+ * Values below 20 or above 220 are likely data errors, so we null them out
+ */
+function clampBpm(bpm: number | null): number | null {
+  if (bpm === null) return null
+  if (bpm < 20 || bpm > 220) return null // Invalid BPM, treat as unknown
+  return bpm
+}
+
+/**
  * Helper to create PlayedTrack from SpotifyTrackFull
  */
 function createPlayedTrack(
@@ -139,7 +149,7 @@ function createPlayedTrack(
     artist: track.artists?.[0]?.name || 'Unknown Artist',
     albumArt: track.album?.images?.[0]?.url,
     playedAt: new Date().toISOString(),
-    bpm,
+    bpm: clampBpm(bpm),
     energy,
   }
 }
@@ -159,7 +169,7 @@ function queuedTrackToPlayedTrack(
     artist: queued.artist,
     albumArt: queued.albumArt,
     playedAt: new Date().toISOString(),
-    bpm,
+    bpm: clampBpm(bpm),
     energy,
   }
 }
