@@ -5,6 +5,8 @@
   align-items: center;
   gap: 1.5rem;
   padding: 0.75rem 1.5rem;
+  /* Add safe area bottom padding for iOS home indicator */
+  padding-bottom: calc(0.75rem + var(--safe-area-inset-bottom, 0px));
   background: linear-gradient(180deg, #1a1a1a 0%, #121212 100%);
   border-top: 1px solid #333;
   min-height: 72px;
@@ -205,6 +207,8 @@
   .now-playing {
     flex-wrap: wrap;
     padding: 0.75rem 1rem;
+    /* Safe area bottom padding for iOS */
+    padding-bottom: calc(0.75rem + var(--safe-area-inset-bottom, 0px));
     gap: 0.75rem;
   }
 

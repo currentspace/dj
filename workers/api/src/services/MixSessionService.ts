@@ -154,11 +154,15 @@ export class MixSessionService {
     const energyDirection = this.detectEnergyDirection(session, track)
 
     // Update BPM range to include new track
+    // Clamp to schema bounds (45-220) to avoid validation errors
+    const BPM_MIN = 45
+    const BPM_MAX = 220
     let bpmRange = { ...currentVibe.bpmRange }
     if (track.bpm !== null) {
+      const clampedBpm = Math.max(BPM_MIN, Math.min(BPM_MAX, track.bpm))
       bpmRange = {
-        min: Math.min(currentVibe.bpmRange.min, track.bpm),
-        max: Math.max(currentVibe.bpmRange.max, track.bpm),
+        min: Math.max(BPM_MIN, Math.min(currentVibe.bpmRange.min, clampedBpm)),
+        max: Math.min(BPM_MAX, Math.max(currentVibe.bpmRange.max, clampedBpm)),
       }
     }
 
@@ -215,11 +219,13 @@ export class MixSessionService {
       blended.genres = uniqueGenres.slice(0, 5)
     }
 
-    // Blend BPM range if provided
+    // Blend BPM range if provided (clamp to schema bounds 45-220)
     if (trackVibe.bpmRange) {
+      const BPM_MIN = 45
+      const BPM_MAX = 220
       blended.bpmRange = {
-        min: Math.min(current.bpmRange.min, trackVibe.bpmRange.min),
-        max: Math.max(current.bpmRange.max, trackVibe.bpmRange.max),
+        min: Math.max(BPM_MIN, Math.min(current.bpmRange.min, trackVibe.bpmRange.min)),
+        max: Math.min(BPM_MAX, Math.max(current.bpmRange.max, trackVibe.bpmRange.max)),
       }
     }
 
