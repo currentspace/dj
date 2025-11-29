@@ -1,0 +1,152 @@
+/* ===== Device Picker ===== */
+
+.devicePicker {
+  position: relative;
+  margin-top: 0.5rem;
+}
+
+.devicePickerButton {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 20px;
+  padding: 0.5rem 1rem;
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 0.875rem;
+  width: 100%;
+  justify-content: center;
+}
+
+.devicePickerButton:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.4);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.devicePickerButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.deviceIcon {
+  font-size: 1rem;
+}
+
+.deviceCurrentName {
+  flex: 1;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.deviceDropdownArrow {
+  font-size: 0.625rem;
+  opacity: 0.7;
+}
+
+.deviceDropdown {
+  position: absolute;
+  bottom: calc(100% + 0.5rem);
+  left: 0;
+  right: 0;
+  background: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 8px;
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.4);
+  z-index: 100;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.deviceLoading,
+.deviceError,
+.deviceEmpty {
+  padding: 1rem;
+  text-align: center;
+  color: #999;
+  font-size: 0.875rem;
+}
+
+.deviceError {
+  color: #ff6b6b;
+}
+
+.deviceHint {
+  font-size: 0.75rem;
+  margin-top: 0.5rem;
+  opacity: 0.7;
+}
+
+.deviceList {
+  list-style: none;
+  margin: 0;
+  padding: 0.5rem;
+}
+
+.deviceItem {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.75rem;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: #e0e0e0;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.2s ease;
+}
+
+.deviceItem:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.deviceItem:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.deviceItemActive {
+  background: rgba(29, 185, 84, 0.2);
+}
+
+.deviceItemActive:hover:not(:disabled) {
+  background: rgba(29, 185, 84, 0.3);
+}
+
+.deviceItemIcon {
+  font-size: 1.25rem;
+  flex-shrink: 0;
+}
+
+.deviceItemInfo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.deviceItemName {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.deviceItemType {
+  font-size: 0.75rem;
+  color: #999;
+  text-transform: capitalize;
+}
+
+.deviceItemActive {
+  color: #1db954;
+  font-size: 0.875rem;
+  flex-shrink: 0;
+}

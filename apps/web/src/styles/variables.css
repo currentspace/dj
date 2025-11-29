@@ -1,0 +1,54 @@
+/* Design System Variables */
+:root {
+  /* Brand Colors */
+  --color-spotify-green: #1db954;
+  --color-spotify-green-light: #1ed760;
+
+  /* Surface Colors (dark theme) */
+  --color-surface-0: #121212;
+  --color-surface-1: #1a1a1a;
+  --color-surface-2: #222222;
+  --color-surface-3: #2a2a2a;
+  --color-surface-4: #333333;
+  --color-surface-5: #444444;
+
+  /* Text Colors */
+  --color-text-primary: #e0e0e0;
+  --color-text-secondary: #999999;
+  --color-text-muted: #666666;
+  --color-text-white: #ffffff;
+
+  /* Accent Colors */
+  --color-accent-purple: #667eea;
+  --color-accent-pink: #764ba2;
+  --color-accent-blue: #4a9eff;
+
+  /* Semantic Colors */
+  --color-error: #ff3b30;
+  --color-error-light: #ff6b6b;
+  --color-warning: #ff9500;
+  --color-success: var(--color-spotify-green);
+
+  /* Border Radius */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-full: 9999px;
+
+  /* Shadows */
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.4);
+
+  /* Transitions */
+  --transition-fast: 0.15s ease;
+  --transition-normal: 0.2s ease;
+  --transition-slow: 0.3s ease;
+
+  /* Z-index layers */
+  --z-dropdown: 100;
+  --z-modal: 200;
+  --z-toast: 300;
+  --z-tooltip: 400;
+}

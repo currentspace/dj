@@ -1,6 +1,7 @@
 import type {Suggestion} from '@dj/shared-types'
 
-import styles from './mix.module.css'
+import sharedStyles from './mix-shared.module.css'
+import styles from './suggestions-panel.module.css'
 
 interface SuggestionsPanelProps {
   isLoading: boolean
@@ -11,7 +12,7 @@ interface SuggestionsPanelProps {
 export function SuggestionsPanel({suggestions, onRefresh, isLoading}: SuggestionsPanelProps) {
   return (
     <div className={styles.suggestionsPanel}>
-      <div className={styles.panelHeader}>
+      <div className={sharedStyles.panelHeader}>
         <h2>Coming Up</h2>
         <button className={styles.refreshButton} disabled={isLoading} onClick={onRefresh} title="Refresh suggestions" type="button">
           <svg className={isLoading ? styles.refreshSpinning : ''} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -22,15 +23,15 @@ export function SuggestionsPanel({suggestions, onRefresh, isLoading}: Suggestion
 
       <div className={styles.suggestionsList}>
         {isLoading ? (
-          <div className={styles.loadingState}>
-            <div className={styles.loadingSpinner}></div>
+          <div className={sharedStyles.loadingState}>
+            <div className={sharedStyles.loadingSpinner}></div>
             <p>Finding perfect tracks...</p>
           </div>
         ) : suggestions.length === 0 ? (
-          <div className={styles.emptyState}>
-            <span className={styles.emptyIcon}>🎧</span>
+          <div className={sharedStyles.emptyState}>
+            <span className={sharedStyles.emptyIcon}>🎧</span>
             <p>Queue is full</p>
-            <p className={styles.emptyHint}>More tracks will be added as the queue plays</p>
+            <p className={sharedStyles.emptyHint}>More tracks will be added as the queue plays</p>
           </div>
         ) : (
           suggestions.map(suggestion => (

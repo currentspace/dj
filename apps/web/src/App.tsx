@@ -80,16 +80,9 @@ function App() {
                 </div>
 
                 <div className="chat-section">
-                  {selectedPlaylist ? (
-                    <Suspense fallback={<div className="loading">Loading chat interface...</div>}>
-                      <ChatInterface />
-                    </Suspense>
-                  ) : (
-                    <div className="no-playlist-selected">
-                      <h2>🎵 Select a Playlist</h2>
-                      <p>Choose a playlist from the left to start chatting with your AI DJ assistant!</p>
-                    </div>
-                  )}
+                  <Suspense fallback={<div className="loading">Loading chat interface...</div>}>
+                    <ChatInterface />
+                  </Suspense>
                 </div>
               </div>
             </PlaylistErrorBoundary>

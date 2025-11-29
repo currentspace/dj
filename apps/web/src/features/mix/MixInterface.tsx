@@ -9,7 +9,7 @@ import {NowPlayingHero} from './NowPlayingHero'
 import {QueuePanel} from './QueuePanel'
 import {SuggestionsPanel} from './SuggestionsPanel'
 import {VibeControls} from './VibeControls'
-import styles from './mix.module.css'
+import styles from './mix-shared.module.css'
 
 interface MixInterfaceProps {
   onEnergyChange?: (level: number) => void

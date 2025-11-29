@@ -1,6 +1,7 @@
 import type {QueuedTrack} from '@dj/shared-types'
 
-import styles from './mix.module.css'
+import sharedStyles from './mix-shared.module.css'
+import styles from './queue-panel.module.css'
 
 interface QueuePanelProps {
   onRemove: (position: number) => void
@@ -11,17 +12,17 @@ interface QueuePanelProps {
 export function QueuePanel({queue, onRemove, onReorder: _onReorder}: QueuePanelProps) {
   return (
     <div className={styles.queuePanel}>
-      <div className={styles.panelHeader}>
+      <div className={sharedStyles.panelHeader}>
         <h2>Queue</h2>
         <span className={styles.queueCount}>{queue.length} tracks</span>
       </div>
 
       <div className={styles.queueList}>
         {queue.length === 0 ? (
-          <div className={styles.emptyState}>
-            <span className={styles.emptyIcon}>🎵</span>
+          <div className={sharedStyles.emptyState}>
+            <span className={sharedStyles.emptyIcon}>🎵</span>
             <p>Queue is empty</p>
-            <p className={styles.emptyHint}>Add tracks from suggestions or search</p>
+            <p className={sharedStyles.emptyHint}>Add tracks from suggestions or search</p>
           </div>
         ) : (
           queue.map((track, index) => (

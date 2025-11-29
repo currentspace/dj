@@ -2,6 +2,7 @@ import type {SpotifyPlaylist} from '@dj/shared-types'
 
 import {useCallback, useRef, useState} from 'react'
 
+import {LoadingSpinner} from '../../components/LoadingSpinner'
 import {useSpotifyAuth} from '../../hooks/useSpotifyAuth'
 import {usePlaylistStore} from '../../stores'
 import '../../styles/user-playlists.css'
@@ -65,8 +66,7 @@ function UserPlaylists({onPlaylistSelect}: UserPlaylistsProps) {
           <h2>🎵 Your Playlists</h2>
         </div>
         <div className="loading-state">
-          <div className="loading-spinner"></div>
-          <p>Loading your playlists...</p>
+          <LoadingSpinner size="md" text="Loading your playlists..." />
         </div>
       </div>
     )

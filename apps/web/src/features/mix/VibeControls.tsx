@@ -2,7 +2,7 @@ import type {VibeProfile} from '@dj/shared-types'
 
 import {useCallback, useState} from 'react'
 
-import styles from './mix.module.css'
+import styles from './vibe-controls.module.css'
 
 interface VibeControlsProps {
   onEnergyChange: (level: number) => void

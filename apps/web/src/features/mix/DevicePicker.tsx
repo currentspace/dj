@@ -4,7 +4,7 @@
 
 import {useCallback, useState} from 'react'
 
-import styles from './mix.module.css'
+import styles from './device-picker.module.css'
 
 interface SpotifyDevice {
   id: string

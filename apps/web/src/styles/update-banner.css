@@ -11,8 +11,8 @@
   justify-content: space-between;
   gap: 1rem;
   padding: 0.75rem 1rem;
-  background: linear-gradient(135deg, #1db954 0%, #1ed760 100%);
-  color: white;
+  background: linear-gradient(135deg, var(--color-spotify-green) 0%, var(--color-spotify-green-light) 100%);
+  color: var(--color-text-white);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   animation: update-banner-slide-in 0.3s ease-out;
 }
@@ -73,12 +73,12 @@
 
 .update-banner__btn--dismiss:hover {
   background: rgba(255, 255, 255, 0.15);
-  color: white;
+  color: var(--color-text-white);
 }
 
 .update-banner__btn--update {
-  background: white;
-  color: #1db954;
+  background: var(--color-text-white);
+  color: var(--color-spotify-green);
 }
 
 .update-banner__btn--update:hover {
@@ -92,12 +92,12 @@
 
 /* Waiting state - when we're waiting for playback to stop */
 .update-banner--waiting {
-  background: linear-gradient(135deg, #ff9500 0%, #ffb340 100%);
+  background: linear-gradient(135deg, var(--color-warning) 0%, #ffb340 100%);
 }
 
 .update-banner__btn--waiting {
   background: rgba(255, 255, 255, 0.3);
-  color: white;
+  color: var(--color-text-white);
   cursor: default;
 }
 
@@ -108,8 +108,8 @@
 
 /* Force update button */
 .update-banner__btn--force {
-  background: #ff3b30;
-  color: white;
+  background: var(--color-error);
+  color: var(--color-text-white);
 }
 
 .update-banner__btn--force:hover {

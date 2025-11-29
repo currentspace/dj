@@ -5,7 +5,7 @@ import {useDevice} from '../../stores'
 
 import {DevicePicker} from './DevicePicker'
 import {PlaybackControls} from './PlaybackControls'
-import styles from './mix.module.css'
+import styles from './now-playing-hero.module.css'
 
 interface NowPlayingHeroProps {
   /** Real-time playback state from Spotify (preferred) */
