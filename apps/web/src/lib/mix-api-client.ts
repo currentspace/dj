@@ -18,6 +18,7 @@ import type {
   SteerVibeResponse,
   Suggestion,
   TrackPlayedResponse,
+  UpdateVibeResponse,
   VibeProfile,
 } from '@dj/shared-types'
 
@@ -206,12 +207,12 @@ export const mixApiClient = {
   /**
    * Update vibe profile with specific values
    * Route: PUT /api/mix/vibe (from updateVibe contract)
+   * Returns the updated vibe and rebuilt queue
    */
-  async updateVibe(updates: Partial<VibeProfile>): Promise<VibeProfile> {
-    const response = await api(updateVibe)({
+  async updateVibe(updates: Partial<VibeProfile>): Promise<UpdateVibeResponse> {
+    return api(updateVibe)({
       body: updates,
     })
-    return response.vibe
   },
 
   // ===== Playback Integration =====

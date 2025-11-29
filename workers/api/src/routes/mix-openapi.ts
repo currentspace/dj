@@ -316,10 +316,14 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
 
       getLogger()?.info(`Started mix session for user ${userId}`, {sessionId: session.id})
 
-      // Auto-fill initial queue (non-blocking)
-      autoFillQueue(c.env, token, session, sessionService).catch((err) => {
+      // Auto-fill initial queue (BLOCKING - user should see filled queue immediately)
+      try {
+        const addedCount = await autoFillQueue(c.env, token, session, sessionService)
+        getLogger()?.info(`Initial auto-fill added ${addedCount} tracks`)
+      } catch (err) {
         getLogger()?.error('Initial auto-fill failed:', err)
-      })
+        // Continue anyway - session is still valid, just empty queue
+      }
 
       return c.json({session}, 200)
     } catch (error) {
@@ -348,6 +352,18 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
 
       const sessionService = new MixSessionService(c.env.MIX_SESSIONS)
       const session = await sessionService.getSession(userId)
+
+      // Auto-fill queue if depleted (e.g., after page refresh)
+      if (session && session.queue.length < TARGET_QUEUE_SIZE) {
+        getLogger()?.info(`Session has ${session.queue.length} tracks, auto-filling to ${TARGET_QUEUE_SIZE}`)
+        try {
+          const addedCount = await autoFillQueue(c.env, token, session, sessionService)
+          getLogger()?.info(`getCurrentMix auto-fill added ${addedCount} tracks`)
+        } catch (err) {
+          getLogger()?.error('getCurrentMix auto-fill failed:', err)
+          // Continue - return session even if auto-fill failed
+        }
+      }
 
       return c.json({session}, 200)
     } catch (error) {
@@ -647,15 +663,17 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       // Clear existing queue and rebuild with new vibe
       sessionService.clearQueue(session)
 
-      // Save updated session
-      await sessionService.updateSession(session)
-
-      // Rebuild queue with new vibe (non-blocking)
-      autoFillQueue(c.env, token, session, sessionService).catch((err) => {
+      // Rebuild queue with new vibe (BLOCKING - user should see new queue immediately)
+      try {
+        const addedCount = await autoFillQueue(c.env, token, session, sessionService)
+        getLogger()?.info(`Vibe update: rebuilt queue with ${addedCount} tracks`)
+      } catch (err) {
         getLogger()?.error('Queue rebuild after vibe update failed:', err)
-      })
+        // Save session even if auto-fill failed
+        await sessionService.updateSession(session)
+      }
 
-      return c.json({vibe: updatedVibe}, 200)
+      return c.json({vibe: updatedVibe, queue: session.queue}, 200)
     } catch (error) {
       getLogger()?.error('Update vibe error:', error)
       const message = error instanceof Error ? error.message : 'Failed to update vibe'
@@ -739,12 +757,15 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       // Clear existing queue and rebuild with new vibe
       sessionService.clearQueue(session)
 
-      await sessionService.updateSession(session)
-
-      // Rebuild queue with new vibe (non-blocking)
-      autoFillQueue(c.env, token, session, sessionService).catch((err) => {
+      // Rebuild queue with new vibe (BLOCKING - user should see new queue immediately)
+      try {
+        const addedCount = await autoFillQueue(c.env, token, session, sessionService)
+        getLogger()?.info(`Vibe steer: rebuilt queue with ${addedCount} tracks`)
+      } catch (err) {
         getLogger()?.error('Queue rebuild after vibe steer failed:', err)
-      })
+        // Save session even if auto-fill failed
+        await sessionService.updateSession(session)
+      }
 
       getLogger()?.info('Steered vibe for session', {
         userId,
@@ -753,7 +774,7 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
         changes,
       })
 
-      return c.json({vibe: updatedVibe, changes}, 200)
+      return c.json({vibe: updatedVibe, changes, queue: session.queue}, 200)
     } catch (error) {
       getLogger()?.error('Steer vibe error:', error)
       const message = error instanceof Error ? error.message : 'Failed to steer vibe'

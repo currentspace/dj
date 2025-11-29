@@ -269,10 +269,18 @@ export const useMixStore = create<MixStoreState>()(
         set({vibeUpdating: true, vibeError: null})
 
         try {
-          const updatedVibe = await mixApiClient.updateVibe({bpmRange: {max, min}})
+          const response = await mixApiClient.updateVibe({bpmRange: {max, min}})
           const currentSession = get().session
           if (currentSession) {
-            set({session: {...currentSession, vibe: updatedVibe}, vibeUpdating: false})
+            // Update vibe and queue (server rebuilds queue after vibe change)
+            set({
+              session: {
+                ...currentSession,
+                vibe: response.vibe,
+                queue: response.queue ?? currentSession.queue,
+              },
+              vibeUpdating: false,
+            })
           }
         } catch (err) {
           set({
@@ -292,10 +300,18 @@ export const useMixStore = create<MixStoreState>()(
         set({vibeUpdating: true, vibeError: null})
 
         try {
-          const updatedVibe = await mixApiClient.updateVibe({energyDirection: direction})
+          const response = await mixApiClient.updateVibe({energyDirection: direction})
           const currentSession = get().session
           if (currentSession) {
-            set({session: {...currentSession, vibe: updatedVibe}, vibeUpdating: false})
+            // Update vibe and queue (server rebuilds queue after vibe change)
+            set({
+              session: {
+                ...currentSession,
+                vibe: response.vibe,
+                queue: response.queue ?? currentSession.queue,
+              },
+              vibeUpdating: false,
+            })
           }
         } catch (err) {
           set({
@@ -319,10 +335,18 @@ export const useMixStore = create<MixStoreState>()(
           set({vibeUpdating: true, vibeError: null})
 
           try {
-            const updatedVibe = await mixApiClient.updateVibe({energyLevel: level})
+            const response = await mixApiClient.updateVibe({energyLevel: level})
             const currentSession = get().session
             if (currentSession) {
-              set({session: {...currentSession, vibe: updatedVibe}, vibeUpdating: false})
+              // Update vibe and queue (server rebuilds queue after vibe change)
+              set({
+                session: {
+                  ...currentSession,
+                  vibe: response.vibe,
+                  queue: response.queue ?? currentSession.queue,
+                },
+                vibeUpdating: false,
+              })
             }
           } catch (err) {
             set({
@@ -346,7 +370,15 @@ export const useMixStore = create<MixStoreState>()(
           const response = await mixApiClient.steerVibe(direction, intensity)
           const currentSession = get().session
           if (currentSession) {
-            set({session: {...currentSession, vibe: response.vibe}, vibeUpdating: false})
+            // Update vibe and queue (server rebuilds queue after vibe steer)
+            set({
+              session: {
+                ...currentSession,
+                vibe: response.vibe,
+                queue: response.queue ?? currentSession.queue,
+              },
+              vibeUpdating: false,
+            })
           }
           return response
         } catch (err) {

@@ -164,6 +164,7 @@ export const GetVibeResponseSchema = z.object({
 
 export const UpdateVibeResponseSchema = z.object({
   vibe: VibeProfileSchema,
+  queue: z.array(QueuedTrackSchema).optional(), // Server returns rebuilt queue after vibe change
 })
 
 // Steer Vibe Request (Natural Language)
@@ -175,6 +176,7 @@ export const SteerVibeRequestSchema = z.object({
 export const SteerVibeResponseSchema = z.object({
   vibe: VibeProfileSchema,
   changes: z.array(z.string()),
+  queue: z.array(QueuedTrackSchema).optional(), // Server returns rebuilt queue after vibe steer
 })
 
 // Get Suggestions Response
