@@ -159,6 +159,8 @@
 .chat-input-form {
   display: flex;
   padding: 1rem 1.5rem;
+  /* Add safe area bottom for iOS home indicator when chat is at bottom of viewport */
+  padding-bottom: calc(1rem + var(--safe-area-inset-bottom, 0px));
   border-top: 1px solid #333;
   background: #222;
   gap: 0.75rem;
@@ -264,6 +266,8 @@
 
   .chat-input-form {
     padding: 0.75rem 1rem;
+    /* Maintain safe area bottom on mobile */
+    padding-bottom: calc(0.75rem + var(--safe-area-inset-bottom, 0px));
   }
 
   .mode-selector {
@@ -274,5 +278,11 @@
 
   .chat-header {
     padding: 1rem;
+  }
+
+  /* Ensure send button is touch-friendly (44px minimum) */
+  .chat-input-form button {
+    min-width: 44px;
+    min-height: 44px;
   }
 }

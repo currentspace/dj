@@ -75,8 +75,9 @@
 /* Toast variant - fixed position notification */
 .error-display--toast {
   position: fixed;
-  bottom: 1.5rem;
-  right: 1.5rem;
+  /* Account for iOS safe area */
+  bottom: calc(1.5rem + var(--safe-area-inset-bottom, 0px));
+  right: calc(1.5rem + var(--safe-area-inset-right, 0px));
   max-width: 400px;
   z-index: 1000;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
@@ -122,13 +123,20 @@
 /* Responsive adjustments */
 @media (max-width: 480px) {
   .error-display--toast {
-    left: 1rem;
-    right: 1rem;
+    left: calc(1rem + var(--safe-area-inset-left, 0px));
+    right: calc(1rem + var(--safe-area-inset-right, 0px));
+    bottom: calc(1rem + var(--safe-area-inset-bottom, 0px));
     max-width: none;
   }
 
   .error-display {
     font-size: 0.85rem;
     padding: 0.625rem 0.875rem;
+  }
+
+  /* Ensure dismiss button is touch-friendly (44px minimum) */
+  .error-display__dismiss {
+    width: 44px;
+    height: 44px;
   }
 }

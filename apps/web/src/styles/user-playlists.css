@@ -198,3 +198,29 @@
 .playlists-grid::-webkit-scrollbar-thumb:hover {
   background: #444;
 }
+
+/* Mobile responsive styles */
+@media (max-width: 768px) {
+  .user-playlists {
+    padding: 1rem;
+  }
+
+  .playlists-grid {
+    grid-template-columns: 1fr;
+    max-height: none;
+  }
+
+  .playlist-card {
+    padding: 1rem;
+    /* Ensure entire card is easy to tap */
+    min-height: 80px;
+  }
+
+  .open-spotify-button {
+    /* Touch-friendly button size */
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+}

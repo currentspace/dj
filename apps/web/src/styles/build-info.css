@@ -1,7 +1,8 @@
 .build-info-toggle {
   position: fixed;
-  bottom: 1rem;
-  right: 1rem;
+  /* Account for iOS safe area */
+  bottom: calc(1rem + var(--safe-area-inset-bottom, 0px));
+  right: calc(1rem + var(--safe-area-inset-right, 0px));
   background: rgba(102, 126, 234, 0.9);
   color: white;
   border: none;
