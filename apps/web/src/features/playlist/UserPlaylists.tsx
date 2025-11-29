@@ -1,35 +1,18 @@
+import type {SpotifyPlaylist} from '@dj/shared-types'
+
 import {useCallback, useRef, useState} from 'react'
 
 import {useSpotifyAuth} from '../../hooks/useSpotifyAuth'
+import {usePlaylistStore} from '../../stores'
 import '../../styles/user-playlists.css'
-
-interface SpotifyPlaylist {
-  description: string
-  external_urls: {
-    spotify: string
-  }
-  id: string
-  images: {
-    height: number
-    url: string
-    width: number
-  }[]
-  name: string
-  owner: {
-    display_name: string
-  }
-  public: boolean
-  tracks: {
-    total: number
-  }
-}
 
 interface UserPlaylistsProps {
   onPlaylistSelect?: (playlist: SpotifyPlaylist) => void
-  selectedPlaylist?: null | SpotifyPlaylist
 }
 
-function UserPlaylists({onPlaylistSelect, selectedPlaylist}: UserPlaylistsProps) {
+function UserPlaylists({onPlaylistSelect}: UserPlaylistsProps) {
+  // Get selected playlist from store (for highlighting)
+  const selectedPlaylist = usePlaylistStore((s) => s.selectedPlaylist)
   const {logout, token} = useSpotifyAuth()
   const [playlists, setPlaylists] = useState<SpotifyPlaylist[]>([])
   const [loading, setLoading] = useState(true)

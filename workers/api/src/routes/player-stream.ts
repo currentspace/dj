@@ -26,59 +26,64 @@ import type {
   PlaybackTrackEvent,
   PlaybackVolumeEvent,
   PlayingType,
-  RepeatState,
 } from '@dj/shared-types'
+import { z } from 'zod'
 
 import type { Env } from '../index'
-import { isSuccessResponse } from '../lib/guards'
+import { isSuccessResponse, safeParse } from '../lib/guards'
 import { getLogger } from '../utils/LoggerContext'
 
 // =============================================================================
-// SPOTIFY API TYPES
+// ZOD SCHEMA FOR SPOTIFY PLAYBACK API
 // =============================================================================
 
-interface SpotifyPlaybackResponse {
-  device?: {
-    id: string | null
-    is_active: boolean
-    is_private_session: boolean
-    is_restricted: boolean
-    name: string
-    supports_volume: boolean
-    type: string
-    volume_percent: number | null
-  }
-  repeat_state?: RepeatState
-  shuffle_state?: boolean
-  context?: {
-    type: string
-    href: string
-    external_urls?: { spotify: string }
-    uri: string
-  } | null
-  timestamp?: number
-  progress_ms?: number | null
-  is_playing?: boolean
-  item?: {
-    album?: {
-      images?: Array<{ url: string }>
-      name?: string
-    }
-    artists?: Array<{ name: string }>
-    duration_ms?: number
-    explicit?: boolean
-    id?: string
-    is_local?: boolean
-    name?: string
-    popularity?: number
-    preview_url?: string | null
-    uri?: string
-  } | null
-  currently_playing_type?: PlayingType
-  actions?: {
-    disallows?: Record<string, boolean>
-  }
-}
+/** Schema for Spotify playback state response */
+const SpotifyPlaybackResponseSchema = z.object({
+  device: z.object({
+    id: z.string().nullable(),
+    is_active: z.boolean(),
+    is_private_session: z.boolean(),
+    is_restricted: z.boolean(),
+    name: z.string(),
+    supports_volume: z.boolean(),
+    type: z.string(),
+    volume_percent: z.number().nullable(),
+  }).optional(),
+  repeat_state: z.enum(['off', 'track', 'context']).optional(),
+  shuffle_state: z.boolean().optional(),
+  context: z.object({
+    type: z.string(),
+    href: z.string(),
+    external_urls: z.object({ spotify: z.string() }).optional(),
+    uri: z.string(),
+  }).nullable().optional(),
+  timestamp: z.number().optional(),
+  progress_ms: z.number().nullable().optional(),
+  is_playing: z.boolean().optional(),
+  item: z.object({
+    album: z.object({
+      images: z.array(z.object({ url: z.string() })).optional(),
+      name: z.string().optional(),
+    }).optional(),
+    artists: z.array(z.object({ name: z.string() })).optional(),
+    duration_ms: z.number().optional(),
+    explicit: z.boolean().optional(),
+    id: z.string().optional(),
+    is_local: z.boolean().optional(),
+    name: z.string().optional(),
+    popularity: z.number().optional(),
+    preview_url: z.string().nullable().optional(),
+    uri: z.string().optional(),
+  }).nullable().optional(),
+  currently_playing_type: z.enum(['track', 'episode', 'ad', 'unknown']).optional(),
+  actions: z.object({
+    disallows: z.record(z.string(), z.boolean()).optional(),
+  }).optional(),
+})
+
+/** Inferred type from the Zod schema */
+type SpotifyPlaybackResponseZod = z.infer<typeof SpotifyPlaybackResponseSchema>
+
 
 // =============================================================================
 // INTERNAL STATE TRACKING
@@ -127,7 +132,7 @@ function normalizeContextType(type: string): ContextType {
     : 'playlist' // Default fallback
 }
 
-function parseSpotifyResponse(data: SpotifyPlaybackResponse): InternalState {
+function parseSpotifyResponse(data: SpotifyPlaybackResponseZod): InternalState {
   const track: PlaybackTrack | null = data.item ? {
     id: data.item.id ?? '',
     uri: data.item.uri ?? '',
@@ -277,8 +282,15 @@ export function registerPlayerStreamRoute(app: OpenAPIHono<{ Bindings: Env }>) {
         throw new Error(`Spotify API error: ${response.status}`)
       }
 
-      const data = await response.json() as SpotifyPlaybackResponse
-      return parseSpotifyResponse(data)
+      const json: unknown = await response.json()
+      const parseResult = safeParse(SpotifyPlaybackResponseSchema, json)
+
+      if (!parseResult.success) {
+        logger?.error('[PlayerStream] Invalid playback response:', parseResult.error.message)
+        throw new Error('Invalid playback response from Spotify')
+      }
+
+      return parseSpotifyResponse(parseResult.data)
     }
 
     // Send init event with full state

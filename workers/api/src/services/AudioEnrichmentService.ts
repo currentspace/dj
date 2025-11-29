@@ -15,11 +15,33 @@ import {
   type MusicBrainzRecording,
   MusicBrainzSearchResponseSchema,
 } from '@dj/shared-types'
+import {z} from 'zod'
 
 import {BPM_RANGE, CACHE_TTL, DURATION_MATCH} from '../constants'
 import {safeParse} from '../lib/guards'
 import {getLogger} from '../utils/LoggerContext'
 import {getGlobalOrchestrator, rateLimitedDeezerCall} from '../utils/RateLimitedAPIClients'
+
+// =============================================================================
+// ZOD SCHEMAS FOR CACHE VALIDATION
+// =============================================================================
+
+/** Schema for BPM enrichment data */
+const BPMEnrichmentSchema = z.object({
+  bpm: z.number().nullable(),
+  gain: z.number().nullable(),
+  rank: z.number().nullable(),
+  release_date: z.string().nullable(),
+  source: z.enum(['deezer', 'deezer-via-musicbrainz']).nullable(),
+})
+
+/** Schema for cached enrichment data */
+const EnrichmentCacheSchema = z.object({
+  enrichment: BPMEnrichmentSchema,
+  fetched_at: z.string(),
+  is_miss: z.boolean().optional(),
+  ttl: z.number(),
+})
 
 export interface BPMEnrichment {
   bpm: null | number
@@ -493,10 +515,17 @@ export class AudioEnrichmentService {
     if (!this.cache) return null
 
     try {
-      const cached = await this.cache.get(`bpm:${trackId}`, 'json')
+      const cached: unknown = await this.cache.get(`bpm:${trackId}`, 'json')
       if (!cached) return null
 
-      const enrichment = cached as EnrichmentCache
+      // Validate cached data structure using Zod
+      const parseResult = safeParse(EnrichmentCacheSchema, cached)
+      if (!parseResult.success) {
+        getLogger()?.warn(`[BPMEnrichment] Invalid cache data for ${trackId}:`, {error: parseResult.error.message})
+        return null
+      }
+
+      const enrichment = parseResult.data
 
       // Check if cache is stale
       const fetchedAt = new Date(enrichment.fetched_at).getTime()

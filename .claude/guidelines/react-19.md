@@ -670,3 +670,160 @@ afterEach(() => {
 ```
 
 **Reference**: `apps/web/src/hooks/useSpotifyAuth.test.ts`
+
+## Signals: Why We Don't Use Them (November 2025)
+
+### The Reality of Signals in React
+
+**React 19.2 does NOT have official signals.** The "signals" discussion involves:
+- Experimental proposals influenced by SolidJS/Preact
+- Community libraries like `@preact/signals-react`
+- Future roadmap considerations
+
+### Why Signals Don't Fit React's Model
+
+The React team's position is clear: **adding signals to a Virtual DOM framework can decrease performance**.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ SIGNALS IN REACT = PERFORMANCE ANTI-PATTERN                                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ 1. React uses Virtual DOM reconciliation                                     │
+│ 2. Signals bypass component re-renders                                       │
+│ 3. BUT React still diffs the entire VDOM tree on state changes              │
+│ 4. Result: You pay both the signal overhead AND VDOM reconciliation cost    │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Quote from React Conf 2025** (Joe Savona, React team):
+> "Adding MobX, Zustand or Signals to React or even Signals to Preact isn't guaranteed
+> to improve performance. In fact, on average, it makes them slower."
+
+### What We Use Instead: Zustand + Derived Selectors
+
+Zustand with `subscribeWithSelector` provides fine-grained reactivity **within React's model**:
+
+```typescript
+// ✅ CORRECT: Derived selector pattern (fine-grained like signals, React-native)
+export const selectCurrentMessages = (state: PlaylistState): ChatMessage[] => {
+  const playlistId = state.selectedPlaylist?.id
+  if (!playlistId) return []
+  return state.conversationsByPlaylist.get(playlistId) ?? []
+}
+
+// Usage: Only re-renders when the derived value changes
+const messages = usePlaylistStore(selectCurrentMessages)
+```
+
+### Signals vs Zustand Comparison
+
+| Feature | Signals (Preact) | Zustand + subscribeWithSelector |
+|---------|------------------|--------------------------------|
+| **Fine-grained updates** | ✅ | ✅ (via selectors) |
+| **React Compiler compatible** | ❌ | ✅ |
+| **DevTools support** | Limited | Full React DevTools |
+| **SSR support** | Varies | ✅ Built-in |
+| **Bundle size** | ~1KB | ~2KB |
+| **Learning curve** | New paradigm | Familiar hooks |
+| **VDOM performance** | Worse | Native |
+
+### When You Might Think You Need Signals
+
+| Symptom | Signal Solution | Better React Solution |
+|---------|-----------------|----------------------|
+| Too many re-renders | Signal primitive | Atomic Zustand selector |
+| Computed state | Signal derived | Selector function |
+| Cross-component state | Signal store | Zustand store |
+| Frequent updates (SSE) | Signal updates | Zustand + delta protocol |
+| Prop drilling | Signal context | Zustand store |
+
+### The DJ App Pattern: Centralized Store with Derived Selectors
+
+```typescript
+// Store with normalized state
+interface PlaylistState {
+  selectedPlaylist: SpotifyPlaylist | null
+  conversationsByPlaylist: Map<string, ChatMessage[]>
+
+  // Actions
+  selectPlaylist: (playlist: SpotifyPlaylist | null) => void
+  addMessage: (playlistId: string, message: ChatMessage) => void
+  updateLastMessage: (playlistId: string, content: string) => void
+}
+
+// Derived selectors (computed on access, memoized by Zustand)
+export const selectCurrentMessages = (state: PlaylistState): ChatMessage[] => {
+  const playlistId = state.selectedPlaylist?.id
+  if (!playlistId) return []
+  return state.conversationsByPlaylist.get(playlistId) ?? []
+}
+
+// Component usage - only re-renders when messages for current playlist change
+function ChatInterface() {
+  const messages = usePlaylistStore(selectCurrentMessages)
+  const addMessage = usePlaylistStore((s) => s.addMessage)
+  // ...
+}
+```
+
+**Benefits over signals:**
+1. Works with React Compiler (automatic memoization)
+2. No new paradigm to learn
+3. Full React DevTools support
+4. SSR-compatible out of the box
+5. TypeScript inference works perfectly
+
+### Memory Management with Map-Based State
+
+```typescript
+// Automatic cleanup when store grows too large
+const MAX_CONVERSATIONS = 20
+
+function cleanupOldConversations(get: () => State, set: (partial: Partial<State>) => void) {
+  const { conversationsByPlaylist, selectedPlaylist } = get()
+
+  if (conversationsByPlaylist.size <= MAX_CONVERSATIONS) return
+
+  // Remove oldest conversations (first in Map = oldest)
+  const playlistIds = [...conversationsByPlaylist.keys()]
+  const currentId = selectedPlaylist?.id
+
+  const toRemove = playlistIds
+    .filter((id) => id !== currentId)
+    .slice(0, conversationsByPlaylist.size - MAX_CONVERSATIONS)
+
+  const newMap = new Map(conversationsByPlaylist)
+  for (const id of toRemove) {
+    newMap.delete(id)
+  }
+
+  set({ conversationsByPlaylist: newMap })
+}
+```
+
+**Reference**: `apps/web/src/stores/playlistStore.ts`
+
+### Summary: React State Management Decision Tree
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ DO I NEED SIGNALS?                                                           │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│ Is it React? ──────────────────────────────────────────────────────► NO     │
+│      │                                                                       │
+│      ▼ YES                                                                   │
+│                                                                              │
+│ Use Zustand + subscribeWithSelector instead:                                 │
+│                                                                              │
+│ • Local UI state ───────────────────────────────────► useState              │
+│ • Shared across components ─────────────────────────► Zustand store         │
+│ • Derived/computed state ───────────────────────────► Selector function     │
+│ • Per-entity state (Map) ───────────────────────────► Normalized store      │
+│ • Real-time updates (SSE) ──────────────────────────► Zustand + delta       │
+│ • Non-blocking updates ─────────────────────────────► useTransition         │
+│                                                                              │
+│ React Compiler will auto-memoize when stable.                                │
+│ Signals would BREAK this optimization.                                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+```

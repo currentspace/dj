@@ -23,8 +23,97 @@ import {
 import {z} from 'zod'
 
 import {AGGREGATION, CACHE_TTL, PROGRESS} from '../constants'
+import {safeParse} from '../lib/guards'
 import {getLogger} from '../utils/LoggerContext'
 import {getGlobalOrchestrator, rateLimitedLastFmCall} from '../utils/RateLimitedAPIClients'
+
+// =============================================================================
+// ZOD SCHEMAS FOR CACHE VALIDATION
+// =============================================================================
+
+/** Schema for cached artist info */
+const CachedArtistInfoSchema = z.object({
+  bio: z.object({
+    content: z.string(),
+    summary: z.string(),
+  }).nullable(),
+  images: z.object({
+    large: z.string().nullable(),
+    medium: z.string().nullable(),
+    small: z.string().nullable(),
+  }),
+  listeners: z.number(),
+  playcount: z.number(),
+  similar: z.array(z.object({
+    name: z.string(),
+    url: z.string(),
+  })),
+  tags: z.array(z.string()),
+})
+
+type CachedArtistInfo = z.infer<typeof CachedArtistInfoSchema>
+
+/** Schema for cached track correction */
+const CachedCorrectionSchema = z.object({
+  artist: z.string(),
+  track: z.string(),
+})
+
+/** Schema for LastFmSignals (used in cache) */
+const LastFmSignalsSchema = z.object({
+  album: z.object({
+    artist: z.string(),
+    image: z.string().nullable(),
+    mbid: z.string().nullable(),
+    title: z.string(),
+    url: z.string().nullable(),
+  }).nullable(),
+  artistInfo: z.object({
+    bio: z.object({
+      content: z.string(),
+      summary: z.string(),
+    }).nullable(),
+    images: z.object({
+      large: z.string().nullable(),
+      medium: z.string().nullable(),
+      small: z.string().nullable(),
+    }),
+    listeners: z.number(),
+    playcount: z.number(),
+    similar: z.array(z.object({
+      name: z.string(),
+      url: z.string(),
+    })),
+    tags: z.array(z.string()),
+  }).nullable(),
+  canonicalArtist: z.string(),
+  canonicalTrack: z.string(),
+  duration: z.number().nullable(),
+  listeners: z.number(),
+  mbid: z.string().nullable(),
+  playcount: z.number(),
+  similar: z.array(z.object({
+    artist: z.string(),
+    match: z.number(),
+    name: z.string(),
+  })),
+  topTags: z.array(z.string()),
+  url: z.string().nullable(),
+  userplaycount: z.number().optional(),
+  wiki: z.object({
+    content: z.string(),
+    published: z.string(),
+    summary: z.string(),
+  }).nullable(),
+})
+
+/** Schema for LastFmCache */
+const LastFmCacheSchema = z.object({
+  fetched_at: z.string(),
+  is_miss: z.boolean().optional(),
+  signals: LastFmSignalsSchema,
+  ttl: z.number(),
+})
 
 export interface LastFmCache {
   fetched_at: string
@@ -198,36 +287,18 @@ export class LastFmService {
 
       try {
         // Check cache first
-        let artistInfo: null | {
-          bio: null | {content: string; summary: string}
-          images: {
-            large: null | string
-            medium: null | string
-            small: null | string
-          }
-          listeners: number
-          playcount: number
-          similar: {name: string; url: string}[]
-          tags: string[]
-        } = null
+        let artistInfo: CachedArtistInfo | null = null
         if (this.cache) {
-          const cached = await this.cache.get(cacheKey, 'json')
+          const cached: unknown = await this.cache.get(cacheKey, 'json')
           if (cached) {
-            // Validate cached data structure
-            artistInfo = cached as {
-              bio: null | {content: string; summary: string}
-              images: {
-                large: null | string
-                medium: null | string
-                small: null | string
-              }
-              listeners: number
-              playcount: number
-              similar: {name: string; url: string}[]
-              tags: string[]
+            // Validate cached data structure using Zod
+            const parseResult = safeParse(CachedArtistInfoSchema, cached)
+            if (parseResult.success) {
+              artistInfo = parseResult.data
+              getLogger()?.info(`[LastFm] Artist cache hit: ${artist}`)
+              return {artist, info: artistInfo}
             }
-            getLogger()?.info(`[LastFm] Artist cache hit: ${artist}`)
-            return {artist, info: artistInfo}
+            getLogger()?.warn(`[LastFm] Invalid artist cache data for ${artist}:`, {error: parseResult.error.message})
           }
         }
 
@@ -558,10 +629,17 @@ export class LastFmService {
     if (!this.cache) return null
 
     try {
-      const cached = await this.cache.get(`lastfm:${key}`, 'json')
+      const cached: unknown = await this.cache.get(`lastfm:${key}`, 'json')
       if (!cached) return null
 
-      const lastfmCache = cached as LastFmCache
+      // Validate cached data structure using Zod
+      const parseResult = safeParse(LastFmCacheSchema, cached)
+      if (!parseResult.success) {
+        getLogger()?.warn(`[LastFm] Invalid cache data for ${key}:`, {error: parseResult.error.message})
+        return null
+      }
+
+      const lastfmCache = parseResult.data
 
       // Check if cache is stale
       const fetchedAt = new Date(lastfmCache.fetched_at).getTime()
@@ -591,14 +669,19 @@ export class LastFmService {
 
     // Check cache first
     if (this.cache) {
-      const cached = await this.cache.get(cacheKey, 'json')
+      const cached: unknown = await this.cache.get(cacheKey, 'json')
       if (cached !== null) {
         if (cached === 'null') {
           getLogger()?.info(`[LastFm] Correction cache hit (no correction): ${artist} - ${track}`)
           return null
         }
-        getLogger()?.info(`[LastFm] Correction cache hit: ${artist} - ${track}`)
-        return cached as {artist: string; track: string}
+        // Validate cached correction data using Zod
+        const parseResult = safeParse(CachedCorrectionSchema, cached)
+        if (parseResult.success) {
+          getLogger()?.info(`[LastFm] Correction cache hit: ${artist} - ${track}`)
+          return parseResult.data
+        }
+        getLogger()?.warn(`[LastFm] Invalid correction cache data for ${artist} - ${track}`)
       }
     }
 

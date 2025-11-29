@@ -11,8 +11,30 @@ import Anthropic from '@anthropic-ai/sdk'
 import { getLogger } from '../utils/LoggerContext'
 
 // =============================================================================
+// TYPE GUARDS
+// =============================================================================
+
+/** Type guard for thinking blocks in Claude's response */
+function isThinkingBlock(block: Anthropic.ContentBlock): block is Anthropic.ContentBlock & { type: 'thinking'; thinking: string } {
+  return block.type === 'thinking' && 'thinking' in block && typeof (block as unknown as Record<string, unknown>).thinking === 'string'
+}
+
+// =============================================================================
 // TYPES
 // =============================================================================
+
+/** Request parameters for Anthropic messages API with optional thinking */
+interface AnthropicRequestParams {
+  model: string
+  max_tokens: number
+  messages: Array<{ role: 'user' | 'assistant'; content: string }>
+  temperature?: number
+  system?: string
+  thinking?: {
+    type: 'enabled'
+    budget_tokens: number
+  }
+}
 
 export interface AIServiceConfig {
   apiKey: string
@@ -72,23 +94,24 @@ export class AIService {
       const useThinking = options.thinkingBudget && options.thinkingBudget > 0
       const model = options.model || this.defaultModel
 
-      // Extended thinking requires specific model and parameters
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const requestParams: any = {
+      // Build request parameters with proper typing
+      const messages: AnthropicRequestParams['messages'] = [{ role: 'user', content: prompt }]
+
+      const requestParams: AnthropicRequestParams = {
         model,
         max_tokens: options.maxTokens || 2000,
-        messages: [{ role: 'user', content: prompt }],
+        messages,
       }
 
       if (useThinking) {
         // Extended thinking mode - no temperature, uses thinking block
         requestParams.thinking = {
           type: 'enabled',
-          budget_tokens: options.thinkingBudget,
+          budget_tokens: options.thinkingBudget!,
         }
         // System prompt goes in messages for thinking mode
         if (options.system) {
-          requestParams.messages.unshift({
+          messages.unshift({
             role: 'user',
             content: `[System]: ${options.system}`,
           })
@@ -108,8 +131,8 @@ export class AIService {
       for (const block of response.content) {
         if (block.type === 'text') {
           rawText += block.text
-        } else if (block.type === 'thinking') {
-          thinking += (block as { type: 'thinking'; thinking: string }).thinking
+        } else if (isThinkingBlock(block)) {
+          thinking += block.thinking
         }
       }
 
@@ -175,6 +198,9 @@ export class AIService {
 
   /**
    * Extract JSON from a text response (handles markdown code blocks, etc.)
+   *
+   * NOTE: The returned type T is NOT validated. Callers MUST validate
+   * the returned data with Zod schemas before use.
    */
   extractJSON<T>(text: string): T | null {
     try {
@@ -185,7 +211,9 @@ export class AIService {
         return null
       }
 
-      return JSON.parse(jsonMatch[0]) as T
+      // Parse JSON - caller is responsible for validating the shape
+      const parsed: unknown = JSON.parse(jsonMatch[0])
+      return parsed as T
     } catch (error) {
       getLogger()?.error('[AIService] JSON parse error:', error)
       return null

@@ -1,16 +1,11 @@
-import type {ChatMessage, SpotifyPlaylist} from '@dj/shared-types'
-
-import {useCallback, useMemo, useRef, useState, useTransition} from 'react'
+import {useCallback, useRef, useState, useTransition} from 'react'
 import {flushSync} from 'react-dom'
 
 import {chatStreamClient} from '../../lib/streaming-client'
 import {hasMarkdownSyntax, MarkdownContent} from '../../lib/markdown-renderer'
+import {selectCurrentMessages, usePlaylistStore} from '../../stores'
 import '../../styles/streaming.css'
 import '../../styles/chat-interface.css'
-
-interface ChatInterfaceProps {
-  selectedPlaylist: null | SpotifyPlaylist
-}
 
 interface StreamingStatus {
   currentAction?: string
@@ -19,10 +14,16 @@ interface StreamingStatus {
   toolsUsed: string[]
 }
 
-export function ChatInterface({selectedPlaylist}: ChatInterfaceProps) {
-  // Maintain separate conversation history per playlist
-  const [conversationsByPlaylist, setConversationsByPlaylist] = useState<Map<string, ChatMessage[]>>(new Map())
-  const [currentPlaylistId, setCurrentPlaylistId] = useState<null | string>(null)
+export function ChatInterface() {
+  // Playlist state from Zustand store (no prop drilling)
+  const selectedPlaylist = usePlaylistStore((s) => s.selectedPlaylist)
+  const addMessage = usePlaylistStore((s) => s.addMessage)
+  const updateLastMessage = usePlaylistStore((s) => s.updateLastMessage)
+
+  // Get messages for current playlist (derived selector - only re-renders when messages change)
+  const messages = usePlaylistStore(selectCurrentMessages)
+
+  // Local UI state
   const [input, setInput] = useState('')
   const [mode, setMode] = useState<'analyze' | 'create' | 'dj' | 'edit'>('analyze')
   const [streamingStatus, setStreamingStatus] = useState<StreamingStatus>({
@@ -34,18 +35,8 @@ export function ChatInterface({selectedPlaylist}: ChatInterfaceProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const streamHandleRef = useRef<null | {close: () => void}>(null)
 
-  // Check if playlist changed - switch context immediately if so
+  // Derived value
   const playlistId = selectedPlaylist?.id ?? null
-  if (playlistId !== currentPlaylistId) {
-    console.log(`[ChatInterface] Switching playlist context: ${currentPlaylistId} → ${playlistId}`)
-    setCurrentPlaylistId(playlistId)
-  }
-
-  // Get messages for current playlist (memoized to prevent unnecessary re-renders)
-  const messages = useMemo(
-    () => conversationsByPlaylist.get(playlistId ?? '') ?? [],
-    [conversationsByPlaylist, playlistId],
-  )
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({behavior: 'smooth'})
@@ -87,13 +78,9 @@ export function ChatInterface({selectedPlaylist}: ChatInterfaceProps) {
 
       // Add user message to current playlist's conversation
       flushSync(() => {
-        setConversationsByPlaylist(prev => {
-          const newMap = new Map(prev)
-          const playlistKey = playlistId ?? ''
-          const currentMessages = newMap.get(playlistKey) ?? []
-          newMap.set(playlistKey, [...currentMessages, {content: displayMessage, role: 'user'}])
-          return newMap
-        })
+        if (playlistId) {
+          addMessage(playlistId, {content: displayMessage, role: 'user'})
+        }
       })
       scrollToBottom()
 
@@ -103,22 +90,9 @@ export function ChatInterface({selectedPlaylist}: ChatInterfaceProps) {
           setCurrentStreamContent(prev => {
             const newContent = prev + content
             // Update the last message or add new one in current playlist's conversation
-            setConversationsByPlaylist(prevMap => {
-              const newMap = new Map(prevMap)
-              const playlistKey = playlistId ?? ''
-              const currentMessages = newMap.get(playlistKey) ?? []
-              const lastMessage = currentMessages[currentMessages.length - 1]
-
-              if (lastMessage?.role === 'assistant') {
-                // Update existing assistant message
-                newMap.set(playlistKey, [...currentMessages.slice(0, -1), {...lastMessage, content: newContent}])
-              } else {
-                // Add new assistant message
-                newMap.set(playlistKey, [...currentMessages, {content: newContent, role: 'assistant'}])
-              }
-
-              return newMap
-            })
+            if (playlistId) {
+              updateLastMessage(playlistId, newContent)
+            }
             return newContent
           })
           scrollToBottom()
@@ -141,13 +115,9 @@ export function ChatInterface({selectedPlaylist}: ChatInterfaceProps) {
             currentAction: undefined,
             isStreaming: false,
           }))
-          setConversationsByPlaylist(prevMap => {
-            const newMap = new Map(prevMap)
-            const playlistKey = playlistId ?? ''
-            const currentMessages = newMap.get(playlistKey) ?? []
-            newMap.set(playlistKey, [...currentMessages, {content: `Error: ${error}`, role: 'assistant'}])
-            return newMap
-          })
+          if (playlistId) {
+            addMessage(playlistId, {content: `Error: ${error}`, role: 'assistant'})
+          }
           scrollToBottom()
         },
 
@@ -179,7 +149,7 @@ export function ChatInterface({selectedPlaylist}: ChatInterfaceProps) {
         },
       })
     },
-    [input, streamingStatus.isStreaming, mode, selectedPlaylist, messages, scrollToBottom],
+    [input, streamingStatus.isStreaming, mode, playlistId, messages, scrollToBottom, addMessage, updateLastMessage],
   )
 
   // If no playlist is selected, show selection prompt

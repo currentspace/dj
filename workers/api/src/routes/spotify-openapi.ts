@@ -18,8 +18,23 @@ import {SpotifySearchResponseSchema, SpotifyTokenResponseSchema} from '@dj/share
 
 import type {Env} from '../index'
 
+import {z} from 'zod'
+
 import {isSuccessResponse, parse, safeParse} from '../lib/guards'
 import {getLogger} from '../utils/LoggerContext'
+
+// =============================================================================
+// ZOD SCHEMAS FOR SPOTIFY API RESPONSES
+// =============================================================================
+
+/** Schema for Spotify user profile response */
+const SpotifyUserProfileSchema = z.object({
+  country: z.string().optional(),
+  display_name: z.string().nullable().optional(),
+  email: z.string().optional(),
+  id: z.string(),
+  product: z.string().optional(),
+})
 
 const SPOTIFY_AUTH_URL = 'https://accounts.spotify.com/authorize'
 const SPOTIFY_TOKEN_URL = 'https://accounts.spotify.com/api/token'
@@ -331,18 +346,20 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
         return c.json({error: 'Invalid or expired token'}, 401)
       }
 
-      const data = (await response.json()) as {
-        country?: string
-        display_name: string | null
-        email?: string
-        id: string
-        product?: string
+      const json: unknown = await response.json()
+      const parseResult = safeParse(SpotifyUserProfileSchema, json)
+
+      if (!parseResult.success) {
+        getLogger()?.error('Invalid user profile response:', parseResult.error.message)
+        return c.json({error: 'Invalid user profile response'}, 500)
       }
+
+      const data = parseResult.data
 
       return c.json(
         {
           country: data.country,
-          display_name: data.display_name,
+          display_name: data.display_name ?? null,
           email: data.email,
           id: data.id,
           product: data.product,
@@ -373,13 +390,15 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
         return c.json({error: 'Invalid or expired token'}, 401)
       }
 
-      const userData = (await userResponse.json()) as {
-        country?: string
-        display_name?: string
-        email?: string
-        id: string
-        product?: string
+      const userJson: unknown = await userResponse.json()
+      const userParseResult = safeParse(SpotifyUserProfileSchema, userJson)
+
+      if (!userParseResult.success) {
+        getLogger()?.error('Invalid user profile response:', userParseResult.error.message)
+        return c.json({error: 'Invalid user profile response'}, 500)
       }
+
+      const userData = userParseResult.data
 
       // Test playlist-read-private scope
       const playlistResponse = await fetch('https://api.spotify.com/v1/me/playlists?limit=1', {
@@ -441,15 +460,15 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       // Call Spotify token endpoint with refresh_token grant
       // PKCE flow only requires client_id, not client_secret
       const response = await fetch(SPOTIFY_TOKEN_URL, {
-        method: 'POST',
+        body: new URLSearchParams({
+          client_id: env.SPOTIFY_CLIENT_ID,
+          grant_type: 'refresh_token',
+          refresh_token: refreshToken,
+        }),
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
-        body: new URLSearchParams({
-          grant_type: 'refresh_token',
-          refresh_token: refreshToken,
-          client_id: env.SPOTIFY_CLIENT_ID,
-        }),
+        method: 'POST',
       })
 
       if (!response.ok) {

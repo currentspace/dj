@@ -7,9 +7,42 @@
 import type { MixSession, PlayedTrack, Suggestion } from '@dj/shared-types'
 import type { AudioEnrichmentService } from './AudioEnrichmentService'
 import type { LastFmService } from './LastFmService'
+import { z } from 'zod'
 import { AIService, createAIService } from '../lib/ai-service'
 import { buildVibeDescription, buildInitialSuggestionsPrompt, buildNextTrackPrompt, SYSTEM_PROMPTS } from '../lib/ai-prompts'
+import { safeParse } from '../lib/guards'
 import { getLogger } from '../utils/LoggerContext'
+
+// =============================================================================
+// ZOD SCHEMAS
+// =============================================================================
+
+/** Zod schema for Spotify track from search API */
+const SpotifyTrackSchema = z.object({
+  id: z.string(),
+  uri: z.string(),
+  name: z.string(),
+  artists: z.array(z.object({ name: z.string() })),
+  album: z.object({
+    name: z.string(),
+    images: z.array(z.object({ url: z.string() })),
+    release_date: z.string(),
+  }),
+  duration_ms: z.number(),
+  popularity: z.number(),
+  external_ids: z.object({ isrc: z.string().optional() }).optional(),
+})
+
+/** Zod schema for Spotify search response */
+const SpotifySearchResponseSchema = z.object({
+  tracks: z.object({
+    items: z.array(SpotifyTrackSchema),
+  }).optional(),
+})
+
+// =============================================================================
+// TYPES
+// =============================================================================
 
 interface SpotifyTrack {
   id: string
@@ -452,14 +485,21 @@ export class SuggestionEngine {
         return null
       }
 
-      const data = await response.json() as { tracks?: { items?: SpotifyTrack[] } }
-      const tracks = data.tracks?.items || []
+      const rawData: unknown = await response.json()
+      const parseResult = safeParse(SpotifySearchResponseSchema, rawData)
+
+      if (!parseResult.success) {
+        getLogger()?.warn('[SuggestionEngine] Invalid Spotify search response:', {error: parseResult.error.message})
+        return null
+      }
+
+      const tracks = parseResult.data.tracks?.items ?? []
 
       if (tracks.length === 0) {
         return null
       }
 
-      return tracks[0] as SpotifyTrack
+      return tracks[0]
     } catch (error) {
       getLogger()?.error('[SuggestionEngine] Spotify search error:', error)
       return null

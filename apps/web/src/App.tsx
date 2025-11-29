@@ -1,4 +1,4 @@
-import {Suspense, useState} from 'react'
+import {Suspense} from 'react'
 
 import {ErrorBoundary, PlaylistErrorBoundary} from './app/ErrorBoundary'
 import {BuildInfo} from './components/BuildInfo'
@@ -9,41 +9,18 @@ import {NowPlaying} from './features/playback/NowPlaying'
 import {UserPlaylists} from './features/playlist/UserPlaylists'
 import {useSpotifyAuth} from './hooks/useSpotifyAuth'
 import {MixPage} from './pages/MixPage'
-import {useNavigationStore} from './stores'
+import {useNavigationStore, usePlaylistStore} from './stores'
 import './styles/app-layout.css'
 import './styles/build-info.css'
-
-interface SpotifyPlaylist {
-  description: string
-  external_urls: {
-    spotify: string
-  }
-  id: string
-  images: {
-    height: number
-    url: string
-    width: number
-  }[]
-  name: string
-  owner: {
-    display_name: string
-  }
-  public: boolean
-  tracks: {
-    total: number
-  }
-}
 
 function App() {
   const {clearError, error, isAuthenticated, isLoading, login, logout, token} = useSpotifyAuth()
   const route = useNavigationStore((s) => s.route)
   const navigate = useNavigationStore((s) => s.navigate)
 
-  const [selectedPlaylist, setSelectedPlaylist] = useState<null | SpotifyPlaylist>(null)
-
-  const handlePlaylistSelect = (playlist: SpotifyPlaylist) => {
-    setSelectedPlaylist(playlist)
-  }
+  // Playlist state from Zustand store (eliminates prop drilling)
+  const selectedPlaylist = usePlaylistStore((s) => s.selectedPlaylist)
+  const selectPlaylist = usePlaylistStore((s) => s.selectPlaylist)
 
   return (
     <ErrorBoundary>
@@ -96,14 +73,14 @@ function App() {
               <div className="main-content">
                 <div className="playlists-section">
                   <Suspense fallback={<div className="loading">Loading playlists...</div>}>
-                    <UserPlaylists onPlaylistSelect={handlePlaylistSelect} selectedPlaylist={selectedPlaylist} />
+                    <UserPlaylists onPlaylistSelect={selectPlaylist} />
                   </Suspense>
                 </div>
 
                 <div className="chat-section">
                   {selectedPlaylist ? (
                     <Suspense fallback={<div className="loading">Loading chat interface...</div>}>
-                      <ChatInterface selectedPlaylist={selectedPlaylist} />
+                      <ChatInterface />
                     </Suspense>
                   ) : (
                     <div className="no-playlist-selected">

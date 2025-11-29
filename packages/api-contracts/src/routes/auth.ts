@@ -162,6 +162,16 @@ export const getSpotifyMe = createRoute({
       },
       description: 'Invalid or expired token',
     },
+    500: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            error: z.string(),
+          }),
+        },
+      },
+      description: 'Internal server error',
+    },
   },
   tags: ['Auth'],
 })
@@ -210,6 +220,16 @@ export const getSpotifyDebugScopes = createRoute({
         },
       },
       description: 'Invalid or expired token',
+    },
+    500: {
+      content: {
+        'application/json': {
+          schema: z.object({
+            error: z.string(),
+          }),
+        },
+      },
+      description: 'Internal server error',
     },
   },
   tags: ['Auth'],

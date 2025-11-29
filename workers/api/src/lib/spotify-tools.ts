@@ -28,6 +28,94 @@ import {getLogger} from '../utils/LoggerContext'
 import {rateLimitedSpotifyCall} from '../utils/RateLimitedAPIClients'
 import {formatZodError, safeParse} from './guards'
 
+// =============================================================================
+// ZOD SCHEMAS FOR PLAYER API RESPONSES
+// =============================================================================
+
+/** Schema for now playing response */
+const NowPlayingResponseSchema = z.object({
+  is_playing: z.boolean(),
+  progress_ms: z.number().nullable().optional(),
+  item: z.object({
+    name: z.string(),
+    uri: z.string(),
+    duration_ms: z.number(),
+    artists: z.array(z.object({name: z.string()})).optional(),
+    album: z.object({name: z.string()}).optional(),
+  }).nullable().optional(),
+})
+
+/** Schema for queue response */
+const QueueResponseSchema = z.object({
+  currently_playing: z.object({
+    name: z.string(),
+    uri: z.string(),
+    artists: z.array(z.object({name: z.string()})).optional(),
+  }).nullable(),
+  queue: z.array(z.object({
+    name: z.string(),
+    uri: z.string(),
+    artists: z.array(z.object({name: z.string()})).optional(),
+  })),
+})
+
+/** Schema for playback state response */
+const PlaybackStateResponseSchema = z.object({
+  device: z.object({
+    id: z.string().nullable(),
+    is_active: z.boolean(),
+    is_private_session: z.boolean(),
+    is_restricted: z.boolean(),
+    name: z.string(),
+    type: z.string(),
+    volume_percent: z.number().nullable(),
+    supports_volume: z.boolean(),
+  }),
+  repeat_state: z.enum(['off', 'track', 'context']),
+  shuffle_state: z.boolean(),
+  context: z.object({
+    type: z.string(),
+    href: z.string(),
+    uri: z.string(),
+  }).nullable(),
+  timestamp: z.number(),
+  progress_ms: z.number().nullable(),
+  is_playing: z.boolean(),
+  item: z.object({
+    name: z.string(),
+    uri: z.string(),
+    duration_ms: z.number(),
+    artists: z.array(z.object({name: z.string()})).optional(),
+    album: z.object({
+      name: z.string(),
+      images: z.array(z.object({url: z.string()})).optional(),
+    }).optional(),
+  }).nullable(),
+  currently_playing_type: z.string(),
+})
+
+/** Schema for related artists response */
+const RelatedArtistsResponseSchema = z.object({
+  artists: z.array(z.object({
+    id: z.string(),
+    name: z.string(),
+    genres: z.array(z.string()).optional(),
+    popularity: z.number().optional(),
+    images: z.array(z.object({url: z.string()})).optional(),
+  })),
+})
+
+/** Schema for artist search response */
+const ArtistSearchResponseSchema = z.object({
+  artists: SpotifyPagingSchema(z.object({
+    id: z.string(),
+    name: z.string(),
+    genres: z.array(z.string()).optional(),
+    popularity: z.number().optional(),
+    images: z.array(z.object({url: z.string()})).optional(),
+  })),
+})
+
 function isString(value: unknown): value is string {
   return typeof value === 'string'
 }
@@ -704,9 +792,8 @@ async function getRelatedArtists(args: Record<string, unknown>, token: string) {
     throw new Error(`Failed to get related artists: ${response.status}`)
   }
 
-  const json = await response.json()
-  const ArtistsSchema = z.object({artists: z.array(z.any())}) // Artists have complex schema
-  const result = safeParse(ArtistsSchema, json)
+  const json: unknown = await response.json()
+  const result = safeParse(RelatedArtistsResponseSchema, json)
 
   if (!result.success) {
     getLogger()?.error('[getRelatedArtists] Failed to parse response:', formatZodError(result.error))
@@ -834,11 +921,8 @@ async function searchArtists(args: Record<string, unknown>, token: string) {
     throw new Error(`Failed to search artists: ${response.status}`)
   }
 
-  const json = await response.json()
-  const ArtistsPagingSchema = z.object({
-    artists: SpotifyPagingSchema(z.any()), // Artist schema is complex, use any for now
-  })
-  const result = safeParse(ArtistsPagingSchema, json)
+  const json: unknown = await response.json()
+  const result = safeParse(ArtistSearchResponseSchema, json)
 
   if (!result.success) {
     getLogger()?.error('[searchArtists] Failed to parse response:', formatZodError(result.error))
@@ -935,17 +1019,15 @@ async function getNowPlaying(token: string) {
     throw new Error(`Failed to get now playing: ${response.status}`)
   }
 
-  const data = (await response.json()) as {
-    is_playing: boolean
-    item: {
-      album?: {name: string}
-      artists?: Array<{name: string}>
-      duration_ms: number
-      name: string
-      uri: string
-    }
-    progress_ms: number
+  const json: unknown = await response.json()
+  const result = safeParse(NowPlayingResponseSchema, json)
+
+  if (!result.success) {
+    getLogger()?.error('[getNowPlaying] Failed to parse response:', formatZodError(result.error))
+    throw new Error(`Invalid now playing response: ${formatZodError(result.error)}`)
   }
+
+  const data = result.data
 
   return {
     album: data.item?.album?.name,
@@ -974,18 +1056,15 @@ async function getQueue(token: string) {
     throw new Error(`Failed to get queue: ${response.status}`)
   }
 
-  const data = (await response.json()) as {
-    currently_playing: {
-      artists?: Array<{name: string}>
-      name: string
-      uri: string
-    } | null
-    queue: Array<{
-      artists?: Array<{name: string}>
-      name: string
-      uri: string
-    }>
+  const json: unknown = await response.json()
+  const result = safeParse(QueueResponseSchema, json)
+
+  if (!result.success) {
+    getLogger()?.error('[getQueue] Failed to parse response:', formatZodError(result.error))
+    throw new Error(`Invalid queue response: ${formatZodError(result.error)}`)
   }
+
+  const data = result.data
 
   return {
     currently_playing: data.currently_playing
@@ -1063,36 +1142,15 @@ async function getPlaybackState(token: string) {
     throw new Error(`Failed to get playback state: ${response.status}`)
   }
 
-  const data = (await response.json()) as {
-    device: {
-      id: string | null
-      is_active: boolean
-      is_private_session: boolean
-      is_restricted: boolean
-      name: string
-      type: string
-      volume_percent: number | null
-      supports_volume: boolean
-    }
-    repeat_state: 'off' | 'track' | 'context'
-    shuffle_state: boolean
-    context: {
-      type: string
-      href: string
-      uri: string
-    } | null
-    timestamp: number
-    progress_ms: number | null
-    is_playing: boolean
-    item: {
-      album?: {name: string; images?: Array<{url: string}>}
-      artists?: Array<{name: string}>
-      duration_ms: number
-      name: string
-      uri: string
-    } | null
-    currently_playing_type: string
+  const json: unknown = await response.json()
+  const result = safeParse(PlaybackStateResponseSchema, json)
+
+  if (!result.success) {
+    getLogger()?.error('[getPlaybackState] Failed to parse response:', formatZodError(result.error))
+    throw new Error(`Invalid playback state response: ${formatZodError(result.error)}`)
   }
+
+  const data = result.data
 
   return {
     // Device info
