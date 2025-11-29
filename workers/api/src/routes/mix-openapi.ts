@@ -125,12 +125,12 @@ function createQueuedTrack(
 }
 
 /**
- * Clamp BPM to valid schema range (20-220) or return null if outside bounds
- * Values below 20 or above 220 are likely data errors, so we null them out
+ * Validate BPM is within sane bounds (positive, max 500) or return null
+ * Very permissive to allow ambient (<20 BPM) and speedcore (>220 BPM)
  */
 function clampBpm(bpm: number | null): number | null {
   if (bpm === null) return null
-  if (bpm < 20 || bpm > 220) return null // Invalid BPM, treat as unknown
+  if (bpm <= 0 || bpm > 500) return null // Obvious data error, treat as unknown
   return bpm
 }
 
