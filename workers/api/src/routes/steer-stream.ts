@@ -409,6 +409,52 @@ async function searchSpotifyTrack(
 }
 
 // =============================================================================
+// SPOTIFY PLAYBACK
+// =============================================================================
+
+/**
+ * Start playback with specific tracks - replaces Spotify's current queue
+ */
+async function startPlaybackWithTracks(
+  token: string,
+  trackUris: string[]
+): Promise<boolean> {
+  const logger = getLogger()
+
+  if (trackUris.length === 0) {
+    logger?.warn('[steer-stream] No tracks to play')
+    return false
+  }
+
+  try {
+    // Use Spotify's Play endpoint with uris to start playback
+    // This replaces whatever was queued before
+    const response = await fetch('https://api.spotify.com/v1/me/player/play', {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        uris: trackUris.slice(0, 50), // Spotify limit is 50 tracks
+      }),
+    })
+
+    if (!response.ok) {
+      const text = await response.text()
+      logger?.warn('[steer-stream] Failed to start playback:', { status: response.status, text })
+      return false
+    }
+
+    logger?.info(`[steer-stream] Started playback with ${trackUris.length} tracks`)
+    return true
+  } catch (error) {
+    logger?.error('[steer-stream] Error starting playback:', error)
+    return false
+  }
+}
+
+// =============================================================================
 // QUEUE REBUILDING
 // =============================================================================
 
@@ -603,6 +649,18 @@ steerStreamRouter.post('/steer-stream', async c => {
 
       // 7. Rebuild queue with steering-aware suggestions
       const queue = await rebuildQueue(c.env, token, session, direction, sessionService, sseWriter)
+
+      // 7.5. Start playback with the new queue (replaces Spotify's old queue)
+      if (queue.length > 0) {
+        const trackUris = queue.map(t => t.trackUri)
+        const playbackStarted = await startPlaybackWithTracks(token, trackUris)
+        if (playbackStarted) {
+          await sseWriter.write({
+            type: 'progress',
+            data: { message: 'Starting your new mix...', stage: 'playing' }
+          })
+        }
+      }
 
       // 8. Send suggestions
       await sseWriter.write({
