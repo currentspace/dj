@@ -1,11 +1,15 @@
 /**
  * NowPlaying Component - Shows current playback state with controls
  * Uses Zustand playbackStore for SSE-based real-time updates
+ *
+ * Also notifies mix API on track changes to trigger queue auto-fill
+ * even when not on the Mix page.
  */
 
 import {memo, useCallback, useEffect, useRef, useState} from 'react'
 
-import {usePlaybackStore} from '../../stores'
+import {mixApiClient} from '../../lib/mix-api-client'
+import {useMixStore, usePlaybackStore} from '../../stores'
 
 import '../../styles/now-playing.css'
 
@@ -34,6 +38,11 @@ export const NowPlaying = memo(function NowPlaying({token}: NowPlayingProps) {
   const storeError = usePlaybackStore((s) => s.error)
   const connect = usePlaybackStore((s) => s.connect)
   const disconnect = usePlaybackStore((s) => s.disconnect)
+  const subscribeToTrackChange = usePlaybackStore((s) => s.subscribeToTrackChange)
+
+  // Mix session from store (to check if we should notify on track changes)
+  const mixSession = useMixStore((s) => s.session)
+  const setMixSession = useMixStore((s) => s.setSession)
 
   // Local state for queue panel
   const [queue, setQueue] = useState<SpotifyQueue | null>(null)
@@ -61,6 +70,33 @@ export const NowPlaying = memo(function NowPlaying({token}: NowPlayingProps) {
       // Cleanup on unmount is handled by store
     }
   }, [token, status, connect, disconnect])
+
+  // Subscribe to track changes and notify mix API if session exists
+  // This enables queue auto-fill even when on the chat page
+  useEffect(() => {
+    const unsubscribe = subscribeToTrackChange(async (previousTrackId, previousTrackUri, _newTrackId) => {
+      // Only notify if we have a mix session and valid previous track
+      if (!mixSession || !previousTrackId || !previousTrackUri) {
+        return
+      }
+
+      console.log('[NowPlaying] Track changed, notifying mix API:', previousTrackId)
+
+      try {
+        const response = await mixApiClient.notifyTrackPlayed(previousTrackId, previousTrackUri)
+        if (response.movedToHistory) {
+          console.log('[NowPlaying] Track moved to history, session updated')
+          // Update session to reflect queue changes from auto-fill
+          setMixSession(response.session)
+        }
+      } catch (err) {
+        // Non-fatal - just log
+        console.warn('[NowPlaying] Failed to notify track played:', err)
+      }
+    })
+
+    return unsubscribe
+  }, [subscribeToTrackChange, mixSession, setMixSession])
 
   const fetchQueue = useCallback(async () => {
     if (!token) return

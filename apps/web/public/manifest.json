@@ -1,0 +1,27 @@
+{
+  "name": "DJ - AI Playlist Generator",
+  "short_name": "DJ",
+  "description": "AI-powered playlist generator with real-time vibe control",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1a1a1a",
+  "theme_color": "#1db954",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "categories": ["music", "entertainment"],
+  "related_applications": [],
+  "prefer_related_applications": false
+}

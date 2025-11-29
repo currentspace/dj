@@ -268,6 +268,14 @@ export function registerPlayerStreamRoute(app: OpenAPIHono<{ Bindings: Env }>) {
     let isStreamClosed = false
     let isIdle = false
 
+    // Custom error for auth expiration
+    class AuthExpiredError extends Error {
+      constructor() {
+        super('auth_expired')
+        this.name = 'AuthExpiredError'
+      }
+    }
+
     // Fetch from Spotify
     async function fetchPlayback(): Promise<InternalState> {
       const response = await fetch('https://api.spotify.com/v1/me/player', {
@@ -276,6 +284,11 @@ export function registerPlayerStreamRoute(app: OpenAPIHono<{ Bindings: Env }>) {
 
       if (response.status === 204) {
         return createIdleState()
+      }
+
+      // Handle 401 specifically - token expired
+      if (response.status === 401) {
+        throw new AuthExpiredError()
       }
 
       if (!isSuccessResponse(response)) {
@@ -400,6 +413,17 @@ export function registerPlayerStreamRoute(app: OpenAPIHono<{ Bindings: Env }>) {
 
         prevState = curr
       } catch (err) {
+        // Handle auth expiration specifically - send auth_expired and close stream
+        if (err instanceof AuthExpiredError) {
+          logger?.info('[PlayerStream] Token expired, sending auth_expired event')
+          writeSSE(writer, 'auth_expired', { message: 'Spotify token expired, please refresh' })
+          isStreamClosed = true
+          clearInterval(pollInterval)
+          clearInterval(heartbeatInterval)
+          writer.close().catch(() => {})
+          return
+        }
+
         consecutiveErrors++
         logger?.error('[PlayerStream] Fetch error:', err)
 

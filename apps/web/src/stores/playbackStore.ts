@@ -308,6 +308,27 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
             }
             break
 
+          case 'auth_expired':
+            console.log('[playbackStore] Auth expired, triggering token refresh')
+            set({ status: 'disconnected', error: 'Token expired, refreshing...' })
+            stopInterpolation()
+            // Trigger token refresh via authStore
+            import('../stores/authStore').then(({ useAuthStore }) => {
+              useAuthStore.getState().refreshToken().then((success) => {
+                if (success) {
+                  console.log('[playbackStore] Token refreshed, reconnecting...')
+                  const newToken = useAuthStore.getState().token
+                  if (newToken) {
+                    setTimeout(() => get().connect(newToken), 500)
+                  }
+                } else {
+                  console.error('[playbackStore] Token refresh failed')
+                  set({ error: 'Session expired. Please log in again.' })
+                }
+              })
+            })
+            break
+
           case 'reconnect':
             console.log('[playbackStore] Server requested reconnect')
             scheduleReconnect(token)
