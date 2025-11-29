@@ -413,7 +413,8 @@ async function searchSpotifyTrack(
 // =============================================================================
 
 /**
- * Start playback with specific tracks - replaces Spotify's current queue
+ * Start playback with first track, then queue the rest
+ * This ensures tracks stay in Spotify's queue for continuous playback
  */
 async function startPlaybackWithTracks(
   token: string,
@@ -427,26 +428,55 @@ async function startPlaybackWithTracks(
   }
 
   try {
-    // Use Spotify's Play endpoint with uris to start playback
-    // This replaces whatever was queued before
-    const response = await fetch('https://api.spotify.com/v1/me/player/play', {
+    // 1. Start playback with just the first track
+    const firstTrack = trackUris[0]
+    const playResponse = await fetch('https://api.spotify.com/v1/me/player/play', {
       method: 'PUT',
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        uris: trackUris.slice(0, 50), // Spotify limit is 50 tracks
+        uris: [firstTrack],
       }),
     })
 
-    if (!response.ok) {
-      const text = await response.text()
-      logger?.warn('[steer-stream] Failed to start playback:', { status: response.status, text })
+    if (!playResponse.ok) {
+      const text = await playResponse.text()
+      logger?.warn('[steer-stream] Failed to start playback:', { status: playResponse.status, text })
       return false
     }
 
-    logger?.info(`[steer-stream] Started playback with ${trackUris.length} tracks`)
+    logger?.info('[steer-stream] Started playback with first track')
+
+    // 2. Queue the remaining tracks (with small delays to ensure order)
+    const remainingTracks = trackUris.slice(1)
+    let queuedCount = 0
+
+    for (const uri of remainingTracks) {
+      try {
+        const queueResponse = await fetch(
+          `https://api.spotify.com/v1/me/player/queue?uri=${encodeURIComponent(uri)}`,
+          {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        )
+
+        if (queueResponse.ok) {
+          queuedCount++
+        } else {
+          logger?.warn('[steer-stream] Failed to queue track:', { uri, status: queueResponse.status })
+        }
+
+        // Small delay to ensure queue order is preserved
+        await new Promise(resolve => setTimeout(resolve, 100))
+      } catch (err) {
+        logger?.warn('[steer-stream] Error queueing track:', { error: String(err) })
+      }
+    }
+
+    logger?.info(`[steer-stream] Queued ${queuedCount}/${remainingTracks.length} additional tracks`)
     return true
   } catch (error) {
     logger?.error('[steer-stream] Error starting playback:', error)
