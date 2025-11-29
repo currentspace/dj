@@ -2,6 +2,7 @@ import {Suspense} from 'react'
 
 import {ErrorBoundary, PlaylistErrorBoundary} from './app/ErrorBoundary'
 import {BuildInfo} from './components/BuildInfo'
+import {UpdateBanner} from './components/UpdateBanner'
 import {SpotifyAuth} from './features/auth/SpotifyAuth'
 import {ChatInterface} from './features/chat/ChatInterface'
 import {ScopeDebugger} from './features/debug/ScopeDebugger'
@@ -24,6 +25,7 @@ function App() {
 
   return (
     <ErrorBoundary>
+      <UpdateBanner />
       <div className="app">
         <header className="app-header">
           <h1>🎵 DJ</h1>
