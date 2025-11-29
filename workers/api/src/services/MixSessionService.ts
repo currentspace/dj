@@ -154,8 +154,9 @@ export class MixSessionService {
     const energyDirection = this.detectEnergyDirection(session, track)
 
     // Update BPM range to include new track
-    // Clamp to schema bounds (45-220) to avoid validation errors
-    const BPM_MIN = 45
+    // Clamp to schema bounds (20-220) to avoid validation errors
+    // 20 BPM allows for slow classical/ambient (Grave tempo is 20-40 BPM)
+    const BPM_MIN = 20
     const BPM_MAX = 220
     let bpmRange = { ...currentVibe.bpmRange }
     if (track.bpm !== null) {
@@ -219,9 +220,9 @@ export class MixSessionService {
       blended.genres = uniqueGenres.slice(0, 5)
     }
 
-    // Blend BPM range if provided (clamp to schema bounds 45-220)
+    // Blend BPM range if provided (clamp to schema bounds 20-220)
     if (trackVibe.bpmRange) {
-      const BPM_MIN = 45
+      const BPM_MIN = 20
       const BPM_MAX = 220
       blended.bpmRange = {
         min: Math.max(BPM_MIN, Math.min(current.bpmRange.min, trackVibe.bpmRange.min)),

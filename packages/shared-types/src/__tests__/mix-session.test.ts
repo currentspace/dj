@@ -125,8 +125,8 @@ describe('VibeProfile Schema', () => {
     expectSchemaToPass(VibeProfileSchema, maxEnergy, 'maximum energy')
   })
 
-  it('enforces BPM range bounds (45-220)', () => {
-    const lowBpm = {...createTestVibeProfile(), bpmRange: {min: 30, max: 100}}
+  it('enforces BPM range bounds (20-220)', () => {
+    const lowBpm = {...createTestVibeProfile(), bpmRange: {min: 10, max: 100}}
     expectSchemaToFail(VibeProfileSchema, lowBpm, 'BPM too low')
 
     const highBpm = {...createTestVibeProfile(), bpmRange: {min: 100, max: 250}}
@@ -185,8 +185,8 @@ describe('PlayedTrack Schema', () => {
     expectSchemaToPass(PlayedTrackSchema, track)
   })
 
-  it('enforces BPM bounds when provided', () => {
-    const lowBpm = {...createTestPlayedTrack(), bpm: 30}
+  it('enforces BPM bounds when provided (20-220)', () => {
+    const lowBpm = {...createTestPlayedTrack(), bpm: 10} // below minimum of 20
     expectSchemaToFail(PlayedTrackSchema, lowBpm)
 
     const highBpm = {...createTestPlayedTrack(), bpm: 250}
@@ -318,7 +318,7 @@ describe('SessionPreferences Schema', () => {
     const invalid = {
       avoidGenres: [],
       favoriteArtists: [],
-      bpmLock: {min: 30, max: 100},
+      bpmLock: {min: 10, max: 100}, // 10 is below minimum of 20
       autoFill: true,
     }
     expectSchemaToFail(SessionPreferencesSchema, invalid)

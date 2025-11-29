@@ -15,8 +15,8 @@ export const VibeProfileSchema = z.object({
     end: z.number().int().min(1900).max(2100),
   }).default({start: 2000, end: 2025}),
   bpmRange: z.object({
-    min: z.number().min(45).max(220),
-    max: z.number().min(45).max(220),
+    min: z.number().min(20).max(220),
+    max: z.number().min(20).max(220),
   }).default({min: 80, max: 140}),
   energyLevel: z.number().min(1).max(10).default(5),
   energyDirection: z.enum(['building', 'steady', 'winding_down']).default('steady'),
@@ -31,7 +31,7 @@ export const PlayedTrackSchema = z.object({
   artist: z.string(),
   albumArt: z.string().url().optional(),
   playedAt: z.string().datetime(),
-  bpm: z.number().min(45).max(220).nullable(),
+  bpm: z.number().min(20).max(220).nullable(),
   energy: z.number().min(0).max(1).nullable(),
 })
 
@@ -59,7 +59,7 @@ export const SuggestionSchema = z.object({
   albumArt: z.string().url().optional(),
   vibeScore: z.number().min(0).max(100),
   reason: z.string(),
-  bpm: z.number().min(45).max(220).nullable(),
+  bpm: z.number().min(20).max(220).nullable(),
 })
 
 // ===== Session Preferences =====
@@ -68,8 +68,8 @@ export const SessionPreferencesSchema = z.object({
   avoidGenres: z.array(z.string()).default([]),
   favoriteArtists: z.array(z.string()).default([]),
   bpmLock: z.object({
-    min: z.number().min(45).max(220),
-    max: z.number().min(45).max(220),
+    min: z.number().min(20).max(220),
+    max: z.number().min(20).max(220),
   }).nullable().default(null),
   autoFill: z.boolean().default(true),
 })
@@ -153,8 +153,8 @@ export const UpdateVibeRequestSchema = z.object({
   energyLevel: z.number().min(1).max(10).optional(),
   energyDirection: z.enum(['building', 'steady', 'winding_down']).optional(),
   bpmRange: z.object({
-    min: z.number().min(45).max(220),
-    max: z.number().min(45).max(220),
+    min: z.number().min(20).max(220),
+    max: z.number().min(20).max(220),
   }).optional(),
 })
 
