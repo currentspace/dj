@@ -9,6 +9,7 @@ import {registerPlayerRoutes} from './routes/player-openapi'
 import {registerPlayerStreamRoute} from './routes/player-stream'
 import {registerPlaylistRoutes} from './routes/playlists-openapi'
 import {registerSpotifyAuthRoutes} from './routes/spotify-openapi'
+import {steerStreamRouter} from './routes/steer-stream'
 
 export interface Env {
   ANTHROPIC_API_KEY: string
@@ -87,6 +88,9 @@ app.get('/api/docs', swaggerUI({url: '/api/openapi.json'}))
 
 // SSE streaming chat endpoint (production)
 app.route('/api/chat-stream', chatStreamRouter)
+
+// SSE streaming vibe steer endpoint
+app.route('/api/mix/vibe', steerStreamRouter)
 
 // Serve static files for non-API routes
 app.get('*', async c => {

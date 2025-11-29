@@ -23,6 +23,25 @@ import type {
 } from '@dj/shared-types'
 
 import {createApiClient} from '@dj/api-client'
+
+/**
+ * Event types from the streaming steer endpoint
+ */
+export interface SteerStreamEvent {
+  type: 'ack' | 'thinking' | 'progress' | 'vibe_update' | 'suggestions' | 'queue_update' | 'error' | 'done'
+  data: {
+    message?: string
+    direction?: string
+    stage?: string
+    preview?: string
+    vibe?: VibeProfile
+    changes?: string[]
+    track?: { name: string; artist: string; trackId: string; trackUri: string }
+    queueSize?: number
+    count?: number
+    queue?: QueuedTrack[]
+  }
+}
 import {
   addToQueue,
   endMix,
@@ -200,6 +219,71 @@ export const mixApiClient = {
     return api(steerVibe)({
       body: {direction, intensity: intensity ?? 5},
     })
+  },
+
+  /**
+   * Steer vibe with streaming progress updates (SSE)
+   * Route: POST /api/mix/vibe/steer-stream (custom SSE endpoint)
+   * @param direction - Natural language direction for steering
+   * @param onEvent - Callback for each SSE event
+   * @returns Promise that resolves when stream is complete
+   */
+  async steerVibeStream(
+    direction: string,
+    onEvent: (event: SteerStreamEvent) => void,
+  ): Promise<void> {
+    const token = getSpotifyToken()
+    if (!token) {
+      throw new Error('No Spotify token')
+    }
+
+    const response = await fetch('/api/mix/vibe/steer-stream', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ direction }),
+    })
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Request failed' }))
+      throw new Error((error as { error?: string }).error || 'Failed to start steer stream')
+    }
+
+    if (!response.body) {
+      throw new Error('No response body')
+    }
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+
+        // Process complete SSE messages
+        const lines = buffer.split('\n\n')
+        buffer = lines.pop() || '' // Keep incomplete message in buffer
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6))
+              onEvent(data as SteerStreamEvent)
+            } catch {
+              // Ignore parse errors for malformed events
+            }
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock()
+    }
   },
 
   // ===== Save =====

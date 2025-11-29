@@ -4,6 +4,7 @@ import {useState} from 'react'
 
 import {ErrorDisplay} from '../components/ErrorDisplay'
 import {MixInterface} from '../features/mix'
+import {SteerProgress} from '../features/mix/SteerProgress'
 import {useError} from '../hooks/useError'
 import {useMixSession} from '../hooks/useMixSession'
 import {mixApiClient} from '../lib/mix-api-client'
@@ -44,8 +45,14 @@ export function MixPage({onBackToChat, seedPlaylistId, token}: MixPageProps) {
   // Vibe controls from store (atomic selectors)
   const vibeError = useMixStore((s) => s.vibeError)
   const setEnergyLevel = useMixStore((s) => s.setEnergyLevel)
-  const steerVibe = useMixStore((s) => s.steerVibe)
+  const steerVibeStream = useMixStore((s) => s.steerVibeStream)
   const clearVibeError = useMixStore((s) => s.clearVibeError)
+
+  // Steer progress state (atomic selectors)
+  const steerInProgress = useMixStore((s) => s.steerInProgress)
+  const steerDirection = useMixStore((s) => s.steerDirection)
+  const steerEvents = useMixStore((s) => s.steerEvents)
+  const clearSteerProgress = useMixStore((s) => s.clearSteerProgress)
 
   // Direct state sync: hide start dialog when existing session is detected
   if (session && showStartDialog) {
@@ -97,13 +104,17 @@ export function MixPage({onBackToChat, seedPlaylistId, token}: MixPageProps) {
 
   const handleSteerVibe = async (direction: string) => {
     try {
-      await steerVibe(direction)
-      // Refresh suggestions after vibe change
+      // Use streaming steer for better UX with progress feedback
+      await steerVibeStream(direction)
+      // Refresh suggestions after vibe change (streaming already updates queue)
       await refreshSuggestions()
     } catch (err) {
       handleError(err, 'Failed to adjust vibe')
     }
   }
+
+  // Check if steer is complete (has done or error event)
+  const steerIsComplete = steerEvents.some((e) => e.type === 'done' || e.type === 'error')
 
   const handleEnergyChange = (level: number) => {
     // setEnergyLevel is already debounced and handles async internally
@@ -197,6 +208,16 @@ export function MixPage({onBackToChat, seedPlaylistId, token}: MixPageProps) {
           error={combinedError}
           onDismiss={clearAllErrors}
           variant="toast"
+        />
+      )}
+
+      {/* Show steer progress modal */}
+      {steerInProgress && steerDirection && (
+        <SteerProgress
+          direction={steerDirection}
+          events={steerEvents}
+          isComplete={steerIsComplete}
+          onClose={clearSteerProgress}
         />
       )}
     </div>

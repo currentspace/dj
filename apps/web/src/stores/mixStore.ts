@@ -7,7 +7,7 @@ import type {MixSession, QueuedTrack, SessionPreferences, SteerVibeResponse, Sug
 import {create} from 'zustand'
 import {subscribeWithSelector} from 'zustand/middleware'
 
-import {mixApiClient} from '../lib/mix-api-client'
+import {mixApiClient, type SteerStreamEvent} from '../lib/mix-api-client'
 
 // =============================================================================
 // TYPES
@@ -27,6 +27,11 @@ interface MixStoreState {
   // Vibe state
   vibeUpdating: boolean
   vibeError: string | null
+
+  // Steer streaming state
+  steerDirection: string | null
+  steerEvents: SteerStreamEvent[]
+  steerInProgress: boolean
 
   // Session actions
   clearError: () => void
@@ -50,6 +55,10 @@ interface MixStoreState {
   setEnergyDirection: (direction: 'building' | 'steady' | 'winding_down') => Promise<void>
   setEnergyLevel: (level: number) => void
   steerVibe: (direction: string, intensity?: number) => Promise<SteerVibeResponse | undefined>
+
+  // Streaming steer actions
+  steerVibeStream: (direction: string) => Promise<void>
+  clearSteerProgress: () => void
 }
 
 // =============================================================================
@@ -76,6 +85,9 @@ export const useMixStore = create<MixStoreState>()(
       suggestionsLoading: false,
       vibeError: null,
       vibeUpdating: false,
+      steerDirection: null,
+      steerEvents: [],
+      steerInProgress: false,
 
       // Session actions
       clearError: () => set({error: null}),
@@ -388,6 +400,82 @@ export const useMixStore = create<MixStoreState>()(
           })
           return undefined
         }
+      },
+
+      // Streaming steer actions
+      steerVibeStream: async (direction) => {
+        const {session} = get()
+        if (!session) {
+          set({vibeError: 'No active session'})
+          return
+        }
+
+        // Start streaming state
+        set({
+          steerInProgress: true,
+          steerDirection: direction,
+          steerEvents: [],
+          vibeUpdating: true,
+          vibeError: null,
+        })
+
+        try {
+          await mixApiClient.steerVibeStream(direction, (event) => {
+            // Accumulate events
+            set((state) => ({
+              steerEvents: [...state.steerEvents, event],
+            }))
+
+            // Handle specific event types
+            if (event.type === 'vibe_update' && event.data.vibe) {
+              const currentSession = get().session
+              if (currentSession) {
+                set({
+                  session: {
+                    ...currentSession,
+                    vibe: event.data.vibe,
+                  },
+                })
+              }
+            }
+
+            if (event.type === 'done') {
+              const currentSession = get().session
+              if (currentSession && event.data.queue) {
+                set({
+                  session: {
+                    ...currentSession,
+                    queue: event.data.queue,
+                  },
+                  vibeUpdating: false,
+                })
+              } else {
+                set({vibeUpdating: false})
+              }
+            }
+
+            if (event.type === 'error') {
+              set({
+                vibeError: event.data.message || 'Failed to steer vibe',
+                vibeUpdating: false,
+              })
+            }
+          })
+        } catch (err) {
+          set({
+            vibeError: err instanceof Error ? err.message : 'Failed to steer vibe',
+            vibeUpdating: false,
+            steerInProgress: false,
+          })
+        }
+      },
+
+      clearSteerProgress: () => {
+        set({
+          steerInProgress: false,
+          steerDirection: null,
+          steerEvents: [],
+        })
       },
     }
   })
