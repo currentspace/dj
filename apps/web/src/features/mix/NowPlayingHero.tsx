@@ -1,8 +1,10 @@
 import type {PlayedTrack, QueuedTrack} from '@dj/shared-types'
 
 import type {PlaybackState} from '../../hooks/usePlaybackStream'
+import {useDevice} from '../../stores'
 
 import {DevicePicker} from './DevicePicker'
+import {PlaybackControls} from './PlaybackControls'
 import styles from './mix.module.css'
 
 interface NowPlayingHeroProps {
@@ -27,6 +29,9 @@ function formatTime(ms: number): string {
 }
 
 export function NowPlayingHero({playback, queue, token, track}: NowPlayingHeroProps) {
+  // Get device info for volume control
+  const device = useDevice()
+
   // Prefer real-time playback state over session history
   const hasPlayback = playback && playback.trackId
   const hasTrack = track
@@ -105,6 +110,14 @@ export function NowPlayingHero({playback, queue, token, track}: NowPlayingHeroPr
           <span className={styles.progressTime}>{formatTime(duration)}</span>
         )}
       </div>
+
+      {hasPlayback && (
+        <PlaybackControls
+          isPlaying={isPlaying}
+          supportsVolume={device?.supportsVolume ?? false}
+          volumePercent={device?.volumePercent ?? null}
+        />
+      )}
 
       <DevicePicker
         currentDeviceId={deviceId}

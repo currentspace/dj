@@ -232,6 +232,17 @@ export const QueueToSpotifyResponseSchema = z.object({
   message: z.string().optional(),
 })
 
+// Update Preferences Request
+export const UpdatePreferencesRequestSchema = z.object({
+  autoFill: z.boolean().optional(),
+})
+
+export const UpdatePreferencesResponseSchema = z.object({
+  success: z.boolean(),
+  preferences: SessionPreferencesSchema,
+  session: MixSessionSchema,
+})
+
 // ===== Type Exports =====
 
 export type VibeProfile = z.infer<typeof VibeProfileSchema>
@@ -264,3 +275,5 @@ export type TrackPlayedRequest = z.infer<typeof TrackPlayedRequestSchema>
 export type TrackPlayedResponse = z.infer<typeof TrackPlayedResponseSchema>
 export type QueueToSpotifyRequest = z.infer<typeof QueueToSpotifyRequestSchema>
 export type QueueToSpotifyResponse = z.infer<typeof QueueToSpotifyResponseSchema>
+export type UpdatePreferencesRequest = z.infer<typeof UpdatePreferencesRequestSchema>
+export type UpdatePreferencesResponse = z.infer<typeof UpdatePreferencesResponseSchema>

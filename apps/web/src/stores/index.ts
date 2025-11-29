@@ -22,6 +22,6 @@
 
 export {useAuthStore, processOAuthCallback} from './authStore'
 export {useNavigationStore, type Route} from './navigationStore'
-export {usePlaybackStore, getPlaybackState, type ConnectionStatus, type PlaybackCore, type PlaybackState} from './playbackStore'
+export {usePlaybackStore, getPlaybackState, useDevice, type ConnectionStatus, type PlaybackCore, type PlaybackState} from './playbackStore'
 export {useMixStore, initializeMixStore} from './mixStore'
 export {usePlaylistStore, selectCurrentMessages, selectMessagesForPlaylist, selectHasConversation} from './playlistStore'

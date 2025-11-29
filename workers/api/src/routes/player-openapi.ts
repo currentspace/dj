@@ -307,6 +307,43 @@ export function registerPlayerRoutes(app: OpenAPIHono<{Bindings: Env}>) {
     }
   })
 
+  // PUT /api/player/volume - Set playback volume
+  app.put('/api/player/volume', async c => {
+    const token = c.req.header('Authorization')?.replace('Bearer ', '')
+    if (!token) {
+      return c.json({error: 'No authorization token'}, 401)
+    }
+
+    try {
+      const body = await c.req.json()
+      const volumePercent = body.volume_percent
+
+      if (typeof volumePercent !== 'number' || volumePercent < 0 || volumePercent > 100) {
+        return c.json({error: 'volume_percent must be a number between 0 and 100'}, 400)
+      }
+
+      const response = await fetch(`https://api.spotify.com/v1/me/player/volume?volume_percent=${Math.round(volumePercent)}`, {
+        headers: {Authorization: `Bearer ${token}`},
+        method: 'PUT',
+      })
+
+      if (response.status === 204) {
+        return c.json({success: true, volume_percent: volumePercent}, 200)
+      }
+
+      if (!isSuccessResponse(response)) {
+        const errorText = await response.text()
+        getLogger()?.error(`[Player] Volume failed: ${response.status} - ${errorText}`)
+        return c.json({error: 'Failed to set volume', details: errorText}, response.status as 400 | 401 | 404)
+      }
+
+      return c.json({success: true, volume_percent: volumePercent}, 200)
+    } catch (error) {
+      getLogger()?.error('[Player] Error setting volume:', error)
+      return c.json({error: 'Internal server error'}, 500)
+    }
+  })
+
   // POST /api/player/queue/add - Add track to queue
   app.post('/api/player/queue/add', async c => {
     const token = c.req.header('Authorization')?.replace('Bearer ', '')

@@ -24,6 +24,8 @@ import {
   SteerVibeResponseSchema,
   TrackPlayedRequestSchema,
   TrackPlayedResponseSchema,
+  UpdatePreferencesRequestSchema,
+  UpdatePreferencesResponseSchema,
   UpdateVibeRequestSchema,
   UpdateVibeResponseSchema,
 } from '@dj/shared-types'
@@ -806,6 +808,61 @@ export const queueToSpotify = createRoute({
         },
       },
       description: 'Spotify Premium required or no active device',
+    },
+    500: {
+      content: {
+        'application/json': {
+          schema: ErrorResponseSchema,
+        },
+      },
+      description: 'Internal server error',
+    },
+  },
+  tags: ['Mix'],
+})
+
+/**
+ * PATCH /api/mix/preferences
+ * Update session preferences (autoFill toggle)
+ */
+export const updatePreferences = createRoute({
+  description: 'Update session preferences such as auto-fill toggle',
+  method: 'patch',
+  path: '/api/mix/preferences',
+  request: {
+    body: {
+      content: {
+        'application/json': {
+          schema: UpdatePreferencesRequestSchema,
+        },
+      },
+    },
+    headers: authHeaders,
+  },
+  responses: {
+    200: {
+      content: {
+        'application/json': {
+          schema: UpdatePreferencesResponseSchema,
+        },
+      },
+      description: 'Preferences updated successfully',
+    },
+    401: {
+      content: {
+        'application/json': {
+          schema: ErrorResponseSchema,
+        },
+      },
+      description: 'Unauthorized',
+    },
+    404: {
+      content: {
+        'application/json': {
+          schema: ErrorResponseSchema,
+        },
+      },
+      description: 'No active session',
     },
     500: {
       content: {

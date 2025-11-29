@@ -4,6 +4,7 @@ import {useCallback, useTransition} from 'react'
 import {usePlaybackStream} from '../../hooks/usePlaybackStream'
 import {useMixStore} from '../../stores'
 
+import {AutoFillToggle} from './AutoFillToggle'
 import {NowPlayingHero} from './NowPlayingHero'
 import {QueuePanel} from './QueuePanel'
 import {SuggestionsPanel} from './SuggestionsPanel'
@@ -58,6 +59,7 @@ export function MixInterface({
   const currentTrack: PlayedTrack | null = session?.history[0] ?? null
   const queue: QueuedTrack[] = session?.queue ?? []
   const vibe: VibeProfile | null = session?.vibe ?? null
+  const autoFill: boolean = session?.preferences?.autoFill ?? true
 
   const handleRemoveFromQueue = useCallback(
     (position: number) => {
@@ -132,7 +134,10 @@ export function MixInterface({
         />
       </div>
 
-      <VibeControls onEnergyChange={handleEnergyChange} onSteer={handleSteerVibe} vibe={vibe} />
+      <div className={styles.controlsRow}>
+        <VibeControls onEnergyChange={handleEnergyChange} onSteer={handleSteerVibe} vibe={vibe} />
+        <AutoFillToggle autoFill={autoFill} />
+      </div>
     </div>
   )
 }

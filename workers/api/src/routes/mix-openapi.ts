@@ -18,6 +18,7 @@ import {
   startMix,
   steerVibe,
   trackPlayed,
+  updatePreferences,
   updateVibe,
 } from '@dj/api-contracts'
 import type {PlayedTrack, QueuedTrack, SpotifyTrackFull} from '@dj/shared-types'
@@ -177,6 +178,12 @@ async function autoFillQueue(
   session: import('@dj/shared-types').MixSession,
   sessionService: MixSessionService
 ): Promise<number> {
+  // Check if autoFill is enabled in session preferences
+  if (!session.preferences.autoFill) {
+    getLogger()?.info('Auto-fill disabled in session preferences, skipping')
+    return 0
+  }
+
   const queueSize = session.queue.length
   const tracksNeeded = TARGET_QUEUE_SIZE - queueSize
 
@@ -1137,6 +1144,64 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
     } catch (error) {
       getLogger()?.error('Queue to Spotify error:', error)
       const message = error instanceof Error ? error.message : 'Failed to queue to Spotify'
+      return c.json({error: message}, 500)
+    }
+  })
+
+  // PATCH /api/mix/preferences - Update session preferences (autoFill toggle)
+  app.openapi(updatePreferences, async c => {
+    try {
+      const token = c.req.header('authorization')?.replace('Bearer ', '')
+      if (!token) {
+        return c.json({error: 'No authorization token'}, 401)
+      }
+
+      // Check if KV is available
+      if (!c.env.MIX_SESSIONS) {
+        return c.json({error: 'Mix sessions not available'}, 500)
+      }
+
+      // Get userId from token
+      const userId = await getUserIdFromToken(token)
+      if (!userId) {
+        return c.json({error: 'Failed to get user identity'}, 401)
+      }
+
+      const sessionService = new MixSessionService(c.env.MIX_SESSIONS)
+      const session = await sessionService.getSession(userId)
+
+      if (!session) {
+        return c.json({error: 'No active mix session'}, 404)
+      }
+
+      const body = await c.req.json()
+      const {autoFill} = body
+
+      // Update preferences
+      if (autoFill !== undefined) {
+        session.preferences.autoFill = autoFill
+      }
+
+      // Save updated session
+      await sessionService.updateSession(session)
+
+      getLogger()?.info(`Updated preferences for session ${session.id}`, {autoFill})
+
+      // If autoFill was just enabled and queue is low, trigger auto-fill
+      if (autoFill && session.queue.length < TARGET_QUEUE_SIZE) {
+        try {
+          const addedCount = await autoFillQueue(c.env, token, session, sessionService)
+          getLogger()?.info(`Preferences update: auto-fill added ${addedCount} tracks`)
+        } catch (err) {
+          getLogger()?.error('Auto-fill after preferences update failed:', err)
+          // Continue - non-fatal
+        }
+      }
+
+      return c.json({success: true, preferences: session.preferences, session}, 200)
+    } catch (error) {
+      getLogger()?.error('Update preferences error:', error)
+      const message = error instanceof Error ? error.message : 'Failed to update preferences'
       return c.json({error: message}, 500)
     }
   })

@@ -974,6 +974,17 @@
   font-weight: 400;
 }
 
+/* ===== Controls Row ===== */
+
+.controlsRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0 0.5rem;
+}
+
 /* ===== Responsive Design ===== */
 
 @media (max-width: 1024px) {
