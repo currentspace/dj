@@ -188,8 +188,9 @@ async function autoFillQueue(
   session: import('@dj/shared-types').MixSession,
   sessionService: MixSessionService
 ): Promise<number> {
-  // Check if autoFill is enabled in session preferences
-  if (!session.preferences.autoFill) {
+  // Check if autoFill is enabled in session preferences (default to true if not set)
+  const autoFillEnabled = session.preferences.autoFill ?? true
+  if (!autoFillEnabled) {
     getLogger()?.info('Auto-fill disabled in session preferences, skipping')
     return 0
   }

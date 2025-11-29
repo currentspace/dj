@@ -68,8 +68,8 @@ export const SessionPreferencesSchema = z.object({
   avoidGenres: z.array(z.string()).default([]),
   favoriteArtists: z.array(z.string()).default([]),
   bpmLock: z.object({
-    min: z.number().min(20).max(220),
-    max: z.number().min(20).max(220),
+    min: z.number().positive().max(500),
+    max: z.number().positive().max(500),
   }).nullable().default(null),
   autoFill: z.boolean().default(true),
 })
