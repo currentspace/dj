@@ -413,8 +413,8 @@ async function searchSpotifyTrack(
 // =============================================================================
 
 /**
- * Start playback with first track, then queue the rest
- * This ensures tracks stay in Spotify's queue for continuous playback
+ * Start playback with ALL tracks as the context
+ * This creates a proper playback context that Spotify will play through
  */
 async function startPlaybackWithTracks(
   token: string,
@@ -428,8 +428,12 @@ async function startPlaybackWithTracks(
   }
 
   try {
-    // 1. Start playback with just the first track
-    const firstTrack = trackUris[0]
+    logger?.info('[steer-stream] Starting playback with context:', {
+      trackCount: trackUris.length,
+      uris: trackUris
+    })
+
+    // Play ALL tracks at once - this creates a proper context that Spotify will play through
     const playResponse = await fetch('https://api.spotify.com/v1/me/player/play', {
       method: 'PUT',
       headers: {
@@ -437,7 +441,7 @@ async function startPlaybackWithTracks(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        uris: [firstTrack],
+        uris: trackUris,
       }),
     })
 
@@ -447,36 +451,7 @@ async function startPlaybackWithTracks(
       return false
     }
 
-    logger?.info('[steer-stream] Started playback with first track')
-
-    // 2. Queue the remaining tracks (with small delays to ensure order)
-    const remainingTracks = trackUris.slice(1)
-    let queuedCount = 0
-
-    for (const uri of remainingTracks) {
-      try {
-        const queueResponse = await fetch(
-          `https://api.spotify.com/v1/me/player/queue?uri=${encodeURIComponent(uri)}`,
-          {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        )
-
-        if (queueResponse.ok) {
-          queuedCount++
-        } else {
-          logger?.warn('[steer-stream] Failed to queue track:', { uri, status: queueResponse.status })
-        }
-
-        // Small delay to ensure queue order is preserved
-        await new Promise(resolve => setTimeout(resolve, 100))
-      } catch (err) {
-        logger?.warn('[steer-stream] Error queueing track:', { error: String(err) })
-      }
-    }
-
-    logger?.info(`[steer-stream] Queued ${queuedCount}/${remainingTracks.length} additional tracks`)
+    logger?.info('[steer-stream] Playback started with all tracks in context')
     return true
   } catch (error) {
     logger?.error('[steer-stream] Error starting playback:', error)
