@@ -111,6 +111,51 @@ Return ONLY valid JSON:
 Do NOT include markdown code blocks, only the raw JSON.`
 }
 
+/**
+ * Prompt for steering the vibe - transitioning from current tracks towards a new direction
+ * Unlike nextTrack, this prioritizes the NEW direction while lightly acknowledging recent tracks
+ */
+export function buildSteeringSuggestionsPrompt(
+  vibeDescription: string,
+  steerDirection: string,
+  recentTracks: Array<{ name: string; artist: string }>,
+  count: number
+): string {
+  const recentList = recentTracks.length > 0
+    ? recentTracks.map((t, i) => `${i + 1}. "${t.name}" by ${t.artist}`).join('\n')
+    : '(Starting fresh)'
+
+  return `You are an expert DJ helping steer a mix in a new direction. The listener wants to shift towards "${steerDirection}".
+
+NEW TARGET VIBE (PRIMARY - this is what we're steering TOWARDS):
+${vibeDescription}
+
+RECENT TRACKS (for context only - we're moving AWAY from this style):
+${recentList}
+
+YOUR TASK:
+Suggest ${count} tracks that embody the NEW vibe direction. These should:
+- STRONGLY match the new target vibe (genres, mood, energy, BPM)
+- Be appropriate "bridge" tracks that wouldn't feel jarring if played after the recent tracks
+- Prioritize the new direction over continuity with the old style
+- Be REAL tracks that exist on Spotify
+
+Think of it like a DJ transitioning from one genre to another - the tracks should feel like the new destination, while being reasonable pivot points from where we were.
+
+Return ONLY valid JSON:
+{
+  "tracks": [
+    {
+      "artist": "Artist Name",
+      "name": "Track Title",
+      "reason": "How this embodies the new direction while bridging from the old"
+    }
+  ]
+}
+
+Do NOT include markdown code blocks, only the raw JSON.`
+}
+
 // =============================================================================
 // VIBE ANALYSIS PROMPTS
 // =============================================================================

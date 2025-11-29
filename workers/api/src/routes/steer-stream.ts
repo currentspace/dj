@@ -8,11 +8,10 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 
 import type { Env } from '../index'
-import type { MixSession, QueuedTrack, VibeProfile } from '@dj/shared-types'
+import type { MixSession, QueuedTrack, Suggestion, VibeProfile } from '@dj/shared-types'
 import { MixSessionService } from '../services/MixSessionService'
-import { SuggestionEngine } from '../services/SuggestionEngine'
-import { LastFmService } from '../services/LastFmService'
-import { AudioEnrichmentService } from '../services/AudioEnrichmentService'
+import { buildSteeringSuggestionsPrompt, buildVibeDescription, SYSTEM_PROMPTS } from '../lib/ai-prompts'
+import { createAIService } from '../lib/ai-service'
 import { getLogger } from '../utils/LoggerContext'
 
 // =============================================================================
@@ -303,6 +302,113 @@ function calculateChanges(oldVibe: VibeProfile, newVibe: VibeProfile): string[] 
 }
 
 // =============================================================================
+// STEERING SUGGESTIONS
+// =============================================================================
+
+/**
+ * Generate suggestions specifically for steering - prioritizes new vibe while
+ * lightly considering recent tracks for smooth transitions
+ */
+async function generateSteeringSuggestions(
+  env: Env,
+  token: string,
+  session: MixSession,
+  direction: string,
+  count: number
+): Promise<Suggestion[]> {
+  const logger = getLogger()
+
+  if (!env.ANTHROPIC_API_KEY) {
+    logger?.warn('[steer-stream] No AI service available for steering suggestions')
+    return []
+  }
+
+  const aiService = createAIService({ apiKey: env.ANTHROPIC_API_KEY })
+
+  // Build the steering prompt with the new vibe and recent history context
+  const vibeDescription = buildVibeDescription(session.vibe)
+  const recentTracks = session.history.slice(-5).map(t => ({ name: t.name, artist: t.artist }))
+  const prompt = buildSteeringSuggestionsPrompt(vibeDescription, direction, recentTracks, count)
+
+  logger?.info('[steer-stream] Asking AI for steering suggestions...', {
+    direction,
+    recentTracksCount: recentTracks.length,
+  })
+
+  const response = await aiService.promptForJSON<{
+    tracks: Array<{ artist: string; name: string; reason: string }>
+  }>(prompt, {
+    temperature: 0.8,
+    system: SYSTEM_PROMPTS.DJ,
+  })
+
+  if (response.error || !response.data?.tracks) {
+    logger?.error('[steer-stream] AI steering request failed:', response.error)
+    return []
+  }
+
+  const aiSuggestions = response.data
+
+  if (aiSuggestions.tracks.length === 0) {
+    logger?.info('[steer-stream] AI returned no steering suggestions')
+    return []
+  }
+
+  logger?.info(`[steer-stream] AI suggested ${aiSuggestions.tracks.length} steering tracks, searching Spotify...`)
+
+  // Search Spotify for each suggested track
+  const suggestions: Suggestion[] = []
+
+  for (const suggestion of aiSuggestions.tracks) {
+    const track = await searchSpotifyTrack(token, suggestion.artist, suggestion.name)
+    if (track) {
+      // Skip enrichment for steering - focus on getting the right tracks quickly
+      suggestions.push({
+        trackId: track.id,
+        trackUri: track.uri,
+        name: track.name,
+        artist: track.artists[0]?.name || 'Unknown Artist',
+        albumArt: track.album.images[0]?.url,
+        vibeScore: 80, // High score since AI specifically picked these for the new vibe
+        reason: suggestion.reason,
+        bpm: null,
+      })
+    }
+    if (suggestions.length >= count) break
+  }
+
+  logger?.info(`[steer-stream] Generated ${suggestions.length} steering suggestions`)
+  return suggestions
+}
+
+/**
+ * Search for a track on Spotify
+ */
+async function searchSpotifyTrack(
+  token: string,
+  artist: string,
+  track: string
+): Promise<{ id: string; uri: string; name: string; artists: { name: string }[]; album: { images: { url: string }[] } } | null> {
+  try {
+    const query = `artist:${artist} track:${track}`
+    const url = `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=track&limit=1`
+
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+
+    if (!response.ok) {
+      return null
+    }
+
+    const data = await response.json() as { tracks?: { items?: Array<{ id: string; uri: string; name: string; artists: { name: string }[]; album: { images: { url: string }[] } }> } }
+    return data.tracks?.items?.[0] || null
+  } catch {
+    return null
+  }
+}
+
+// =============================================================================
 // QUEUE REBUILDING
 // =============================================================================
 
@@ -310,6 +416,7 @@ async function rebuildQueue(
   env: Env,
   token: string,
   session: MixSession,
+  direction: string,
   sessionService: MixSessionService,
   sseWriter: SteerSSEWriter
 ): Promise<QueuedTrack[]> {
@@ -321,19 +428,15 @@ async function rebuildQueue(
   const tracksNeeded = TARGET_QUEUE_SIZE
 
   try {
-    const lastFmService = new LastFmService(env.LASTFM_API_KEY || '', env.AUDIO_FEATURES_CACHE)
-    const audioService = new AudioEnrichmentService(env.AUDIO_FEATURES_CACHE)
-    const suggestionEngine = new SuggestionEngine(lastFmService, audioService, token, env.ANTHROPIC_API_KEY, true)
-
-    // IMPORTANT: When steering, use empty history to focus purely on the NEW vibe
-    // This prevents the AI from trying to "transition" from old tracks
-    const steerSession: MixSession = {
-      ...session,
-      history: [], // Clear history so AI focuses on vibe, not old tracks
-    }
-
-    logger?.info('[steer-stream] Generating suggestions with empty history to focus on new vibe')
-    const suggestions = await suggestionEngine.generateSuggestions(steerSession, tracksNeeded + 3)
+    // Generate steering-specific suggestions using AI
+    logger?.info('[steer-stream] Generating steering suggestions towards:', { direction })
+    const suggestions = await generateSteeringSuggestions(
+      env,
+      token,
+      session,
+      direction,
+      tracksNeeded + 3
+    )
 
     if (suggestions.length === 0) {
       logger?.info('[steer-stream] No suggestions generated')
@@ -498,8 +601,8 @@ steerStreamRouter.post('/steer-stream', async c => {
         data: { message: buildingMsg, stage: 'building' }
       })
 
-      // 7. Rebuild queue
-      const queue = await rebuildQueue(c.env, token, session, sessionService, sseWriter)
+      // 7. Rebuild queue with steering-aware suggestions
+      const queue = await rebuildQueue(c.env, token, session, direction, sessionService, sseWriter)
 
       // 8. Send suggestions
       await sseWriter.write({
