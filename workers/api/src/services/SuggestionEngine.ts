@@ -28,17 +28,26 @@ interface SpotifyTrack {
 
 export class SuggestionEngine {
   private aiService: AIService | null = null
+  private enableThinking: boolean
 
   constructor(
     private lastFmService: LastFmService,
     private audioService: AudioEnrichmentService,
     private spotifyToken: string,
-    anthropicApiKey?: string
+    anthropicApiKey?: string,
+    /** Enable extended thinking for deeper AI reasoning (costs more tokens) */
+    enableThinking = false
   ) {
     if (anthropicApiKey) {
       this.aiService = createAIService({ apiKey: anthropicApiKey })
     }
+    this.enableThinking = enableThinking
   }
+
+  /**
+   * Last thinking content captured (for debugging/analysis)
+   */
+  public lastThinking: string | null = null
 
   /**
    * Generate suggestions based on current vibe
@@ -82,15 +91,28 @@ export class SuggestionEngine {
       const recentTracks = history.slice(-5).map(t => ({ name: t.name, artist: t.artist }))
       const prompt = buildNextTrackPrompt(vibeDescription, recentTracks, count * 2)
 
-      getLogger()?.info('[SuggestionEngine] Asking AI for context-aware track suggestions...')
+      getLogger()?.info('[SuggestionEngine] Asking AI for context-aware track suggestions...', {
+        enableThinking: this.enableThinking,
+      })
 
       // Use AI service for the request
+      // When thinking is enabled, we get deeper reasoning about track selection
       const response = await this.aiService.promptForJSON<{
         tracks: Array<{ artist: string; name: string; reason: string }>
       }>(prompt, {
-        temperature: 0.8,
+        temperature: this.enableThinking ? undefined : 0.8, // No temp with thinking
         system: SYSTEM_PROMPTS.DJ,
+        thinkingBudget: this.enableThinking ? 2000 : undefined,
       })
+
+      // Capture thinking for analysis
+      if (response.thinking) {
+        this.lastThinking = response.thinking
+        getLogger()?.info('[SuggestionEngine] Extended thinking captured', {
+          thinkingPreview: response.thinking.slice(0, 500) + '...',
+          usage: response.usage,
+        })
+      }
 
       if (response.error || !response.data?.tracks) {
         getLogger()?.error('[SuggestionEngine] AI request failed:', response.error)
@@ -479,15 +501,28 @@ export class SuggestionEngine {
       const vibeDescription = buildVibeDescription(vibe)
       const prompt = buildInitialSuggestionsPrompt(vibeDescription, count * 2)
 
-      getLogger()?.info('[SuggestionEngine] Asking AI for initial track suggestions...')
+      getLogger()?.info('[SuggestionEngine] Asking AI for initial track suggestions...', {
+        enableThinking: this.enableThinking,
+      })
 
       // Use common AI service for the request
+      // When thinking is enabled, we get deeper reasoning about vibe interpretation
       const response = await this.aiService.promptForJSON<{
         tracks: Array<{ artist: string; name: string; reason: string }>
       }>(prompt, {
-        temperature: 0.8, // Higher temperature for creative suggestions
+        temperature: this.enableThinking ? undefined : 0.8, // No temp with thinking
         system: SYSTEM_PROMPTS.DJ,
+        thinkingBudget: this.enableThinking ? 2000 : undefined,
       })
+
+      // Capture thinking for analysis
+      if (response.thinking) {
+        this.lastThinking = response.thinking
+        getLogger()?.info('[SuggestionEngine] Extended thinking captured (initial)', {
+          thinkingPreview: response.thinking.slice(0, 500) + '...',
+          usage: response.usage,
+        })
+      }
 
       if (response.error || !response.data?.tracks) {
         getLogger()?.error('[SuggestionEngine] AI request failed:', response.error)

@@ -29,12 +29,22 @@ export interface AIRequestOptions {
   maxTokens?: number
   /** System prompt */
   system?: string
+  /** Enable extended thinking (budget tokens for reasoning) */
+  thinkingBudget?: number
 }
 
 export interface AIResponse<T> {
   data: T | null
   error: string | null
   rawText: string
+  /** Extended thinking content (if enabled) */
+  thinking?: string
+  /** Token usage stats */
+  usage?: {
+    inputTokens: number
+    outputTokens: number
+    thinkingTokens?: number
+  }
 }
 
 // =============================================================================
@@ -54,30 +64,79 @@ export class AIService {
 
   /**
    * Send a prompt to Claude and get a JSON response
+   * Supports extended thinking when thinkingBudget is provided
    */
   async promptForJSON<T>(prompt: string, options: AIRequestOptions = {}): Promise<AIResponse<T>> {
     try {
-      const response = await this.client.messages.create({
-        model: options.model || this.defaultModel,
-        max_tokens: options.maxTokens || 2000,
-        temperature: options.temperature ?? this.defaultTemperature,
-        system: options.system || 'You are an AI assistant. Return only valid JSON.',
-        messages: [{ role: 'user', content: prompt }],
-      })
+      // Build request parameters
+      const useThinking = options.thinkingBudget && options.thinkingBudget > 0
+      const model = options.model || this.defaultModel
 
-      // Extract text from response blocks
-      const rawText = response.content
-        .filter((block): block is Anthropic.TextBlock => block.type === 'text')
-        .map(block => block.text)
-        .join('')
+      // Extended thinking requires specific model and parameters
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const requestParams: any = {
+        model,
+        max_tokens: options.maxTokens || 2000,
+        messages: [{ role: 'user', content: prompt }],
+      }
+
+      if (useThinking) {
+        // Extended thinking mode - no temperature, uses thinking block
+        requestParams.thinking = {
+          type: 'enabled',
+          budget_tokens: options.thinkingBudget,
+        }
+        // System prompt goes in messages for thinking mode
+        if (options.system) {
+          requestParams.messages.unshift({
+            role: 'user',
+            content: `[System]: ${options.system}`,
+          })
+        }
+      } else {
+        // Standard mode
+        requestParams.temperature = options.temperature ?? this.defaultTemperature
+        requestParams.system = options.system || 'You are an AI assistant. Return only valid JSON.'
+      }
+
+      const response = await this.client.messages.create(requestParams)
+
+      // Extract text and thinking from response blocks
+      let rawText = ''
+      let thinking = ''
+
+      for (const block of response.content) {
+        if (block.type === 'text') {
+          rawText += block.text
+        } else if (block.type === 'thinking') {
+          thinking += (block as { type: 'thinking'; thinking: string }).thinking
+        }
+      }
 
       // Parse JSON from response
       const data = this.extractJSON<T>(rawText)
+
+      // Build usage stats
+      const usage = {
+        inputTokens: response.usage?.input_tokens || 0,
+        outputTokens: response.usage?.output_tokens || 0,
+        thinkingTokens: thinking ? thinking.split(/\s+/).length : undefined,
+      }
+
+      // Log thinking if enabled (for prompt optimization analysis)
+      if (thinking) {
+        getLogger()?.info('[AIService] Extended thinking captured', {
+          thinkingLength: thinking.length,
+          thinkingTokens: usage.thinkingTokens,
+        })
+      }
 
       return {
         data,
         error: data === null ? 'Failed to parse JSON from response' : null,
         rawText,
+        thinking: thinking || undefined,
+        usage,
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)

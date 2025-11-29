@@ -187,13 +187,21 @@ async function autoFillQueue(
   getLogger()?.info(`Auto-filling queue: ${queueSize} → ${TARGET_QUEUE_SIZE} (need ${tracksNeeded} tracks)`)
 
   try {
-    // Initialize suggestion engine
+    // Initialize suggestion engine with extended thinking enabled for quality reasoning
     const lastFmService = new LastFmService(env.LASTFM_API_KEY || '', env.AUDIO_FEATURES_CACHE)
     const audioService = new AudioEnrichmentService(env.AUDIO_FEATURES_CACHE)
-    const suggestionEngine = new SuggestionEngine(lastFmService, audioService, token, env.ANTHROPIC_API_KEY)
+    const enableThinking = true // Enable extended thinking for deeper track selection reasoning
+    const suggestionEngine = new SuggestionEngine(lastFmService, audioService, token, env.ANTHROPIC_API_KEY, enableThinking)
 
     // Generate suggestions (fetch a few extra in case of duplicates)
     const suggestions = await suggestionEngine.generateSuggestions(session, tracksNeeded + 3)
+
+    // Log thinking patterns if available (for prompt optimization)
+    if (suggestionEngine.lastThinking) {
+      getLogger()?.info('[autoFillQueue] AI thinking patterns captured for analysis', {
+        thinkingSample: suggestionEngine.lastThinking.slice(0, 1000),
+      })
+    }
 
     if (suggestions.length === 0) {
       getLogger()?.info('No suggestions generated for auto-fill')
@@ -779,13 +787,21 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
         return c.json({error: 'No active session'}, 404)
       }
 
-      // Initialize services
+      // Initialize services with extended thinking for quality reasoning
       const lastFmService = new LastFmService(c.env.LASTFM_API_KEY || '', c.env.AUDIO_FEATURES_CACHE)
       const audioService = new AudioEnrichmentService(c.env.AUDIO_FEATURES_CACHE)
-      const suggestionEngine = new SuggestionEngine(lastFmService, audioService, token, c.env.ANTHROPIC_API_KEY)
+      const enableThinking = true // Enable extended thinking for deeper track selection reasoning
+      const suggestionEngine = new SuggestionEngine(lastFmService, audioService, token, c.env.ANTHROPIC_API_KEY, enableThinking)
 
       // Generate suggestions
       const suggestions = await suggestionEngine.generateSuggestions(session, count)
+
+      // Log thinking patterns if available
+      if (suggestionEngine.lastThinking) {
+        getLogger()?.info('[getSuggestions] AI thinking patterns', {
+          thinkingSample: suggestionEngine.lastThinking.slice(0, 1000),
+        })
+      }
 
       // Build basedOn context
       const currentTrack = session.history[0]?.name
@@ -1026,12 +1042,17 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       // Save updated session
       await sessionService.updateSession(session)
 
-      // Auto-fill queue if needed (non-blocking, runs after response)
+      // Auto-fill queue if needed - AWAIT to return updated session
       if (movedToHistory) {
-        // Run auto-fill in background (don't await)
-        autoFillQueue(c.env, token, session, sessionService).catch((err) => {
-          getLogger()?.error('Background auto-fill failed:', err)
-        })
+        try {
+          const addedCount = await autoFillQueue(c.env, token, session, sessionService)
+          if (addedCount > 0) {
+            getLogger()?.info(`[track-played] Auto-fill added ${addedCount} tracks, queue now has ${session.queue.length}`)
+          }
+        } catch (err) {
+          getLogger()?.error('Auto-fill failed:', err)
+          // Continue - non-fatal, return session as-is
+        }
       }
 
       return c.json({success: true, movedToHistory, session}, 200)

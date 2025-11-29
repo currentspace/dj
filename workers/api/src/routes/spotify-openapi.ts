@@ -30,7 +30,7 @@ const REDIRECT_URI = 'https://dj.current.space/api/spotify/callback'
  */
 export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
   // GET /api/spotify/auth-url - Generate OAuth URL with PKCE
-  app.openapi(getSpotifyAuthUrl, async (c) => {
+  app.openapi(getSpotifyAuthUrl, async c => {
     const env = c.env
 
     const codeVerifier = generateCodeVerifier()
@@ -66,9 +66,12 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
     c.header('Set-Cookie', `spotify_oauth=${cookieValue}; Max-Age=900; Secure; SameSite=Lax; Path=/; HttpOnly`)
 
     // Response automatically validated against contract schema
-    return c.json({
-      url: `${SPOTIFY_AUTH_URL}?${params.toString()}`,
-    }, 200)
+    return c.json(
+      {
+        url: `${SPOTIFY_AUTH_URL}?${params.toString()}`,
+      },
+      200,
+    )
   })
 
   // GET /api/spotify/callback - OAuth callback handler
@@ -173,12 +176,12 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       // Max-Age: 30 days (refresh tokens don't expire but we set reasonable limit)
       if (tokenData.refresh_token) {
         cookies.push(
-          `spotify_refresh=${tokenData.refresh_token}; Max-Age=2592000; Secure; SameSite=Lax; Path=/api/spotify; HttpOnly`
+          `spotify_refresh=${tokenData.refresh_token}; Max-Age=2592000; Secure; SameSite=Lax; Path=/api/spotify; HttpOnly`,
         )
       }
 
       // Set all cookies (Hono supports multiple Set-Cookie via append)
-      cookies.forEach(cookie => c.header('Set-Cookie', cookie, { append: true }))
+      cookies.forEach(cookie => c.header('Set-Cookie', cookie, {append: true}))
 
       // Redirect back to SPA with success and token
       const redirectUrl = new URL(env.FRONTEND_URL ?? 'https://dj.current.space')
@@ -194,7 +197,7 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
   })
 
   // POST /api/spotify/token - Exchange authorization code for token
-  app.openapi(exchangeSpotifyToken, async (c) => {
+  app.openapi(exchangeSpotifyToken, async c => {
     const env = c.env
 
     try {
@@ -244,13 +247,16 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       }
 
       // Response automatically validated against contract schema
-      return c.json({
-        access_token: tokenData.access_token,
-        expires_in: tokenData.expires_in,
-        refresh_token: tokenData.refresh_token,
-        scope: tokenData.scope,
-        token_type: 'Bearer' as const,
-      }, 200)
+      return c.json(
+        {
+          access_token: tokenData.access_token,
+          expires_in: tokenData.expires_in,
+          refresh_token: tokenData.refresh_token,
+          scope: tokenData.scope,
+          token_type: 'Bearer' as const,
+        },
+        200,
+      )
     } catch (error) {
       getLogger()?.error('Token exchange error:', error)
       return c.json(
@@ -264,7 +270,7 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
   })
 
   // POST /api/spotify/search - Search Spotify catalog
-  app.openapi(searchSpotify, async (c) => {
+  app.openapi(searchSpotify, async c => {
     try {
       // Headers and body automatically validated by contract
       const token = c.req.header('authorization')?.replace('Bearer ', '')
@@ -306,7 +312,7 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
   })
 
   // GET /api/spotify/me - Get current user profile (token validation)
-  app.openapi(getSpotifyMe, async (c) => {
+  app.openapi(getSpotifyMe, async c => {
     try {
       const token = c.req.header('authorization')?.replace('Bearer ', '')
 
@@ -325,7 +331,7 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
         return c.json({error: 'Invalid or expired token'}, 401)
       }
 
-      const data = await response.json() as {
+      const data = (await response.json()) as {
         country?: string
         display_name: string | null
         email?: string
@@ -333,13 +339,16 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
         product?: string
       }
 
-      return c.json({
-        country: data.country,
-        display_name: data.display_name,
-        email: data.email,
-        id: data.id,
-        product: data.product,
-      }, 200)
+      return c.json(
+        {
+          country: data.country,
+          display_name: data.display_name,
+          email: data.email,
+          id: data.id,
+          product: data.product,
+        },
+        200,
+      )
     } catch (error) {
       getLogger()?.error('Get user profile error:', error)
       return c.json({error: 'Failed to get user profile'}, 401)
@@ -347,7 +356,7 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
   })
 
   // GET /api/spotify/debug/scopes - Debug OAuth scopes
-  app.openapi(getSpotifyDebugScopes, async (c) => {
+  app.openapi(getSpotifyDebugScopes, async c => {
     try {
       const token = c.req.header('authorization')?.replace('Bearer ', '')
 
@@ -364,7 +373,7 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
         return c.json({error: 'Invalid or expired token'}, 401)
       }
 
-      const userData = await userResponse.json() as {
+      const userData = (await userResponse.json()) as {
         country?: string
         display_name?: string
         email?: string
@@ -391,20 +400,23 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
         'streaming',
       ]
 
-      return c.json({
-        required_scopes: requiredScopes,
-        scope_tests: {
-          'playlist-read-private': playlistResponse.ok,
-          'user-read-private': userResponse.ok,
+      return c.json(
+        {
+          required_scopes: requiredScopes,
+          scope_tests: {
+            'playlist-read-private': playlistResponse.ok,
+            'user-read-private': userResponse.ok,
+          },
+          token_info: {
+            country: userData.country ?? 'Unknown',
+            display_name: userData.display_name ?? 'Unknown',
+            email: userData.email ?? 'Not provided',
+            product: userData.product ?? 'Unknown',
+            user_id: userData.id,
+          },
         },
-        token_info: {
-          country: userData.country ?? 'Unknown',
-          display_name: userData.display_name ?? 'Unknown',
-          email: userData.email ?? 'Not provided',
-          product: userData.product ?? 'Unknown',
-          user_id: userData.id,
-        },
-      }, 200)
+        200,
+      )
     } catch (error) {
       getLogger()?.error('Scope debug error:', error)
       return c.json({error: 'Failed to check scopes'}, 401)
@@ -412,7 +424,7 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
   })
 
   // POST /api/spotify/refresh - Refresh access token using HttpOnly cookie
-  app.openapi(refreshSpotifyToken, async (c) => {
+  app.openapi(refreshSpotifyToken, async c => {
     const env = c.env
 
     try {
@@ -463,16 +475,19 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       if (tokenData.refresh_token) {
         c.header(
           'Set-Cookie',
-          `spotify_refresh=${tokenData.refresh_token}; Max-Age=2592000; Secure; SameSite=Lax; Path=/api/spotify; HttpOnly`
+          `spotify_refresh=${tokenData.refresh_token}; Max-Age=2592000; Secure; SameSite=Lax; Path=/api/spotify; HttpOnly`,
         )
       }
 
       getLogger()?.info('Token refreshed successfully')
 
-      return c.json({
-        access_token: tokenData.access_token,
-        expires_in: tokenData.expires_in,
-      }, 200)
+      return c.json(
+        {
+          access_token: tokenData.access_token,
+          expires_in: tokenData.expires_in,
+        },
+        200,
+      )
     } catch (error) {
       getLogger()?.error('Token refresh error:', error)
       return c.json({error: 'Token refresh failed'}, 401)
