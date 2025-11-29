@@ -325,7 +325,15 @@ async function rebuildQueue(
     const audioService = new AudioEnrichmentService(env.AUDIO_FEATURES_CACHE)
     const suggestionEngine = new SuggestionEngine(lastFmService, audioService, token, env.ANTHROPIC_API_KEY, true)
 
-    const suggestions = await suggestionEngine.generateSuggestions(session, tracksNeeded + 3)
+    // IMPORTANT: When steering, use empty history to focus purely on the NEW vibe
+    // This prevents the AI from trying to "transition" from old tracks
+    const steerSession: MixSession = {
+      ...session,
+      history: [], // Clear history so AI focuses on vibe, not old tracks
+    }
+
+    logger?.info('[steer-stream] Generating suggestions with empty history to focus on new vibe')
+    const suggestions = await suggestionEngine.generateSuggestions(steerSession, tracksNeeded + 3)
 
     if (suggestions.length === 0) {
       logger?.info('[steer-stream] No suggestions generated')
