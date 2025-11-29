@@ -34,4 +34,24 @@ locations.forEach(location => {
   }
 })
 
+// Also update the service worker version
+// This ensures the SW file changes on each build, triggering browser update detection
+const swPath = './apps/web/public/sw.js'
+try {
+  const {readFileSync} = await import('fs')
+  let swContent = readFileSync(swPath, 'utf-8')
+
+  // Replace the version constant
+  const newVersion = `${commitHash}-${Date.now()}`
+  swContent = swContent.replace(
+    /const SW_VERSION = '[^']+'/,
+    `const SW_VERSION = '${newVersion}'`
+  )
+
+  writeFileSync(swPath, swContent)
+  console.log(`✅ Service worker version updated to ${newVersion}`)
+} catch (error) {
+  console.error(`❌ Failed to update service worker:`, error.message)
+}
+
 console.log('Build info:', buildInfo)

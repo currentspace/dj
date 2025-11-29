@@ -90,6 +90,37 @@
   transform: scale(0.98);
 }
 
+/* Waiting state - when we're waiting for playback to stop */
+.update-banner--waiting {
+  background: linear-gradient(135deg, #ff9500 0%, #ffb340 100%);
+}
+
+.update-banner__btn--waiting {
+  background: rgba(255, 255, 255, 0.3);
+  color: white;
+  cursor: default;
+}
+
+.update-banner__btn--waiting:hover {
+  background: rgba(255, 255, 255, 0.4);
+  transform: none;
+}
+
+/* Force update button */
+.update-banner__btn--force {
+  background: #ff3b30;
+  color: white;
+}
+
+.update-banner__btn--force:hover {
+  background: #ff2d20;
+  transform: scale(1.02);
+}
+
+.update-banner__btn--force:active {
+  transform: scale(0.98);
+}
+
 /* Mobile adjustments */
 @media (max-width: 480px) {
   .update-banner {

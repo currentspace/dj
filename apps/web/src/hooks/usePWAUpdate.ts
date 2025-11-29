@@ -16,6 +16,8 @@
 
 import {useCallback, useEffect, useRef, useState} from 'react'
 
+import {usePlaybackStore} from '../stores'
+
 interface PWAUpdateState {
   /** Whether an update is available and waiting */
   updateAvailable: boolean
@@ -25,15 +27,19 @@ interface PWAUpdateState {
   waitingWorker: ServiceWorker | null
   /** Error message if update check failed */
   error: string | null
+  /** Whether we're waiting for playback to stop before updating */
+  waitingForPlaybackStop: boolean
 }
 
 interface UsePWAUpdateReturn extends PWAUpdateState {
   /** Manually check for updates */
   checkForUpdate: () => Promise<void>
-  /** Apply the waiting update (reloads the page) */
-  applyUpdate: () => void
+  /** Apply the waiting update (reloads the page) - waits for playback to stop if music is playing */
+  applyUpdate: (force?: boolean) => void
   /** Dismiss the update notification (user chose to defer) */
   dismissUpdate: () => void
+  /** Whether music is currently playing (for UI feedback) */
+  isPlaybackActive: boolean
 }
 
 const UPDATE_CHECK_INTERVAL = 5 * 60 * 1000 // 5 minutes
@@ -44,11 +50,16 @@ export function usePWAUpdate(): UsePWAUpdateReturn {
     checking: false,
     waitingWorker: null,
     error: null,
+    waitingForPlaybackStop: false,
   })
+
+  // Get playback state from store
+  const isPlaying = usePlaybackStore((s) => s.playbackCore?.isPlaying ?? false)
 
   const registrationRef = useRef<ServiceWorkerRegistration | null>(null)
   const intervalRef = useRef<number | null>(null)
   const dismissedRef = useRef(false)
+  const pendingUpdateRef = useRef(false) // Track if we're waiting to apply update
 
   // Check if there's already a waiting worker
   const checkWaitingWorker = useCallback((registration: ServiceWorkerRegistration) => {
@@ -110,15 +121,9 @@ export function usePWAUpdate(): UsePWAUpdateReturn {
     }
   }, [checkWaitingWorker])
 
-  // Apply the update by telling SW to skip waiting, then reload
-  const applyUpdate = useCallback(() => {
-    const {waitingWorker} = state
-    if (!waitingWorker) {
-      console.warn('[PWA] No waiting worker to activate')
-      return
-    }
-
-    console.log('[PWA] Applying update...')
+  // Actually perform the update (skip waiting and reload)
+  const performUpdate = useCallback((waitingWorker: ServiceWorker) => {
+    console.log('[PWA] Performing update...')
 
     // Listen for controller change to know when new SW takes over
     const onControllerChange = () => {
@@ -129,7 +134,35 @@ export function usePWAUpdate(): UsePWAUpdateReturn {
 
     // Tell the waiting worker to take over
     waitingWorker.postMessage({type: 'SKIP_WAITING'})
-  }, [state])
+  }, [])
+
+  // Apply the update - waits for playback to stop if music is playing
+  const applyUpdate = useCallback((force = false) => {
+    const {waitingWorker} = state
+    if (!waitingWorker) {
+      console.warn('[PWA] No waiting worker to activate')
+      return
+    }
+
+    // If force is true, update immediately regardless of playback
+    if (force) {
+      console.log('[PWA] Force update requested')
+      performUpdate(waitingWorker)
+      return
+    }
+
+    // Check if music is currently playing
+    const currentlyPlaying = usePlaybackStore.getState().playbackCore?.isPlaying ?? false
+
+    if (currentlyPlaying) {
+      console.log('[PWA] Music is playing, will update when playback stops')
+      pendingUpdateRef.current = true
+      setState(prev => ({...prev, waitingForPlaybackStop: true}))
+    } else {
+      console.log('[PWA] No playback active, updating now')
+      performUpdate(waitingWorker)
+    }
+  }, [state, performUpdate])
 
   // Dismiss the update notification
   const dismissUpdate = useCallback(() => {
@@ -230,10 +263,24 @@ export function usePWAUpdate(): UsePWAUpdateReturn {
     }
   }, [checkForUpdate, state.updateAvailable])
 
+  // Watch for playback to stop when we have a pending update
+  useEffect(() => {
+    if (!pendingUpdateRef.current || !state.waitingWorker) return
+
+    // If playback stopped and we have a pending update, apply it
+    if (!isPlaying) {
+      console.log('[PWA] Playback stopped, applying pending update')
+      pendingUpdateRef.current = false
+      setState(prev => ({...prev, waitingForPlaybackStop: false}))
+      performUpdate(state.waitingWorker)
+    }
+  }, [isPlaying, state.waitingWorker, performUpdate])
+
   return {
     ...state,
     checkForUpdate,
     applyUpdate,
     dismissUpdate,
+    isPlaybackActive: isPlaying,
   }
 }
