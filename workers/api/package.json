@@ -14,7 +14,7 @@
     "test:integration:watch": "vitest --config vitest.integration.config.ts --watch"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.71.0",
+    "@anthropic-ai/sdk": "^0.71.2",
     "@dj/api-contracts": "workspace:*",
     "@dj/shared-types": "workspace:*",
     "@hono/swagger-ui": "^0.5.2",
