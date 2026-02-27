@@ -40,3 +40,11 @@ apps/web/tsconfig.node.tsbuildinfo
 .eslintcache
 apps/web/playwright-report/
 apps/web/test-results/
+marvel/runs/
+marvel/guidance-archive.jsonl
+marvel/security/learned.jsonl
+marvel/security/suggestions.jsonl
+marvel/security/decisions.jsonl
+marvel/security/agent-evaluations.jsonl
+marvel/tools/hooks/node_modules/
+marvel/tools/hooks/dist/

@@ -734,3 +734,12 @@ git push
 - **MCP_SETUP.md** - Model Context Protocol implementation
 - **SSE_DEBUGGING_GUIDE.md** - Comprehensive SSE troubleshooting
 - **SPOTIFY_TRACK_ANALYSIS.md** - Spotify API data optimization
+
+## MARVEL
+
+MARVEL hooks auto-inject relevant pack lessons before file operations.
+
+- **Packs:** `marvel/packs/<name>/guardrails.md`
+- **Specs:** `marvel/specs/active/`
+- **Rebuild hooks:** `cd marvel/tools/hooks && pnpm build`
+- **MARVEL docs:** `marvel/README.md`, `marvel/TERMINOLOGY.md`
