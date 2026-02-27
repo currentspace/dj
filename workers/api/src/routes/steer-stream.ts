@@ -8,6 +8,7 @@ import { Hono } from 'hono'
 import { z } from 'zod'
 
 import type { Env } from '../index'
+import { LLM } from '../constants'
 import type { MixSession, QueuedTrack, Suggestion, VibeProfile } from '@dj/shared-types'
 import { MixSessionService } from '../services/MixSessionService'
 import { buildSteeringSuggestionsPrompt, buildVibeDescription, SYSTEM_PROMPTS } from '../lib/ai-prompts'
@@ -108,7 +109,7 @@ async function summarizeThinkingWithHaiku(
 ): Promise<string> {
   try {
     const response = await anthropic.messages.create({
-      model: 'claude-haiku-4-20250929',
+      model: LLM.MODEL_HAIKU,
       max_tokens: 100,
       temperature: 0.7,
       messages: [{
@@ -157,7 +158,7 @@ async function steerVibeWithThinking(
   logger?.info('[steer-stream] Calling Claude with extended thinking...')
 
   const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
+    model: LLM.MODEL,
     max_tokens: 16000,
     thinking: {
       type: 'enabled',

@@ -133,7 +133,7 @@ async function simulateChatStreamHandler(
 
   try {
     const stream = anthropicClient.messages.stream({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6-20260219',
       max_tokens: 4096,
       messages,
       tools: [],

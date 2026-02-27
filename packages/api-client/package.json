@@ -12,8 +12,8 @@
   "dependencies": {
     "@dj/api-contracts": "workspace:*",
     "@dj/shared-types": "workspace:*",
-    "hono": "^4.10.7",
-    "zod": "^4.1.13"
+    "hono": "^4.12.3",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "tsup": "^8.5.1",

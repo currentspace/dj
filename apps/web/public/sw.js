@@ -1,6 +1,6 @@
 // DJ Service Worker - v2.0.0
 // Version is used for cache busting - increment when deploying updates
-const SW_VERSION = '2.0.0';
+const SW_VERSION = '0a17932-1772236257164';
 const STATIC_CACHE = `dj-static-v${SW_VERSION}`;
 const RUNTIME_CACHE = `dj-runtime-v${SW_VERSION}`;
 

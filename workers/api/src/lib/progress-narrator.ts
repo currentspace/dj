@@ -13,6 +13,7 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 
+import {LLM} from '../constants'
 import {getLogger} from '../utils/LoggerContext'
 import {rateLimitedAnthropicCall} from '../utils/RateLimitedAPIClients'
 import {ServiceLogger} from '../utils/ServiceLogger'
@@ -77,7 +78,7 @@ export class ProgressNarrator {
 
       this.logger.debug(`Generating message for event: ${context.eventType}${skipCache ? ' (uncached)' : ''}`, {
         maxTokens: 100,
-        model: 'claude-haiku-4-5-20251001',
+        model: LLM.MODEL_HAIKU,
         promptLength: prompt.length,
         promptPreview: prompt.substring(0, 200),
         systemPromptLength: this.systemPrompt.length,
@@ -86,7 +87,7 @@ export class ProgressNarrator {
 
       this.logger.info('About to call Anthropic API (rate-limited)', {
         hasApiKey: !!this.apiKey,
-        model: 'claude-haiku-4-5-20251001',
+        model: LLM.MODEL_HAIKU,
       })
 
       // Use rate-limited API wrapper (no timeout - orchestrator handles queuing)
@@ -99,7 +100,7 @@ export class ProgressNarrator {
           return await anthropic.messages.create({
             max_tokens: 100,
             messages: [{content: prompt, role: 'user'}],
-            model: 'claude-haiku-4-5-20251001', // Haiku 4.5: 2x faster, better at creative tasks
+            model: LLM.MODEL_HAIKU, // Haiku 4.5: 2x faster, better at creative tasks
             system: [
               {
                 cache_control: {type: 'ephemeral' as const},

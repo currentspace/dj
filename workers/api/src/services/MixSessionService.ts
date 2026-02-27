@@ -56,6 +56,11 @@ export class MixSessionService {
         bpmLock: null,
         autoFill: true,
       },
+      conversation: [],
+      signals: [],
+      plan: null,
+      tasteModel: null,
+      fallbackPool: [],
     }
 
     // Validate with Zod schema

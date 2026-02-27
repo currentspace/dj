@@ -23,6 +23,43 @@ vi.mock('../../utils/LoggerContext', () => ({
   }),
 }))
 
+/** Default fields for new MixSession properties (Phase 1-4) */
+const newSessionDefaults: Pick<MixSession, 'conversation' | 'signals' | 'plan' | 'tasteModel' | 'fallbackPool'> = {
+  conversation: [],
+  signals: [],
+  plan: null,
+  tasteModel: null,
+  fallbackPool: [],
+}
+
+/** Create a test MixSession with all required fields */
+function createTestMixSession(overrides: Partial<MixSession> = {}): MixSession {
+  return {
+    id: 'session-1',
+    userId: 'user-1',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    vibe: {
+      mood: [],
+      genres: [],
+      era: {start: 2000, end: 2025},
+      bpmRange: {min: 80, max: 140},
+      energyLevel: 5,
+      energyDirection: 'steady',
+    },
+    history: [],
+    queue: [],
+    preferences: {
+      avoidGenres: [],
+      favoriteArtists: [],
+      bpmLock: null,
+      autoFill: true,
+    },
+    ...newSessionDefaults,
+    ...overrides,
+  }
+}
+
 describe('MixSessionService', () => {
   let service: MixSessionService
   let mockKV: MockKVNamespace
@@ -181,28 +218,7 @@ describe('MixSessionService', () => {
 
   describe('Vibe Management', () => {
     it('should update vibe from track with BPM and energy', () => {
-      const session: MixSession = {
-        id: 'session-1',
-        userId: 'user-1',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        vibe: {
-          mood: [],
-          genres: [],
-          era: { start: 2000, end: 2025 },
-          bpmRange: { min: 80, max: 140 },
-          energyLevel: 5,
-          energyDirection: 'steady',
-        },
-        history: [],
-        queue: [],
-        preferences: {
-          avoidGenres: [],
-          favoriteArtists: [],
-          bpmLock: null,
-          autoFill: true,
-        },
-      }
+      const session = createTestMixSession()
 
       const track: PlayedTrack = {
         trackId: 'track-1',
@@ -224,11 +240,7 @@ describe('MixSessionService', () => {
     })
 
     it('should detect building energy direction from history', () => {
-      const session: MixSession = {
-        id: 'session-1',
-        userId: 'user-1',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+      const session = createTestMixSession({
         vibe: {
           mood: [],
           genres: [],
@@ -257,14 +269,7 @@ describe('MixSessionService', () => {
             energy: 0.7,
           },
         ],
-        queue: [],
-        preferences: {
-          avoidGenres: [],
-          favoriteArtists: [],
-          bpmLock: null,
-          autoFill: true,
-        },
-      }
+      })
 
       const track: PlayedTrack = {
         trackId: 'track-3',
@@ -282,11 +287,7 @@ describe('MixSessionService', () => {
     })
 
     it('should detect winding down energy direction', () => {
-      const session: MixSession = {
-        id: 'session-1',
-        userId: 'user-1',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+      const session = createTestMixSession({
         vibe: {
           mood: [],
           genres: [],
@@ -315,14 +316,7 @@ describe('MixSessionService', () => {
             energy: 0.6,
           },
         ],
-        queue: [],
-        preferences: {
-          avoidGenres: [],
-          favoriteArtists: [],
-          bpmLock: null,
-          autoFill: true,
-        },
-      }
+      })
 
       const track: PlayedTrack = {
         trackId: 'track-3',
@@ -451,28 +445,7 @@ describe('MixSessionService', () => {
     let session: MixSession
 
     beforeEach(() => {
-      session = {
-        id: 'session-1',
-        userId: 'user-1',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        vibe: {
-          mood: [],
-          genres: [],
-          era: { start: 2000, end: 2025 },
-          bpmRange: { min: 80, max: 140 },
-          energyLevel: 5,
-          energyDirection: 'steady',
-        },
-        history: [],
-        queue: [],
-        preferences: {
-          avoidGenres: [],
-          favoriteArtists: [],
-          bpmLock: null,
-          autoFill: true,
-        },
-      }
+      session = createTestMixSession()
     })
 
     it('should add track to queue at end', () => {
@@ -695,28 +668,7 @@ describe('MixSessionService', () => {
     let session: MixSession
 
     beforeEach(() => {
-      session = {
-        id: 'session-1',
-        userId: 'user-1',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        vibe: {
-          mood: [],
-          genres: [],
-          era: { start: 2000, end: 2025 },
-          bpmRange: { min: 80, max: 140 },
-          energyLevel: 5,
-          energyDirection: 'steady',
-        },
-        history: [],
-        queue: [],
-        preferences: {
-          avoidGenres: [],
-          favoriteArtists: [],
-          bpmLock: null,
-          autoFill: true,
-        },
-      }
+      session = createTestMixSession()
     })
 
     it('should add track to history', () => {

@@ -49,6 +49,11 @@ function createMockSession(userId: string = 'test-user'): MixSession {
       bpmLock: null,
       autoFill: true,
     },
+    conversation: [],
+    signals: [],
+    plan: null,
+    tasteModel: null,
+    fallbackPool: [],
   }
 }
 

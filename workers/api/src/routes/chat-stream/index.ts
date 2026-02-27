@@ -3,6 +3,7 @@ import {Hono} from 'hono'
 import {z} from 'zod'
 
 import type {Env} from '../../index'
+import {LLM} from '../../constants'
 import {ProgressNarrator} from '../../lib/progress-narrator'
 import {getLogger, runWithLogger} from '../../utils/LoggerContext'
 import {runWithSubrequestTracker, SubrequestTracker} from '../../utils/SubrequestTracker'
@@ -321,7 +322,7 @@ chatStreamRouter.post('/message', async c => {
             const stream = anthropic.messages.stream({
               max_tokens: 10000, // 5000 for thinking + 5000 for response
               messages: messages,
-              model: 'claude-sonnet-4-5-20250929',
+              model: LLM.MODEL,
               system: [
                 {
                   cache_control: {type: 'ephemeral' as const},

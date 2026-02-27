@@ -242,7 +242,7 @@ describe('Vibe Steering AI', () => {
 
       expect(mockCreate).toHaveBeenCalledWith(
         expect.objectContaining({
-          model: 'claude-haiku-4-20250929',
+          model: 'claude-haiku-4-5-20251001',
           max_tokens: 500,
           temperature: 0.3,
         })

@@ -4,8 +4,10 @@ Claude integration patterns, tool definitions, agentic loop control, prompt engi
 
 ## Model Configuration
 
-- Primary model: Claude Sonnet 4.5 (`claude-sonnet-4-5-20250929`) for main chat and discovery tools
-- Progress narrator: Claude Haiku 4.5 for lightweight, fast progress messages
+- All model IDs are centralized in `workers/api/src/constants.ts` as `LLM.MODEL` and `LLM.MODEL_HAIKU`
+- NEVER hardcode model ID strings in source files; always import from constants
+- Primary model: Claude Sonnet 4.6 (`claude-sonnet-4-6-20260219`) via `LLM.MODEL` — main chat, discovery tools, set planning
+- Quick tasks model: Claude Haiku 4.5 (`claude-haiku-4-5-20251001`) via `LLM.MODEL_HAIKU` — progress narrator, vibe steering
 - Extended thinking: 5000 token budget on initial response; disabled in agentic loop follow-ups
 - Temperature: 1.0 when extended thinking is enabled (required); 0.7 in agentic loop turns
 - Max tokens: 10,000 for initial response (5000 thinking + 5000 output); 5000 in agentic loop

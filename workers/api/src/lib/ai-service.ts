@@ -8,6 +8,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk'
+import { LLM } from '../constants'
 import { getLogger } from '../utils/LoggerContext'
 
 // =============================================================================
@@ -80,7 +81,7 @@ export class AIService {
 
   constructor(config: AIServiceConfig) {
     this.client = new Anthropic({ apiKey: config.apiKey })
-    this.defaultModel = config.defaultModel || 'claude-sonnet-4-5-20250929'
+    this.defaultModel = config.defaultModel || LLM.MODEL
     this.defaultTemperature = config.defaultTemperature || 0.7
   }
 

@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import {z} from 'zod'
 
 import type {Env} from '../../../index'
+import {LLM} from '../../../constants'
 import {getLogger} from '../../../utils/LoggerContext'
 import {isNumber, isObject, isString, isStringArray} from '../streaming/anthropic-utils'
 import type {SSEWriter} from '../streaming/sse-writer'
@@ -66,7 +67,7 @@ export function createDiscoveryTools(
           const response = await anthropic.messages.create({
             max_tokens: 2000,
             messages: [{content: vibePrompt, role: 'user'}],
-            model: 'claude-sonnet-4-5-20250929',
+            model: LLM.MODEL,
             system: 'You are a music critic. Return only valid JSON with deep vibe analysis.',
             temperature: 0.7,
           })
@@ -265,7 +266,7 @@ export function createDiscoveryTools(
           const response = await anthropic.messages.create({
             max_tokens: 3000,
             messages: [{content: strategyPrompt, role: 'user'}],
-            model: 'claude-sonnet-4-5-20250929',
+            model: LLM.MODEL,
             system: 'You are a music discovery strategist. Return only valid JSON.',
             temperature: 0.7,
           })
@@ -394,7 +395,7 @@ export function createDiscoveryTools(
           const response = await anthropic.messages.create({
             max_tokens: 2000,
             messages: [{content: curationPrompt, role: 'user'}],
-            model: 'claude-sonnet-4-5-20250929',
+            model: LLM.MODEL,
             system: 'You are a music curator. Return only valid JSON.',
             temperature: 0.7,
           })

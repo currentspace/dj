@@ -6,6 +6,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import type { VibeProfile } from '@dj/shared-types'
 
+import { LLM } from '../constants'
 import { getLogger } from '../utils/LoggerContext'
 
 /**
@@ -69,7 +70,7 @@ export async function steerVibe(
     const prompt = buildVibeSteeringPrompt(currentVibe, direction)
 
     const response = await anthropic.messages.create({
-      model: 'claude-haiku-4-20250929',
+      model: LLM.MODEL_HAIKU,
       max_tokens: 500,
       temperature: 0.3, // Lower temperature for more consistent parsing
       messages: [

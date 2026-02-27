@@ -12,59 +12,70 @@ vi.stubGlobal('fetch', fetchMock)
 // Mock logger
 vi.mock('../utils/LoggerContext', () => ({
   getLogger: () => ({
-    info: vi.fn(),
-    error: vi.fn(),
     debug: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
   }),
 }))
 
 import type { MixSession, PlayedTrack, VibeProfile } from '@dj/shared-types'
+
+import { MockKVNamespace } from '../__tests__/fixtures/cloudflare-mocks'
 import { AudioEnrichmentService } from '../services/AudioEnrichmentService'
 import { LastFmService, type LastFmSignals } from '../services/LastFmService'
 import { SuggestionEngine } from './SuggestionEngine'
-import { MockKVNamespace } from '../__tests__/fixtures/cloudflare-mocks'
 
-// Test data builders
-function buildVibeProfile(overrides?: Partial<VibeProfile>): VibeProfile {
+function buildLastFmSignals(overrides?: Partial<LastFmSignals>): LastFmSignals {
   return {
-    mood: ['energetic', 'upbeat'],
-    genres: ['rock', 'indie'],
-    era: { start: 2000, end: 2020 },
-    bpmRange: { min: 100, max: 140 },
-    energyLevel: 7,
-    energyDirection: 'steady',
-    ...overrides,
-  }
-}
-
-function buildPlayedTrack(overrides?: Partial<PlayedTrack>): PlayedTrack {
-  return {
-    trackId: 'track-123',
-    trackUri: 'spotify:track:123',
-    name: 'Test Track',
-    artist: 'Test Artist',
-    playedAt: new Date().toISOString(),
-    bpm: 120,
-    energy: 0.7,
+    album: null,
+    artistInfo: null,
+    canonicalArtist: 'Test Artist',
+    canonicalTrack: 'Test Track',
+    duration: null,
+    listeners: 1000,
+    mbid: null,
+    playcount: 5000,
+    similar: [],
+    topTags: [],
+    url: null,
+    wiki: null,
     ...overrides,
   }
 }
 
 function buildMixSession(overrides?: Partial<MixSession>): MixSession {
   return {
-    id: crypto.randomUUID(),
-    userId: 'user-123',
+    conversation: [],
     createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    vibe: buildVibeProfile(),
+    fallbackPool: [],
     history: [],
-    queue: [],
+    id: crypto.randomUUID(),
+    plan: null,
     preferences: {
-      avoidGenres: [],
-      favoriteArtists: [],
-      bpmLock: null,
       autoFill: true,
+      avoidGenres: [],
+      bpmLock: null,
+      favoriteArtists: [],
     },
+    queue: [],
+    signals: [],
+    tasteModel: null,
+    updatedAt: new Date().toISOString(),
+    userId: 'user-123',
+    vibe: buildVibeProfile(),
+    ...overrides,
+  }
+}
+
+function buildPlayedTrack(overrides?: Partial<PlayedTrack>): PlayedTrack {
+  return {
+    artist: 'Test Artist',
+    bpm: 120,
+    energy: 0.7,
+    name: 'Test Track',
+    playedAt: new Date().toISOString(),
+    trackId: 'track-123',
+    trackUri: 'spotify:track:123',
     ...overrides,
   }
 }
@@ -76,35 +87,30 @@ function buildSpotifyTrack(id: string, name: string, artist: string, overrides?:
   release_date?: string
 }) {
   return {
-    id,
-    uri: `spotify:track:${id}`,
-    name,
-    artists: [{ name: artist }],
     album: {
-      name: 'Test Album',
       images: [{ url: 'https://example.com/image.jpg' }],
+      name: 'Test Album',
       release_date: overrides?.release_date || '2015-01-01',
     },
+    artists: [{ name: artist }],
     duration_ms: 200000,
-    popularity: 70,
     external_ids: { isrc: 'TEST123' },
+    id,
+    name,
+    popularity: 70,
+    uri: `spotify:track:${id}`,
   }
 }
 
-function buildLastFmSignals(overrides?: Partial<LastFmSignals>): LastFmSignals {
+// Test data builders
+function buildVibeProfile(overrides?: Partial<VibeProfile>): VibeProfile {
   return {
-    canonicalArtist: 'Test Artist',
-    canonicalTrack: 'Test Track',
-    similar: [],
-    topTags: [],
-    listeners: 1000,
-    playcount: 5000,
-    mbid: null,
-    url: null,
-    album: null,
-    artistInfo: null,
-    duration: null,
-    wiki: null,
+    bpmRange: { max: 140, min: 100 },
+    energyDirection: 'steady',
+    energyLevel: 7,
+    era: { end: 2020, start: 2000 },
+    genres: ['rock', 'indie'],
+    mood: ['energetic', 'upbeat'],
     ...overrides,
   }
 }
@@ -127,18 +133,18 @@ describe('SuggestionEngine', () => {
   describe('generateSuggestions', () => {
     it('should generate suggestions based on session vibe', async () => {
       const session = buildMixSession({
-        vibe: buildVibeProfile({ genres: ['rock', 'indie'], bpmRange: { min: 110, max: 130 } }),
         history: [
-          buildPlayedTrack({ trackId: 'track1', name: 'Song 1', artist: 'Artist 1', bpm: 120 }),
+          buildPlayedTrack({ artist: 'Artist 1', bpm: 120, name: 'Song 1', trackId: 'track1' }),
         ],
+        vibe: buildVibeProfile({ bpmRange: { max: 130, min: 110 }, genres: ['rock', 'indie'] }),
       })
 
       // Spy on Last.fm service
       vi.spyOn(lastFmService, 'getTrackSignals').mockResolvedValue(
         buildLastFmSignals({
           similar: [
-            { artist: 'Artist 2', name: 'Song 2', match: 0.9 },
-            { artist: 'Artist 3', name: 'Song 3', match: 0.8 },
+            { artist: 'Artist 2', match: 0.9, name: 'Song 2' },
+            { artist: 'Artist 3', match: 0.8, name: 'Song 3' },
           ],
           topTags: ['rock', 'indie'],
         })
@@ -150,12 +156,12 @@ describe('SuggestionEngine', () => {
 
       fetchMock
         .mockResolvedValueOnce({
-          ok: true,
           json: () => Promise.resolve({ tracks: { items: [mockTrack2] } }),
+          ok: true,
         } as Response)
         .mockResolvedValueOnce({
-          ok: true,
           json: () => Promise.resolve({ tracks: { items: [mockTrack3] } }),
+          ok: true,
         } as Response)
 
       // Spy on audio enrichment
@@ -185,24 +191,24 @@ describe('SuggestionEngine', () => {
     it('should not suggest tracks already in history', async () => {
       const session = buildMixSession({
         history: [
-          buildPlayedTrack({ trackId: 'track1', name: 'Song 1', artist: 'Artist 1' }),
-          buildPlayedTrack({ trackId: 'track2', name: 'Song 2', artist: 'Artist 2' }),
+          buildPlayedTrack({ artist: 'Artist 1', name: 'Song 1', trackId: 'track1' }),
+          buildPlayedTrack({ artist: 'Artist 2', name: 'Song 2', trackId: 'track2' }),
         ],
       })
 
       vi.spyOn(lastFmService, 'getTrackSignals').mockResolvedValue(
         buildLastFmSignals({
           similar: [
-            { artist: 'Artist 2', name: 'Song 2', match: 0.9 }, // Already in history
-            { artist: 'Artist 3', name: 'Song 3', match: 0.8 },
+            { artist: 'Artist 2', match: 0.9, name: 'Song 2' }, // Already in history
+            { artist: 'Artist 3', match: 0.8, name: 'Song 3' },
           ],
         })
       )
 
       const mockTrack3 = buildSpotifyTrack('track3', 'Song 3', 'Artist 3')
       fetchMock.mockResolvedValue({
-        ok: true,
         json: () => Promise.resolve({ tracks: { items: [mockTrack3] } }),
+        ok: true,
       } as Response)
 
       vi.spyOn(audioService, 'enrichTrack').mockResolvedValue({
@@ -221,16 +227,16 @@ describe('SuggestionEngine', () => {
 
     it('should not suggest tracks already in queue', async () => {
       const session = buildMixSession({
-        history: [buildPlayedTrack({ trackId: 'track1', name: 'Song 1', artist: 'Artist 1' })],
+        history: [buildPlayedTrack({ artist: 'Artist 1', name: 'Song 1', trackId: 'track1' })],
         queue: [
           {
+            addedBy: 'user',
+            artist: 'Artist 2',
+            name: 'Song 2',
+            position: 0,
             trackId: 'track2',
             trackUri: 'spotify:track:track2',
-            name: 'Song 2',
-            artist: 'Artist 2',
-            addedBy: 'user',
             vibeScore: 85,
-            position: 0,
           },
         ],
       })
@@ -238,16 +244,16 @@ describe('SuggestionEngine', () => {
       vi.spyOn(lastFmService, 'getTrackSignals').mockResolvedValue(
         buildLastFmSignals({
           similar: [
-            { artist: 'Artist 2', name: 'Song 2', match: 0.9 }, // Already in queue
-            { artist: 'Artist 3', name: 'Song 3', match: 0.8 },
+            { artist: 'Artist 2', match: 0.9, name: 'Song 2' }, // Already in queue
+            { artist: 'Artist 3', match: 0.8, name: 'Song 3' },
           ],
         })
       )
 
       const mockTrack3 = buildSpotifyTrack('track3', 'Song 3', 'Artist 3')
       fetchMock.mockResolvedValue({
-        ok: true,
         json: () => Promise.resolve({ tracks: { items: [mockTrack3] } }),
+        ok: true,
       } as Response)
 
       vi.spyOn(audioService, 'enrichTrack').mockResolvedValue({
@@ -293,7 +299,7 @@ describe('SuggestionEngine', () => {
 
   describe('scoreSuggestion', () => {
     it('should score perfect BPM match highly', () => {
-      const vibe = buildVibeProfile({ bpmRange: { min: 115, max: 125 } })
+      const vibe = buildVibeProfile({ bpmRange: { max: 125, min: 115 } })
       const track = buildSpotifyTrack('track1', 'Test', 'Artist')
       const lastTrack = buildPlayedTrack({ bpm: 120 })
 
@@ -326,7 +332,7 @@ describe('SuggestionEngine', () => {
     })
 
     it('should score era match correctly', () => {
-      const vibe = buildVibeProfile({ era: { start: 2010, end: 2020 } })
+      const vibe = buildVibeProfile({ era: { end: 2020, start: 2010 } })
       const track = buildSpotifyTrack('track1', 'Test', 'Artist', { release_date: '2015-06-15' })
 
       const score = engine.scoreSuggestion(track, vibe, undefined, 120, 0.7)
@@ -336,7 +342,7 @@ describe('SuggestionEngine', () => {
     })
 
     it('should return lower score for poor BPM match', () => {
-      const vibe = buildVibeProfile({ bpmRange: { min: 100, max: 120 } })
+      const vibe = buildVibeProfile({ bpmRange: { max: 120, min: 100 } })
       const track = buildSpotifyTrack('track1', 'Test', 'Artist')
 
       // BPM way off (150) - still gets neutral points from energy and era
@@ -348,7 +354,7 @@ describe('SuggestionEngine', () => {
     })
 
     it('should handle null BPM gracefully', () => {
-      const vibe = buildVibeProfile({ bpmRange: { min: 100, max: 120 } })
+      const vibe = buildVibeProfile({ bpmRange: { max: 120, min: 100 } })
       const track = buildSpotifyTrack('track1', 'Test', 'Artist')
 
       const score = engine.scoreSuggestion(track, vibe, undefined, null, 0.7)
@@ -418,7 +424,7 @@ describe('SuggestionEngine', () => {
 
       vi.spyOn(lastFmService, 'getTrackSignals').mockResolvedValue(
         buildLastFmSignals({
-          similar: [{ artist: 'Artist', name: 'Song', match: 0.9 }],
+          similar: [{ artist: 'Artist', match: 0.9, name: 'Song' }],
         })
       )
 
@@ -439,22 +445,22 @@ describe('SuggestionEngine', () => {
 
       vi.spyOn(lastFmService, 'getTrackSignals').mockResolvedValue(
         buildLastFmSignals({
-          similar: [{ artist: 'Artist', name: 'Song', match: 0.9 }],
+          similar: [{ artist: 'Artist', match: 0.9, name: 'Song' }],
         })
       )
 
       const trackNoArt = {
         ...buildSpotifyTrack('track2', 'Song', 'Artist'),
         album: {
-          name: 'Album',
           images: [], // No images
+          name: 'Album',
           release_date: '2015-01-01',
         },
       }
 
       fetchMock.mockResolvedValue({
-        ok: true,
         json: () => Promise.resolve({ tracks: { items: [trackNoArt] } }),
+        ok: true,
       } as Response)
 
       vi.spyOn(audioService, 'enrichTrack').mockResolvedValue({

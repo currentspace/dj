@@ -95,8 +95,10 @@ export const PAGINATION = {
 
 /** LLM (Claude) configuration */
 export const LLM = {
-  /** Claude model for tool calls */
-  MODEL: 'claude-sonnet-4-5-20250929',
+  /** Claude Sonnet model for tool calls and main conversation */
+  MODEL: 'claude-sonnet-4-6-20260219',
+  /** Claude Haiku model for quick tasks (progress narrator, vibe steering) */
+  MODEL_HAIKU: 'claude-haiku-4-5-20251001',
   /** Max tokens for vibe extraction/planning */
   MAX_TOKENS_VIBE: 2000,
   /** Max tokens for main conversation */

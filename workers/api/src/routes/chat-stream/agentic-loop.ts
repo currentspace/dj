@@ -1,5 +1,6 @@
 import type Anthropic from '@anthropic-ai/sdk'
 
+import {LLM} from '../../constants'
 import {getLogger} from '../../utils/LoggerContext'
 import {isString} from './streaming'
 import type {SSEWriter} from './streaming/sse-writer'
@@ -163,7 +164,7 @@ export async function processAgenticLoop({
       nextStream = anthropic.messages.stream({
         max_tokens: 5000,
         messages: conversationMessages,
-        model: 'claude-sonnet-4-5-20250929',
+        model: LLM.MODEL,
         system: [
           {
             cache_control: {type: 'ephemeral' as const},
@@ -297,7 +298,7 @@ export async function processAgenticLoop({
       const finalStream = anthropic.messages.stream({
         max_tokens: 10000,
         messages: conversationMessages,
-        model: 'claude-sonnet-4-5-20250929',
+        model: LLM.MODEL,
         system: [
           {
             cache_control: {type: 'ephemeral' as const},

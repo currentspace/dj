@@ -67,7 +67,7 @@ export function buildMessageStartEvent(overrides?: {
       type: 'message',
       role: 'assistant',
       content: [],
-      model: overrides?.model ?? 'claude-sonnet-4-20250514',
+      model: overrides?.model ?? 'claude-sonnet-4-6-20260219',
       stop_reason: null,
       stop_sequence: null,
       usage: {
@@ -266,8 +266,8 @@ export class MockAnthropicClient {
    */
   get messages(): {
     stream: (params: Anthropic.MessageCreateParams) => {
-      [Symbol.asyncIterator](): AsyncIterator<MockStreamEvent>
       finalMessage: () => Promise<Anthropic.Message>
+      [Symbol.asyncIterator](): AsyncIterator<MockStreamEvent>
     }
   } {
     return {
@@ -313,7 +313,7 @@ export class MockAnthropicClient {
                     id: event.content_block.id!,
                     name: event.content_block.name!,
                     input: {},
-                  })
+                  } as Anthropic.ContentBlock)
                 }
               } else if (event.type === 'content_block_delta' && event.delta) {
                 const lastBlock = content[content.length - 1]
@@ -341,7 +341,8 @@ export class MockAnthropicClient {
               type: 'message',
               role: 'assistant',
               content,
-              model: 'claude-sonnet-4-20250514',
+              container: null,
+              model: 'claude-sonnet-4-6-20260219',
               stop_reason: stopReason as Anthropic.Message['stop_reason'],
               stop_sequence: null,
               usage: {
@@ -352,8 +353,9 @@ export class MockAnthropicClient {
                 cache_read_input_tokens: null,
                 server_tool_use: null,
                 service_tier: null,
+                inference_geo: null,
               },
-            }
+            } as Anthropic.Message
           },
         }
       },
@@ -398,7 +400,7 @@ export function mockMessageCreate(
           id: block.id ?? `toolu_${Math.random().toString(36).substring(7)}`,
           name: block.name ?? 'unknown_tool',
           input: block.input ?? {},
-        })
+        } as Anthropic.ContentBlock)
       }
     }
   }
@@ -408,7 +410,8 @@ export function mockMessageCreate(
     type: 'message',
     role: 'assistant',
     content: contentBlocks,
-    model: 'claude-sonnet-4-20250514',
+    container: null,
+    model: 'claude-sonnet-4-6-20260219',
     stop_reason: 'end_turn',
     stop_sequence: null,
     usage: {
@@ -419,6 +422,7 @@ export function mockMessageCreate(
       cache_read_input_tokens: null,
       server_tool_use: null,
       service_tier: null,
+      inference_geo: null,
     },
-  }
+  } as Anthropic.Message
 }
