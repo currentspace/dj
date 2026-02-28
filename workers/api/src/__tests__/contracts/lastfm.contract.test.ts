@@ -18,8 +18,7 @@ import {
 } from '@dj/shared-types'
 import {describe, expect, it} from 'vitest'
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type ApiResponse = Record<string, any>
+import { asRecord } from './helpers'
 
 const LASTFM_API_BASE = 'https://ws.audioscrobbler.com/2.0/'
 const RATE_LIMIT_DELAY_MS = 200 // Last.fm allows 5 req/s, we use 200ms = 5 req/s
@@ -51,42 +50,50 @@ describe('Last.fm API Contract Tests', () => {
     const response = await fetch(url)
     expect(response.ok).toBe(true)
 
-    const data = await response.json() as ApiResponse
+    const data = asRecord(await response.json())
+    const track = asRecord(data.track)
 
     // Validate response structure
-    expect(data.track).toBeDefined()
-    expect(data.track.name).toBe('Bohemian Rhapsody')
-    expect(data.track.artist).toBeDefined()
-    expect(data.track.artist.name).toBe('Queen')
+    expect(track).toBeDefined()
+    expect(track.name).toBe('Bohemian Rhapsody')
+    const trackArtist = asRecord(track.artist)
+    expect(trackArtist).toBeDefined()
+    expect(trackArtist.name).toBe('Queen')
 
-    // Validate popularity fields exist (Last.fm returns numbers)
-    expect(data.track.listeners).toBeDefined()
-    expect(typeof data.track.listeners).toBe('number')
-    expect(data.track.playcount).toBeDefined()
-    expect(typeof data.track.playcount).toBe('number')
+    // Validate popularity fields exist (Last.fm returns strings)
+    expect(track.listeners).toBeDefined()
+    expect(typeof track.listeners).toBe('string')
+    expect(track.playcount).toBeDefined()
+    expect(typeof track.playcount).toBe('string')
 
     // Validate top tags structure
-    if (data.track.toptags?.tag) {
-      expect(Array.isArray(data.track.toptags.tag)).toBe(true)
-      if (data.track.toptags.tag.length > 0) {
-        const firstTag = data.track.toptags.tag[0]
-        expect(firstTag.name).toBeDefined()
-        expect(typeof firstTag.name).toBe('string')
-        expect(firstTag.url).toBeDefined()
+    if (track.toptags) {
+      const toptags = asRecord(track.toptags)
+      if (toptags.tag) {
+        const tags = toptags.tag
+        expect(Array.isArray(tags)).toBe(true)
+        if (Array.isArray(tags) && tags.length > 0) {
+          const firstTag = asRecord(tags[0])
+          expect(firstTag.name).toBeDefined()
+          expect(typeof firstTag.name).toBe('string')
+          expect(firstTag.url).toBeDefined()
+        }
       }
     }
 
     // Validate album structure if present
-    if (data.track.album) {
-      expect(data.track.album.title).toBeDefined()
-      expect(data.track.album.artist).toBeDefined()
-      expect(data.track.album.url).toBeDefined()
+    if (track.album) {
+      const album = asRecord(track.album)
+      expect(album.title).toBeDefined()
+      expect(album.artist).toBeDefined()
+      expect(album.url).toBeDefined()
     }
 
     // Validate wiki if present
-    if (data.track.wiki) {
-      expect(data.track.wiki.summary).toBeDefined()
-      expect(typeof data.track.wiki.summary).toBe('string')
+    if (track.wiki) {
+      const wiki = asRecord(track.wiki)
+      expect(wiki.summary).toBeDefined()
+      expect(typeof wiki.summary).toBe('string')
     }
 
     // Validate against Zod schema
@@ -111,19 +118,22 @@ describe('Last.fm API Contract Tests', () => {
     const response = await fetch(url)
     expect(response.ok).toBe(true)
 
-    const data = await response.json() as ApiResponse
+    const data = asRecord(await response.json())
+    const similartracks = asRecord(data.similartracks)
 
     // Validate response structure
-    expect(data.similartracks).toBeDefined()
-    expect(data.similartracks.track).toBeDefined()
-    expect(Array.isArray(data.similartracks.track)).toBe(true)
+    expect(similartracks).toBeDefined()
+    expect(similartracks.track).toBeDefined()
+    const tracks = similartracks.track
+    expect(Array.isArray(tracks)).toBe(true)
 
     // Validate first similar track structure
-    if (data.similartracks.track.length > 0) {
-      const firstTrack = data.similartracks.track[0]
+    if (Array.isArray(tracks) && tracks.length > 0) {
+      const firstTrack = asRecord(tracks[0])
       expect(firstTrack.name).toBeDefined()
       expect(firstTrack.artist).toBeDefined()
-      expect(firstTrack.artist.name).toBeDefined()
+      const firstTrackArtist = asRecord(firstTrack.artist)
+      expect(firstTrackArtist.name).toBeDefined()
       expect(firstTrack.match).toBeDefined()
       expect(typeof firstTrack.match).toBe('number')
       expect(firstTrack.match).toBeGreaterThanOrEqual(0)
@@ -151,55 +161,64 @@ describe('Last.fm API Contract Tests', () => {
     const response = await fetch(url)
     expect(response.ok).toBe(true)
 
-    const data = await response.json() as ApiResponse
+    const data = asRecord(await response.json())
+    const artist = asRecord(data.artist)
 
     // Validate response structure
-    expect(data.artist).toBeDefined()
-    expect(data.artist.name).toBe('Queen')
-    expect(data.artist.url).toBeDefined()
+    expect(artist).toBeDefined()
+    expect(artist.name).toBe('Queen')
+    expect(artist.url).toBeDefined()
 
     // Validate bio structure
-    if (data.artist.bio) {
-      expect(data.artist.bio.summary).toBeDefined()
-      expect(typeof data.artist.bio.summary).toBe('string')
-      if (data.artist.bio.content) {
-        expect(typeof data.artist.bio.content).toBe('string')
+    if (artist.bio) {
+      const bio = asRecord(artist.bio)
+      expect(bio.summary).toBeDefined()
+      expect(typeof bio.summary).toBe('string')
+      if (bio.content) {
+        expect(typeof bio.content).toBe('string')
       }
     }
 
     // Validate stats
-    if (data.artist.stats) {
-      expect(data.artist.stats.listeners).toBeDefined()
-      expect(typeof data.artist.stats.listeners).toBe('number')
-      expect(data.artist.stats.playcount).toBeDefined()
-      expect(typeof data.artist.stats.playcount).toBe('number')
+    if (artist.stats) {
+      const stats = asRecord(artist.stats)
+      expect(stats.listeners).toBeDefined()
+      expect(typeof stats.listeners).toBe('string')
+      expect(stats.playcount).toBeDefined()
+      expect(typeof stats.playcount).toBe('string')
     }
 
     // Validate tags structure
-    if (data.artist.tags?.tag) {
-      expect(Array.isArray(data.artist.tags.tag)).toBe(true)
-      if (data.artist.tags.tag.length > 0) {
-        const firstTag = data.artist.tags.tag[0]
-        expect(firstTag.name).toBeDefined()
-        expect(firstTag.url).toBeDefined()
+    if (artist.tags) {
+      const tags = asRecord(artist.tags)
+      if (tags.tag) {
+        expect(Array.isArray(tags.tag)).toBe(true)
+        if (Array.isArray(tags.tag) && tags.tag.length > 0) {
+          const firstTag = asRecord(tags.tag[0])
+          expect(firstTag.name).toBeDefined()
+          expect(firstTag.url).toBeDefined()
+        }
       }
     }
 
     // Validate similar artists
-    if (data.artist.similar?.artist) {
-      expect(Array.isArray(data.artist.similar.artist)).toBe(true)
-      if (data.artist.similar.artist.length > 0) {
-        const firstSimilar = data.artist.similar.artist[0]
-        expect(firstSimilar.name).toBeDefined()
-        expect(firstSimilar.url).toBeDefined()
+    if (artist.similar) {
+      const similar = asRecord(artist.similar)
+      if (similar.artist) {
+        expect(Array.isArray(similar.artist)).toBe(true)
+        if (Array.isArray(similar.artist) && similar.artist.length > 0) {
+          const firstSimilar = asRecord(similar.artist[0])
+          expect(firstSimilar.name).toBeDefined()
+          expect(firstSimilar.url).toBeDefined()
+        }
       }
     }
 
     // Validate images
-    if (data.artist.image) {
-      expect(Array.isArray(data.artist.image)).toBe(true)
-      if (data.artist.image.length > 0) {
-        const firstImage = data.artist.image[0]
+    if (artist.image) {
+      expect(Array.isArray(artist.image)).toBe(true)
+      if (Array.isArray(artist.image) && artist.image.length > 0) {
+        const firstImage = asRecord(artist.image[0])
         expect(firstImage['#text']).toBeDefined()
         expect(firstImage.size).toBeDefined()
       }
@@ -226,16 +245,18 @@ describe('Last.fm API Contract Tests', () => {
     const response = await fetch(url)
     expect(response.ok).toBe(true)
 
-    const data = await response.json() as ApiResponse
+    const data = asRecord(await response.json())
+    const toptags = asRecord(data.toptags)
 
     // Validate response structure
-    expect(data.toptags).toBeDefined()
-    expect(data.toptags.tag).toBeDefined()
-    expect(Array.isArray(data.toptags.tag)).toBe(true)
+    expect(toptags).toBeDefined()
+    expect(toptags.tag).toBeDefined()
+    const tags = toptags.tag
+    expect(Array.isArray(tags)).toBe(true)
 
     // Validate tag structure
-    if (data.toptags.tag.length > 0) {
-      const firstTag = data.toptags.tag[0]
+    if (Array.isArray(tags) && tags.length > 0) {
+      const firstTag = asRecord(tags[0])
       expect(firstTag.name).toBeDefined()
       expect(typeof firstTag.name).toBe('string')
       expect(firstTag.url).toBeDefined()
@@ -243,9 +264,10 @@ describe('Last.fm API Contract Tests', () => {
     }
 
     // Validate attributes if present
-    if (data.toptags['@attr']) {
-      expect(data.toptags['@attr'].artist).toBeDefined()
-      expect(data.toptags['@attr'].track).toBeDefined()
+    if (toptags['@attr']) {
+      const attr = asRecord(toptags['@attr'])
+      expect(attr.artist).toBeDefined()
+      expect(attr.track).toBeDefined()
     }
 
     // Validate against Zod schema
@@ -269,24 +291,27 @@ describe('Last.fm API Contract Tests', () => {
     const response = await fetch(url)
     expect(response.ok).toBe(true)
 
-    const data = await response.json() as ApiResponse
+    const data = asRecord(await response.json())
+    const corrections = asRecord(data.corrections)
 
     // Validate response structure
-    expect(data.corrections).toBeDefined()
-    expect(data.corrections.correction).toBeDefined()
+    expect(corrections).toBeDefined()
+    expect(corrections.correction).toBeDefined()
 
     // Validate correction structure
-    if (data.corrections.correction?.track) {
-      const correctedTrack = data.corrections.correction.track
+    const correction = asRecord(corrections.correction)
+    if (correction.track) {
+      const correctedTrack = asRecord(correction.track)
       expect(correctedTrack.name).toBeDefined()
       expect(typeof correctedTrack.name).toBe('string')
       expect(correctedTrack.artist).toBeDefined()
-      expect(correctedTrack.artist.name).toBeDefined()
+      const correctedArtist = asRecord(correctedTrack.artist)
+      expect(correctedArtist.name).toBeDefined()
       expect(correctedTrack.url).toBeDefined()
 
       // Verify correction happened
       expect(correctedTrack.name).toBe('Bohemian Rhapsody')
-      expect(correctedTrack.artist.name).toBe('Queen')
+      expect(correctedArtist.name).toBe('Queen')
     }
 
     // Validate against Zod schema
@@ -310,7 +335,7 @@ describe('Last.fm API Contract Tests', () => {
     const response = await fetch(url)
     expect(response.ok).toBe(true) // Last.fm returns 200 even for errors
 
-    const data = await response.json() as ApiResponse
+    const data = asRecord(await response.json())
 
     // Last.fm returns error in response body
     if (data.error) {
@@ -337,17 +362,18 @@ describe('Last.fm API Contract Tests', () => {
     const response = await fetch(url)
     expect(response.ok).toBe(true)
 
-    const data = await response.json() as ApiResponse
+    const data = asRecord(await response.json())
+    const track = asRecord(data.track)
 
-    // Last.fm returns numeric fields as actual numbers (not strings)
-    expect(data.track.listeners).toBeDefined()
-    expect(typeof data.track.listeners).toBe('number')
-    expect(data.track.playcount).toBeDefined()
-    expect(typeof data.track.playcount).toBe('number')
+    // Last.fm returns numeric fields as strings
+    expect(track.listeners).toBeDefined()
+    expect(typeof track.listeners).toBe('string')
+    expect(track.playcount).toBeDefined()
+    expect(typeof track.playcount).toBe('string')
 
-    // Duration is optional but should be number if present
-    if (data.track.duration !== undefined) {
-      expect(typeof data.track.duration).toBe('number')
+    // Duration is optional but should be string if present (Last.fm returns strings)
+    if (track.duration !== undefined) {
+      expect(typeof track.duration).toBe('string')
     }
 
     await rateLimitPause()
@@ -363,12 +389,13 @@ describe('Last.fm API Contract Tests', () => {
     })
 
     const trackResponse = await fetch(trackUrl)
-    const trackData = await trackResponse.json() as ApiResponse
+    const trackData = asRecord(await trackResponse.json())
 
     // Last.fm wraps track info in .track
     expect(trackData).toHaveProperty('track')
-    expect(trackData.track).toHaveProperty('name')
-    expect(trackData.track).toHaveProperty('artist')
+    const trackObj = asRecord(trackData.track)
+    expect(trackObj).toHaveProperty('name')
+    expect(trackObj).toHaveProperty('artist')
 
     await rateLimitPause()
 
@@ -379,12 +406,13 @@ describe('Last.fm API Contract Tests', () => {
     })
 
     const artistResponse = await fetch(artistUrl)
-    const artistData = await artistResponse.json() as ApiResponse
+    const artistData = asRecord(await artistResponse.json())
 
     // Last.fm wraps artist info in .artist
     expect(artistData).toHaveProperty('artist')
-    expect(artistData.artist).toHaveProperty('name')
-    expect(artistData.artist).toHaveProperty('url')
+    const artistObj = asRecord(artistData.artist)
+    expect(artistObj).toHaveProperty('name')
+    expect(artistObj).toHaveProperty('url')
 
     await rateLimitPause()
 
@@ -397,12 +425,13 @@ describe('Last.fm API Contract Tests', () => {
     })
 
     const similarResponse = await fetch(similarUrl)
-    const similarData = await similarResponse.json() as ApiResponse
+    const similarData = asRecord(await similarResponse.json())
 
     // Last.fm wraps similar tracks in .similartracks
     expect(similarData).toHaveProperty('similartracks')
-    expect(similarData.similartracks).toHaveProperty('track')
-    expect(Array.isArray(similarData.similartracks.track)).toBe(true)
+    const similarObj = asRecord(similarData.similartracks)
+    expect(similarObj).toHaveProperty('track')
+    expect(Array.isArray(similarObj.track)).toBe(true)
 
     await rateLimitPause()
   })

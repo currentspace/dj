@@ -18,15 +18,14 @@ import type {
  */
 export function buildDeezerTrack(overrides?: Partial<DeezerTrack>): DeezerTrack {
   return {
-    id: 12345678,
-    title: 'Test Track',
-    duration: 240,
-    rank: 850000,
-    bpm: 120,
-    gain: -8.5,
-    isrc: 'USUM71234567',
-    release_date: '2023-01-15',
-    preview: 'https://cdns-preview-d.dzcdn.net/stream/test.mp3',
+    album: {
+      cover: 'https://e-cdns-images.dzcdn.net/images/cover/test/500x500.jpg',
+      cover_medium: 'https://e-cdns-images.dzcdn.net/images/cover/test/250x250.jpg',
+      cover_small: 'https://e-cdns-images.dzcdn.net/images/cover/test/56x56.jpg',
+      id: 54321,
+      title: 'Test Album',
+      type: 'album',
+    },
     artist: {
       id: 98765,
       name: 'Test Artist',
@@ -35,58 +34,16 @@ export function buildDeezerTrack(overrides?: Partial<DeezerTrack>): DeezerTrack 
       picture_small: 'https://e-cdns-images.dzcdn.net/images/artist/test/56x56.jpg',
       type: 'artist',
     },
-    album: {
-      id: 54321,
-      title: 'Test Album',
-      cover: 'https://e-cdns-images.dzcdn.net/images/cover/test/500x500.jpg',
-      cover_medium: 'https://e-cdns-images.dzcdn.net/images/cover/test/250x250.jpg',
-      cover_small: 'https://e-cdns-images.dzcdn.net/images/cover/test/56x56.jpg',
-      type: 'album',
-    },
+    bpm: 120,
+    duration: 240,
+    gain: -8.5,
+    id: 12345678,
+    isrc: 'USUM71234567',
+    preview: 'https://cdns-preview-d.dzcdn.net/stream/test.mp3',
+    rank: 850000,
+    release_date: '2023-01-15',
+    title: 'Test Track',
     type: 'track',
-    ...overrides,
-  }
-}
-
-/**
- * Build a realistic Last.fm track info response
- */
-export function buildLastFmTrack(overrides?: Partial<LastFmTrackInfo>): LastFmTrackInfo {
-  return {
-    name: 'Test Track',
-    artist: {
-      name: 'Test Artist',
-      mbid: 'artist-mbid-123',
-      url: 'https://www.last.fm/music/Test+Artist',
-    },
-    url: 'https://www.last.fm/music/Test+Artist/_/Test+Track',
-    duration: 240000,
-    listeners: 125000,
-    playcount: 2500000,
-    mbid: 'track-mbid-456',
-    album: {
-      artist: 'Test Artist',
-      title: 'Test Album',
-      mbid: 'album-mbid-789',
-      url: 'https://www.last.fm/music/Test+Artist/Test+Album',
-      image: [
-        {'#text': 'https://lastfm.freetls.fastly.net/i/u/34s/test.jpg', size: 'small'},
-        {'#text': 'https://lastfm.freetls.fastly.net/i/u/64s/test.jpg', size: 'medium'},
-        {'#text': 'https://lastfm.freetls.fastly.net/i/u/174s/test.jpg', size: 'large'},
-      ],
-    },
-    toptags: {
-      tag: [
-        {name: 'indie', url: 'https://www.last.fm/tag/indie'},
-        {name: 'alternative', url: 'https://www.last.fm/tag/alternative'},
-        {name: 'rock', url: 'https://www.last.fm/tag/rock'},
-      ],
-    },
-    wiki: {
-      summary: 'Test track summary',
-      content: 'Test track full content',
-      published: 'Sat, 1 Jan 2023 00:00:00 +0000',
-    },
     ...overrides,
   }
 }
@@ -96,23 +53,27 @@ export function buildLastFmTrack(overrides?: Partial<LastFmTrackInfo>): LastFmTr
  */
 export function buildLastFmArtistInfo(overrides?: Partial<LastFmArtistInfo>): LastFmArtistInfo {
   return {
-    name: 'Test Artist',
-    mbid: 'artist-mbid-123',
-    url: 'https://www.last.fm/music/Test+Artist',
+    bio: {
+      content: 'Test artist bio full content',
+      published: 'Sat, 1 Jan 2023 00:00:00 +0000',
+      summary: 'Test artist bio summary',
+    },
     image: [
       {'#text': 'https://lastfm.freetls.fastly.net/i/u/34s/artist.jpg', size: 'small'},
       {'#text': 'https://lastfm.freetls.fastly.net/i/u/64s/artist.jpg', size: 'medium'},
       {'#text': 'https://lastfm.freetls.fastly.net/i/u/174s/artist.jpg', size: 'large'},
     ],
-    stats: {
-      listeners: 500000,
-      playcount: 10000000,
-    },
+    mbid: 'artist-mbid-123',
+    name: 'Test Artist',
     similar: {
       artist: [
         {name: 'Similar Artist 1', url: 'https://www.last.fm/music/Similar+Artist+1'},
         {name: 'Similar Artist 2', url: 'https://www.last.fm/music/Similar+Artist+2'},
       ],
+    },
+    stats: {
+      listeners: 500000,
+      playcount: 10000000,
     },
     tags: {
       tag: [
@@ -120,10 +81,49 @@ export function buildLastFmArtistInfo(overrides?: Partial<LastFmArtistInfo>): La
         {name: 'alternative', url: 'https://www.last.fm/tag/alternative'},
       ],
     },
-    bio: {
-      summary: 'Test artist bio summary',
-      content: 'Test artist bio full content',
+    url: 'https://www.last.fm/music/Test+Artist',
+    ...overrides,
+  }
+}
+
+/**
+ * Build a realistic Last.fm track info response
+ */
+export function buildLastFmTrack(overrides?: Partial<LastFmTrackInfo>): LastFmTrackInfo {
+  return {
+    album: {
+      artist: 'Test Artist',
+      image: [
+        {'#text': 'https://lastfm.freetls.fastly.net/i/u/34s/test.jpg', size: 'small'},
+        {'#text': 'https://lastfm.freetls.fastly.net/i/u/64s/test.jpg', size: 'medium'},
+        {'#text': 'https://lastfm.freetls.fastly.net/i/u/174s/test.jpg', size: 'large'},
+      ],
+      mbid: 'album-mbid-789',
+      title: 'Test Album',
+      url: 'https://www.last.fm/music/Test+Artist/Test+Album',
+    },
+    artist: {
+      mbid: 'artist-mbid-123',
+      name: 'Test Artist',
+      url: 'https://www.last.fm/music/Test+Artist',
+    },
+    duration: 240000,
+    listeners: 125000,
+    mbid: 'track-mbid-456',
+    name: 'Test Track',
+    playcount: 2500000,
+    toptags: {
+      tag: [
+        {name: 'indie', url: 'https://www.last.fm/tag/indie'},
+        {name: 'alternative', url: 'https://www.last.fm/tag/alternative'},
+        {name: 'rock', url: 'https://www.last.fm/tag/rock'},
+      ],
+    },
+    url: 'https://www.last.fm/music/Test+Artist/_/Test+Track',
+    wiki: {
+      content: 'Test track full content',
       published: 'Sat, 1 Jan 2023 00:00:00 +0000',
+      summary: 'Test track summary',
     },
     ...overrides,
   }
@@ -133,93 +133,23 @@ export function buildLastFmArtistInfo(overrides?: Partial<LastFmArtistInfo>): La
  * Build a realistic MusicBrainz recording response
  */
 export function buildMusicBrainzRecording(overrides?: {
-  isrc?: string
-  title?: string
   artist?: string
+  isrc?: string
   score?: number
+  title?: string
 }): {
-  id: string
-  title: string
   'artist-credit': {artist: {name: string}}[]
+  id: string
   isrcs: string[]
   score: number
+  title: string
 } {
   return {
-    id: 'recording-id-123',
-    title: overrides?.title ?? 'Test Track',
     'artist-credit': [{artist: {name: overrides?.artist ?? 'Test Artist'}}],
+    id: 'recording-id-123',
     isrcs: overrides?.isrc ? [overrides.isrc] : ['USUM71234567'],
     score: overrides?.score ?? 100,
-  }
-}
-
-/**
- * Build a realistic Spotify track response
- */
-export function buildSpotifyTrack(overrides?: Partial<SpotifyTrackFull>): SpotifyTrackFull {
-  return {
-    id: 'track123',
-    name: 'Test Track',
-    uri: 'spotify:track:track123',
-    type: 'track',
-    href: 'https://api.spotify.com/v1/tracks/track123',
-    external_urls: {
-      spotify: 'https://open.spotify.com/track/track123',
-    },
-    artists: [
-      {
-        id: 'artist123',
-        name: 'Test Artist',
-        uri: 'spotify:artist:artist123',
-        type: 'artist',
-        href: 'https://api.spotify.com/v1/artists/artist123',
-        external_urls: {
-          spotify: 'https://open.spotify.com/artist/artist123',
-        },
-      },
-    ],
-    album: {
-      id: 'album123',
-      name: 'Test Album',
-      uri: 'spotify:album:album123',
-      type: 'album',
-      album_type: 'album',
-      href: 'https://api.spotify.com/v1/albums/album123',
-      external_urls: {
-        spotify: 'https://open.spotify.com/album/album123',
-      },
-      artists: [
-        {
-          id: 'artist123',
-          name: 'Test Artist',
-          uri: 'spotify:artist:artist123',
-          type: 'artist',
-          href: 'https://api.spotify.com/v1/artists/artist123',
-          external_urls: {
-            spotify: 'https://open.spotify.com/artist/artist123',
-          },
-        },
-      ],
-      images: [
-        {url: 'https://i.scdn.co/image/test-640.jpg', width: 640, height: 640},
-        {url: 'https://i.scdn.co/image/test-300.jpg', width: 300, height: 300},
-        {url: 'https://i.scdn.co/image/test-64.jpg', width: 64, height: 64},
-      ],
-      release_date: '2023-01-15',
-      release_date_precision: 'day',
-      total_tracks: 12,
-    },
-    duration_ms: 240000,
-    explicit: false,
-    popularity: 75,
-    preview_url: 'https://p.scdn.co/mp3-preview/test',
-    track_number: 1,
-    disc_number: 1,
-    is_local: false,
-    external_ids: {
-      isrc: 'USUM71234567',
-    },
-    ...overrides,
+    title: overrides?.title ?? 'Test Track',
   }
 }
 
@@ -228,31 +158,33 @@ export function buildSpotifyTrack(overrides?: Partial<SpotifyTrackFull>): Spotif
  */
 export function buildSpotifyPlaylist(overrides?: Partial<SpotifyPlaylistFull>): SpotifyPlaylistFull {
   return {
-    id: 'playlist123',
-    name: 'Test Playlist',
-    uri: 'spotify:playlist:playlist123',
-    type: 'playlist',
-    href: 'https://api.spotify.com/v1/playlists/playlist123',
+    collaborative: false,
+    description: 'A test playlist',
     external_urls: {
       spotify: 'https://open.spotify.com/playlist/playlist123',
     },
-    description: 'A test playlist',
-    public: true,
-    collaborative: false,
-    snapshot_id: 'snapshot123',
+    followers: {
+      href: null,
+      total: 100,
+    },
+    href: 'https://api.spotify.com/v1/playlists/playlist123',
+    id: 'playlist123',
+    images: [
+      {height: 640, url: 'https://mosaic.scdn.co/640/test.jpg', width: 640},
+    ],
+    name: 'Test Playlist',
     owner: {
-      id: 'user123',
       display_name: 'Test User',
-      uri: 'spotify:user:user123',
-      type: 'user',
-      href: 'https://api.spotify.com/v1/users/user123',
       external_urls: {
         spotify: 'https://open.spotify.com/user/user123',
       },
+      href: 'https://api.spotify.com/v1/users/user123',
+      id: 'user123',
+      type: 'user',
+      uri: 'spotify:user:user123',
     },
-    images: [
-      {url: 'https://mosaic.scdn.co/640/test.jpg', width: 640, height: 640},
-    ],
+    public: true,
+    snapshot_id: 'snapshot123',
     tracks: {
       href: 'https://api.spotify.com/v1/playlists/playlist123/tracks',
       items: [],
@@ -262,10 +194,78 @@ export function buildSpotifyPlaylist(overrides?: Partial<SpotifyPlaylistFull>): 
       previous: null,
       total: 0,
     },
-    followers: {
-      href: null,
-      total: 100,
+    type: 'playlist',
+    uri: 'spotify:playlist:playlist123',
+    ...overrides,
+  }
+}
+
+/**
+ * Build a realistic Spotify track response
+ */
+export function buildSpotifyTrack(overrides?: Partial<SpotifyTrackFull>): SpotifyTrackFull {
+  return {
+    album: {
+      album_type: 'album',
+      artists: [
+        {
+          external_urls: {
+            spotify: 'https://open.spotify.com/artist/artist123',
+          },
+          href: 'https://api.spotify.com/v1/artists/artist123',
+          id: 'artist123',
+          name: 'Test Artist',
+          type: 'artist',
+          uri: 'spotify:artist:artist123',
+        },
+      ],
+      external_urls: {
+        spotify: 'https://open.spotify.com/album/album123',
+      },
+      href: 'https://api.spotify.com/v1/albums/album123',
+      id: 'album123',
+      images: [
+        {height: 640, url: 'https://i.scdn.co/image/test-640.jpg', width: 640},
+        {height: 300, url: 'https://i.scdn.co/image/test-300.jpg', width: 300},
+        {height: 64, url: 'https://i.scdn.co/image/test-64.jpg', width: 64},
+      ],
+      name: 'Test Album',
+      release_date: '2023-01-15',
+      release_date_precision: 'day',
+      total_tracks: 12,
+      type: 'album',
+      uri: 'spotify:album:album123',
     },
+    artists: [
+      {
+        external_urls: {
+          spotify: 'https://open.spotify.com/artist/artist123',
+        },
+        href: 'https://api.spotify.com/v1/artists/artist123',
+        id: 'artist123',
+        name: 'Test Artist',
+        type: 'artist',
+        uri: 'spotify:artist:artist123',
+      },
+    ],
+    disc_number: 1,
+    duration_ms: 240000,
+    explicit: false,
+    external_ids: {
+      isrc: 'USUM71234567',
+    },
+    external_urls: {
+      spotify: 'https://open.spotify.com/track/track123',
+    },
+    href: 'https://api.spotify.com/v1/tracks/track123',
+    id: 'track123',
+    is_local: false,
+    name: 'Test Track',
+    popularity: 75,
+    preview_url: 'https://p.scdn.co/mp3-preview/test',
+    track_number: 1,
+    type: 'track',
+    uri: 'spotify:track:track123',
     ...overrides,
   }
 }
@@ -276,29 +276,27 @@ export function buildSpotifyPlaylist(overrides?: Partial<SpotifyPlaylistFull>): 
  * Mock global fetch for Deezer API calls
  * Call this in beforeEach to intercept Deezer requests
  */
-export function mockDeezerAPI(responses: {
-  [isrc: string]: DeezerTrack | null
-}): () => void {
+export function mockDeezerAPI(responses: Record<string, DeezerTrack | null>): () => void {
   const originalFetch = global.fetch
 
   global.fetch = async (input: RequestInfo | URL) => {
     const url = typeof input === 'string' ? input : input.toString()
 
     // Deezer ISRC lookup
-    const isrcMatch = url.match(/api\.deezer\.com\/track\/isrc:([A-Z0-9]+)/)
+    const isrcMatch = /api\.deezer\.com\/track\/isrc:([A-Z0-9]+)/.exec(url)
     if (isrcMatch) {
       const isrc = isrcMatch[1]
       const track = responses[isrc]
 
       if (track) {
         return new Response(JSON.stringify(track), {
-          status: 200,
           headers: {'Content-Type': 'application/json'},
+          status: 200,
         })
       } else {
         return new Response(JSON.stringify({error: {code: 800, message: 'Not found'}}), {
-          status: 404,
           headers: {'Content-Type': 'application/json'},
+          status: 404,
         })
       }
     }
@@ -317,11 +315,11 @@ export function mockDeezerAPI(responses: {
  * Mock global fetch for Last.fm API calls
  */
 export function mockLastFmAPI(responses: {
-  'track.getInfo'?: Record<string, LastFmTrackInfo | null>
-  'track.getCorrection'?: Record<string, {artist: string; name: string} | null>
-  'track.getSimilar'?: Record<string, {artist: string; name: string; match: number}[]>
-  'track.getTopTags'?: Record<string, {name: string; count: number}[]>
   'artist.getInfo'?: Record<string, LastFmArtistInfo | null>
+  'track.getCorrection'?: Record<string, null | {artist: string; name: string}>
+  'track.getInfo'?: Record<string, LastFmTrackInfo | null>
+  'track.getSimilar'?: Record<string, {artist: string; match: number; name: string;}[]>
+  'track.getTopTags'?: Record<string, {count: number; name: string;}[]>
 }): () => void {
   const originalFetch = global.fetch
 
@@ -337,12 +335,12 @@ export function mockLastFmAPI(responses: {
       const key = `${artist}|${track}`
 
       switch (method) {
-        case 'track.getInfo': {
-          const info = responses['track.getInfo']?.[key]
+        case 'artist.getInfo': {
+          const info = responses['artist.getInfo']?.[artist]
           if (info) {
-            return new Response(JSON.stringify({track: info}), {
-              status: 200,
+            return new Response(JSON.stringify({artist: info}), {
               headers: {'Content-Type': 'application/json'},
+              status: 200,
             })
           }
           break
@@ -355,27 +353,27 @@ export function mockLastFmAPI(responses: {
                 corrections: {
                   correction: {
                     track: {
-                      name: correction.name,
                       artist: {name: correction.artist, url: 'https://www.last.fm/music/test'},
+                      name: correction.name,
                       url: 'https://www.last.fm/music/test/_/test',
                     },
                   },
                 },
               }),
               {
-                status: 200,
                 headers: {'Content-Type': 'application/json'},
+                status: 200,
               },
             )
           }
           break
         }
-        case 'artist.getInfo': {
-          const info = responses['artist.getInfo']?.[artist]
+        case 'track.getInfo': {
+          const info = responses['track.getInfo']?.[key]
           if (info) {
-            return new Response(JSON.stringify({artist: info}), {
-              status: 200,
+            return new Response(JSON.stringify({track: info}), {
               headers: {'Content-Type': 'application/json'},
+              status: 200,
             })
           }
           break
@@ -384,8 +382,8 @@ export function mockLastFmAPI(responses: {
 
       // Not found
       return new Response(JSON.stringify({error: 6, message: 'Track not found'}), {
-        status: 404,
         headers: {'Content-Type': 'application/json'},
+        status: 404,
       })
     }
 
@@ -403,9 +401,7 @@ export function mockLastFmAPI(responses: {
  * Mock global fetch for MusicBrainz API calls
  */
 export function mockMusicBrainzAPI(
-  responses: {
-    [artistTrack: string]: {id: string; title: string; isrcs: string[]; score: number} | null
-  },
+  responses: Record<string, null | {id: string; isrcs: string[]; score: number; title: string;}>,
 ): () => void {
   const originalFetch = global.fetch
 
@@ -416,8 +412,8 @@ export function mockMusicBrainzAPI(
     if (url.includes('musicbrainz.org/ws/2/recording')) {
       const urlObj = new URL(url)
       const query = urlObj.searchParams.get('query') ?? ''
-      const artistMatch = query.match(/artist:"([^"]+)"/)
-      const recordingMatch = query.match(/recording:"([^"]+)"/)
+      const artistMatch = /artist:"([^"]+)"/.exec(query)
+      const recordingMatch = /recording:"([^"]+)"/.exec(query)
 
       if (artistMatch && recordingMatch) {
         const key = `${artistMatch[1]}|${recordingMatch[1]}`
@@ -428,17 +424,17 @@ export function mockMusicBrainzAPI(
             JSON.stringify({
               recordings: [
                 {
-                  id: recording.id,
-                  title: recording.title,
                   'artist-credit': [{artist: {name: artistMatch[1]}}],
+                  id: recording.id,
                   isrcs: recording.isrcs,
                   score: recording.score,
+                  title: recording.title,
                 },
               ],
             }),
             {
-              status: 200,
               headers: {'Content-Type': 'application/json'},
+              status: 200,
             },
           )
         }
@@ -446,8 +442,8 @@ export function mockMusicBrainzAPI(
 
       // Not found
       return new Response(JSON.stringify({recordings: []}), {
-        status: 200,
         headers: {'Content-Type': 'application/json'},
+        status: 200,
       })
     }
 
@@ -465,10 +461,10 @@ export function mockMusicBrainzAPI(
  * Mock global fetch for Spotify API calls
  */
 export function mockSpotifyAPI(responses: {
-  'GET /v1/tracks/:id'?: Record<string, SpotifyTrackFull | null>
-  'GET /v1/playlists/:id'?: Record<string, SpotifyPlaylistFull | null>
+  'GET /v1/playlists/:id'?: Record<string, null | SpotifyPlaylistFull>
   'GET /v1/playlists/:id/tracks'?: Record<string, {items: unknown[]; total: number}>
   'GET /v1/search'?: (query: string) => SpotifyTrackFull[]
+  'GET /v1/tracks/:id'?: Record<string, null | SpotifyTrackFull>
   'POST /v1/playlists/:id/tracks'?: () => {snapshot_id: string}
 }): () => void {
   const originalFetch = global.fetch
@@ -482,40 +478,40 @@ export function mockSpotifyAPI(responses: {
       const path = urlObj.pathname
 
       // GET /v1/tracks/:id
-      const trackMatch = path.match(/^\/v1\/tracks\/([^/]+)$/)
+      const trackMatch = /^\/v1\/tracks\/([^/]+)$/.exec(path)
       if (trackMatch && init?.method !== 'POST') {
         const trackId = trackMatch[1]
         const track = responses['GET /v1/tracks/:id']?.[trackId]
         if (track) {
           return new Response(JSON.stringify(track), {
-            status: 200,
             headers: {'Content-Type': 'application/json'},
+            status: 200,
           })
         }
       }
 
       // GET /v1/playlists/:id
-      const playlistMatch = path.match(/^\/v1\/playlists\/([^/]+)$/)
+      const playlistMatch = /^\/v1\/playlists\/([^/]+)$/.exec(path)
       if (playlistMatch && init?.method !== 'POST') {
         const playlistId = playlistMatch[1]
         const playlist = responses['GET /v1/playlists/:id']?.[playlistId]
         if (playlist) {
           return new Response(JSON.stringify(playlist), {
-            status: 200,
             headers: {'Content-Type': 'application/json'},
+            status: 200,
           })
         }
       }
 
       // GET /v1/playlists/:id/tracks
-      const playlistTracksMatch = path.match(/^\/v1\/playlists\/([^/]+)\/tracks$/)
+      const playlistTracksMatch = /^\/v1\/playlists\/([^/]+)\/tracks$/.exec(path)
       if (playlistTracksMatch && init?.method !== 'POST') {
         const playlistId = playlistTracksMatch[1]
         const tracks = responses['GET /v1/playlists/:id/tracks']?.[playlistId]
         if (tracks) {
           return new Response(JSON.stringify(tracks), {
-            status: 200,
             headers: {'Content-Type': 'application/json'},
+            status: 200,
           })
         }
       }
@@ -534,30 +530,30 @@ export function mockSpotifyAPI(responses: {
               },
             }),
             {
-              status: 200,
               headers: {'Content-Type': 'application/json'},
+              status: 200,
             },
           )
         }
       }
 
       // POST /v1/playlists/:id/tracks
-      const addTracksMatch = path.match(/^\/v1\/playlists\/([^/]+)\/tracks$/)
+      const addTracksMatch = /^\/v1\/playlists\/([^/]+)\/tracks$/.exec(path)
       if (addTracksMatch && init?.method === 'POST') {
         const addFn = responses['POST /v1/playlists/:id/tracks']
         if (addFn) {
           const result = addFn()
           return new Response(JSON.stringify(result), {
-            status: 201,
             headers: {'Content-Type': 'application/json'},
+            status: 201,
           })
         }
       }
 
       // Not found
-      return new Response(JSON.stringify({error: {status: 404, message: 'Not found'}}), {
-        status: 404,
+      return new Response(JSON.stringify({error: {message: 'Not found', status: 404}}), {
         headers: {'Content-Type': 'application/json'},
+        status: 404,
       })
     }
 

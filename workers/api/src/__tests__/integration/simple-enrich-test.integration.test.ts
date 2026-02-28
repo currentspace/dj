@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
+
 import { AudioEnrichmentService } from '../../services/AudioEnrichmentService'
 import { MockKVNamespace } from './setup'
 
@@ -8,17 +9,17 @@ describe.skip('Simple Enrich Test', () => {
 
   beforeEach(() => {
     mockKv = new MockKVNamespace()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     service = new AudioEnrichmentService(mockKv as any)
   })
 
   it('should enrich a track with direct properties', async () => {
     const track = {
-      id: '6rqhFgbbKwnb9MLmUQDhG6',
-      name: 'Bohemian Rhapsody - Remastered 2011',
       artists: [{ id: '1dfeR4HaWDbWqFHLkxsg1d', name: 'Queen' }],
       duration_ms: 354320,
       external_ids: { isrc: 'GBUM71029604' },
+      id: '6rqhFgbbKwnb9MLmUQDhG6',
+      name: 'Bohemian Rhapsody - Remastered 2011',
     }
 
     console.log('Starting enrichment for track:', track.name)

@@ -12,14 +12,14 @@
  * The structured output from an agent security evaluation session.
  */
 export interface AgentSecurityDecision {
-  decision: "allow" | "deny" | "ask";
-  reasoning: string;
   confidence: number; // 0.0–1.0
+  decision: "allow" | "ask" | "deny";
   investigated: string[]; // files/paths examined
+  reasoning: string;
   suggested_rule?: {
-    type: "prefix" | "regex" | "contains";
     pattern: string;
     reason: string;
+    type: "contains" | "prefix" | "regex";
   };
 }
 
@@ -28,24 +28,35 @@ export interface AgentSecurityDecision {
  * Enables schema-validated structured output from Claude Code.
  */
 export const SECURITY_DECISION_SCHEMA: Record<string, unknown> = {
-  type: "object",
   properties: {
-    decision: { type: "string", enum: ["allow", "deny", "ask"] },
+    confidence: { maximum: 1, minimum: 0, type: "number" },
+    decision: { enum: ["allow", "deny", "ask"], type: "string" },
+    investigated: { items: { type: "string" }, type: "array" },
     reasoning: { type: "string" },
-    confidence: { type: "number", minimum: 0, maximum: 1 },
-    investigated: { type: "array", items: { type: "string" } },
     suggested_rule: {
-      type: "object",
       properties: {
-        type: { type: "string", enum: ["prefix", "regex", "contains"] },
         pattern: { type: "string" },
         reason: { type: "string" },
+        type: { enum: ["prefix", "regex", "contains"], type: "string" },
       },
       required: ["type", "pattern", "reason"],
+      type: "object",
     },
   },
   required: ["decision", "reasoning", "confidence"],
+  type: "object",
 };
+
+/**
+ * Meta-evaluation result for Phase 2.
+ */
+export interface MetaEvaluationResult {
+  confidence: number;
+  correct: boolean;
+  original_decision: "allow" | "ask" | "deny";
+  reasoning: string;
+  suggested_decision: "allow" | "ask" | "deny";
+}
 
 /**
  * Runtime validator for AgentSecurityDecision.
@@ -60,7 +71,7 @@ export function isValidSecurityDecision(
 
   // Required fields
   if (typeof obj.decision !== "string") return false;
-  if (!["allow", "deny", "ask"].includes(obj.decision)) return false;
+  if (!["allow", "ask", "deny"].includes(obj.decision)) return false;
 
   if (typeof obj.reasoning !== "string") return false;
 
@@ -81,7 +92,7 @@ export function isValidSecurityDecision(
       return false;
     const rule = obj.suggested_rule as Record<string, unknown>;
     if (typeof rule.type !== "string") return false;
-    if (!["prefix", "regex", "contains"].includes(rule.type)) return false;
+    if (!["contains", "prefix", "regex"].includes(rule.type)) return false;
     if (typeof rule.pattern !== "string") return false;
     if (typeof rule.reason !== "string") return false;
   }
@@ -90,27 +101,15 @@ export function isValidSecurityDecision(
 }
 
 /**
- * Meta-evaluation result for Phase 2.
- */
-export interface MetaEvaluationResult {
-  original_decision: "allow" | "deny" | "ask";
-  correct: boolean;
-  suggested_decision: "allow" | "deny" | "ask";
-  reasoning: string;
-  confidence: number;
-}
-
-/**
  * JSON Schema for meta-evaluation structured output (Phase 2).
  */
 export const META_EVALUATION_SCHEMA: Record<string, unknown> = {
-  type: "object",
   properties: {
-    original_decision: { type: "string", enum: ["allow", "deny", "ask"] },
+    confidence: { maximum: 1, minimum: 0, type: "number" },
     correct: { type: "boolean" },
-    suggested_decision: { type: "string", enum: ["allow", "deny", "ask"] },
+    original_decision: { enum: ["allow", "deny", "ask"], type: "string" },
     reasoning: { type: "string" },
-    confidence: { type: "number", minimum: 0, maximum: 1 },
+    suggested_decision: { enum: ["allow", "deny", "ask"], type: "string" },
   },
   required: [
     "original_decision",
@@ -119,4 +118,5 @@ export const META_EVALUATION_SCHEMA: Record<string, unknown> = {
     "reasoning",
     "confidence",
   ],
+  type: "object",
 };

@@ -30,19 +30,19 @@ beforeEach(() => {
 // Global fetch mock setup
 global.fetch = vi.fn(() =>
   Promise.resolve({
-    ok: true,
-    status: 200,
-    json: async () => ({id: 'user123'}),
-    text: async () => JSON.stringify({id: 'user123'}),
-    headers: new Headers(),
-    redirected: false,
-    type: 'basic',
-    url: '',
-    clone: function() { return this },
-    body: null,
-    bodyUsed: false,
     arrayBuffer: async () => new ArrayBuffer(0),
     blob: async () => new Blob(),
+    body: null,
+    bodyUsed: false,
+    clone: function() { return this },
     formData: async () => new FormData(),
+    headers: new Headers(),
+    json: async () => ({id: 'user123'}),
+    ok: true,
+    redirected: false,
+    status: 200,
+    text: async () => JSON.stringify({id: 'user123'}),
+    type: 'basic',
+    url: '',
   } as Response)
 )

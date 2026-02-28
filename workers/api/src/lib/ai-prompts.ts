@@ -12,31 +12,105 @@ import type { MixSession } from '@dj/shared-types'
 // =============================================================================
 
 /**
- * Build a description of a vibe profile for use in prompts
+ * Prompt for curating/ranking track recommendations
  */
-export function buildVibeDescription(vibe: MixSession['vibe']): string {
-  const parts: string[] = []
-
-  if (vibe.genres.length > 0) {
-    parts.push(`Genres: ${vibe.genres.join(', ')}`)
+export function buildCurationPrompt(args: {
+  candidate_tracks: { artists?: string; id: string; name: string; popularity?: number; source?: string }[]
+  playlist_context?: {
+    avg_popularity?: number
+    bpm_range?: { max: number; min: number; }
+    dominant_tags?: string[]
+    era?: string
   }
+  top_n: number
+  user_request: string
+}): string {
+  return `<task>
+You are an expert music curator selecting the best track recommendations from a pool of candidates.
+</task>
 
-  if (vibe.mood.length > 0) {
-    parts.push(`Mood: ${vibe.mood.join(', ')}`)
-  }
+<user_intent>
+USER REQUEST: "${args.user_request}"
+</user_intent>
 
-  const energyDesc = vibe.energyLevel <= 3 ? 'low/chill' : vibe.energyLevel <= 6 ? 'medium' : 'high/intense'
-  parts.push(`Energy: ${energyDesc} (${vibe.energyLevel}/10, ${vibe.energyDirection})`)
+<playlist_context>
+${args.playlist_context?.bpm_range ? `BPM Range: ${args.playlist_context.bpm_range.min}-${args.playlist_context.bpm_range.max}` : ''}
+${args.playlist_context?.dominant_tags?.length ? `Dominant Tags: ${args.playlist_context.dominant_tags.join(', ')}` : ''}
+${args.playlist_context?.avg_popularity ? `Average Popularity: ${args.playlist_context.avg_popularity}/100` : ''}
+${args.playlist_context?.era ? `Era: ${args.playlist_context.era}` : ''}
+</playlist_context>
 
-  if (vibe.bpmRange) {
-    parts.push(`BPM range: ${vibe.bpmRange.min}-${vibe.bpmRange.max}`)
-  }
+<candidate_pool>
+CANDIDATE TRACKS (${args.candidate_tracks.length} total):
+${args.candidate_tracks
+  .slice(0, 50)
+  .map((t, i) => `${i + 1}. "${t.name}" by ${t.artists} (popularity: ${t.popularity ?? 'unknown'}, source: ${t.source ?? 'unknown'})`)
+  .join('\n')}
+</candidate_pool>
 
-  if (vibe.era) {
-    parts.push(`Era: ${vibe.era.start}-${vibe.era.end}`)
-  }
+<output_format>
+Return ONLY valid JSON:
+{
+  "selected_track_ids": ["id1", "id2", ...],
+  "reasoning": "2-3 sentence explanation of your selection approach"
+}
 
-  return parts.join('\n')
+Select exactly ${args.top_n} tracks. Return valid JSON only, no markdown code blocks.
+</output_format>`
+}
+
+/**
+ * Prompt for creating a discovery strategy based on vibe
+ */
+export function buildDiscoveryStrategyPrompt(args: {
+  similar_tracks_available?: string[]
+  user_request: string
+  vibe_profile: Record<string, unknown>
+}): string {
+  return `<task>
+You are a music discovery strategist creating an intelligent, multi-pronged search plan. Your goal is to find tracks that match the user's request while honoring the playlist's vibe profile.
+</task>
+
+<user_intent>
+USER REQUEST: "${args.user_request}"
+</user_intent>
+
+<vibe_context>
+VIBE PROFILE (extracted from playlist analysis):
+${JSON.stringify(args.vibe_profile, null, 2)}
+</vibe_context>
+
+${
+  Array.isArray(args.similar_tracks_available) && args.similar_tracks_available.length > 0
+    ? `<lastfm_similar_tracks>
+AVAILABLE LAST.FM SIMILAR TRACKS:
+${args.similar_tracks_available.slice(0, 10).join('\n')}
+</lastfm_similar_tracks>`
+    : ''
+}
+
+<output_format>
+Return ONLY valid JSON:
+{
+  "strategy_summary": "2-3 sentence description of the overall discovery approach",
+  "lastfm_similar_priority": ["Artist - Track", ...],
+  "tag_searches": [
+    {
+      "tags": ["tag1", "tag2"],
+      "rationale": "Why this combination captures a facet of the vibe"
+    }
+  ],
+  "spotify_searches": [
+    {
+      "query": "creative search query",
+      "rationale": "What angle this targets"
+    }
+  ],
+  "avoid": ["specific things to avoid"]
+}
+
+CRITICAL: Return valid JSON only. No markdown code blocks.
+</output_format>`
 }
 
 /**
@@ -75,9 +149,9 @@ Do NOT include markdown code blocks, only the raw JSON.`
  */
 export function buildNextTrackPrompt(
   vibeDescription: string,
-  recentTracks: Array<{ name: string; artist: string }>,
+  recentTracks: { artist: string; name: string; }[],
   count: number,
-  tasteContext?: { likedGenres: string[]; dislikedGenres: string[]; skippedArtists: string[] },
+  tasteContext?: { dislikedGenres: string[]; likedGenres: string[]; skippedArtists: string[] },
 ): string {
   const recentList = recentTracks
     .map((t, i) => `${i + 1}. "${t.name}" by ${t.artist}`)
@@ -129,6 +203,10 @@ Return ONLY valid JSON:
 Do NOT include markdown code blocks, only the raw JSON.`
 }
 
+// =============================================================================
+// VIBE ANALYSIS PROMPTS
+// =============================================================================
+
 /**
  * Prompt for steering the vibe - transitioning from current tracks towards a new direction
  * Unlike nextTrack, this prioritizes the NEW direction while lightly acknowledging recent tracks
@@ -136,7 +214,7 @@ Do NOT include markdown code blocks, only the raw JSON.`
 export function buildSteeringSuggestionsPrompt(
   vibeDescription: string,
   steerDirection: string,
-  recentTracks: Array<{ name: string; artist: string }>,
+  recentTracks: { artist: string; name: string; }[],
   count: number
 ): string {
   const recentList = recentTracks.length > 0
@@ -174,18 +252,42 @@ Return ONLY valid JSON:
 Do NOT include markdown code blocks, only the raw JSON.`
 }
 
-// =============================================================================
-// VIBE ANALYSIS PROMPTS
-// =============================================================================
+/**
+ * Build a description of a vibe profile for use in prompts
+ */
+export function buildVibeDescription(vibe: MixSession['vibe']): string {
+  const parts: string[] = []
+
+  if (vibe.genres.length > 0) {
+    parts.push(`Genres: ${vibe.genres.join(', ')}`)
+  }
+
+  if (vibe.mood.length > 0) {
+    parts.push(`Mood: ${vibe.mood.join(', ')}`)
+  }
+
+  const energyDesc = vibe.energyLevel <= 3 ? 'low/chill' : vibe.energyLevel <= 6 ? 'medium' : 'high/intense'
+  parts.push(`Energy: ${energyDesc} (${vibe.energyLevel}/10, ${vibe.energyDirection})`)
+
+  if (vibe.bpmRange) {
+    parts.push(`BPM range: ${vibe.bpmRange.min}-${vibe.bpmRange.max}`)
+  }
+
+  if (vibe.era) {
+    parts.push(`Era: ${vibe.era.start}-${vibe.era.end}`)
+  }
+
+  return parts.join('\n')
+}
 
 /**
  * Prompt for extracting deep vibe characteristics from playlist analysis
  */
 export function buildVibeExtractionPrompt(args: {
-  metadata_analysis?: Record<string, unknown>
   deezer_analysis?: Record<string, unknown>
   lastfm_analysis?: Record<string, unknown>
-  sample_tracks?: Array<{ name: string; artists: string }>
+  metadata_analysis?: Record<string, unknown>
+  sample_tracks?: { artists: string; name: string; }[]
 }): string {
   return `<task>
 You are a music critic with expertise in identifying subtle sonic and emotional characteristics. Your task is to analyze the provided playlist data and extract a deep vibe profile that captures signals beyond simple genre labels.
@@ -239,115 +341,13 @@ CRITICAL: Ensure all JSON is valid. Do not include markdown code blocks, only th
 </output_format>`
 }
 
-/**
- * Prompt for creating a discovery strategy based on vibe
- */
-export function buildDiscoveryStrategyPrompt(args: {
-  user_request: string
-  vibe_profile: Record<string, unknown>
-  similar_tracks_available?: string[]
-}): string {
-  return `<task>
-You are a music discovery strategist creating an intelligent, multi-pronged search plan. Your goal is to find tracks that match the user's request while honoring the playlist's vibe profile.
-</task>
-
-<user_intent>
-USER REQUEST: "${args.user_request}"
-</user_intent>
-
-<vibe_context>
-VIBE PROFILE (extracted from playlist analysis):
-${JSON.stringify(args.vibe_profile, null, 2)}
-</vibe_context>
-
-${
-  Array.isArray(args.similar_tracks_available) && args.similar_tracks_available.length > 0
-    ? `<lastfm_similar_tracks>
-AVAILABLE LAST.FM SIMILAR TRACKS:
-${args.similar_tracks_available.slice(0, 10).join('\n')}
-</lastfm_similar_tracks>`
-    : ''
-}
-
-<output_format>
-Return ONLY valid JSON:
-{
-  "strategy_summary": "2-3 sentence description of the overall discovery approach",
-  "lastfm_similar_priority": ["Artist - Track", ...],
-  "tag_searches": [
-    {
-      "tags": ["tag1", "tag2"],
-      "rationale": "Why this combination captures a facet of the vibe"
-    }
-  ],
-  "spotify_searches": [
-    {
-      "query": "creative search query",
-      "rationale": "What angle this targets"
-    }
-  ],
-  "avoid": ["specific things to avoid"]
-}
-
-CRITICAL: Return valid JSON only. No markdown code blocks.
-</output_format>`
-}
-
-/**
- * Prompt for curating/ranking track recommendations
- */
-export function buildCurationPrompt(args: {
-  user_request: string
-  candidate_tracks: Array<{ id: string; name: string; artists?: string; popularity?: number; source?: string }>
-  playlist_context?: {
-    bpm_range?: { min: number; max: number }
-    dominant_tags?: string[]
-    avg_popularity?: number
-    era?: string
-  }
-  top_n: number
-}): string {
-  return `<task>
-You are an expert music curator selecting the best track recommendations from a pool of candidates.
-</task>
-
-<user_intent>
-USER REQUEST: "${args.user_request}"
-</user_intent>
-
-<playlist_context>
-${args.playlist_context?.bpm_range ? `BPM Range: ${args.playlist_context.bpm_range.min}-${args.playlist_context.bpm_range.max}` : ''}
-${args.playlist_context?.dominant_tags?.length ? `Dominant Tags: ${args.playlist_context.dominant_tags.join(', ')}` : ''}
-${args.playlist_context?.avg_popularity ? `Average Popularity: ${args.playlist_context.avg_popularity}/100` : ''}
-${args.playlist_context?.era ? `Era: ${args.playlist_context.era}` : ''}
-</playlist_context>
-
-<candidate_pool>
-CANDIDATE TRACKS (${args.candidate_tracks.length} total):
-${args.candidate_tracks
-  .slice(0, 50)
-  .map((t, i) => `${i + 1}. "${t.name}" by ${t.artists} (popularity: ${t.popularity ?? 'unknown'}, source: ${t.source ?? 'unknown'})`)
-  .join('\n')}
-</candidate_pool>
-
-<output_format>
-Return ONLY valid JSON:
-{
-  "selected_track_ids": ["id1", "id2", ...],
-  "reasoning": "2-3 sentence explanation of your selection approach"
-}
-
-Select exactly ${args.top_n} tracks. Return valid JSON only, no markdown code blocks.
-</output_format>`
-}
-
 // =============================================================================
 // SYSTEM PROMPTS
 // =============================================================================
 
 export const SYSTEM_PROMPTS = {
+  CURATOR: 'You are a music curator. Return only valid JSON.',
+  DISCOVERY_STRATEGIST: 'You are a music discovery strategist. Return only valid JSON.',
   DJ: 'You are a music expert DJ. Suggest real tracks that exist on Spotify. Return only valid JSON.',
   MUSIC_CRITIC: 'You are a music critic. Return only valid JSON with deep vibe analysis.',
-  DISCOVERY_STRATEGIST: 'You are a music discovery strategist. Return only valid JSON.',
-  CURATOR: 'You are a music curator. Return only valid JSON.',
 }

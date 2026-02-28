@@ -1,4 +1,3 @@
-export {SSEWriter} from './sse-writer'
 export {
   convertToAnthropicTools,
   isNumber,
@@ -6,3 +5,4 @@ export {
   isString,
   isStringArray,
 } from './anthropic-utils'
+export {SSEWriter} from './sse-writer'

@@ -14,7 +14,7 @@ import * as path from "path";
 /**
  * Find the MARVEL root directory by walking up from cwd.
  */
-export function findMarvelRoot(): string | null {
+export function findMarvelRoot(): null | string {
   // Check environment variable first
   const envRoot = process.env.MARVEL_ROOT;
   if (envRoot && fs.existsSync(path.join(envRoot, "packs"))) {
@@ -39,7 +39,7 @@ export function findMarvelRoot(): string | null {
 /**
  * Find the current run directory.
  */
-export function findRunDir(): string | null {
+export function findRunDir(): null | string {
   // Check environment variable first
   const envDir = process.env.MARVEL_RUN_DIR;
   if (envDir && fs.existsSync(envDir)) {
@@ -72,6 +72,14 @@ export function findRunDir(): string | null {
 }
 
 /**
+ * Find the MARVEL security directory if it exists on disk.
+ */
+export function findSecurityDir(): null | string {
+  const dir = getSecurityDir();
+  return fs.existsSync(dir) ? dir : null;
+}
+
+/**
  * Get the MARVEL security directory path.
  * Always returns a path (may not exist on disk yet).
  */
@@ -85,14 +93,6 @@ export function getSecurityDir(): string {
 }
 
 /**
- * Find the MARVEL security directory if it exists on disk.
- */
-export function findSecurityDir(): string | null {
-  const dir = getSecurityDir();
-  return fs.existsSync(dir) ? dir : null;
-}
-
-/**
  * Get a secure, per-user temp directory for MARVEL hooks.
  * Created with mode 0o700 (owner-only access).
  */
@@ -102,7 +102,7 @@ export function getTempDir(): string {
   // limit of 104 bytes (old "marvel-hooks-{uid}" pushed paths to 104+ chars).
   const baseDir = path.join(os.tmpdir(), `mhd-${uid}`);
   if (!fs.existsSync(baseDir)) {
-    fs.mkdirSync(baseDir, { recursive: true, mode: 0o700 });
+    fs.mkdirSync(baseDir, { mode: 0o700, recursive: true });
   } else {
     try {
       fs.chmodSync(baseDir, 0o700);

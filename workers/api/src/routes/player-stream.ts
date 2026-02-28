@@ -457,7 +457,7 @@ export function registerPlayerStreamRoute(app: OpenAPIHono<{ Bindings: Env }>) {
           isStreamClosed = true
           clearInterval(pollInterval)
           clearInterval(heartbeatInterval)
-          writer.close().catch(() => {})
+          writer.close().catch(() => { /* noop */ })
           return
         }
 
@@ -467,7 +467,7 @@ export function registerPlayerStreamRoute(app: OpenAPIHono<{ Bindings: Env }>) {
         if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
           writeSSE(writer, 'error', { message: 'Too many errors, closing stream' })
           isStreamClosed = true
-          writer.close().catch(() => {})
+          writer.close().catch(() => { /* noop */ })
           return
         }
 
@@ -487,7 +487,7 @@ export function registerPlayerStreamRoute(app: OpenAPIHono<{ Bindings: Env }>) {
     }
 
     // Start intervals
-    const pollInterval = setInterval(poll, POLLING_INTERVAL_MS)
+    const pollInterval = setInterval(() => { void poll() }, POLLING_INTERVAL_MS)
     const heartbeatInterval = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL_MS)
 
     // Initial fetch
@@ -507,7 +507,7 @@ export function registerPlayerStreamRoute(app: OpenAPIHono<{ Bindings: Env }>) {
           clearInterval(pollInterval)
           clearInterval(heartbeatInterval)
           writeSSE(writer, 'reconnect', { message: 'Stream lifetime exceeded' })
-          writer.close().catch(() => {})
+          writer.close().catch(() => { /* noop */ })
           resolve()
         }, MAX_STREAM_LIFETIME_MS)
 
@@ -663,6 +663,7 @@ async function handleTrackTransition(
     const recentSignals = session.signals.slice(-5)
     let consecutiveSkips = 0
     for (let i = recentSignals.length - 1; i >= 0; i--) {
+      // eslint-disable-next-line security/detect-object-injection -- safe: i is a controlled loop index bounded by array length
       if (recentSignals[i].type === 'skipped') consecutiveSkips++
       else break
     }

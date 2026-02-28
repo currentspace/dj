@@ -8,12 +8,14 @@
  */
 
 import * as path from "path";
+
 import type { PreCompactHookInput, SyncHookJSONOutput } from "../sdk-types.js";
 import type { RunState } from "../types.js";
-import { findRunDir, getTempDir } from "../lib/paths.js";
-import { serializeForSession, hasSessionAgents } from "../lib/agent-registry.js";
+
+import { hasSessionAgents, serializeForSession } from "../lib/agent-registry.js";
 import { safeReadJson, safeWriteJson } from "../lib/file-ops.js";
-import { logDebug, buildHookContext } from "../lib/logger.js";
+import { buildHookContext, logDebug } from "../lib/logger.js";
+import { findRunDir, getTempDir } from "../lib/paths.js";
 
 export async function handlePreCompact(input: PreCompactHookInput): Promise<SyncHookJSONOutput> {
   const context = buildHookContext("pre-compact", input);
@@ -39,9 +41,9 @@ export async function handlePreCompact(input: PreCompactHookInput): Promise<Sync
   // Append compaction event to recentActivity
   runState.recentActivity = runState.recentActivity || [];
   runState.recentActivity.push({
-    type: "compaction",
-    timestamp: new Date().toISOString(),
     data: { toolCallCount: runState.toolCallCount },
+    timestamp: new Date().toISOString(),
+    type: "compaction",
   });
 
   if (runState.recentActivity.length > 20) {

@@ -9,19 +9,54 @@
  */
 
 import * as path from "path";
+
 import type {
+  NotificationHookInput,
   SubagentStartHookInput,
   SubagentStopHookInput,
-  NotificationHookInput,
-  TeammateIdleHookInput,
-  TaskCompletedHookInput,
   SyncHookJSONOutput,
+  TaskCompletedHookInput,
+  TeammateIdleHookInput,
 } from "../sdk-types.js";
-import type { RunState, ActivityEventType } from "../types.js";
-import { findRunDir } from "../lib/paths.js";
+import type { ActivityEventType, RunState } from "../types.js";
+
+import { completeAgent, registerAgent, trackTeammate } from "../lib/agent-registry.js";
 import { safeReadJson, safeWriteJson } from "../lib/file-ops.js";
-import { logDebug, buildHookContext, type LogContext } from "../lib/logger.js";
-import { registerAgent, completeAgent, trackTeammate } from "../lib/agent-registry.js";
+import { buildHookContext, type LogContext, logDebug } from "../lib/logger.js";
+import { findRunDir } from "../lib/paths.js";
+
+export async function handleNotification(input: NotificationHookInput): Promise<SyncHookJSONOutput> {
+  const context = buildHookContext("notification", input);
+  logActivity("notification", { message: input.message, notification_type: input.notification_type, title: input.title }, context);
+  return {};
+}
+
+export async function handleSubagentStart(input: SubagentStartHookInput): Promise<SyncHookJSONOutput> {
+  const context = buildHookContext("subagent-start", input);
+  logActivity("subagent_start", { agent_id: input.agent_id, agent_type: input.agent_type }, context);
+  registerAgent(input.session_id, input.agent_id, input.agent_type, context);
+  return {};
+}
+
+export async function handleSubagentStop(input: SubagentStopHookInput): Promise<SyncHookJSONOutput> {
+  const context = buildHookContext("subagent-stop", input);
+  logActivity("subagent_stop", { agent_id: input.agent_id, agent_transcript_path: input.agent_transcript_path }, context);
+  completeAgent(input.session_id, input.agent_id, input.agent_transcript_path, context);
+  return {};
+}
+
+export async function handleTaskCompleted(input: TaskCompletedHookInput): Promise<SyncHookJSONOutput> {
+  const context = buildHookContext("task-completed", input);
+  logActivity("task_completed", { task_id: input.task_id, task_subject: input.task_subject }, context);
+  return {};
+}
+
+export async function handleTeammateIdle(input: TeammateIdleHookInput): Promise<SyncHookJSONOutput> {
+  const context = buildHookContext("teammate-idle", input);
+  logActivity("teammate_idle", { team_name: input.team_name, teammate_name: input.teammate_name }, context);
+  trackTeammate(input.session_id, input.teammate_name, input.team_name, context);
+  return {};
+}
 
 function logActivity(
   activityType: ActivityEventType,
@@ -43,9 +78,9 @@ function logActivity(
 
   runState.recentActivity = runState.recentActivity || [];
   runState.recentActivity.push({
-    type: activityType,
-    timestamp: new Date().toISOString(),
     data,
+    timestamp: new Date().toISOString(),
+    type: activityType,
   });
 
   if (runState.recentActivity.length > 20) {
@@ -53,37 +88,4 @@ function logActivity(
   }
 
   safeWriteJson(runJsonPath, runState, context);
-}
-
-export async function handleSubagentStart(input: SubagentStartHookInput): Promise<SyncHookJSONOutput> {
-  const context = buildHookContext("subagent-start", input);
-  logActivity("subagent_start", { agent_id: input.agent_id, agent_type: input.agent_type }, context);
-  registerAgent(input.session_id, input.agent_id, input.agent_type, context);
-  return {};
-}
-
-export async function handleSubagentStop(input: SubagentStopHookInput): Promise<SyncHookJSONOutput> {
-  const context = buildHookContext("subagent-stop", input);
-  logActivity("subagent_stop", { agent_id: input.agent_id, agent_transcript_path: input.agent_transcript_path }, context);
-  completeAgent(input.session_id, input.agent_id, input.agent_transcript_path, context);
-  return {};
-}
-
-export async function handleNotification(input: NotificationHookInput): Promise<SyncHookJSONOutput> {
-  const context = buildHookContext("notification", input);
-  logActivity("notification", { message: input.message, title: input.title, notification_type: input.notification_type }, context);
-  return {};
-}
-
-export async function handleTeammateIdle(input: TeammateIdleHookInput): Promise<SyncHookJSONOutput> {
-  const context = buildHookContext("teammate-idle", input);
-  logActivity("teammate_idle", { teammate_name: input.teammate_name, team_name: input.team_name }, context);
-  trackTeammate(input.session_id, input.teammate_name, input.team_name, context);
-  return {};
-}
-
-export async function handleTaskCompleted(input: TaskCompletedHookInput): Promise<SyncHookJSONOutput> {
-  const context = buildHookContext("task-completed", input);
-  logActivity("task_completed", { task_id: input.task_id, task_subject: input.task_subject }, context);
-  return {};
 }

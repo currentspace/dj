@@ -295,7 +295,7 @@ export const mixApiClient = {
 
         // Process complete SSE messages
         const lines = buffer.split('\n\n')
-        buffer = lines.pop() || '' // Keep incomplete message in buffer
+        buffer = lines.pop() ?? '' // Keep incomplete message in buffer
 
         for (const line of lines) {
           if (line.startsWith('data: ')) {

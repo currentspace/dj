@@ -35,84 +35,84 @@ import {formatZodError, safeParse} from './guards'
 /** Schema for now playing response */
 const NowPlayingResponseSchema = z.object({
   is_playing: z.boolean(),
-  progress_ms: z.number().nullable().optional(),
   item: z.object({
+    album: z.object({name: z.string()}).optional(),
+    artists: z.array(z.object({name: z.string()})).optional(),
+    duration_ms: z.number(),
     name: z.string(),
     uri: z.string(),
-    duration_ms: z.number(),
-    artists: z.array(z.object({name: z.string()})).optional(),
-    album: z.object({name: z.string()}).optional(),
   }).nullable().optional(),
+  progress_ms: z.number().nullable().optional(),
 })
 
 /** Schema for queue response */
 const QueueResponseSchema = z.object({
   currently_playing: z.object({
+    artists: z.array(z.object({name: z.string()})).optional(),
     name: z.string(),
     uri: z.string(),
-    artists: z.array(z.object({name: z.string()})).optional(),
   }).nullable(),
   queue: z.array(z.object({
+    artists: z.array(z.object({name: z.string()})).optional(),
     name: z.string(),
     uri: z.string(),
-    artists: z.array(z.object({name: z.string()})).optional(),
   })),
 })
 
 /** Schema for playback state response */
 const PlaybackStateResponseSchema = z.object({
+  context: z.object({
+    href: z.string(),
+    type: z.string(),
+    uri: z.string(),
+  }).nullable(),
+  currently_playing_type: z.string(),
   device: z.object({
     id: z.string().nullable(),
     is_active: z.boolean(),
     is_private_session: z.boolean(),
     is_restricted: z.boolean(),
     name: z.string(),
+    supports_volume: z.boolean(),
     type: z.string(),
     volume_percent: z.number().nullable(),
-    supports_volume: z.boolean(),
   }),
-  repeat_state: z.enum(['off', 'track', 'context']),
-  shuffle_state: z.boolean(),
-  context: z.object({
-    type: z.string(),
-    href: z.string(),
-    uri: z.string(),
-  }).nullable(),
-  timestamp: z.number(),
-  progress_ms: z.number().nullable(),
   is_playing: z.boolean(),
   item: z.object({
+    album: z.object({
+      images: z.array(z.object({url: z.string()})).optional(),
+      name: z.string(),
+    }).optional(),
+    artists: z.array(z.object({name: z.string()})).optional(),
+    duration_ms: z.number(),
     name: z.string(),
     uri: z.string(),
-    duration_ms: z.number(),
-    artists: z.array(z.object({name: z.string()})).optional(),
-    album: z.object({
-      name: z.string(),
-      images: z.array(z.object({url: z.string()})).optional(),
-    }).optional(),
   }).nullable(),
-  currently_playing_type: z.string(),
+  progress_ms: z.number().nullable(),
+  repeat_state: z.enum(['off', 'track', 'context']),
+  shuffle_state: z.boolean(),
+  timestamp: z.number(),
 })
 
 /** Schema for related artists response */
 const RelatedArtistsResponseSchema = z.object({
   artists: z.array(z.object({
-    id: z.string(),
-    name: z.string(),
     genres: z.array(z.string()).optional(),
-    popularity: z.number().optional(),
+    id: z.string(),
     images: z.array(z.object({url: z.string()})).optional(),
+    name: z.string(),
+    popularity: z.number().optional(),
   })),
 })
 
 /** Schema for artist search response */
 const ArtistSearchResponseSchema = z.object({
   artists: SpotifyPagingSchema(z.object({
-    id: z.string(),
-    name: z.string(),
     genres: z.array(z.string()).optional(),
-    popularity: z.number().optional(),
+    id: z.string(),
     images: z.array(z.object({url: z.string()})).optional(),
+    name: z.string(),
+    popularity: z.number().optional(),
   })),
 })
 
@@ -371,7 +371,7 @@ export async function executeSpotifyTool(
   toolName: string,
   args: Record<string, unknown>,
   token: string,
-  _cache?: KVNamespace, // eslint-disable-line @typescript-eslint/no-unused-vars -- kept for API compatibility
+  _cache?: KVNamespace,  
 ): Promise<unknown> {
   getLogger()?.info(`[Tool] Executing ${toolName} with args:`, {args: JSON.stringify(args).substring(0, 200)})
   const startTime = Date.now()
@@ -379,8 +379,15 @@ export async function executeSpotifyTool(
   try {
     let result
     switch (toolName) {
+      // Queue & Playback Tools (DJ Mode)
+      case 'add_to_queue':
+        result = await addToQueue(args, token)
+        break
       case 'analyze_playlist':
         result = await analyzePlaylist(args, token)
+        break
+      case 'control_playback':
+        result = await controlPlayback(args, token)
         break
       case 'create_playlist':
         result = await createPlaylist(args, token)
@@ -393,6 +400,15 @@ export async function executeSpotifyTool(
         break
       case 'get_artist_top_tracks':
         result = await getArtistTopTracks(args, token)
+        break
+      case 'get_now_playing':
+        result = await getNowPlaying(token)
+        break
+      case 'get_playback_state':
+        result = await getPlaybackState(token)
+        break
+      case 'get_queue':
+        result = await getQueue(token)
         break
       case 'get_related_artists':
         result = await getRelatedArtists(args, token)
@@ -409,27 +425,11 @@ export async function executeSpotifyTool(
       case 'search_spotify_tracks':
         result = await searchSpotifyTracks(args as z.infer<typeof SearchTracksSchema>, token)
         break
-      // Queue & Playback Tools (DJ Mode)
-      case 'add_to_queue':
-        result = await addToQueue(args, token)
-        break
-      case 'get_now_playing':
-        result = await getNowPlaying(token)
-        break
-      case 'get_queue':
-        result = await getQueue(token)
-        break
-      case 'control_playback':
-        result = await controlPlayback(args, token)
-        break
-      case 'get_playback_state':
-        result = await getPlaybackState(token)
+      case 'set_repeat':
+        result = await setRepeat(args, token)
         break
       case 'set_shuffle':
         result = await setShuffle(args, token)
-        break
-      case 'set_repeat':
-        result = await setRepeat(args, token)
         break
       case 'set_volume':
         result = await setVolume(args, token)
@@ -450,6 +450,36 @@ export async function executeSpotifyTool(
     getLogger()?.error(`[Tool] ${toolName} failed after ${duration}ms:`, error)
     throw error
   }
+}
+
+async function addToQueue(args: Record<string, unknown>, token: string) {
+  const uri = isString(args.uri) ? args.uri : null
+  if (!uri) {
+    throw new Error('Track URI is required')
+  }
+
+  getLogger()?.info(`[Tool:addToQueue] Adding ${uri} to queue`)
+
+  const response = await rateLimitedSpotifyCall(
+    () =>
+      fetch(`https://api.spotify.com/v1/me/player/queue?uri=${encodeURIComponent(uri)}`, {
+        headers: {Authorization: `Bearer ${token}`},
+        method: 'POST',
+      }),
+    undefined,
+    'player:queue'
+  )
+
+  if (response.status === 204) {
+    return {message: 'Track added to queue', success: true, uri}
+  }
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`Failed to add to queue: ${response.status} - ${errorText}`)
+  }
+
+  return {message: 'Track added to queue', success: true, uri}
 }
 
 async function analyzePlaylist(args: Record<string, unknown>, token: string) {
@@ -584,6 +614,42 @@ async function analyzePlaylist(args: Record<string, unknown>, token: string) {
   return analysis
 }
 
+async function controlPlayback(args: Record<string, unknown>, token: string) {
+  const action = isString(args.action) ? args.action : null
+  if (!action || !['next', 'pause', 'play', 'previous'].includes(action)) {
+    throw new Error('Valid action is required: play, pause, next, or previous')
+  }
+
+  getLogger()?.info(`[Tool:controlPlayback] Executing ${action}`)
+
+  const endpoints: Record<string, {method: string; url: string}> = {
+    next: {method: 'POST', url: 'https://api.spotify.com/v1/me/player/next'},
+    pause: {method: 'PUT', url: 'https://api.spotify.com/v1/me/player/pause'},
+    play: {method: 'PUT', url: 'https://api.spotify.com/v1/me/player/play'},
+    previous: {method: 'POST', url: 'https://api.spotify.com/v1/me/player/previous'},
+  }
+
+  // eslint-disable-next-line security/detect-object-injection
+  const {method, url} = endpoints[action]
+
+  const response = await rateLimitedSpotifyCall(
+    () =>
+      fetch(url, {
+        headers: {Authorization: `Bearer ${token}`},
+        method,
+      }),
+    undefined,
+    `player:${action}`
+  )
+
+  if (response.status === 204 || response.ok) {
+    return {action, message: `Playback ${action} successful`, success: true}
+  }
+
+  const errorText = await response.text()
+  throw new Error(`Failed to ${action}: ${response.status} - ${errorText}`)
+}
+
 async function createPlaylist(args: Record<string, unknown>, token: string) {
   getLogger()?.info(`[Tool:createPlaylist] Creating playlist: ${args.name}`)
 
@@ -711,10 +777,10 @@ async function getAlbumInfo(args: Record<string, unknown>, token: string) {
     release_date: album.release_date,
     total_tracks: album.total_tracks,
     tracks: album.tracks?.items?.slice(0, 10).map(t => ({
-      id: t.id,
-      name: t.name,
       artists: t.artists?.map((a: {name: string}) => a.name).join(', '),
       duration_ms: t.duration_ms,
+      id: t.id,
+      name: t.name,
       track_number: t.track_number,
     })),
   }
@@ -765,17 +831,168 @@ async function getArtistTopTracks(args: Record<string, unknown>, token: string) 
 
   // Return compact track format to reduce payload size
   return (result.data.items ?? []).map(track => ({
-    id: track.id,
-    name: track.name,
-    artists: track.artists?.map(a => a.name).join(', '),
-    popularity: track.popularity,
-    uri: track.uri,
     album: track.album ? {
       name: track.album.name,
       release_date: track.album.release_date,
     } : undefined,
+    artists: track.artists?.map(a => a.name).join(', '),
+    id: track.id,
+    name: track.name,
+    popularity: track.popularity,
+    uri: track.uri,
   }))
 }
+
+async function getNowPlaying(token: string) {
+  getLogger()?.info('[Tool:getNowPlaying] Fetching current playback')
+
+  const response = await rateLimitedSpotifyCall(
+    () =>
+      fetch('https://api.spotify.com/v1/me/player/currently-playing', {
+        headers: {Authorization: `Bearer ${token}`},
+      }),
+    undefined,
+    'player:current'
+  )
+
+  if (response.status === 204) {
+    return {is_playing: false, message: 'Nothing currently playing'}
+  }
+
+  if (!response.ok) {
+    throw new Error(`Failed to get now playing: ${response.status}`)
+  }
+
+  const json: unknown = await response.json()
+  const result = safeParse(NowPlayingResponseSchema, json)
+
+  if (!result.success) {
+    getLogger()?.error('[getNowPlaying] Failed to parse response:', formatZodError(result.error))
+    throw new Error(`Invalid now playing response: ${formatZodError(result.error)}`)
+  }
+
+  const data = result.data
+
+  return {
+    album: data.item?.album?.name,
+    artists: data.item?.artists?.map(a => a.name).join(', '),
+    duration_ms: data.item?.duration_ms,
+    is_playing: data.is_playing,
+    progress_ms: data.progress_ms,
+    track_name: data.item?.name,
+    uri: data.item?.uri,
+  }
+}
+
+async function getPlaybackState(token: string) {
+  getLogger()?.info('[Tool:getPlaybackState] Fetching full playback state')
+
+  const response = await rateLimitedSpotifyCall(
+    () =>
+      fetch('https://api.spotify.com/v1/me/player', {
+        headers: {Authorization: `Bearer ${token}`},
+      }),
+    undefined,
+    'player:state'
+  )
+
+  if (response.status === 204) {
+    return {
+      is_playing: false,
+      message: 'No active playback session. Start playing on any device first.',
+    }
+  }
+
+  if (!response.ok) {
+    throw new Error(`Failed to get playback state: ${response.status}`)
+  }
+
+  const json: unknown = await response.json()
+  const result = safeParse(PlaybackStateResponseSchema, json)
+
+  if (!result.success) {
+    getLogger()?.error('[getPlaybackState] Failed to parse response:', formatZodError(result.error))
+    throw new Error(`Invalid playback state response: ${formatZodError(result.error)}`)
+  }
+
+  const data = result.data
+
+  return {
+    // Context (playlist/album being played)
+    context: data.context ? {
+      type: data.context.type,
+      uri: data.context.uri,
+    } : null,
+    currently_playing_type: data.currently_playing_type,
+    // Device info
+    device: {
+      id: data.device?.id,
+      is_active: data.device?.is_active,
+      name: data.device?.name,
+      supports_volume: data.device?.supports_volume,
+      type: data.device?.type,
+      volume_percent: data.device?.volume_percent,
+    },
+    // Current track
+    is_playing: data.is_playing,
+    progress_ms: data.progress_ms,
+    repeat_state: data.repeat_state,
+    // Playback settings
+    shuffle_state: data.shuffle_state,
+    track: data.item ? {
+      album: data.item.album?.name,
+      artists: data.item.artists?.map(a => a.name).join(', '),
+      duration_ms: data.item.duration_ms,
+      name: data.item.name,
+      uri: data.item.uri,
+    } : null,
+  }
+}
+
+async function getQueue(token: string) {
+  getLogger()?.info('[Tool:getQueue] Fetching queue')
+
+  const response = await rateLimitedSpotifyCall(
+    () =>
+      fetch('https://api.spotify.com/v1/me/player/queue', {
+        headers: {Authorization: `Bearer ${token}`},
+      }),
+    undefined,
+    'player:queue'
+  )
+
+  if (!response.ok) {
+    throw new Error(`Failed to get queue: ${response.status}`)
+  }
+
+  const json: unknown = await response.json()
+  const result = safeParse(QueueResponseSchema, json)
+
+  if (!result.success) {
+    getLogger()?.error('[getQueue] Failed to parse response:', formatZodError(result.error))
+    throw new Error(`Invalid queue response: ${formatZodError(result.error)}`)
+  }
+
+  const data = result.data
+
+  return {
+    currently_playing: data.currently_playing
+      ? {
+          artists: data.currently_playing.artists?.map(a => a.name).join(', '),
+          name: data.currently_playing.name,
+          uri: data.currently_playing.uri,
+        }
+      : null,
+    queue: data.queue.slice(0, 10).map(track => ({
+      artists: track.artists?.map(a => a.name).join(', '),
+      name: track.name,
+      uri: track.uri,
+    })),
+    queue_length: data.queue.length,
+  }
+}
+
+// ==================== Queue & Playback Tools (DJ Mode) ====================
 
 async function getRelatedArtists(args: Record<string, unknown>, token: string) {
   const {artist_id} = args
@@ -968,221 +1185,36 @@ async function searchSpotifyTracks(
   return result.data.tracks?.items ?? []
 }
 
-// ==================== Queue & Playback Tools (DJ Mode) ====================
-
-async function addToQueue(args: Record<string, unknown>, token: string) {
-  const uri = isString(args.uri) ? args.uri : null
-  if (!uri) {
-    throw new Error('Track URI is required')
+async function setRepeat(args: Record<string, unknown>, token: string) {
+  const state = isString(args.state) && ['context', 'off', 'track'].includes(args.state) ? args.state : null
+  if (!state) {
+    throw new Error('state is required: "off", "track", or "context"')
   }
 
-  getLogger()?.info(`[Tool:addToQueue] Adding ${uri} to queue`)
+  getLogger()?.info(`[Tool:setRepeat] Setting repeat to ${state}`)
 
   const response = await rateLimitedSpotifyCall(
     () =>
-      fetch(`https://api.spotify.com/v1/me/player/queue?uri=${encodeURIComponent(uri)}`, {
+      fetch(`https://api.spotify.com/v1/me/player/repeat?state=${state}`, {
         headers: {Authorization: `Bearer ${token}`},
-        method: 'POST',
+        method: 'PUT',
       }),
     undefined,
-    'player:queue'
-  )
-
-  if (response.status === 204) {
-    return {message: 'Track added to queue', success: true, uri}
-  }
-
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(`Failed to add to queue: ${response.status} - ${errorText}`)
-  }
-
-  return {message: 'Track added to queue', success: true, uri}
-}
-
-async function getNowPlaying(token: string) {
-  getLogger()?.info('[Tool:getNowPlaying] Fetching current playback')
-
-  const response = await rateLimitedSpotifyCall(
-    () =>
-      fetch('https://api.spotify.com/v1/me/player/currently-playing', {
-        headers: {Authorization: `Bearer ${token}`},
-      }),
-    undefined,
-    'player:current'
-  )
-
-  if (response.status === 204) {
-    return {is_playing: false, message: 'Nothing currently playing'}
-  }
-
-  if (!response.ok) {
-    throw new Error(`Failed to get now playing: ${response.status}`)
-  }
-
-  const json: unknown = await response.json()
-  const result = safeParse(NowPlayingResponseSchema, json)
-
-  if (!result.success) {
-    getLogger()?.error('[getNowPlaying] Failed to parse response:', formatZodError(result.error))
-    throw new Error(`Invalid now playing response: ${formatZodError(result.error)}`)
-  }
-
-  const data = result.data
-
-  return {
-    album: data.item?.album?.name,
-    artists: data.item?.artists?.map(a => a.name).join(', '),
-    duration_ms: data.item?.duration_ms,
-    is_playing: data.is_playing,
-    progress_ms: data.progress_ms,
-    track_name: data.item?.name,
-    uri: data.item?.uri,
-  }
-}
-
-async function getQueue(token: string) {
-  getLogger()?.info('[Tool:getQueue] Fetching queue')
-
-  const response = await rateLimitedSpotifyCall(
-    () =>
-      fetch('https://api.spotify.com/v1/me/player/queue', {
-        headers: {Authorization: `Bearer ${token}`},
-      }),
-    undefined,
-    'player:queue'
-  )
-
-  if (!response.ok) {
-    throw new Error(`Failed to get queue: ${response.status}`)
-  }
-
-  const json: unknown = await response.json()
-  const result = safeParse(QueueResponseSchema, json)
-
-  if (!result.success) {
-    getLogger()?.error('[getQueue] Failed to parse response:', formatZodError(result.error))
-    throw new Error(`Invalid queue response: ${formatZodError(result.error)}`)
-  }
-
-  const data = result.data
-
-  return {
-    currently_playing: data.currently_playing
-      ? {
-          artists: data.currently_playing.artists?.map(a => a.name).join(', '),
-          name: data.currently_playing.name,
-          uri: data.currently_playing.uri,
-        }
-      : null,
-    queue: data.queue.slice(0, 10).map(track => ({
-      artists: track.artists?.map(a => a.name).join(', '),
-      name: track.name,
-      uri: track.uri,
-    })),
-    queue_length: data.queue.length,
-  }
-}
-
-async function controlPlayback(args: Record<string, unknown>, token: string) {
-  const action = isString(args.action) ? args.action : null
-  if (!action || !['play', 'pause', 'next', 'previous'].includes(action)) {
-    throw new Error('Valid action is required: play, pause, next, or previous')
-  }
-
-  getLogger()?.info(`[Tool:controlPlayback] Executing ${action}`)
-
-  const endpoints: Record<string, {method: string; url: string}> = {
-    next: {method: 'POST', url: 'https://api.spotify.com/v1/me/player/next'},
-    pause: {method: 'PUT', url: 'https://api.spotify.com/v1/me/player/pause'},
-    play: {method: 'PUT', url: 'https://api.spotify.com/v1/me/player/play'},
-    previous: {method: 'POST', url: 'https://api.spotify.com/v1/me/player/previous'},
-  }
-
-  // eslint-disable-next-line security/detect-object-injection
-  const {method, url} = endpoints[action]
-
-  const response = await rateLimitedSpotifyCall(
-    () =>
-      fetch(url, {
-        headers: {Authorization: `Bearer ${token}`},
-        method,
-      }),
-    undefined,
-    `player:${action}`
+    'player:repeat'
   )
 
   if (response.status === 204 || response.ok) {
-    return {action, message: `Playback ${action} successful`, success: true}
+    const messages: Record<string, string> = {
+      context: 'Repeating playlist/album',
+      off: 'Repeat disabled',
+      track: 'Repeating current track',
+    }
+    // eslint-disable-next-line security/detect-object-injection
+    return {message: messages[state], repeat: state, success: true}
   }
 
   const errorText = await response.text()
-  throw new Error(`Failed to ${action}: ${response.status} - ${errorText}`)
-}
-
-async function getPlaybackState(token: string) {
-  getLogger()?.info('[Tool:getPlaybackState] Fetching full playback state')
-
-  const response = await rateLimitedSpotifyCall(
-    () =>
-      fetch('https://api.spotify.com/v1/me/player', {
-        headers: {Authorization: `Bearer ${token}`},
-      }),
-    undefined,
-    'player:state'
-  )
-
-  if (response.status === 204) {
-    return {
-      is_playing: false,
-      message: 'No active playback session. Start playing on any device first.',
-    }
-  }
-
-  if (!response.ok) {
-    throw new Error(`Failed to get playback state: ${response.status}`)
-  }
-
-  const json: unknown = await response.json()
-  const result = safeParse(PlaybackStateResponseSchema, json)
-
-  if (!result.success) {
-    getLogger()?.error('[getPlaybackState] Failed to parse response:', formatZodError(result.error))
-    throw new Error(`Invalid playback state response: ${formatZodError(result.error)}`)
-  }
-
-  const data = result.data
-
-  return {
-    // Device info
-    device: {
-      id: data.device?.id,
-      name: data.device?.name,
-      type: data.device?.type,
-      volume_percent: data.device?.volume_percent,
-      is_active: data.device?.is_active,
-      supports_volume: data.device?.supports_volume,
-    },
-    // Playback settings
-    shuffle_state: data.shuffle_state,
-    repeat_state: data.repeat_state,
-    // Current track
-    is_playing: data.is_playing,
-    progress_ms: data.progress_ms,
-    track: data.item ? {
-      name: data.item.name,
-      artists: data.item.artists?.map(a => a.name).join(', '),
-      album: data.item.album?.name,
-      duration_ms: data.item.duration_ms,
-      uri: data.item.uri,
-    } : null,
-    // Context (playlist/album being played)
-    context: data.context ? {
-      type: data.context.type,
-      uri: data.context.uri,
-    } : null,
-    currently_playing_type: data.currently_playing_type,
-  }
+  throw new Error(`Failed to set repeat: ${response.status} - ${errorText}`)
 }
 
 async function setShuffle(args: Record<string, unknown>, token: string) {
@@ -1204,43 +1236,11 @@ async function setShuffle(args: Record<string, unknown>, token: string) {
   )
 
   if (response.status === 204 || response.ok) {
-    return {success: true, shuffle: state, message: `Shuffle ${state ? 'enabled' : 'disabled'}`}
+    return {message: `Shuffle ${state ? 'enabled' : 'disabled'}`, shuffle: state, success: true}
   }
 
   const errorText = await response.text()
   throw new Error(`Failed to set shuffle: ${response.status} - ${errorText}`)
-}
-
-async function setRepeat(args: Record<string, unknown>, token: string) {
-  const state = isString(args.state) && ['off', 'track', 'context'].includes(args.state) ? args.state : null
-  if (!state) {
-    throw new Error('state is required: "off", "track", or "context"')
-  }
-
-  getLogger()?.info(`[Tool:setRepeat] Setting repeat to ${state}`)
-
-  const response = await rateLimitedSpotifyCall(
-    () =>
-      fetch(`https://api.spotify.com/v1/me/player/repeat?state=${state}`, {
-        headers: {Authorization: `Bearer ${token}`},
-        method: 'PUT',
-      }),
-    undefined,
-    'player:repeat'
-  )
-
-  if (response.status === 204 || response.ok) {
-    const messages: Record<string, string> = {
-      off: 'Repeat disabled',
-      track: 'Repeating current track',
-      context: 'Repeating playlist/album',
-    }
-    // eslint-disable-next-line security/detect-object-injection
-    return {success: true, repeat: state, message: messages[state]}
-  }
-
-  const errorText = await response.text()
-  throw new Error(`Failed to set repeat: ${response.status} - ${errorText}`)
 }
 
 async function setVolume(args: Record<string, unknown>, token: string) {
@@ -1262,7 +1262,7 @@ async function setVolume(args: Record<string, unknown>, token: string) {
   )
 
   if (response.status === 204 || response.ok) {
-    return {success: true, volume_percent: volumePercent, message: `Volume set to ${volumePercent}%`}
+    return {message: `Volume set to ${volumePercent}%`, success: true, volume_percent: volumePercent}
   }
 
   const errorText = await response.text()
@@ -1282,22 +1282,22 @@ async function transferPlayback(args: Record<string, unknown>, token: string) {
   const response = await rateLimitedSpotifyCall(
     () =>
       fetch('https://api.spotify.com/v1/me/player', {
+        body: JSON.stringify({
+          device_ids: [deviceId],
+          play,
+        }),
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         method: 'PUT',
-        body: JSON.stringify({
-          device_ids: [deviceId],
-          play,
-        }),
       }),
     undefined,
     'player:transfer'
   )
 
   if (response.status === 204 || response.ok) {
-    return {success: true, device_id: deviceId, message: `Playback transferred to device`}
+    return {device_id: deviceId, message: `Playback transferred to device`, success: true}
   }
 
   const errorText = await response.text()

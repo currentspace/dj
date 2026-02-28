@@ -36,16 +36,6 @@ const CATEGORY_KEYWORDS: Record<string, string[]> = {
     "pull",
     "worktree",
   ],
-  "testing": [
-    "test",
-    "mock",
-    "assert",
-    "coverage",
-    "fixture",
-    "vitest",
-    "jest",
-    "expect",
-  ],
   "security": [
     "auth",
     "security",
@@ -55,6 +45,16 @@ const CATEGORY_KEYWORDS: Record<string, string[]> = {
     "injection",
     "xss",
     "csrf",
+  ],
+  "testing": [
+    "test",
+    "mock",
+    "assert",
+    "coverage",
+    "fixture",
+    "vitest",
+    "jest",
+    "expect",
   ],
 };
 
@@ -67,6 +67,26 @@ const DIRECTION_PATTERNS = [
   /from\s+now\s+on\s+/i,
   /going\s+forward\s+/i,
 ];
+
+/**
+ * Detect the category of guidance based on keywords.
+ */
+export function detectCategory(prompt: string): string | undefined {
+  const normalizedPrompt = prompt.toLowerCase();
+
+  let bestCategory: string | undefined;
+  let bestScore = 0;
+
+  for (const [category, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
+    const score = keywords.filter((kw) => normalizedPrompt.includes(kw)).length;
+    if (score > bestScore) {
+      bestScore = score;
+      bestCategory = category;
+    }
+  }
+
+  return bestCategory;
+}
 
 /**
  * Detect the type of guidance in a user prompt.
@@ -110,24 +130,4 @@ export function detectGuidanceType(
   }
 
   return "unknown";
-}
-
-/**
- * Detect the category of guidance based on keywords.
- */
-export function detectCategory(prompt: string): string | undefined {
-  const normalizedPrompt = prompt.toLowerCase();
-
-  let bestCategory: string | undefined;
-  let bestScore = 0;
-
-  for (const [category, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
-    const score = keywords.filter((kw) => normalizedPrompt.includes(kw)).length;
-    if (score > bestScore) {
-      bestScore = score;
-      bestCategory = category;
-    }
-  }
-
-  return bestCategory;
 }

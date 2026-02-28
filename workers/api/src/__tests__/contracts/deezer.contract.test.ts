@@ -10,22 +10,21 @@
  * Run strategy: Nightly in CI (not on every commit) to detect API changes
  */
 
-import { describe, it, expect, beforeAll } from 'vitest'
 import { DeezerTrackSchema } from '@dj/shared-types'
+import { beforeAll, describe, expect, it } from 'vitest'
+
 // Import setup to restore native fetch for contract tests
 import './setup'
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type ApiResponse = Record<string, any>
+import { asRecord } from './helpers'
 
 const DEEZER_BASE_URL = 'https://api.deezer.com'
 
 // Test ISRCs - well-known tracks that should be stable in Deezer's catalog
 const TEST_ISRCS = {
-  bohemianRhapsody: 'GBUM71029604', // Queen - Bohemian Rhapsody
   billie_jean: 'USRC18100050', // Michael Jackson - Billie Jean
-  stairway: 'USLED7100321', // Led Zeppelin - Stairway to Heaven
+  bohemianRhapsody: 'GBUM71029604', // Queen - Bohemian Rhapsody
   invalid: 'INVALID1234567', // Non-existent ISRC for error testing
+  stairway: 'USLED7100321', // Led Zeppelin - Stairway to Heaven
 } as const
 
 // Rate limiting helper - adds delay between tests
@@ -46,7 +45,7 @@ describe('Deezer API Contracts', () => {
       expect(response.ok).toBe(true)
       expect(response.status).toBe(200)
 
-      const data = await response.json() as ApiResponse
+      const data = asRecord(await response.json())
 
       // Check if this is an error response (ISRC not found in Deezer)
       if (data.error) {
@@ -103,17 +102,19 @@ describe('Deezer API Contracts', () => {
 
       // Validate nested objects if present
       if (data.artist) {
-        expect(data.artist).toHaveProperty('id')
-        expect(data.artist).toHaveProperty('name')
-        expect(typeof data.artist.id).toBe('number')
-        expect(typeof data.artist.name).toBe('string')
+        const artist = asRecord(data.artist)
+        expect(artist).toHaveProperty('id')
+        expect(artist).toHaveProperty('name')
+        expect(typeof artist.id).toBe('number')
+        expect(typeof artist.name).toBe('string')
       }
 
       if (data.album) {
-        expect(data.album).toHaveProperty('id')
-        expect(data.album).toHaveProperty('title')
-        expect(typeof data.album.id).toBe('number')
-        expect(typeof data.album.title).toBe('string')
+        const album = asRecord(data.album)
+        expect(album).toHaveProperty('id')
+        expect(album).toHaveProperty('title')
+        expect(typeof album.id).toBe('number')
+        expect(typeof album.title).toBe('string')
       }
 
       // Respect rate limits
@@ -126,7 +127,7 @@ describe('Deezer API Contracts', () => {
       expect(response.ok).toBe(true)
       expect(response.status).toBe(200)
 
-      const data = await response.json() as ApiResponse
+      const data = asRecord(await response.json())
 
       // Check if this is an error response (ISRC not found in Deezer)
       if (data.error) {
@@ -168,7 +169,7 @@ describe('Deezer API Contracts', () => {
       expect(response.ok).toBe(true)
       expect(response.status).toBe(200)
 
-      const data = await response.json() as ApiResponse
+      const data = asRecord(await response.json())
 
       // Check if this is an error response (ISRC not found in Deezer)
       if (data.error) {
@@ -202,7 +203,7 @@ describe('Deezer API Contracts', () => {
     it('should match DeezerTrackSchema when querying by track ID', async () => {
       // First, get a track by ISRC to obtain its Deezer ID
       const isrcResponse = await fetch(`${DEEZER_BASE_URL}/track/isrc:${TEST_ISRCS.bohemianRhapsody}`)
-      const isrcData = await isrcResponse.json() as ApiResponse
+      const isrcData = asRecord(await isrcResponse.json())
       const trackId = isrcData.id
 
       expect(trackId).toBeDefined()
@@ -216,7 +217,7 @@ describe('Deezer API Contracts', () => {
       expect(response.ok).toBe(true)
       expect(response.status).toBe(200)
 
-      const data = await response.json() as ApiResponse
+      const data = asRecord(await response.json())
 
       // Validate against our Zod schema
       const result = DeezerTrackSchema.safeParse(data)
@@ -248,16 +249,17 @@ describe('Deezer API Contracts', () => {
       // Deezer returns 200 with error object for not found
       expect(response.status).toBe(200)
 
-      const data = await response.json() as ApiResponse
+      const data = asRecord(await response.json())
 
       // Validate error response structure
       expect(data).toHaveProperty('error')
-      expect(data.error).toHaveProperty('type')
-      expect(data.error).toHaveProperty('message')
-      expect(data.error).toHaveProperty('code')
+      const error = asRecord(data.error)
+      expect(error).toHaveProperty('type')
+      expect(error).toHaveProperty('message')
+      expect(error).toHaveProperty('code')
 
       // Common Deezer error codes: 800 (no data found), 300 (invalid parameters)
-      expect([300, 800]).toContain(data.error.code)
+      expect([300, 800]).toContain(error.code)
 
       await delay(500)
     })
@@ -267,13 +269,14 @@ describe('Deezer API Contracts', () => {
 
       expect(response.status).toBe(200)
 
-      const data = await response.json() as ApiResponse
+      const data = asRecord(await response.json())
 
       // Validate error response structure
       expect(data).toHaveProperty('error')
-      expect(data.error).toHaveProperty('type')
-      expect(data.error).toHaveProperty('message')
-      expect(data.error).toHaveProperty('code')
+      const error = asRecord(data.error)
+      expect(error).toHaveProperty('type')
+      expect(error).toHaveProperty('message')
+      expect(error).toHaveProperty('code')
 
       await delay(500)
     })
@@ -282,14 +285,14 @@ describe('Deezer API Contracts', () => {
   describe('BPM Validation', () => {
     it('should have BPM in valid range when present', async () => {
       const testCases = [
-        { name: 'Bohemian Rhapsody', isrc: TEST_ISRCS.bohemianRhapsody },
-        { name: 'Billie Jean', isrc: TEST_ISRCS.billie_jean },
-        { name: 'Stairway to Heaven', isrc: TEST_ISRCS.stairway },
+        { isrc: TEST_ISRCS.bohemianRhapsody, name: 'Bohemian Rhapsody' },
+        { isrc: TEST_ISRCS.billie_jean, name: 'Billie Jean' },
+        { isrc: TEST_ISRCS.stairway, name: 'Stairway to Heaven' },
       ]
 
       for (const testCase of testCases) {
         const response = await fetch(`${DEEZER_BASE_URL}/track/isrc:${testCase.isrc}`)
-        const data = await response.json() as ApiResponse
+        const data = asRecord(await response.json())
 
         // Skip error responses (ISRC not found)
         if (data.error) {
@@ -320,7 +323,7 @@ describe('Deezer API Contracts', () => {
       // This test ensures our schema accepts null values
 
       const response = await fetch(`${DEEZER_BASE_URL}/track/isrc:${TEST_ISRCS.bohemianRhapsody}`)
-      const data = await response.json() as ApiResponse
+      const data = asRecord(await response.json())
 
       // BPM can be null - verify our schema handles it
       const result = DeezerTrackSchema.safeParse({
@@ -337,7 +340,7 @@ describe('Deezer API Contracts', () => {
   describe('Enrichment Fields', () => {
     it('should include all enrichment fields used by AudioEnrichmentService', async () => {
       const response = await fetch(`${DEEZER_BASE_URL}/track/isrc:${TEST_ISRCS.bohemianRhapsody}`)
-      const data = await response.json() as ApiResponse
+      const data = asRecord(await response.json())
 
       // Verify all fields used by AudioEnrichmentService exist
       const requiredFields = ['bpm', 'rank', 'gain', 'release_date']
@@ -370,12 +373,12 @@ describe('Deezer API Contracts', () => {
 
     it('should include ISRC when available', async () => {
       const response = await fetch(`${DEEZER_BASE_URL}/track/isrc:${TEST_ISRCS.bohemianRhapsody}`)
-      const data = await response.json() as ApiResponse
+      const data = asRecord(await response.json())
 
       // Verify ISRC is returned (should match what we queried)
       if (data.isrc) {
         expect(typeof data.isrc).toBe('string')
-        expect(data.isrc.length).toBeGreaterThan(0)
+        expect(String(data.isrc).length).toBeGreaterThan(0)
       }
 
       await delay(500)
@@ -383,7 +386,7 @@ describe('Deezer API Contracts', () => {
 
     it('should include rank (popularity) field', async () => {
       const response = await fetch(`${DEEZER_BASE_URL}/track/isrc:${TEST_ISRCS.bohemianRhapsody}`)
-      const data = await response.json() as ApiResponse
+      const data = asRecord(await response.json())
 
       expect(data).toHaveProperty('rank')
 
@@ -412,7 +415,7 @@ describe('Deezer API Contracts', () => {
 
       for (const isrc of isrcs) {
         const response = await fetch(`${DEEZER_BASE_URL}/track/isrc:${isrc}`)
-        const data = await response.json() as ApiResponse
+        const data = asRecord(await response.json())
 
         // Skip error responses (ISRCs not found in Deezer)
         if (!data.error) {

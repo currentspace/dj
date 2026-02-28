@@ -577,14 +577,6 @@ export const steerVibe = createRoute({
       },
       description: 'No active session',
     },
-    501: {
-      content: {
-        'application/json': {
-          schema: ErrorResponseSchema,
-        },
-      },
-      description: 'Not implemented yet (placeholder for Agent 7)',
-    },
     500: {
       content: {
         'application/json': {
@@ -592,6 +584,14 @@ export const steerVibe = createRoute({
         },
       },
       description: 'Internal server error',
+    },
+    501: {
+      content: {
+        'application/json': {
+          schema: ErrorResponseSchema,
+        },
+      },
+      description: 'Not implemented yet (placeholder for Agent 7)',
     },
   },
   tags: ['Mix'],

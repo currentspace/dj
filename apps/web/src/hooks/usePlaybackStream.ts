@@ -43,6 +43,7 @@ export function usePlaybackStream(
   const trackChangeUnsubRef = useRef<(() => void) | null>(null)
 
   // Keep callback ref updated
+  /* eslint-disable react-hooks/refs -- intentional: managing SSE connection, subscription lifecycle, and callback refs in hook body per React 19 project guidelines (no useEffect) */
   onTrackChangeRef.current = onTrackChange
   tokenRef.current = token
 
@@ -77,6 +78,7 @@ export function usePlaybackStream(
     hasConnectedRef.current = false
     storeDisconnect()
   }
+  /* eslint-enable react-hooks/refs */
 
   // Manual connect
   const connect = useCallback(() => {

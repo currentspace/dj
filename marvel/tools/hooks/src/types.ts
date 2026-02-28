@@ -5,145 +5,174 @@
  * MARVEL Hooks Type Definitions
  */
 
-// Pack metadata from pack.json
-export interface PackMetadata {
-  name: string;
-  version: string;
-  owner: string;
-  description: string;
-  categories: string[];
-  applies_to: {
-    extensions: string[];
-  };
-  depends_on?: string[];
-  sensitive_paths?: string[];
-  excludes_paths?: string[];
-  references?: {
-    code_paths?: string[];
-    doc_links?: string[];
-  };
+export interface ActivityEvent {
+  data: Record<string, unknown>;
+  timestamp: string;
+  type: ActivityEventType;
 }
 
-// Lesson from lessons.jsonl
-export interface Lesson {
-  timestamp: string;
-  run_id?: string;
-  category: string;
-  title: string;
-  description: string;
+export type ActivityEventType =
+  | "capture"
+  | "compaction"
+  | "injection"
+  | "notification"
+  | "subagent_start"
+  | "subagent_stop"
+  | "task_completed"
+  | "teammate_idle"
+  | "tool_call"
+  | "tool_failure";
+
+// Enhanced lesson with source tracking
+export interface EnhancedLesson {
   actionable: string;
-  context?: string;
-  // Utility tracking (populated by /marvel-health)
-  utility_score?: number;
-  injection_count?: number;
-  correction_count?: number;
-  last_injected?: string;
-}
-
-// Injection record for outcome tracking
-export interface InjectionRecord {
+  category: string;
+  confidence: number;
+  description: string;
+  examples?: {
+    after?: string;
+    before?: string;
+    file?: string;
+  };
+  id: string;
+  recurrence: number;
+  runId?: string;
+  source: {
+    reference?: string;
+    type: "ci_failure" | "guardrail_violation" | "production_error" | "review_comment" | "user_guidance" | "verification_failure";
+    userWords?: string;
+  };
   timestamp: string;
-  file: string;
-  lessons_injected: string[];
-  packs_injected: string[];
+  title: string;
 }
 
-// Per-lesson outcome stats from a session
-export interface LessonOutcome {
-  lesson_title: string;
-  pack: string;
-  injected: number;
-  followed_by_correction: number;
-}
-
-// Loaded pack with metadata and lessons
-export interface LoadedPack {
-  metadata: PackMetadata;
-  lessons: Lesson[];
-  guardrailsPath: string;
-  loadedAt: number;
+// External rule format for allowlist/denylist
+export interface ExternalRule {
+  id: string;
+  pattern: string;
+  reason: string;
+  type: "contains" | "prefix" | "regex";
 }
 
 // Guidance captured from user prompts
 export interface Guidance {
-  id: string;
-  timestamp: string;
-  run_id: string;
-  type: GuidanceType;
-  content: string;
   category?: string;
   confidence: number;
-  // Before/after context: what was happening when the correction was made
-  preceding_tool?: string;
+  content: string;
+  id: string;
   preceding_file?: string;
   preceding_injections?: string[];
+  // Before/after context: what was happening when the correction was made
+  preceding_tool?: string;
+  run_id: string;
+  timestamp: string;
+  type: GuidanceType;
 }
 
 export type GuidanceType =
+  | "approval"
+  | "clarification"
   | "correction"
   | "direction"
-  | "task_start"
-  | "task_end"
-  | "clarification"
-  | "approval"
   | "rejection"
+  | "task_end"
+  | "task_start"
   | "unknown";
 
-// Run state for tracking session activity
-export interface RunState {
-  runId: string;
-  startedAt: string;
-  endedAt?: string;
-  endReason?: string;
-  spec?: string;
-  activePacks: string[];
-  packVersions?: Record<string, string>;
-  toolCallCount: number;
-  correctionCount: number;
-  pendingLessons?: number;
-  lastReflectionAt?: string;
-  currentTask?: {
-    description: string;
-    startedAt: string;
-    filesInvolved: string[];
-  };
-  recentActivity: ActivityEvent[];
-  packInjectionCounts?: Record<string, number>;
-  lastInjection?: {
-    file: string;
-    packs: string[];
-    relevanceScores: RelevanceScore[];
-    lessons: string[];
-  };
+// Injection record for outcome tracking
+export interface InjectionRecord {
+  file: string;
+  lessons_injected: string[];
+  packs_injected: string[];
+  timestamp: string;
 }
 
-export type ActivityEventType =
-  | "injection"
-  | "capture"
-  | "tool_call"
-  | "tool_failure"
-  | "compaction"
-  | "subagent_start"
-  | "subagent_stop"
-  | "notification"
-  | "teammate_idle"
-  | "task_completed";
-
-export interface ActivityEvent {
-  type: ActivityEventType;
+// Lesson from lessons.jsonl
+export interface Lesson {
+  actionable: string;
+  category: string;
+  context?: string;
+  correction_count?: number;
+  description: string;
+  injection_count?: number;
+  last_injected?: string;
+  run_id?: string;
   timestamp: string;
-  data: Record<string, unknown>;
+  title: string;
+  // Utility tracking (populated by /marvel-health)
+  utility_score?: number;
 }
 
-// Tool call record for trace
-export interface ToolCallRecord {
-  sequence: number;
-  timestamp: string;
-  tool: string;
-  input_summary: string;
-  output_summary?: string;
-  success: boolean;
-  duration_ms?: number;
+export interface LessonCandidate {
+  confidence: number;
+  guidance: Guidance;
+  suggestedLesson: Lesson;
+  suggestedPack: string;
+}
+
+// Per-lesson outcome stats from a session
+export interface LessonOutcome {
+  followed_by_correction: number;
+  injected: number;
+  lesson_title: string;
+  pack: string;
+}
+
+// Loaded pack with metadata and lessons
+export interface LoadedPack {
+  guardrailsPath: string;
+  lessons: Lesson[];
+  loadedAt: number;
+  metadata: PackMetadata;
+}
+
+// Pack metadata from pack.json
+export interface PackMetadata {
+  applies_to: {
+    extensions: string[];
+  };
+  categories: string[];
+  depends_on?: string[];
+  description: string;
+  excludes_paths?: string[];
+  name: string;
+  owner: string;
+  references?: {
+    code_paths?: string[];
+    doc_links?: string[];
+  };
+  sensitive_paths?: string[];
+  version: string;
+}
+
+
+// Pack relevance scoring result (detailed version for injection tracking)
+export interface PackRelevance {
+  packName: string;
+  reasons: string[];
+  score: number;
+}
+
+// Potential lesson extracted from guidance for reflection
+export interface PotentialLesson {
+  category: string;
+  confidence: number;
+  corrections: Guidance[];
+  suggestedTitle: string;
+}
+
+export interface PromotionCandidate {
+  firstSeen: string;
+  frequency: number;
+  lastSeen: string;
+  rule: ExternalRule;
+  source: "learned" | "suggestion";
+}
+
+
+export interface PromotionReport {
+  domain: { candidates: LessonCandidate[]; totalGuidance: number };
+  security: { candidates: PromotionCandidate[]; duplicates: number; unsafe: number };
 }
 
 // Relevance scoring result
@@ -153,97 +182,68 @@ export interface RelevanceScore {
   signals: string[];
 }
 
-
-// External rule format for allowlist/denylist
-export interface ExternalRule {
-  id: string;
-  type: "regex" | "prefix" | "contains";
-  pattern: string;
-  reason: string;
-}
-
 // Rule file structure
 export interface RuleFile {
   rules: ExternalRule[];
 }
 
+// Run state for tracking session activity
+export interface RunState {
+  activePacks: string[];
+  correctionCount: number;
+  currentTask?: {
+    description: string;
+    filesInvolved: string[];
+    startedAt: string;
+  };
+  endedAt?: string;
+  endReason?: string;
+  lastInjection?: {
+    file: string;
+    lessons: string[];
+    packs: string[];
+    relevanceScores: RelevanceScore[];
+  };
+  lastReflectionAt?: string;
+  packInjectionCounts?: Record<string, number>;
+  packVersions?: Record<string, string>;
+  pendingLessons?: number;
+  recentActivity: ActivityEvent[];
+  runId: string;
+  spec?: string;
+  startedAt: string;
+  toolCallCount: number;
+}
+
+// Promotion pipeline types
+
 // LLM response with rule suggestions
 export interface SecurityEvaluationResponse {
-  decision: "allow" | "deny" | "ask";
+  decision: "allow" | "ask" | "deny";
   reason: string;
-  source: "allowlist" | "denylist" | "learned" | "llm" | "error";
+  source: "allowlist" | "denylist" | "error" | "learned" | "llm";
   suggestions?: {
-    allow?: Array<{ pattern: string; reason: string }>;
-    deny?: Array<{ pattern: string; reason: string }>;
+    allow?: { pattern: string; reason: string }[];
+    deny?: { pattern: string; reason: string }[];
   };
-}
-
-
-// Pack relevance scoring result (detailed version for injection tracking)
-export interface PackRelevance {
-  packName: string;
-  score: number;
-  reasons: string[];
-}
-
-// Potential lesson extracted from guidance for reflection
-export interface PotentialLesson {
-  category: string;
-  corrections: Guidance[];
-  confidence: number;
-  suggestedTitle: string;
 }
 
 // Session statistics for reflection
 export interface SessionStats {
   correctionCount: number;
-  toolCallCount: number;
-  filesInvolved: string[];
   durationMinutes: number;
+  filesInvolved: string[];
   tasksCompleted: number;
+  toolCallCount: number;
 }
 
-// Enhanced lesson with source tracking
-export interface EnhancedLesson {
-  id: string;
+// Tool call record for trace
+export interface ToolCallRecord {
+  duration_ms?: number;
+  input_summary: string;
+  output_summary?: string;
+  sequence: number;
+  success: boolean;
   timestamp: string;
-  runId?: string;
-  category: string;
-  confidence: number;
-  recurrence: number;
-  title: string;
-  description: string;
-  actionable: string;
-  source: {
-    type: "user_guidance" | "guardrail_violation" | "verification_failure" | "ci_failure" | "review_comment" | "production_error";
-    reference?: string;
-    userWords?: string;
-  };
-  examples?: {
-    before?: string;
-    after?: string;
-    file?: string;
-  };
-}
-
-// Promotion pipeline types
-
-export interface PromotionCandidate {
-  source: "learned" | "suggestion";
-  rule: ExternalRule;
-  frequency: number;
-  firstSeen: string;
-  lastSeen: string;
-}
-
-export interface LessonCandidate {
-  guidance: Guidance;
-  suggestedPack: string;
-  suggestedLesson: Lesson;
-  confidence: number;
-}
-
-export interface PromotionReport {
-  security: { candidates: PromotionCandidate[]; duplicates: number; unsafe: number };
-  domain: { candidates: LessonCandidate[]; totalGuidance: number };
+  tool: string;
 }

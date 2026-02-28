@@ -19,6 +19,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
+
 import type { ClaudeSettings, CommandHookHandler, MatcherGroup } from "./settings-types.js";
 
 // Use $CLAUDE_PROJECT_DIR for working directory independence
@@ -29,8 +30,8 @@ const HOOK_SCRIPT = `${PROJECT_DIR}/marvel/tools/hooks/scripts/marvel-hook.sh`;
 
 function commandHook(hookType: string, timeout?: number): CommandHookHandler {
   const hook: CommandHookHandler = {
-    type: "command",
     command: `${HOOK_SCRIPT} ${hookType}`,
+    type: "command",
   };
   if (timeout !== undefined) {
     hook.timeout = timeout;
@@ -39,7 +40,7 @@ function commandHook(hookType: string, timeout?: number): CommandHookHandler {
 }
 
 function matcherGroup(hooks: CommandHookHandler[], matcher?: string): MatcherGroup {
-  return matcher ? { matcher, hooks } : { hooks };
+  return matcher ? { hooks, matcher } : { hooks };
 }
 
 /**
@@ -53,22 +54,17 @@ function matcherGroup(hooks: CommandHookHandler[], matcher?: string): MatcherGro
  */
 export const settings: ClaudeSettings = {
   hooks: {
-    // Starts daemon, initializes session
-    SessionStart: [
-      matcherGroup([commandHook("session-start")]),
+    // Track notifications
+    Notification: [
+      matcherGroup([commandHook("notification")]),
     ],
 
-    // Inject lessons before file operations; security gate for Bash
-    PreToolUse: [
+    // Security gate for permission requests
+    PermissionRequest: [
       matcherGroup(
-        [commandHook("pre-tool-use", 90)],
-        "Bash|Edit|Write|Read"
+        [commandHook("permission-request", 90)],
+        "Bash"
       ),
-    ],
-
-    // Capture corrections and handle "marvel status"
-    UserPromptSubmit: [
-      matcherGroup([commandHook("user-prompt-submit")]),
     ],
 
     // Record tool calls to trace
@@ -87,40 +83,40 @@ export const settings: ClaudeSettings = {
       ),
     ],
 
-    // Security gate for permission requests
-    PermissionRequest: [
-      matcherGroup(
-        [commandHook("permission-request", 90)],
-        "Bash"
-      ),
-    ],
-
     // Snapshot state before context compaction
     PreCompact: [
       matcherGroup([commandHook("pre-compact")]),
+    ],
+
+    // Inject lessons before file operations; security gate for Bash
+    PreToolUse: [
+      matcherGroup(
+        [commandHook("pre-tool-use", 90)],
+        "Bash|Edit|Write|Read"
+      ),
+    ],
+
+    // Stop daemon on session end
+    SessionEnd: [
+      matcherGroup([commandHook("session-end")]),
+    ],
+
+    // Starts daemon, initializes session
+    SessionStart: [
+      matcherGroup([commandHook("session-start")]),
     ],
 
     // Reflection at end of turn
     Stop: [
       matcherGroup([commandHook("stop")]),
     ],
-
     // Track subagent lifecycle
     SubagentStart: [
       matcherGroup([commandHook("subagent-start")]),
     ],
+
     SubagentStop: [
       matcherGroup([commandHook("subagent-stop")]),
-    ],
-
-    // Track notifications
-    Notification: [
-      matcherGroup([commandHook("notification")]),
-    ],
-
-    // Track teammate idle events
-    TeammateIdle: [
-      matcherGroup([commandHook("teammate-idle")]),
     ],
 
     // Track task completions
@@ -128,14 +124,19 @@ export const settings: ClaudeSettings = {
       matcherGroup([commandHook("task-completed")]),
     ],
 
-    // Stop daemon on session end
-    SessionEnd: [
-      matcherGroup([commandHook("session-end")]),
+    // Track teammate idle events
+    TeammateIdle: [
+      matcherGroup([commandHook("teammate-idle")]),
+    ],
+
+    // Capture corrections and handle "marvel status"
+    UserPromptSubmit: [
+      matcherGroup([commandHook("user-prompt-submit")]),
     ],
   },
 };
 
-function findProjectRoot(startDir: string): string | null {
+function findProjectRoot(startDir: string): null | string {
   let current = startDir;
   const root = path.parse(current).root;
 

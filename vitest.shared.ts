@@ -49,13 +49,8 @@ export const sharedConfig: UserConfig['test'] = {
   // Test isolation
   isolate: true,
 
-  // Pool options
+  // Pool configuration (top-level in Vitest 4)
   pool: 'threads',
-  poolOptions: {
-    threads: {
-      singleThread: false,
-    },
-  },
 
   // Disable watch mode by default (CI friendly)
   watch: false,

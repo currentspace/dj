@@ -6,9 +6,11 @@
  */
 
 import type { ZodSchema } from 'zod'
-import { getCachedResponse, cacheResponse } from './setup'
+
 import { config } from 'dotenv'
 import { resolve } from 'path'
+
+import { cacheResponse, getCachedResponse } from './setup'
 
 // Load environment variables from .dev.vars (Cloudflare Workers format)
 config({ path: resolve(__dirname, '../../../../.dev.vars') })
@@ -16,10 +18,21 @@ config({ path: resolve(__dirname, '../../../../.dev.vars') })
 config({ path: resolve(__dirname, '../../../../../.env') })
 
 /**
+ * Type guard to narrow `unknown` from response.json() to Record<string, unknown>.
+ * Use this instead of `as` assertions to satisfy the no-assertion lint rule.
+ */
+export function asRecord(data: unknown): Record<string, unknown> {
+  if (data !== null && typeof data === 'object' && !Array.isArray(data)) {
+    return data as Record<string, unknown>
+  }
+  throw new Error(`Expected object, got ${typeof data}`)
+}
+
+/**
  * Cached Spotify access token (to avoid fetching on every test)
  */
-let cachedSpotifyToken: string | null = null
-let tokenExpiresAt: number = 0
+let cachedSpotifyToken: null | string = null
+let tokenExpiresAt = 0
 
 /**
  * Fetch Spotify access token using Client Credentials flow
@@ -29,7 +42,7 @@ let tokenExpiresAt: number = 0
  *
  * @returns Promise<string | null> - Access token or null if credentials missing
  */
-export async function getSpotifyAccessToken(): Promise<string | null> {
+export async function getSpotifyAccessToken(): Promise<null | string> {
   // Return cached token if still valid (with 60s buffer)
   if (cachedSpotifyToken && Date.now() < tokenExpiresAt - 60000) {
     return cachedSpotifyToken
@@ -45,15 +58,15 @@ export async function getSpotifyAccessToken(): Promise<string | null> {
 
   try {
     const response = await fetch('https://accounts.spotify.com/api/token', {
-      method: 'POST',
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        grant_type: 'client_credentials',
+      }),
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
-      body: new URLSearchParams({
-        grant_type: 'client_credentials',
-        client_id: clientId,
-        client_secret: clientSecret,
-      }),
+      method: 'POST',
     })
 
     if (!response.ok) {
@@ -61,9 +74,10 @@ export async function getSpotifyAccessToken(): Promise<string | null> {
       return null
     }
 
-    const data = await response.json() as { access_token: string; expires_in: number }
-    cachedSpotifyToken = data.access_token
-    tokenExpiresAt = Date.now() + (data.expires_in * 1000)
+    const raw: unknown = await response.json()
+    const data = asRecord(raw)
+    cachedSpotifyToken = String(data.access_token)
+    tokenExpiresAt = Date.now() + (Number(data.expires_in) * 1000)
 
     console.log('✅ Spotify access token obtained (expires in 1 hour)')
     return cachedSpotifyToken
@@ -79,174 +93,32 @@ export async function getSpotifyAccessToken(): Promise<string | null> {
 const lastRequestTime = new Map<string, number>()
 
 /**
- * Rate-limited fetch wrapper
+ * Assert schema matches with helpful error messages
  *
- * Ensures we respect API rate limits by enforcing a minimum delay
- * between requests to the same API.
+ * Convenience function that validates schema and throws with detailed
+ * error messages if validation fails.
  *
- * @param url - URL to fetch
- * @param delay - Minimum milliseconds between requests
- * @param options - Fetch options
- * @returns Promise<Response>
- *
- * @example
- * ```typescript
- * const response = await rateLimitedFetch(
- *   'https://api.spotify.com/v1/tracks/123',
- *   1000, // 1 second between Spotify requests
- *   { headers: { Authorization: `Bearer ${token}` } }
- * )
- * ```
- */
-export async function rateLimitedFetch(
-  url: string,
-  delay: number,
-  options?: RequestInit
-): Promise<Response> {
-  // Extract domain for rate limiting key
-  const domain = new URL(url).hostname
-
-  // Check last request time for this domain
-  const lastTime = lastRequestTime.get(domain) || 0
-  const timeSinceLastRequest = Date.now() - lastTime
-  const timeToWait = Math.max(0, delay - timeSinceLastRequest)
-
-  // Wait if needed
-  if (timeToWait > 0) {
-    await new Promise((resolve) => setTimeout(resolve, timeToWait))
-  }
-
-  // Update last request time
-  lastRequestTime.set(domain, Date.now())
-
-  // Make request
-  return fetch(url, options)
-}
-
-/**
- * Get test credentials from environment
- *
- * Returns credentials needed for contract tests. If credentials are missing,
- * tests should use `skipIfMissingCredentials()` to skip gracefully.
- *
- * @returns Object with API credentials
- *
- * @example
- * ```typescript
- * const { spotifyToken, lastfmKey } = getTestCredentials()
- * if (!spotifyToken) {
- *   skipIfMissingCredentials('SPOTIFY_ACCESS_TOKEN')
- *   return
- * }
- * ```
- */
-export function getTestCredentials() {
-  return {
-    spotifyToken: process.env.SPOTIFY_ACCESS_TOKEN,
-    lastfmKey: process.env.LASTFM_API_KEY,
-  }
-}
-
-/**
- * Skip test if required credentials are missing
- *
- * Call this at the beginning of a test to skip if API credentials
- * are not configured. This allows contract tests to pass in CI
- * without requiring all API credentials.
- *
- * @param envVar - Environment variable name
- *
- * @example
- * ```typescript
- * test('Spotify API contract', () => {
- *   skipIfMissingCredentials('SPOTIFY_ACCESS_TOKEN')
- *
- *   // Test code here...
- * })
- * ```
- */
-export function skipIfMissingCredentials(envVar: string): void {
-  if (!process.env[envVar]) {
-    // Note: Use `it.skipIf(!process.env[envVar])` at test definition instead
-    // This function only logs a warning - actual skip must be handled by test runner
-    console.warn(`⏭️  Skipping test: ${envVar} not configured`)
-    throw new Error(`Test skipped: ${envVar} not configured`)
-  }
-}
-
-/**
- * Validate schema against data with helpful error messages
- *
- * This is a wrapper around Zod's safeParse that provides better error
- * messages for contract test failures. It shows:
- * - Which fields failed validation
- * - Expected vs actual types
- * - Sample of actual data
- *
- * @param schema - Zod schema to validate against
+ * @param schema - Zod schema
  * @param data - Data to validate
- * @returns Validation result with success flag and errors
+ * @param schemaName - Name of schema for error messages
  *
  * @example
  * ```typescript
- * const result = validateSchema(SpotifyTrackSchema, trackData)
- *
- * if (!result.success) {
- *   console.error('Schema validation failed:')
- *   result.errors.forEach(err => console.error(`  - ${err}`))
- * }
- *
- * expect(result.success).toBe(true)
+ * const track = await fetchTrack('123')
+ * assertSchemaMatches(SpotifyTrackSchema, track, 'SpotifyTrackSchema')
+ * // Throws with detailed error if validation fails
  * ```
  */
-export function validateSchema<T>(
+export function assertSchemaMatches<T>(
   schema: ZodSchema<T>,
-  data: unknown
-): {
-  success: boolean
-  data?: T
-  errors: string[]
-  details?: unknown
-} {
-  const result = schema.safeParse(data)
+  data: unknown,
+  schemaName: string
+): asserts data is T {
+  const result = validateSchema(schema, data)
 
-  if (result.success) {
-    return {
-      success: true,
-      data: result.data,
-      errors: [],
-    }
-  }
-
-  // Format errors for better readability
-  const errors: string[] = []
-  const formatted = result.error.format()
-
-  // Helper to flatten Zod error object into readable messages
-  function flattenErrors(obj: unknown, path = ''): void {
-    if (!obj || typeof obj !== 'object') return
-
-    for (const [key, value] of Object.entries(obj)) {
-      if (key === '_errors' && Array.isArray(value) && value.length > 0) {
-        errors.push(`${path}: ${value.join(', ')}`)
-      } else if (typeof value === 'object' && value !== null) {
-        const newPath = path ? `${path}.${key}` : key
-        flattenErrors(value, newPath)
-      }
-    }
-  }
-
-  flattenErrors(formatted)
-
-  // If no formatted errors, show raw error
-  if (errors.length === 0) {
-    errors.push(result.error.message)
-  }
-
-  return {
-    success: false,
-    errors,
-    details: formatted,
+  if (!result.success) {
+    logSchemaFailure(schemaName, result.errors, data)
+    throw new Error(`${schemaName} validation failed`)
   }
 }
 
@@ -311,6 +183,30 @@ export function formatValidationErrors(errors: string[]): string {
 }
 
 /**
+ * Get test credentials from environment
+ *
+ * Returns credentials needed for contract tests. If credentials are missing,
+ * tests should use `skipIfMissingCredentials()` to skip gracefully.
+ *
+ * @returns Object with API credentials
+ *
+ * @example
+ * ```typescript
+ * const { spotifyToken, lastfmKey } = getTestCredentials()
+ * if (!spotifyToken) {
+ *   skipIfMissingCredentials('SPOTIFY_ACCESS_TOKEN')
+ *   return
+ * }
+ * ```
+ */
+export function getTestCredentials() {
+  return {
+    lastfmKey: process.env.LASTFM_API_KEY,
+    spotifyToken: process.env.SPOTIFY_ACCESS_TOKEN,
+  }
+}
+
+/**
  * Log schema validation failure with detailed information
  *
  * @param schemaName - Name of the schema that failed
@@ -335,31 +231,149 @@ export function logSchemaFailure(
 }
 
 /**
- * Assert schema matches with helpful error messages
+ * Rate-limited fetch wrapper
  *
- * Convenience function that validates schema and throws with detailed
- * error messages if validation fails.
+ * Ensures we respect API rate limits by enforcing a minimum delay
+ * between requests to the same API.
  *
- * @param schema - Zod schema
- * @param data - Data to validate
- * @param schemaName - Name of schema for error messages
+ * @param url - URL to fetch
+ * @param delay - Minimum milliseconds between requests
+ * @param options - Fetch options
+ * @returns Promise<Response>
  *
  * @example
  * ```typescript
- * const track = await fetchTrack('123')
- * assertSchemaMatches(SpotifyTrackSchema, track, 'SpotifyTrackSchema')
- * // Throws with detailed error if validation fails
+ * const response = await rateLimitedFetch(
+ *   'https://api.spotify.com/v1/tracks/123',
+ *   1000, // 1 second between Spotify requests
+ *   { headers: { Authorization: `Bearer ${token}` } }
+ * )
  * ```
  */
-export function assertSchemaMatches<T>(
-  schema: ZodSchema<T>,
-  data: unknown,
-  schemaName: string
-): asserts data is T {
-  const result = validateSchema(schema, data)
+export async function rateLimitedFetch(
+  url: string,
+  delay: number,
+  options?: RequestInit
+): Promise<Response> {
+  // Extract domain for rate limiting key
+  const domain = new URL(url).hostname
 
-  if (!result.success) {
-    logSchemaFailure(schemaName, result.errors, data)
-    throw new Error(`${schemaName} validation failed`)
+  // Check last request time for this domain
+  const lastTime = lastRequestTime.get(domain) ?? 0
+  const timeSinceLastRequest = Date.now() - lastTime
+  const timeToWait = Math.max(0, delay - timeSinceLastRequest)
+
+  // Wait if needed
+  if (timeToWait > 0) {
+    await new Promise((resolve) => setTimeout(resolve, timeToWait))
+  }
+
+  // Update last request time
+  lastRequestTime.set(domain, Date.now())
+
+  // Make request
+  return fetch(url, options)
+}
+
+/**
+ * Skip test if required credentials are missing
+ *
+ * Call this at the beginning of a test to skip if API credentials
+ * are not configured. This allows contract tests to pass in CI
+ * without requiring all API credentials.
+ *
+ * @param envVar - Environment variable name
+ *
+ * @example
+ * ```typescript
+ * test('Spotify API contract', () => {
+ *   skipIfMissingCredentials('SPOTIFY_ACCESS_TOKEN')
+ *
+ *   // Test code here...
+ * })
+ * ```
+ */
+export function skipIfMissingCredentials(envVar: string): void {
+  if (!process.env[envVar]) {
+    // Note: Use `it.skipIf(!process.env[envVar])` at test definition instead
+    // This function only logs a warning - actual skip must be handled by test runner
+    console.warn(`⏭️  Skipping test: ${envVar} not configured`)
+    throw new Error(`Test skipped: ${envVar} not configured`)
+  }
+}
+
+/**
+ * Validate schema against data with helpful error messages
+ *
+ * This is a wrapper around Zod's safeParse that provides better error
+ * messages for contract test failures. It shows:
+ * - Which fields failed validation
+ * - Expected vs actual types
+ * - Sample of actual data
+ *
+ * @param schema - Zod schema to validate against
+ * @param data - Data to validate
+ * @returns Validation result with success flag and errors
+ *
+ * @example
+ * ```typescript
+ * const result = validateSchema(SpotifyTrackSchema, trackData)
+ *
+ * if (!result.success) {
+ *   console.error('Schema validation failed:')
+ *   result.errors.forEach(err => console.error(`  - ${err}`))
+ * }
+ *
+ * expect(result.success).toBe(true)
+ * ```
+ */
+export function validateSchema<T>(
+  schema: ZodSchema<T>,
+  data: unknown
+): {
+  data?: T
+  details?: unknown
+  errors: string[]
+  success: boolean
+} {
+  const result = schema.safeParse(data)
+
+  if (result.success) {
+    return {
+      data: result.data,
+      errors: [],
+      success: true,
+    }
+  }
+
+  // Format errors for better readability
+  const errors: string[] = []
+  const formatted = result.error.format()
+
+  // Helper to flatten Zod error object into readable messages
+  function flattenErrors(obj: unknown, path = ''): void {
+    if (!obj || typeof obj !== 'object') return
+
+    for (const [key, value] of Object.entries(obj)) {
+      if (key === '_errors' && Array.isArray(value) && value.length > 0) {
+        errors.push(`${path}: ${value.join(', ')}`)
+      } else if (typeof value === 'object' && value !== null) {
+        const newPath = path ? `${path}.${key}` : key
+        flattenErrors(value, newPath)
+      }
+    }
+  }
+
+  flattenErrors(formatted)
+
+  // If no formatted errors, show raw error
+  if (errors.length === 0) {
+    errors.push(result.error.message)
+  }
+
+  return {
+    details: formatted,
+    errors,
+    success: false,
   }
 }

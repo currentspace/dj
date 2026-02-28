@@ -2,9 +2,9 @@ import type {SpotifyPlaylist} from '@dj/shared-types'
 
 import {useCallback, useRef, useState} from 'react'
 
-import {LoadingSpinner} from '../atoms/LoadingSpinner'
 import {useSpotifyAuth} from '../../hooks/useSpotifyAuth'
 import {usePlaylistStore} from '../../stores'
+import {LoadingSpinner} from '../atoms/LoadingSpinner'
 import '../../styles/user-playlists.css'
 
 interface UserPlaylistsProps {

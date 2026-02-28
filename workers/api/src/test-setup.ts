@@ -55,7 +55,7 @@ global.setTimeout = function (callback: (...args: any[]) => void, ms?: number, .
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 } as any
 
-global.clearTimeout = function (id: number | null | undefined): void {
+global.clearTimeout = function (id: null | number | undefined): void {
   if (id == null) return
   const timeout = timerMap.get(id)
   if (timeout) {

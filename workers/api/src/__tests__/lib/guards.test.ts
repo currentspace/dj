@@ -18,12 +18,12 @@ import {
 
 describe('Type Guards', () => {
   it('createTypeGuard() creates working type predicate', () => {
-    const schema = z.object({ name: z.string(), age: z.number() })
+    const schema = z.object({ age: z.number(), name: z.string() })
     const isValid = createTypeGuard(schema)
 
-    expect(isValid({ name: 'John', age: 30 })).toBe(true)
-    expect(isValid({ name: 'John', age: 'thirty' })).toBe(false)
-    expect(isValid({ name: 123, age: 30 })).toBe(false)
+    expect(isValid({ age: 30, name: 'John' })).toBe(true)
+    expect(isValid({ age: 'thirty', name: 'John' })).toBe(false)
+    expect(isValid({ age: 30, name: 123 })).toBe(false)
     expect(isValid(null)).toBe(false)
   })
 
@@ -39,14 +39,14 @@ describe('Type Guards', () => {
   it('createTypeGuard() handles nested schemas', () => {
     const schema = z.object({
       user: z.object({
-        name: z.string(),
         email: z.string().email(),
+        name: z.string(),
       }),
     })
     const isValid = createTypeGuard(schema)
 
-    expect(isValid({ user: { name: 'John', email: 'john@example.com' } })).toBe(true)
-    expect(isValid({ user: { name: 'John', email: 'invalid' } })).toBe(false)
+    expect(isValid({ user: { email: 'john@example.com', name: 'John' } })).toBe(true)
+    expect(isValid({ user: { email: 'invalid', name: 'John' } })).toBe(false)
   })
 
   it('createTypeGuard() validates optional fields', () => {
@@ -83,8 +83,8 @@ describe('Safe Parsing', () => {
   })
 
   it('formatZodError() formats errors readably', () => {
-    const schema = z.object({ name: z.string(), age: z.number() })
-    const result = schema.safeParse({ name: 123, age: 'old' })
+    const schema = z.object({ age: z.number(), name: z.string() })
+    const result = schema.safeParse({ age: 'old', name: 123 })
 
     if (result.error) {
       const formatted = formatZodError(result.error)
@@ -174,12 +174,12 @@ describe('Parsing Functions', () => {
   it('safeParse() and parse() work with complex schemas', () => {
     const schema = z.object({
       id: z.string().uuid(),
-      items: z.array(z.object({ name: z.string(), count: z.number().positive() })),
+      items: z.array(z.object({ count: z.number().positive(), name: z.string() })),
     })
 
     const validData = {
       id: '550e8400-e29b-41d4-a716-446655440000',
-      items: [{ name: 'item1', count: 5 }],
+      items: [{ count: 5, name: 'item1' }],
     }
 
     const safeResult = safeParse(schema, validData)

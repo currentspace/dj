@@ -31,11 +31,10 @@
 
 import {beforeEach, describe, expect, it} from 'vitest'
 
-import {KNOWN_TEST_TRACKS, measureExecutionTime} from '../helpers/integration-setup'
-import {INTEGRATION_TEST_TIMEOUT, MockKVNamespace} from './setup'
-
 import {AudioEnrichmentService} from '../../services/AudioEnrichmentService'
 import {LastFmService} from '../../services/LastFmService'
+import {KNOWN_TEST_TRACKS, measureExecutionTime} from '../helpers/integration-setup'
+import {INTEGRATION_TEST_TIMEOUT, MockKVNamespace} from './setup'
 
 // Check if Last.fm API key is available
 const hasLastFmKey = !!process.env.LASTFM_API_KEY
@@ -245,9 +244,9 @@ describe('Enrichment Pipeline Integration', () => {
       expect(metadata.avg_popularity).toBeGreaterThan(0)
 
       console.log('✓ Complete analysis workflow:', {
-        metadata,
         deezer: deezerAnalysis,
-        lastfm: lastFmAnalysis || 'skipped',
+        lastfm: lastFmAnalysis ?? 'skipped',
+        metadata,
       })
     },
     INTEGRATION_TEST_TIMEOUT,
@@ -416,7 +415,7 @@ describe('Enrichment Pipeline Integration', () => {
         const signals = signalsWithoutArtist.get(key)
 
         if (signals) {
-          signals.artistInfo = artistInfoMap.get(track.artist.toLowerCase()) || null
+          signals.artistInfo = artistInfoMap.get(track.artist.toLowerCase()) ?? null
 
           // Update cache with artist info
           await lastFmService.updateCachedSignals(key, signals)
@@ -517,9 +516,9 @@ describe('Enrichment Pipeline Integration', () => {
       }
 
       console.log('✓ Cache isolation verified:', {
+        cache_size: mockKv.size(),
         deezer_key: `bpm:${track.id}`,
         lastfm_key: 'lastfm:<hash>',
-        cache_size: mockKv.size(),
       })
     },
     INTEGRATION_TEST_TIMEOUT,
@@ -597,8 +596,8 @@ describe('Enrichment Pipeline Integration', () => {
 
       console.log('✓ Complete pipeline performance:', {
         duration: `${totalDuration}ms`,
-        tracks: tracks.length,
         per_track: `${Math.round(totalDuration / tracks.length)}ms`,
+        tracks: tracks.length,
       })
     },
     INTEGRATION_TEST_TIMEOUT,

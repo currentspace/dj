@@ -9,39 +9,39 @@
  */
 
 export type {
-  // Hook event discriminator
-  HookEvent,
-
   // Base input (common fields: session_id, transcript_path, cwd, permission_mode?)
   BaseHookInput,
+
+  // Hook event discriminator
+  HookEvent,
 
   // Discriminated union of all hook inputs
   HookInput,
 
+  NotificationHookInput,
+  PermissionRequestHookInput,
+  PermissionRequestHookSpecificOutput,
+  PostToolUseFailureHookInput,
+  PostToolUseFailureHookSpecificOutput,
+  PostToolUseHookInput,
+  PostToolUseHookSpecificOutput,
+  PreCompactHookInput,
   // Individual hook input types
   PreToolUseHookInput,
-  PostToolUseHookInput,
-  PostToolUseFailureHookInput,
-  UserPromptSubmitHookInput,
-  SessionStartHookInput,
-  SessionEndHookInput,
-  StopHookInput,
-  PermissionRequestHookInput,
-  PreCompactHookInput,
-  SubagentStartHookInput,
-  SubagentStopHookInput,
-  NotificationHookInput,
-  TeammateIdleHookInput,
-  TaskCompletedHookInput,
-
-  // Sync hook output (the shape we return from handlers)
-  SyncHookJSONOutput,
-
   // Hook-specific output types (nested in hookSpecificOutput)
   PreToolUseHookSpecificOutput,
-  PostToolUseHookSpecificOutput,
-  PostToolUseFailureHookSpecificOutput,
-  UserPromptSubmitHookSpecificOutput,
+  SessionEndHookInput,
+  SessionStartHookInput,
   SessionStartHookSpecificOutput,
-  PermissionRequestHookSpecificOutput,
+  StopHookInput,
+
+  SubagentStartHookInput,
+
+  SubagentStopHookInput,
+  // Sync hook output (the shape we return from handlers)
+  SyncHookJSONOutput,
+  TaskCompletedHookInput,
+  TeammateIdleHookInput,
+  UserPromptSubmitHookInput,
+  UserPromptSubmitHookSpecificOutput,
 } from "@anthropic-ai/claude-agent-sdk";

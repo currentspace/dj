@@ -10,8 +10,8 @@
 
 export interface BuildOrderWarning {
   command: string;
-  suggestion: string;
   message: string;
+  suggestion: string;
 }
 
 /**
@@ -35,10 +35,10 @@ export function checkBuildOrder(command: string): BuildOrderWarning | null {
 
   return {
     command: trimmed,
-    suggestion: "pnpm build:all",
     message:
       "STOP: `pnpm build` only runs the root build — it does NOT compile workspace dependencies. " +
       "Use `pnpm build:all` to build all packages in topological order. " +
       "If you see module resolution errors for workspace packages, this is a build-order problem, not a code bug.",
+    suggestion: "pnpm build:all",
   };
 }

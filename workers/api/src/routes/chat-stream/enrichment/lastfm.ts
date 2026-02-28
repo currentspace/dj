@@ -2,11 +2,12 @@ import type {SpotifyTrackFull} from '@dj/shared-types'
 
 import type {Env} from '../../../index'
 import type {ProgressNarrator} from '../../../lib/progress-narrator'
+import type {SSEWriter} from '../streaming/sse-writer'
+
 import {LastFmService} from '../../../services/LastFmService'
 import {getChildLogger, getLogger} from '../../../utils/LoggerContext'
 import {ProgressMessageThrottler} from '../../../utils/ProgressMessageThrottler'
 import {getSubrequestTracker} from '../../../utils/SubrequestTracker'
-import type {SSEWriter} from '../streaming/sse-writer'
 
 // Enrichment limits to stay within Cloudflare Workers subrequest cap (1000 on paid tier)
 // Last.fm makes 4 API calls per track (correction, info, tags, similar)
@@ -103,14 +104,14 @@ export async function performLastFmEnrichment(
       const message = await narrator.generateMessage({
         eventType: 'enrichment_lastfm',
         metadata: {
-          cacheHitRate: lastfmCacheHitRate,
           cachedCount: cachedLastFmTracks.length,
+          cacheHitRate: lastfmCacheHitRate,
           enrichCount: tracksForLastFm.length,
           playlistName,
         },
         milestone: 'finishing',
-        progressPercent: 65,
         previousMessages: recentMessages,
+        progressPercent: 65,
         userRequest,
       })
       sseWriter.writeAsync({data: message, type: 'thinking'})

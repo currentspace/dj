@@ -1,20 +1,21 @@
 import {
   SpotifyPlaylistTracksResponseSchema,
   SpotifySearchResponseSchema,
-  SpotifyTrackFullSchema,
   type SpotifyTrackFull,
+  SpotifyTrackFullSchema,
 } from '@dj/shared-types'
 import {z} from 'zod'
 
 import type {Env} from '../../../index'
 import type {ProgressNarrator} from '../../../lib/progress-narrator'
+import type {SSEWriter} from '../streaming/sse-writer'
+import type {CreatePlaylistResult, NativeTool} from '../types'
+
 import {executeSpotifyTool} from '../../../lib/spotify-tools'
 import {getLogger} from '../../../utils/LoggerContext'
 import {rateLimitedSpotifyCall} from '../../../utils/RateLimitedAPIClients'
 import {executeAnalyzePlaylist} from '../enrichment'
 import {isNumber, isStringArray} from '../streaming/anthropic-utils'
-import type {SSEWriter} from '../streaming/sse-writer'
-import type {AnalysisResult, CreatePlaylistResult, NativeTool} from '../types'
 
 /**
  * Create playlist-related Spotify tools
@@ -60,7 +61,7 @@ export function createPlaylistTools(
           recentMessages,
         )
 
-        const analysisResult = result as AnalysisResult
+        const analysisResult = result
         await sseWriter.write({
           data: {
             result: analysisResult.playlist_name ? `Analyzed "${analysisResult.playlist_name}"` : 'Analysis complete',

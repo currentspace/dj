@@ -24,112 +24,41 @@
 
 import * as fs from "fs";
 import * as path from "path";
+
 import type { SecurityEvaluationResponse } from "../types.js";
 import type { LogContext } from "./logger.js";
-import { logDebug, logWarn } from "./logger.js";
-import { matchesAllowlist, matchesDenylist } from "./external-rules.js";
-import { matchesLearnedRules, addLearnedRule } from "./learned-rules.js";
-import { addPendingDecision, consumePendingDecision } from "./pending-decisions.js";
+
 import { analyzeWithAgent } from "./agent-evaluator.js";
+import { matchesAllowlist, matchesDenylist } from "./external-rules.js";
+import { addLearnedRule, matchesLearnedRules } from "./learned-rules.js";
+import { logDebug, logWarn } from "./logger.js";
 import { findRunDir } from "./paths.js";
+import { addPendingDecision, consumePendingDecision } from "./pending-decisions.js";
 
 /**
  * Security gate metrics for tracking decision sources
  */
 export interface SecurityMetrics {
+  autoAcceptRate: number;
+  byDecision: {
+    allow: number;
+    ask: number;
+    deny: number;
+  };
   bySource: {
     allowlist: number;
     denylist: number;
+    error: number;
     learned: number;
     llm: number;
-    error: number;
   };
-  byDecision: {
-    allow: number;
-    deny: number;
-    ask: number;
-  };
-  total: number;
-  autoAcceptRate: number;
-  startedAt: string;
   lastUpdated: string;
+  startedAt: string;
+  total: number;
 }
 
 // In-memory metrics
 let metrics: SecurityMetrics = createFreshMetrics();
-
-function createFreshMetrics(): SecurityMetrics {
-  return {
-    bySource: {
-      allowlist: 0,
-      denylist: 0,
-      learned: 0,
-      llm: 0,
-      error: 0,
-    },
-    byDecision: {
-      allow: 0,
-      deny: 0,
-      ask: 0,
-    },
-    total: 0,
-    autoAcceptRate: 0,
-    startedAt: new Date().toISOString(),
-    lastUpdated: new Date().toISOString(),
-  };
-}
-
-/**
- * Update metrics after a security decision.
- */
-function trackDecision(source: SecurityEvaluationResponse["source"], decision: "allow" | "deny" | "ask"): void {
-  metrics.bySource[source]++;
-  metrics.byDecision[decision]++;
-  metrics.total++;
-
-  // Auto-accept includes allowlist and learned rules
-  const autoAccepts = metrics.bySource.allowlist + metrics.bySource.learned;
-  metrics.autoAcceptRate = metrics.total > 0 ? autoAccepts / metrics.total : 0;
-  metrics.lastUpdated = new Date().toISOString();
-}
-
-/**
- * Persist metrics to the run directory.
- */
-function persistMetrics(context?: LogContext): void {
-  const runDir = findRunDir();
-  if (!runDir) return;
-
-  try {
-    const metricsPath = path.join(runDir, "security-metrics.json");
-    fs.writeFileSync(metricsPath, JSON.stringify(metrics, null, 2), { mode: 0o600 });
-    logDebug("Persisted security metrics", context);
-  } catch {
-    // Ignore persistence errors - metrics are in-memory anyway
-  }
-}
-
-/**
- * Get current security metrics.
- */
-export function getSecurityMetrics(): SecurityMetrics {
-  return { ...metrics };
-}
-
-/**
- * Reset security metrics (useful for testing).
- */
-export function resetSecurityMetrics(): void {
-  metrics = createFreshMetrics();
-}
-
-/**
- * Check if we're in a recursive security evaluation call.
- * This prevents infinite loops when the LLM evaluation itself triggers Bash commands.
- */
-function isRecursiveCall(): boolean {
-  return process.env.MARVEL_SECURITY_EVAL === "1";
-}
 
 /**
  * Evaluate a Bash command through the security gate.
@@ -231,6 +160,13 @@ export async function evaluateBashCommand(
 }
 
 /**
+ * Get current security metrics.
+ */
+export function getSecurityMetrics(): SecurityMetrics {
+  return { ...metrics };
+}
+
+/**
  * Process a command that was approved (by user or LLM).
  * Called from PostToolUse when a Bash command completes.
  * If the command had a pending decision (from "ask" or LLM "allow"),
@@ -265,4 +201,70 @@ export function processApprovedCommand(
 
   logDebug("Pattern rejected as unsafe - not learning this command", context);
   return false;
+}
+
+/**
+ * Reset security metrics (useful for testing).
+ */
+export function resetSecurityMetrics(): void {
+  metrics = createFreshMetrics();
+}
+
+function createFreshMetrics(): SecurityMetrics {
+  return {
+    autoAcceptRate: 0,
+    byDecision: {
+      allow: 0,
+      ask: 0,
+      deny: 0,
+    },
+    bySource: {
+      allowlist: 0,
+      denylist: 0,
+      error: 0,
+      learned: 0,
+      llm: 0,
+    },
+    lastUpdated: new Date().toISOString(),
+    startedAt: new Date().toISOString(),
+    total: 0,
+  };
+}
+
+/**
+ * Check if we're in a recursive security evaluation call.
+ * This prevents infinite loops when the LLM evaluation itself triggers Bash commands.
+ */
+function isRecursiveCall(): boolean {
+  return process.env.MARVEL_SECURITY_EVAL === "1";
+}
+
+/**
+ * Persist metrics to the run directory.
+ */
+function persistMetrics(context?: LogContext): void {
+  const runDir = findRunDir();
+  if (!runDir) return;
+
+  try {
+    const metricsPath = path.join(runDir, "security-metrics.json");
+    fs.writeFileSync(metricsPath, JSON.stringify(metrics, null, 2), { mode: 0o600 });
+    logDebug("Persisted security metrics", context);
+  } catch {
+    // Ignore persistence errors - metrics are in-memory anyway
+  }
+}
+
+/**
+ * Update metrics after a security decision.
+ */
+function trackDecision(source: SecurityEvaluationResponse["source"], decision: "allow" | "ask" | "deny"): void {
+  metrics.bySource[source]++;
+  metrics.byDecision[decision]++;
+  metrics.total++;
+
+  // Auto-accept includes allowlist and learned rules
+  const autoAccepts = metrics.bySource.allowlist + metrics.bySource.learned;
+  metrics.autoAcceptRate = metrics.total > 0 ? autoAccepts / metrics.total : 0;
+  metrics.lastUpdated = new Date().toISOString();
 }

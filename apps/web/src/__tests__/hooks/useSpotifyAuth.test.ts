@@ -1,5 +1,6 @@
 import {renderHook, waitFor} from '@testing-library/react'
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest'
+
 import {cleanupAuthStore, useSpotifyAuth} from '../../hooks/useSpotifyAuth'
 import {
   clearMockTokenFromLocalStorage,
@@ -8,8 +9,8 @@ import {
   createTokenDataWithoutExpiry,
   setLegacyTokenInLocalStorage,
   setMockTokenInLocalStorage,
-  triggerStorageEvent,
   type TokenData,
+  triggerStorageEvent,
 } from '../fixtures/storage-mocks'
 import {createAbortError, createMockFetchResponse, flushPromises} from '../fixtures/test-helpers'
 
@@ -321,7 +322,7 @@ describe.skip('useSpotifyAuth Hook', () => {
 
       let abortSignal: AbortSignal | null = null
       vi.mocked(fetch).mockImplementation((_url, options) => {
-        abortSignal = options?.signal as AbortSignal
+        abortSignal = (options?.signal) ?? null
         return new Promise((resolve, reject) => {
           setTimeout(() => {
             if (abortSignal?.aborted) {
@@ -696,7 +697,7 @@ describe.skip('useSpotifyAuth Hook', () => {
     })
 
     it('should synchronize across tabs via storage event', async () => {
-      const {result, rerender} = renderHook(() => useSpotifyAuth())
+      const {rerender, result} = renderHook(() => useSpotifyAuth())
 
       expect(result.current.isAuthenticated).toBe(false)
 

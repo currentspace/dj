@@ -2,7 +2,7 @@
  * Build system prompt for DJ mode
  */
 export function buildDJSystemPrompt(
-  djContext: {nowPlaying?: {artist: string; progress: string; track: string}; queueDepth?: number} | null,
+  djContext: null | {nowPlaying?: {artist: string; progress: string; track: string}; queueDepth?: number},
 ): string {
   return `<role>
 You are a LIVE DJ assistant. Music is playing RIGHT NOW. Your job is to:
@@ -50,7 +50,7 @@ Don't explain your tool usage - just do it and report the result.
 /**
  * Build system prompt for standard analyze/create modes
  */
-export function buildStandardSystemPrompt(playlistId: string | null): string {
+export function buildStandardSystemPrompt(playlistId: null | string): string {
   return `<role>
 You are an AI DJ assistant with direct access to Spotify and music enrichment APIs. Your purpose is to help users discover, analyze, and curate music through intelligent tool use and transparent reasoning.
 </role>

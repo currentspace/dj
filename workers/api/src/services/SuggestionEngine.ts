@@ -384,6 +384,7 @@ export class SuggestionEngine {
           const enrichment = await this.audioService.enrichTrack(track)
           const vibeScore = this.scoreSuggestion(track, vibe, lastTrack, enrichment.bpm, null, [])
           const transitionScore = lastTrack ? this.scoreTransition(lastTrack, { bpm: enrichment.bpm, energy: null }) : 50
+          // eslint-disable-next-line security/detect-object-injection -- safe: index is a controlled integer from Array.map callback
           const aiReason = aiSuggestions.tracks[index]?.reason || 'AI-recommended for your vibe and recent tracks'
 
           return {
@@ -489,6 +490,7 @@ export class SuggestionEngine {
         filtered.slice(0, count).map(async (track, index) => {
           const enrichment = await this.audioService.enrichTrack(track)
           const vibeScore = this.scoreSuggestion(track, vibe, undefined, enrichment.bpm, null, [])
+          // eslint-disable-next-line security/detect-object-injection -- safe: index is a controlled integer from Array.map callback
           const aiReason = aiSuggestions.tracks[index]?.reason || 'AI-recommended for your vibe'
 
           return {

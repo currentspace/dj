@@ -12,14 +12,25 @@ import {processOAuthCallback, useAuthStore} from '../stores'
 
 export interface UseSpotifyAuthReturn {
   clearError: () => void
-  error: string | null
+  error: null | string
   isAuthenticated: boolean
   isLoading: boolean
   isValidating: boolean
   login: () => void
   logout: () => void
-  token: string | null
+  token: null | string
   validateToken: () => Promise<boolean>
+}
+
+// Export cleanup function for tests
+export function cleanupAuthStore(): void {
+  useAuthStore.setState({
+    error: null,
+    isAuthenticated: false,
+    isLoading: false,
+    isValidating: false,
+    token: null,
+  })
 }
 
 export function useSpotifyAuth(): UseSpotifyAuthReturn {
@@ -46,7 +57,7 @@ export function useSpotifyAuth(): UseSpotifyAuthReturn {
     processOAuthCallback()
 
     // Schedule token validation after render (if we have a token)
-    const {token: currentToken, isValidating: currentIsValidating, validateToken} = useAuthStore.getState()
+    const {isValidating: currentIsValidating, token: currentToken, validateToken} = useAuthStore.getState()
     if (currentToken && !currentIsValidating) {
       // Use queueMicrotask to run after render without blocking
       queueMicrotask(() => {
@@ -56,15 +67,4 @@ export function useSpotifyAuth(): UseSpotifyAuthReturn {
   }
 
   return state
-}
-
-// Export cleanup function for tests
-export function cleanupAuthStore(): void {
-  useAuthStore.setState({
-    error: null,
-    isAuthenticated: false,
-    isLoading: false,
-    isValidating: false,
-    token: null,
-  })
 }

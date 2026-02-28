@@ -1,10 +1,11 @@
 import type Anthropic from '@anthropic-ai/sdk'
 
+import type {SSEWriter} from './streaming/sse-writer'
+import type {AnthropicToolCall, NativeTool} from './types'
+
 import {LLM} from '../../constants'
 import {getLogger} from '../../utils/LoggerContext'
 import {isString} from './streaming'
-import type {SSEWriter} from './streaming/sse-writer'
-import type {AnthropicToolCall, NativeTool} from './types'
 
 interface AgenticLoopParams {
   abortController: AbortController

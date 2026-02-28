@@ -8,12 +8,14 @@
  */
 
 import * as path from "path";
+
 import type { PostToolUseFailureHookInput, SyncHookJSONOutput } from "../sdk-types.js";
-import type { ToolCallRecord, RunState } from "../types.js";
-import { findRunDir } from "../lib/paths.js";
+import type { RunState, ToolCallRecord } from "../types.js";
+
 import { safeAppendFile, safeReadJson, safeWriteJson } from "../lib/file-ops.js";
-import { logDebug, buildHookContext } from "../lib/logger.js";
-import { summarize, getInputSummary } from "../lib/tool-summary.js";
+import { buildHookContext, logDebug } from "../lib/logger.js";
+import { findRunDir } from "../lib/paths.js";
+import { getInputSummary, summarize } from "../lib/tool-summary.js";
 
 export async function handlePostToolUseFailure(input: PostToolUseFailureHookInput): Promise<SyncHookJSONOutput> {
   const context = buildHookContext("post-tool-use-failure", input);
@@ -39,12 +41,12 @@ export async function handlePostToolUseFailure(input: PostToolUseFailureHookInpu
   const sequence = (runState.toolCallCount || 0) + 1;
 
   const record: ToolCallRecord = {
-    sequence,
-    timestamp: new Date().toISOString(),
-    tool: toolName,
     input_summary: getInputSummary(input),
     output_summary: input.error ? summarize(input.error) : undefined,
+    sequence,
     success: false,
+    timestamp: new Date().toISOString(),
+    tool: toolName,
   };
 
   // Append to tool_calls.jsonl
@@ -55,9 +57,9 @@ export async function handlePostToolUseFailure(input: PostToolUseFailureHookInpu
   runState.toolCallCount = sequence;
   runState.recentActivity = runState.recentActivity || [];
   runState.recentActivity.push({
-    type: "tool_failure",
+    data: { input_summary: record.input_summary, tool: toolName },
     timestamp: record.timestamp,
-    data: { tool: toolName, input_summary: record.input_summary },
+    type: "tool_failure",
   });
 
   if (runState.recentActivity.length > 20) {

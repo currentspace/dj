@@ -1,5 +1,6 @@
-import {getLogger} from '../../../utils/LoggerContext'
 import type {StreamEvent} from '../types'
+
+import {getLogger} from '../../../utils/LoggerContext'
 
 /**
  * SSE Writer with queue to prevent concurrent writes

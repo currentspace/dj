@@ -8,5 +8,5 @@
  * Tracks version assumptions, tool names, hook types, and parameter names.
  */
 
-export * from './constants.js';
 export * from './compatibility.js';
+export * from './constants.js';

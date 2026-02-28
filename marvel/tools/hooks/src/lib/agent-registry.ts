@@ -12,39 +12,39 @@
  * serializes it to a temp file as a fallback for daemon restarts.
  */
 
-import { logDebug, type LogContext } from "./logger.js";
+import { type LogContext, logDebug } from "./logger.js";
 
 // ── Types ────────────────────────────────────────────────────────────
 
 export interface AgentEntry {
-  id: string;
   agentType: string;
-  sessionId: string;
-  status: "running" | "completed" | "errored";
-  transcriptPath?: string;
-  launchTime: string;
   completedTime?: string;
-  resultSummary: string | null;
-  errorMessage: string | null;
-}
-
-export interface TeamMember {
-  teammateName: string;
-  teamName: string;
-  firstSeen: string;
-}
-
-export interface TeamState {
-  name: string;
-  members: TeamMember[];
+  errorMessage: null | string;
+  id: string;
+  launchTime: string;
+  resultSummary: null | string;
+  sessionId: string;
+  status: "completed" | "errored" | "running";
+  transcriptPath?: string;
 }
 
 export interface SerializedAgentState {
-  version: 1;
-  sessionId: string;
-  timestamp: string;
   agents: AgentEntry[];
-  teamState: TeamState | null;
+  sessionId: string;
+  teamState: null | TeamState;
+  timestamp: string;
+  version: 1;
+}
+
+export interface TeamMember {
+  firstSeen: string;
+  teammateName: string;
+  teamName: string;
+}
+
+export interface TeamState {
+  members: TeamMember[];
+  name: string;
 }
 
 // ── Registry State ───────────────────────────────────────────────────
@@ -58,59 +58,30 @@ const teamBySession = new Map<string, Map<string, TeamMember>>();
 // ── TTL Cleanup ──────────────────────────────────────────────────────
 
 const TTL_MS = 60 * 60 * 1000; // 1 hour
-let cleanupTimer: ReturnType<typeof setInterval> | null = null;
+let cleanupTimer: null | ReturnType<typeof setInterval> = null;
 
-function startCleanupTimer(): void {
-  if (cleanupTimer) return;
-  cleanupTimer = setInterval(() => {
-    const cutoff = Date.now() - TTL_MS;
-    for (const [sessionId, agents] of agentsBySession) {
-      for (const [agentId, entry] of agents) {
-        const entryTime = new Date(entry.completedTime ?? entry.launchTime).getTime();
-        if (entryTime < cutoff) {
-          agents.delete(agentId);
-        }
-      }
-      if (agents.size === 0) {
-        agentsBySession.delete(sessionId);
-        teamBySession.delete(sessionId);
-      }
-    }
-  }, 5 * 60 * 1000); // Sweep every 5 minutes
-  // Unref so this timer doesn't prevent process exit
-  if (cleanupTimer && typeof cleanupTimer === "object" && "unref" in cleanupTimer) {
-    cleanupTimer.unref();
+/**
+ * Reset all state. Used in tests.
+ */
+export function _resetForTesting(): void {
+  agentsBySession.clear();
+  teamBySession.clear();
+  if (cleanupTimer) {
+    clearInterval(cleanupTimer);
+    cleanupTimer = null;
   }
 }
 
 // ── Agent Operations ─────────────────────────────────────────────────
 
-export function registerAgent(
-  sessionId: string,
-  agentId: string,
-  agentType: string,
-  context?: LogContext,
-): void {
-  startCleanupTimer();
-
-  let sessionAgents = agentsBySession.get(sessionId);
-  if (!sessionAgents) {
-    sessionAgents = new Map();
-    agentsBySession.set(sessionId, sessionAgents);
+export function clearSession(sessionId: string, context?: LogContext): void {
+  const agentCount = agentsBySession.get(sessionId)?.size ?? 0;
+  const teamCount = teamBySession.get(sessionId)?.size ?? 0;
+  agentsBySession.delete(sessionId);
+  teamBySession.delete(sessionId);
+  if (agentCount > 0 || teamCount > 0) {
+    logDebug(`Session cleared: ${agentCount} agents, ${teamCount} teammates`, context);
   }
-
-  const entry: AgentEntry = {
-    id: agentId,
-    agentType,
-    sessionId,
-    status: "running",
-    launchTime: new Date().toISOString(),
-    resultSummary: null,
-    errorMessage: null,
-  };
-
-  sessionAgents.set(agentId, entry);
-  logDebug(`Agent registered: ${agentId} (${agentType})`, context);
 }
 
 export function completeAgent(
@@ -161,12 +132,65 @@ export function getSessionAgents(sessionId: string): AgentEntry[] {
   return Array.from(sessionAgents.values());
 }
 
+export function getTeamState(sessionId: string): null | TeamState {
+  const sessionTeam = teamBySession.get(sessionId);
+  if (!sessionTeam || sessionTeam.size === 0) return null;
+
+  const members = Array.from(sessionTeam.values());
+  // Use the most common team name
+  const teamName = members[0].teamName;
+
+  return { members, name: teamName };
+}
+
+// ── Team Operations ──────────────────────────────────────────────────
+
 export function hasSessionAgents(sessionId: string): boolean {
   const sessionAgents = agentsBySession.get(sessionId);
   return sessionAgents !== undefined && sessionAgents.size > 0;
 }
 
-// ── Team Operations ──────────────────────────────────────────────────
+export function registerAgent(
+  sessionId: string,
+  agentId: string,
+  agentType: string,
+  context?: LogContext,
+): void {
+  startCleanupTimer();
+
+  let sessionAgents = agentsBySession.get(sessionId);
+  if (!sessionAgents) {
+    sessionAgents = new Map();
+    agentsBySession.set(sessionId, sessionAgents);
+  }
+
+  const entry: AgentEntry = {
+    agentType,
+    errorMessage: null,
+    id: agentId,
+    launchTime: new Date().toISOString(),
+    resultSummary: null,
+    sessionId,
+    status: "running",
+  };
+
+  sessionAgents.set(agentId, entry);
+  logDebug(`Agent registered: ${agentId} (${agentType})`, context);
+}
+
+// ── Serialization ────────────────────────────────────────────────────
+
+export function serializeForSession(sessionId: string): SerializedAgentState {
+  return {
+    agents: getSessionAgents(sessionId),
+    sessionId,
+    teamState: getTeamState(sessionId),
+    timestamp: new Date().toISOString(),
+    version: 1,
+  };
+}
+
+// ── Cleanup ──────────────────────────────────────────────────────────
 
 export function trackTeammate(
   sessionId: string,
@@ -182,57 +206,33 @@ export function trackTeammate(
 
   if (!sessionTeam.has(teammateName)) {
     sessionTeam.set(teammateName, {
+      firstSeen: new Date().toISOString(),
       teammateName,
       teamName,
-      firstSeen: new Date().toISOString(),
     });
     logDebug(`Teammate tracked: ${teammateName} (team: ${teamName})`, context);
   }
 }
 
-export function getTeamState(sessionId: string): TeamState | null {
-  const sessionTeam = teamBySession.get(sessionId);
-  if (!sessionTeam || sessionTeam.size === 0) return null;
-
-  const members = Array.from(sessionTeam.values());
-  // Use the most common team name
-  const teamName = members[0].teamName;
-
-  return { name: teamName, members };
-}
-
-// ── Serialization ────────────────────────────────────────────────────
-
-export function serializeForSession(sessionId: string): SerializedAgentState {
-  return {
-    version: 1,
-    sessionId,
-    timestamp: new Date().toISOString(),
-    agents: getSessionAgents(sessionId),
-    teamState: getTeamState(sessionId),
-  };
-}
-
-// ── Cleanup ──────────────────────────────────────────────────────────
-
-export function clearSession(sessionId: string, context?: LogContext): void {
-  const agentCount = agentsBySession.get(sessionId)?.size ?? 0;
-  const teamCount = teamBySession.get(sessionId)?.size ?? 0;
-  agentsBySession.delete(sessionId);
-  teamBySession.delete(sessionId);
-  if (agentCount > 0 || teamCount > 0) {
-    logDebug(`Session cleared: ${agentCount} agents, ${teamCount} teammates`, context);
-  }
-}
-
-/**
- * Reset all state. Used in tests.
- */
-export function _resetForTesting(): void {
-  agentsBySession.clear();
-  teamBySession.clear();
-  if (cleanupTimer) {
-    clearInterval(cleanupTimer);
-    cleanupTimer = null;
+function startCleanupTimer(): void {
+  if (cleanupTimer) return;
+  cleanupTimer = setInterval(() => {
+    const cutoff = Date.now() - TTL_MS;
+    for (const [sessionId, agents] of agentsBySession) {
+      for (const [agentId, entry] of agents) {
+        const entryTime = new Date(entry.completedTime ?? entry.launchTime).getTime();
+        if (entryTime < cutoff) {
+          agents.delete(agentId);
+        }
+      }
+      if (agents.size === 0) {
+        agentsBySession.delete(sessionId);
+        teamBySession.delete(sessionId);
+      }
+    }
+  }, 5 * 60 * 1000); // Sweep every 5 minutes
+  // Unref so this timer doesn't prevent process exit
+  if (cleanupTimer && typeof cleanupTimer === "object" && "unref" in cleanupTimer) {
+    cleanupTimer.unref();
   }
 }

@@ -8,14 +8,16 @@
  */
 
 import * as path from "path";
+
 import type { PostToolUseHookInput, SyncHookJSONOutput } from "../sdk-types.js";
-import type { ToolCallRecord, RunState } from "../types.js";
-import { findRunDir } from "../lib/paths.js";
-import { safeAppendFile, safeReadJson, safeWriteJson } from "../lib/file-ops.js";
-import { logDebug, buildHookContext } from "../lib/logger.js";
+import type { RunState, ToolCallRecord } from "../types.js";
+
 import { processApprovedCommand } from "../lib/bash-security-gate.js";
-import { recordPreCommitSuccess, invalidatePreCommitChecks } from "../lib/session-state.js";
-import { summarize, getInputSummary } from "../lib/tool-summary.js";
+import { safeAppendFile, safeReadJson, safeWriteJson } from "../lib/file-ops.js";
+import { buildHookContext, logDebug } from "../lib/logger.js";
+import { findRunDir } from "../lib/paths.js";
+import { invalidatePreCommitChecks, recordPreCommitSuccess } from "../lib/session-state.js";
+import { getInputSummary, summarize } from "../lib/tool-summary.js";
 
 export async function handlePostToolUse(input: PostToolUseHookInput): Promise<SyncHookJSONOutput> {
   const context = buildHookContext("post-tool-use", input);
@@ -65,14 +67,14 @@ export async function handlePostToolUse(input: PostToolUseHookInput): Promise<Sy
   const sequence = (runState.toolCallCount || 0) + 1;
 
   const record: ToolCallRecord = {
-    sequence,
-    timestamp: new Date().toISOString(),
-    tool: toolName,
     input_summary: getInputSummary(input),
     output_summary: input.tool_response
       ? summarize(input.tool_response)
       : undefined,
+    sequence,
     success: true, // Claude Code doesn't pass error info, assume success
+    timestamp: new Date().toISOString(),
+    tool: toolName,
   };
 
   // Append to tool_calls.jsonl

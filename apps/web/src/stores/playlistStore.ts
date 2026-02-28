@@ -31,19 +31,19 @@ const MAX_MESSAGES_PER_CONVERSATION = 100
 // =============================================================================
 
 interface PlaylistState {
-  // State
-  selectedPlaylist: SpotifyPlaylist | null
-  conversationsByPlaylist: Map<string, ChatMessage[]>
+  addMessage: (playlistId: string, message: ChatMessage) => void
+  clearAllConversations: () => void
 
   // Derived (computed in selectors, not stored)
   // currentMessages: ChatMessage[] - use selector instead
 
-  // Actions
-  selectPlaylist: (playlist: SpotifyPlaylist | null) => void
-  addMessage: (playlistId: string, message: ChatMessage) => void
-  updateLastMessage: (playlistId: string, content: string) => void
   clearConversation: (playlistId: string) => void
-  clearAllConversations: () => void
+  conversationsByPlaylist: Map<string, ChatMessage[]>
+  // State
+  selectedPlaylist: null | SpotifyPlaylist
+  // Actions
+  selectPlaylist: (playlist: null | SpotifyPlaylist) => void
+  updateLastMessage: (playlistId: string, content: string) => void
 }
 
 // =============================================================================
@@ -52,21 +52,6 @@ interface PlaylistState {
 
 export const usePlaylistStore = create<PlaylistState>()(
   subscribeWithSelector((set, get) => ({
-    selectedPlaylist: null,
-    conversationsByPlaylist: new Map(),
-
-    selectPlaylist: (playlist) => {
-      const current = get().selectedPlaylist
-      if (current?.id === playlist?.id) return // No change
-
-      set({selectedPlaylist: playlist})
-
-      // Cleanup old conversations when selecting a new playlist
-      if (playlist) {
-        cleanupOldConversations(get, set)
-      }
-    },
-
     addMessage: (playlistId, message) => {
       set((state) => {
         const newMap = new Map(state.conversationsByPlaylist)
@@ -81,6 +66,33 @@ export const usePlaylistStore = create<PlaylistState>()(
         newMap.set(playlistId, [...trimmedMessages, message])
         return {conversationsByPlaylist: newMap}
       })
+    },
+    clearAllConversations: () => {
+      set({conversationsByPlaylist: new Map()})
+    },
+
+    clearConversation: (playlistId) => {
+      set((state) => {
+        const newMap = new Map(state.conversationsByPlaylist)
+        newMap.delete(playlistId)
+        return {conversationsByPlaylist: newMap}
+      })
+    },
+
+    conversationsByPlaylist: new Map(),
+
+    selectedPlaylist: null,
+
+    selectPlaylist: (playlist) => {
+      const current = get().selectedPlaylist
+      if (current?.id === playlist?.id) return // No change
+
+      set({selectedPlaylist: playlist})
+
+      // Cleanup old conversations when selecting a new playlist
+      if (playlist) {
+        cleanupOldConversations(get, set)
+      }
     },
 
     updateLastMessage: (playlistId, content) => {
@@ -104,18 +116,6 @@ export const usePlaylistStore = create<PlaylistState>()(
 
         return {conversationsByPlaylist: newMap}
       })
-    },
-
-    clearConversation: (playlistId) => {
-      set((state) => {
-        const newMap = new Map(state.conversationsByPlaylist)
-        newMap.delete(playlistId)
-        return {conversationsByPlaylist: newMap}
-      })
-    },
-
-    clearAllConversations: () => {
-      set({conversationsByPlaylist: new Map()})
     },
   }))
 )

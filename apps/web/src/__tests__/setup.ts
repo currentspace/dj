@@ -14,19 +14,19 @@ beforeEach(() => {
   // Reset location mock
   delete (window as {location?: Location}).location
   ;(window as {location: Location}).location = {
-    href: 'http://localhost:3000',
-    pathname: '/',
-    search: '',
+    ancestorOrigins: {} as DOMStringList,
+    assign: vi.fn(),
     hash: '',
-    origin: 'http://localhost:3000',
     host: 'localhost:3000',
     hostname: 'localhost',
+    href: 'http://localhost:3000',
+    origin: 'http://localhost:3000',
+    pathname: '/',
     port: '3000',
     protocol: 'http:',
-    assign: vi.fn(),
     reload: vi.fn(),
     replace: vi.fn(),
+    search: '',
     toString: vi.fn(() => 'http://localhost:3000'),
-    ancestorOrigins: {} as DOMStringList,
   } as Location
 })

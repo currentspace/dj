@@ -125,7 +125,7 @@ export function registerPlayerRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       if (!isSuccessResponse(response)) {
         const errorText = await response.text()
         getLogger()?.error(`[Player] Play failed: ${response.status} - ${errorText}`)
-        return c.json({error: 'Failed to start playback', details: errorText}, response.status as 400 | 401 | 404)
+        return c.json({details: errorText, error: 'Failed to start playback'}, response.status as 400 | 401 | 404)
       }
 
       return c.json({success: true}, 200)
@@ -155,7 +155,7 @@ export function registerPlayerRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       if (!isSuccessResponse(response)) {
         const errorText = await response.text()
         getLogger()?.error(`[Player] Pause failed: ${response.status} - ${errorText}`)
-        return c.json({error: 'Failed to pause playback', details: errorText}, response.status as 400 | 401 | 404)
+        return c.json({details: errorText, error: 'Failed to pause playback'}, response.status as 400 | 401 | 404)
       }
 
       return c.json({success: true}, 200)
@@ -185,7 +185,7 @@ export function registerPlayerRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       if (!isSuccessResponse(response)) {
         const errorText = await response.text()
         getLogger()?.error(`[Player] Next failed: ${response.status} - ${errorText}`)
-        return c.json({error: 'Failed to skip track', details: errorText}, response.status as 400 | 401 | 404)
+        return c.json({details: errorText, error: 'Failed to skip track'}, response.status as 400 | 401 | 404)
       }
 
       return c.json({success: true}, 200)
@@ -215,7 +215,7 @@ export function registerPlayerRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       if (!isSuccessResponse(response)) {
         const errorText = await response.text()
         getLogger()?.error(`[Player] Previous failed: ${response.status} - ${errorText}`)
-        return c.json({error: 'Failed to go to previous track', details: errorText}, response.status as 400 | 401 | 404)
+        return c.json({details: errorText, error: 'Failed to go to previous track'}, response.status as 400 | 401 | 404)
       }
 
       return c.json({success: true}, 200)
@@ -252,7 +252,7 @@ export function registerPlayerRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       if (!isSuccessResponse(response)) {
         const errorText = await response.text()
         getLogger()?.error(`[Player] Seek failed: ${response.status} - ${errorText}`)
-        return c.json({error: 'Failed to seek', details: errorText}, response.status as 400 | 401 | 404)
+        return c.json({details: errorText, error: 'Failed to seek'}, response.status as 400 | 401 | 404)
       }
 
       return c.json({success: true}, 200)
@@ -297,7 +297,7 @@ export function registerPlayerRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       if (!isSuccessResponse(response)) {
         const errorText = await response.text()
         getLogger()?.error(`[Player] Transfer failed: ${response.status} - ${errorText}`)
-        return c.json({error: 'Failed to transfer playback', details: errorText}, response.status as 400 | 401 | 404)
+        return c.json({details: errorText, error: 'Failed to transfer playback'}, response.status as 400 | 401 | 404)
       }
 
       return c.json({success: true}, 200)
@@ -334,7 +334,7 @@ export function registerPlayerRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       if (!isSuccessResponse(response)) {
         const errorText = await response.text()
         getLogger()?.error(`[Player] Volume failed: ${response.status} - ${errorText}`)
-        return c.json({error: 'Failed to set volume', details: errorText}, response.status as 400 | 401 | 404)
+        return c.json({details: errorText, error: 'Failed to set volume'}, response.status as 400 | 401 | 404)
       }
 
       return c.json({success: true, volume_percent: volumePercent}, 200)
@@ -371,7 +371,7 @@ export function registerPlayerRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       if (!isSuccessResponse(response)) {
         const errorText = await response.text()
         getLogger()?.error(`[Player] Add to queue failed: ${response.status} - ${errorText}`)
-        return c.json({error: 'Failed to add to queue', details: errorText}, response.status as 400 | 401 | 404)
+        return c.json({details: errorText, error: 'Failed to add to queue'}, response.status as 400 | 401 | 404)
       }
 
       return c.json({success: true, uri}, 200)

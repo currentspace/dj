@@ -7,8 +7,9 @@
  * Key Principle: Create realistic test data that matches production patterns
  */
 
-import { MockKVNamespace } from '../integration/setup'
 import type { SpotifyTrack } from '@dj/shared-types'
+
+import { MockKVNamespace } from '../integration/setup'
 
 /**
  * Create mock environment for integration tests
@@ -25,13 +26,13 @@ export function createMockEnv(): {
   SPOTIFY_CLIENT_SECRET: string
 } {
   return {
-    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || 'test-key',
+    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? 'test-key',
     AUDIO_FEATURES_CACHE: new MockKVNamespace(),
     ENVIRONMENT: 'test',
     LASTFM_API_KEY: process.env.LASTFM_API_KEY,
     SESSIONS: new MockKVNamespace(),
-    SPOTIFY_CLIENT_ID: process.env.SPOTIFY_CLIENT_ID || 'test-client-id',
-    SPOTIFY_CLIENT_SECRET: process.env.SPOTIFY_CLIENT_SECRET || 'test-client-secret',
+    SPOTIFY_CLIENT_ID: process.env.SPOTIFY_CLIENT_ID ?? 'test-client-id',
+    SPOTIFY_CLIENT_SECRET: process.env.SPOTIFY_CLIENT_SECRET ?? 'test-client-secret',
   }
 }
 
@@ -124,10 +125,10 @@ export function createTestTrack(options?: {
   isrc?: string
   name?: string
   popularity?: number
-}): SpotifyTrack & { external_ids?: { isrc: string }; duration_ms?: number; explicit?: boolean; popularity?: number } {
-  const trackId = options?.id || 'test-track-id'
-  const trackName = options?.name || 'Test Track'
-  const artistName = options?.artistName || 'Test Artist'
+}): SpotifyTrack & { duration_ms?: number; explicit?: boolean; external_ids?: { isrc: string }; popularity?: number } {
+  const trackId = options?.id ?? 'test-track-id'
+  const trackName = options?.name ?? 'Test Track'
+  const artistName = options?.artistName ?? 'Test Artist'
 
   return {
     album: {
@@ -136,13 +137,13 @@ export function createTestTrack(options?: {
       name: 'Test Album',
     },
     artists: [{ id: 'test-artist-id', name: artistName }],
-    duration_ms: options?.duration_ms || 180000,
-    explicit: options?.explicit || false,
-    external_ids: { isrc: options?.isrc || 'TEST12345678' },
+    duration_ms: options?.duration_ms ?? 180000,
+    explicit: options?.explicit ?? false,
+    external_ids: { isrc: options?.isrc ?? 'TEST12345678' },
     external_urls: { spotify: `https://open.spotify.com/track/${trackId}` },
     id: trackId,
     name: trackName,
-    popularity: options?.popularity || 50,
+    popularity: options?.popularity ?? 50,
     preview_url: `https://p.scdn.co/mp3-preview/${trackId}`,
     uri: `spotify:track:${trackId}`,
   }
@@ -156,7 +157,7 @@ export function createTestTrack(options?: {
  */
 export function createTestTracks(
   count: number
-): Array<SpotifyTrack & { external_ids?: { isrc: string }; duration_ms?: number; explicit?: boolean; popularity?: number }> {
+): (SpotifyTrack & { duration_ms?: number; explicit?: boolean; external_ids?: { isrc: string }; popularity?: number })[] {
   const knownTracks = Object.values(KNOWN_TEST_TRACKS)
 
   // If requesting fewer tracks than known tracks, return subset
@@ -184,15 +185,6 @@ export function createTestTracks(
 }
 
 /**
- * Wait for a specified number of milliseconds
- *
- * Useful for testing rate limiting and timing behavior.
- */
-export function waitFor(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms))
-}
-
-/**
  * Measure execution time of an async function
  *
  * Returns [result, durationMs] tuple.
@@ -216,4 +208,13 @@ export function skipIfNoLastFmKey(): void {
     console.warn('⚠️  Skipping test: LASTFM_API_KEY not set')
     // Note: In actual tests, use `test.skip()` or conditional test execution
   }
+}
+
+/**
+ * Wait for a specified number of milliseconds
+ *
+ * Useful for testing rate limiting and timing behavior.
+ */
+export function waitFor(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
 }

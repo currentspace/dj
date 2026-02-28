@@ -9,16 +9,51 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import type { PackMetadata, LoadedPack, Lesson } from "../types.js";
+
+import type { Lesson, LoadedPack, PackMetadata } from "../types.js";
 
 interface CacheEntry {
-  pack: LoadedPack;
-  loadedAt: number;
-  packJsonMtime: number;
   lessonsJsonlMtime: number;
+  loadedAt: number;
+  pack: LoadedPack;
+  packJsonMtime: number;
 }
 
 const packCache = new Map<string, CacheEntry>();
+
+/**
+ * Load all packs from the marvel/packs directory.
+ */
+export async function loadAllPacks(marvelRoot: string): Promise<LoadedPack[]> {
+  const packsDir = path.join(marvelRoot, "packs");
+
+  if (!fs.existsSync(packsDir)) {
+    return [];
+  }
+
+  const packDirs = fs
+    .readdirSync(packsDir)
+    .filter((name) => !name.startsWith("_"))
+    .map((name) => path.join(packsDir, name))
+    .filter((dir) => {
+      try {
+        return fs.statSync(dir).isDirectory();
+      } catch {
+        return false;
+      }
+    });
+
+  const packs: LoadedPack[] = [];
+
+  for (const packDir of packDirs) {
+    const pack = loadPack(packDir);
+    if (pack) {
+      packs.push(pack);
+    }
+  }
+
+  return packs;
+}
 
 function getFileMtime(filePath: string): number {
   try {
@@ -80,8 +115,7 @@ function loadPack(packDir: string): LoadedPack | null {
   // Check cache
   const cached = packCache.get(packName);
   if (
-    cached &&
-    cached.packJsonMtime === packJsonMtime &&
+    cached?.packJsonMtime === packJsonMtime &&
     cached.lessonsJsonlMtime === lessonsJsonlMtime
   ) {
     return cached.pack;
@@ -95,56 +129,22 @@ function loadPack(packDir: string): LoadedPack | null {
     const lessons = loadLessons(lessonsPath);
 
     const pack: LoadedPack = {
-      metadata,
-      lessons,
       guardrailsPath,
+      lessons,
       loadedAt: Date.now(),
+      metadata,
     };
 
     // Update cache
     packCache.set(packName, {
-      pack,
-      loadedAt: Date.now(),
-      packJsonMtime,
       lessonsJsonlMtime,
+      loadedAt: Date.now(),
+      pack,
+      packJsonMtime,
     });
 
     return pack;
   } catch {
     return null;
   }
-}
-
-/**
- * Load all packs from the marvel/packs directory.
- */
-export async function loadAllPacks(marvelRoot: string): Promise<LoadedPack[]> {
-  const packsDir = path.join(marvelRoot, "packs");
-
-  if (!fs.existsSync(packsDir)) {
-    return [];
-  }
-
-  const packDirs = fs
-    .readdirSync(packsDir)
-    .filter((name) => !name.startsWith("_"))
-    .map((name) => path.join(packsDir, name))
-    .filter((dir) => {
-      try {
-        return fs.statSync(dir).isDirectory();
-      } catch {
-        return false;
-      }
-    });
-
-  const packs: LoadedPack[] = [];
-
-  for (const packDir of packDirs) {
-    const pack = loadPack(packDir);
-    if (pack) {
-      packs.push(pack);
-    }
-  }
-
-  return packs;
 }

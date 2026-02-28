@@ -13,7 +13,8 @@
  */
 
 import * as fs from "fs";
-import { logWarn, type LogContext } from "./logger.js";
+
+import { type LogContext, logWarn } from "./logger.js";
 
 /**
  * Safe append to file with logging.
@@ -36,51 +37,6 @@ export function safeAppendFile(
       operation: "append",
     });
     return false;
-  }
-}
-
-/**
- * Safe write file with logging.
- * @returns true if successful, false on error
- */
-export function safeWriteFile(
-  filePath: string,
-  content: string,
-  context: LogContext,
-  mode?: fs.Mode
-): boolean {
-  try {
-    fs.writeFileSync(filePath, content, mode !== undefined ? { mode } : undefined);
-    return true;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    logWarn(`Failed to write file: ${message}`, {
-      ...context,
-      filePath,
-      operation: "write",
-    });
-    return false;
-  }
-}
-
-/**
- * Safe read file with logging.
- * @returns file contents if successful, null on error
- */
-export function safeReadFile(
-  filePath: string,
-  context: LogContext
-): string | null {
-  try {
-    return fs.readFileSync(filePath, "utf-8");
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    logWarn(`Failed to read file: ${message}`, {
-      ...context,
-      filePath,
-      operation: "read",
-    });
-    return null;
   }
 }
 
@@ -138,13 +94,34 @@ export function safeParseJsonl<T>(filePath: string, context: LogContext): T[] {
 }
 
 /**
+ * Safe read file with logging.
+ * @returns file contents if successful, null on error
+ */
+export function safeReadFile(
+  filePath: string,
+  context: LogContext
+): null | string {
+  try {
+    return fs.readFileSync(filePath, "utf-8");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logWarn(`Failed to read file: ${message}`, {
+      ...context,
+      filePath,
+      operation: "read",
+    });
+    return null;
+  }
+}
+
+/**
  * Safe read and parse JSON file with logging.
  * @returns parsed object if successful, null on error
  */
 export function safeReadJson<T>(
   filePath: string,
   context: LogContext
-): T | null {
+): null | T {
   const content = safeReadFile(filePath, context);
   if (content === null) {
     return null;
@@ -164,21 +141,21 @@ export function safeReadJson<T>(
 }
 
 /**
- * Safe write JSONL file with logging.
- * Writes an array of items as newline-delimited JSON.
+ * Safe write file with logging.
  * @returns true if successful, false on error
  */
-export function safeWriteJsonl<T>(
+export function safeWriteFile(
   filePath: string,
-  items: T[],
-  context: LogContext
+  content: string,
+  context: LogContext,
+  mode?: fs.Mode
 ): boolean {
   try {
-    const content = items.map((item) => JSON.stringify(item)).join("\n") + "\n";
-    return safeWriteFile(filePath, content, context);
+    fs.writeFileSync(filePath, content, mode !== undefined ? { mode } : undefined);
+    return true;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    logWarn(`Failed to serialize JSONL: ${message}`, {
+    logWarn(`Failed to write file: ${message}`, {
       ...context,
       filePath,
       operation: "write",
@@ -195,7 +172,7 @@ export function safeWriteJson(
   filePath: string,
   data: unknown,
   context: LogContext,
-  pretty: boolean = true
+  pretty = true
 ): boolean {
   try {
     const content = pretty ? JSON.stringify(data, null, 2) : JSON.stringify(data);
@@ -203,6 +180,30 @@ export function safeWriteJson(
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     logWarn(`Failed to serialize JSON: ${message}`, {
+      ...context,
+      filePath,
+      operation: "write",
+    });
+    return false;
+  }
+}
+
+/**
+ * Safe write JSONL file with logging.
+ * Writes an array of items as newline-delimited JSON.
+ * @returns true if successful, false on error
+ */
+export function safeWriteJsonl<T>(
+  filePath: string,
+  items: T[],
+  context: LogContext
+): boolean {
+  try {
+    const content = items.map((item) => JSON.stringify(item)).join("\n") + "\n";
+    return safeWriteFile(filePath, content, context);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logWarn(`Failed to serialize JSONL: ${message}`, {
       ...context,
       filePath,
       operation: "write",

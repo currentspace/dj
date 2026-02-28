@@ -10,20 +10,6 @@
 
 export const MAX_SUMMARY_LENGTH = 200;
 
-export function summarize(
-  value: unknown,
-  maxLength: number = MAX_SUMMARY_LENGTH
-): string {
-  if (value === null || value === undefined) {
-    return "";
-  }
-  const str = typeof value === "string" ? value : JSON.stringify(value);
-  if (str.length <= maxLength) {
-    return str;
-  }
-  return str.slice(0, maxLength - 3) + "...";
-}
-
 export function getInputSummary(input: { tool_input?: unknown }): string {
   const raw = input.tool_input;
   if (!raw || typeof raw !== "object") return "";
@@ -46,4 +32,18 @@ export function getInputSummary(input: { tool_input?: unknown }): string {
   }
 
   return summarize(toolInput);
+}
+
+export function summarize(
+  value: unknown,
+  maxLength: number = MAX_SUMMARY_LENGTH
+): string {
+  if (value === null || value === undefined) {
+    return "";
+  }
+  const str = typeof value === "string" ? value : JSON.stringify(value);
+  if (str.length <= maxLength) {
+    return str;
+  }
+  return str.slice(0, maxLength - 3) + "...";
 }

@@ -73,8 +73,8 @@ export class AIService {
 
   constructor(config: AIServiceConfig) {
     this.client = new Anthropic({ apiKey: config.apiKey })
-    this.defaultModel = config.defaultModel || LLM.MODEL
-    this.defaultTemperature = config.defaultTemperature || 0.7
+    this.defaultModel = config.defaultModel ?? LLM.MODEL
+    this.defaultTemperature = config.defaultTemperature ?? 0.7
   }
 
   /**
@@ -105,13 +105,13 @@ export class AIService {
     try {
       // Build request parameters
       const useThinking = options.thinkingBudget && options.thinkingBudget > 0
-      const model = options.model || this.defaultModel
+      const model = options.model ?? this.defaultModel
 
       // Build request parameters with proper typing
       const messages: AnthropicRequestParams['messages'] = [{ content: prompt, role: 'user' }]
 
       const requestParams: AnthropicRequestParams = {
-        max_tokens: options.maxTokens || 2000,
+        max_tokens: options.maxTokens ?? 2000,
         messages,
         model,
       }
@@ -132,7 +132,7 @@ export class AIService {
       } else {
         // Standard mode
         requestParams.temperature = options.temperature ?? this.defaultTemperature
-        requestParams.system = options.system || 'You are an AI assistant. Return only valid JSON.'
+        requestParams.system = options.system ?? 'You are an AI assistant. Return only valid JSON.'
       }
 
       const response = await this.client.messages.create(requestParams)
@@ -154,8 +154,8 @@ export class AIService {
 
       // Build usage stats
       const usage = {
-        inputTokens: response.usage?.input_tokens || 0,
-        outputTokens: response.usage?.output_tokens || 0,
+        inputTokens: response.usage?.input_tokens ?? 0,
+        outputTokens: response.usage?.output_tokens ?? 0,
         thinkingTokens: thinking ? thinking.split(/\s+/).length : undefined,
       }
 
@@ -192,10 +192,10 @@ export class AIService {
   async promptForText(prompt: string, options: AIRequestOptions = {}): Promise<string> {
     try {
       const response = await this.client.messages.create({
-        max_tokens: options.maxTokens || 2000,
+        max_tokens: options.maxTokens ?? 2000,
         messages: [{ content: prompt, role: 'user' }],
-        model: options.model || this.defaultModel,
-        system: options.system || 'You are an AI assistant.',
+        model: options.model ?? this.defaultModel,
+        system: options.system ?? 'You are an AI assistant.',
         temperature: options.temperature ?? this.defaultTemperature,
       })
 

@@ -7,12 +7,12 @@ import {z} from 'zod'
 
 import type {Env} from '../../../index'
 import type {ProgressNarrator} from '../../../lib/progress-narrator'
-import {getLogger} from '../../../utils/LoggerContext'
-import {ProgressMessageThrottler} from '../../../utils/ProgressMessageThrottler'
-import {rateLimitedSpotifyCall} from '../../../utils/RateLimitedAPIClients'
 import type {SSEWriter} from '../streaming/sse-writer'
 import type {AnalysisResult} from '../types'
 
+import {getLogger} from '../../../utils/LoggerContext'
+import {ProgressMessageThrottler} from '../../../utils/ProgressMessageThrottler'
+import {rateLimitedSpotifyCall} from '../../../utils/RateLimitedAPIClients'
 import {performDeezerEnrichment} from './deezer'
 import {performLastFmEnrichment} from './lastfm'
 
@@ -118,8 +118,8 @@ export async function executeAnalyzePlaylist(
         trackCount: tracks.length,
       },
       milestone: 'starting',
-      progressPercent: 15,
       previousMessages: recentMessages,
+      progressPercent: 15,
       userRequest,
     })
     sseWriter.writeAsync({data: message, type: 'thinking'})
@@ -257,8 +257,8 @@ export async function executeAnalyzePlaylist(
         trackCount: tracks.length,
       },
       milestone: 'complete',
-      progressPercent: 95,
       previousMessages: recentMessages,
+      progressPercent: 95,
       userRequest,
     })
     sseWriter.writeAsync({data: message, type: 'thinking'})

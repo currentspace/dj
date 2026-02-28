@@ -18,6 +18,12 @@ import {getLogger} from './LoggerContext'
 
 export interface SubrequestTrackerOptions {
   /**
+   * Enable detailed logging
+   * Default: false
+   */
+  enableLogging?: boolean
+
+  /**
    * Maximum subrequests allowed per request
    * Default: 45 (safety margin below free tier limit of 50)
    */
@@ -28,25 +34,69 @@ export interface SubrequestTrackerOptions {
    * Default: 0.8 (80%)
    */
   warningThreshold?: number
+}
 
-  /**
-   * Enable detailed logging
-   * Default: false
-   */
-  enableLogging?: boolean
+// AsyncLocalStorage for per-request SubrequestTracker context
+interface SubrequestTrackerContext {
+  tracker: SubrequestTracker
 }
 
 export class SubrequestTracker {
   private count = 0
-  private readonly maxSubrequests: number
-  private readonly warningThreshold: number
   private readonly enableLogging: boolean
   private hasWarned = false
+  private readonly maxSubrequests: number
+  private readonly warningThreshold: number
 
   constructor(options: SubrequestTrackerOptions = {}) {
     this.maxSubrequests = options.maxSubrequests ?? 45 // Safety margin
     this.warningThreshold = options.warningThreshold ?? 0.8
     this.enableLogging = options.enableLogging ?? false
+  }
+
+  /**
+   * Check if we can make N more subrequests
+   */
+  canMake(count: number): boolean {
+    return this.count + count <= this.maxSubrequests
+  }
+
+  /**
+   * Get current count
+   */
+  getCount(): number {
+    return this.count
+  }
+
+  /**
+   * Get max limit
+   */
+  getMax(): number {
+    return this.maxSubrequests
+  }
+
+  /**
+   * Get percentage used
+   */
+  getPercentage(): number {
+    return (this.count / this.maxSubrequests) * 100
+  }
+
+  /**
+   * Get summary for logging
+   */
+  getSummary(): {
+    count: number
+    max: number
+    percentage: number
+    remaining: number
+  } {
+    return {
+      count: this.count,
+      max: this.maxSubrequests,
+      percentage: this.getPercentage(),
+      remaining: this.remaining(),
+    }
   }
 
   /**
@@ -73,38 +123,10 @@ export class SubrequestTracker {
   }
 
   /**
-   * Check if we can make N more subrequests
-   */
-  canMake(count: number): boolean {
-    return this.count + count <= this.maxSubrequests
-  }
-
-  /**
    * Get remaining subrequest budget
    */
   remaining(): number {
     return Math.max(0, this.maxSubrequests - this.count)
-  }
-
-  /**
-   * Get current count
-   */
-  getCount(): number {
-    return this.count
-  }
-
-  /**
-   * Get max limit
-   */
-  getMax(): number {
-    return this.maxSubrequests
-  }
-
-  /**
-   * Get percentage used
-   */
-  getPercentage(): number {
-    return (this.count / this.maxSubrequests) * 100
   }
 
   /**
@@ -113,23 +135,6 @@ export class SubrequestTracker {
   reset(): void {
     this.count = 0
     this.hasWarned = false
-  }
-
-  /**
-   * Get summary for logging
-   */
-  getSummary(): {
-    count: number
-    max: number
-    remaining: number
-    percentage: number
-  } {
-    return {
-      count: this.count,
-      max: this.maxSubrequests,
-      remaining: this.remaining(),
-      percentage: this.getPercentage(),
-    }
   }
 }
 
@@ -140,9 +145,9 @@ export function calculateBatchSizes(
   tracker: SubrequestTracker,
   totalTracks: number,
 ): {
-  lastfm: number // Number of tracks to enrich with Last.fm (4 calls each)
   deezer: number // Number of tracks to enrich with Deezer (1 call each, but most cached)
   estimatedCalls: number
+  lastfm: number // Number of tracks to enrich with Last.fm (4 calls each)
 } {
   const remaining = tracker.remaining()
 
@@ -162,15 +167,10 @@ export function calculateBatchSizes(
   const estimatedCalls = lastfmTracks * 4 + Math.floor(deezerTracks * 0.5)
 
   return {
-    lastfm: lastfmTracks,
     deezer: deezerTracks,
     estimatedCalls,
+    lastfm: lastfmTracks,
   }
-}
-
-// AsyncLocalStorage for per-request SubrequestTracker context
-interface SubrequestTrackerContext {
-  tracker: SubrequestTracker
 }
 
 const SubrequestTrackerContextSchema = z.object({

@@ -1,31 +1,21 @@
 import type {PlayedTrack, QueuedTrack} from '@dj/shared-types'
 
 import type {PlaybackState} from '../../hooks/usePlaybackStream'
-import {useDevice} from '../../stores'
 
+import {useDevice} from '../../stores'
 import {DevicePicker} from '../molecules/DevicePicker'
 import {PlaybackControls} from '../molecules/PlaybackControls'
 import styles from './now-playing-hero.module.css'
 
 interface NowPlayingHeroProps {
   /** Real-time playback state from Spotify (preferred) */
-  playback?: PlaybackState | null
+  playback?: null | PlaybackState
   /** The current queue */
   queue?: QueuedTrack[]
   /** Auth token for device picker */
-  token?: string | null
+  token?: null | string
   /** Fallback track from mix session history */
-  track?: PlayedTrack | null
-}
-
-/**
- * Format milliseconds as m:ss
- */
-function formatTime(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000)
-  const minutes = Math.floor(totalSeconds / 60)
-  const seconds = totalSeconds % 60
-  return `${minutes}:${seconds.toString().padStart(2, '0')}`
+  track?: null | PlayedTrack
 }
 
 export function NowPlayingHero({playback, queue, token, track}: NowPlayingHeroProps) {
@@ -33,7 +23,7 @@ export function NowPlayingHero({playback, queue, token, track}: NowPlayingHeroPr
   const device = useDevice()
 
   // Prefer real-time playback state over session history
-  const hasPlayback = playback && playback.trackId
+  const hasPlayback = playback?.trackId
   const hasTrack = track
 
   if (!hasPlayback && !hasTrack) {
@@ -148,4 +138,14 @@ export function NowPlayingHero({playback, queue, token, track}: NowPlayingHeroPr
       )}
     </div>
   )
+}
+
+/**
+ * Format milliseconds as m:ss
+ */
+function formatTime(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000)
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`
 }

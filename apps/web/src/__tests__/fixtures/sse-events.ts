@@ -29,38 +29,32 @@ export function mockContentEvent(content: string): StreamContentEvent {
 }
 
 /**
- * Create a thinking event (Claude processing indicator)
+ * Create a debug event (server debug info)
  */
-export function mockThinkingEvent(message: string): StreamThinkingEvent {
+export function mockDebugEvent(data: Record<string, unknown>): StreamDebugEvent {
   return {
-    data: message,
-    type: 'thinking',
+    data,
+    type: 'debug',
   }
 }
 
 /**
- * Create a tool_start event (tool execution begins)
+ * Create a done event (stream complete)
  */
-export function mockToolStartEvent(tool: string, args: Record<string, unknown>): StreamToolStartEvent {
+export function mockDoneEvent(): StreamDoneEvent {
   return {
-    data: {
-      args,
-      tool,
-    },
-    type: 'tool_start',
+    data: null,
+    type: 'done',
   }
 }
 
 /**
- * Create a tool_end event (tool execution completes)
+ * Create an error event (stream error)
  */
-export function mockToolEndEvent(tool: string, result: unknown): StreamToolEndEvent {
+export function mockErrorEvent(error: string): StreamErrorEvent {
   return {
-    data: {
-      result,
-      tool,
-    },
-    type: 'tool_end',
+    data: error,
+    type: 'error',
   }
 }
 
@@ -78,32 +72,38 @@ export function mockLogEvent(level: 'error' | 'info' | 'warn', message: string):
 }
 
 /**
- * Create a debug event (server debug info)
+ * Create a thinking event (Claude processing indicator)
  */
-export function mockDebugEvent(data: Record<string, unknown>): StreamDebugEvent {
+export function mockThinkingEvent(message: string): StreamThinkingEvent {
   return {
-    data,
-    type: 'debug',
+    data: message,
+    type: 'thinking',
   }
 }
 
 /**
- * Create an error event (stream error)
+ * Create a tool_end event (tool execution completes)
  */
-export function mockErrorEvent(error: string): StreamErrorEvent {
+export function mockToolEndEvent(tool: string, result: unknown): StreamToolEndEvent {
   return {
-    data: error,
-    type: 'error',
+    data: {
+      result,
+      tool,
+    },
+    type: 'tool_end',
   }
 }
 
 /**
- * Create a done event (stream complete)
+ * Create a tool_start event (tool execution begins)
  */
-export function mockDoneEvent(): StreamDoneEvent {
+export function mockToolStartEvent(tool: string, args: Record<string, unknown>): StreamToolStartEvent {
   return {
-    data: null,
-    type: 'done',
+    data: {
+      args,
+      tool,
+    },
+    type: 'tool_start',
   }
 }
 
@@ -186,87 +186,23 @@ type SSEEvent =
   | StreamToolStartEvent
 
 /**
- * Convert event objects to SSE format (data: {...}\n\n)
- */
-export function formatSSEEvent(event: SSEEvent): string {
-  return `data: ${JSON.stringify(event)}\n\n`
-}
-
-/**
- * Create a mock SSE stream that emits events with delays
- * @param events - Array of events to emit
- * @param delayMs - Delay between events in milliseconds
- * @returns ReadableStream that emits SSE-formatted events
- */
-export function createMockSSEStream(events: SSEEvent[], delayMs: number = 10): ReadableStream<Uint8Array> {
-  let eventIndex = 0
-  const encoder = new TextEncoder()
-
-  return new ReadableStream({
-    async pull(controller) {
-      if (eventIndex >= events.length) {
-        controller.close()
-        return
-      }
-
-      // Add delay between events to simulate real streaming
-      if (eventIndex > 0) {
-        await new Promise(resolve => setTimeout(resolve, delayMs))
-      }
-
-      const event = events[eventIndex]
-      const formatted = formatSSEEvent(event)
-      controller.enqueue(encoder.encode(formatted))
-
-      eventIndex++
-    },
-    start(controller) {
-      // Emit initial heartbeat
-      controller.enqueue(encoder.encode(': heartbeat\n\n'))
-    },
-  })
-}
-
-/**
- * Create a mock Response object with SSE stream
- * @param events - Array of events to stream
- * @param delayMs - Delay between events
- */
-export function createMockSSEResponse(events: SSEEvent[], delayMs: number = 10): Response {
-  const stream = createMockSSEStream(events, delayMs)
-
-  return new Response(stream, {
-    headers: {
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-      'Content-Type': 'text/event-stream',
-    },
-    status: 200,
-  })
-}
-
-// ============================================================================
-// MOCK EVENT SOURCE (for non-fetch SSE)
-// ============================================================================
-
-/**
  * Mock EventSource for testing legacy SSE implementations
  */
 export class MockEventSource implements EventSource {
   CLOSED = 2 as const
   CONNECTING = 0 as const
-  OPEN = 1 as const
-  onmessage: ((this: EventSource, ev: MessageEvent) => unknown) | null = null
   onerror: ((this: EventSource, ev: Event) => unknown) | null = null
+  onmessage: ((this: EventSource, ev: MessageEvent) => unknown) | null = null
   onopen: ((this: EventSource, ev: Event) => unknown) | null = null
+  OPEN = 1 as const
   readyState: 0 | 1 | 2 = 0
   url: string
   withCredentials = false
 
-  private listeners: Map<string, Set<EventListenerOrEventListenerObject>> = new Map()
-  private events: SSEEvent[]
   private eventIndex = 0
-  private intervalId: number | null = null
+  private events: SSEEvent[]
+  private intervalId: null | number = null
+  private listeners = new Map<string, Set<EventListenerOrEventListenerObject>>()
 
   constructor(url: string, events: SSEEvent[] = []) {
     this.url = url
@@ -283,15 +219,30 @@ export class MockEventSource implements EventSource {
     }, 10)
   }
 
+  /**
+   * Add an event to emit
+   */
+  addEvent(event: SSEEvent): void {
+    this.events.push(event)
+  }
+
   addEventListener(
     type: string,
-    listener: EventListenerOrEventListenerObject | ((this: EventSource, event: MessageEvent) => unknown),
+    listener: ((this: EventSource, event: MessageEvent) => unknown) | EventListenerOrEventListenerObject,
     _options?: AddEventListenerOptions | boolean,
   ): void {
     if (!this.listeners.has(type)) {
       this.listeners.set(type, new Set())
     }
     this.listeners.get(type)!.add(listener as EventListenerOrEventListenerObject)
+  }
+
+  /**
+   * Clear all pending events
+   */
+  clearEvents(): void {
+    this.events = []
+    this.eventIndex = 0
   }
 
   close(): void {
@@ -318,8 +269,8 @@ export class MockEventSource implements EventSource {
 
   removeEventListener(
     type: string,
-    listener: EventListenerOrEventListenerObject | ((this: EventSource, event: MessageEvent) => unknown),
-    _options?: EventListenerOptions | boolean,
+    listener: ((this: EventSource, event: MessageEvent) => unknown) | EventListenerOrEventListenerObject,
+    _options?: boolean | EventListenerOptions,
   ): void {
     const listeners = this.listeners.get(type)
     if (listeners) {
@@ -328,24 +279,9 @@ export class MockEventSource implements EventSource {
   }
 
   /**
-   * Add an event to emit
-   */
-  addEvent(event: SSEEvent): void {
-    this.events.push(event)
-  }
-
-  /**
-   * Clear all pending events
-   */
-  clearEvents(): void {
-    this.events = []
-    this.eventIndex = 0
-  }
-
-  /**
    * Trigger an error
    */
-  triggerError(_errorMessage: string = 'Connection failed'): void {
+  triggerError(_errorMessage = 'Connection failed'): void {
     this.readyState = 2
     const errorEvent = new Event('error')
     if (this.onerror) {
@@ -383,6 +319,70 @@ export function createMockEventSource(url: string, events: SSEEvent[] = []): Moc
   return new MockEventSource(url, events)
 }
 
+/**
+ * Create a mock Response object with SSE stream
+ * @param events - Array of events to stream
+ * @param delayMs - Delay between events
+ */
+export function createMockSSEResponse(events: SSEEvent[], delayMs = 10): Response {
+  const stream = createMockSSEStream(events, delayMs)
+
+  return new Response(stream, {
+    headers: {
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Content-Type': 'text/event-stream',
+    },
+    status: 200,
+  })
+}
+
+// ============================================================================
+// MOCK EVENT SOURCE (for non-fetch SSE)
+// ============================================================================
+
+/**
+ * Create a mock SSE stream that emits events with delays
+ * @param events - Array of events to emit
+ * @param delayMs - Delay between events in milliseconds
+ * @returns ReadableStream that emits SSE-formatted events
+ */
+export function createMockSSEStream(events: SSEEvent[], delayMs = 10): ReadableStream<Uint8Array> {
+  let eventIndex = 0
+  const encoder = new TextEncoder()
+
+  return new ReadableStream({
+    async pull(controller) {
+      if (eventIndex >= events.length) {
+        controller.close()
+        return
+      }
+
+      // Add delay between events to simulate real streaming
+      if (eventIndex > 0) {
+        await new Promise(resolve => setTimeout(resolve, delayMs))
+      }
+
+      const event = events[eventIndex]
+      const formatted = formatSSEEvent(event)
+      controller.enqueue(encoder.encode(formatted))
+
+      eventIndex++
+    },
+    start(controller) {
+      // Emit initial heartbeat
+      controller.enqueue(encoder.encode(': heartbeat\n\n'))
+    },
+  })
+}
+
+/**
+ * Convert event objects to SSE format (data: {...}\n\n)
+ */
+export function formatSSEEvent(event: SSEEvent): string {
+  return `data: ${JSON.stringify(event)}\n\n`
+}
+
 // ============================================================================
 // TEST HELPERS
 // ============================================================================
@@ -407,7 +407,7 @@ export async function parseSSEStream(response: Response): Promise<SSEEvent[]> {
 
     // Split by double newline (SSE event boundary)
     const parts = buffer.split('\n\n')
-    buffer = parts.pop() || '' // Keep incomplete event in buffer
+    buffer = parts.pop() ?? '' // Keep incomplete event in buffer
 
     for (const part of parts) {
       if (part.startsWith(': heartbeat')) continue // Skip heartbeats
@@ -432,7 +432,7 @@ export async function parseSSEStream(response: Response): Promise<SSEEvent[]> {
 export function waitForSSEEvent(
   events: SSEEvent[],
   predicate: (event: SSEEvent) => boolean,
-  timeoutMs: number = 5000,
+  timeoutMs = 5000,
 ): Promise<SSEEvent> {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {

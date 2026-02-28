@@ -33,6 +33,7 @@ export function SteerProgress({ direction, events, isComplete, onClose }: SteerP
   const prevEventsLengthRef = useRef(0)
 
   // Auto-scroll to bottom when new events arrive (component body, no useEffect)
+  /* eslint-disable react-hooks/refs -- intentional: tracking event count and auto-scrolling in component body per React 19 project guidelines (no useEffect) */
   if (events.length !== prevEventsLengthRef.current) {
     prevEventsLengthRef.current = events.length
     // Schedule scroll after render via microtask
@@ -40,6 +41,7 @@ export function SteerProgress({ direction, events, isComplete, onClose }: SteerP
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     })
   }
+  /* eslint-enable react-hooks/refs */
 
   // Get the latest progress messages for display
   const progressMessages = events
@@ -49,7 +51,7 @@ export function SteerProgress({ direction, events, isComplete, onClose }: SteerP
 
   // Get vibe changes if available
   const vibeUpdate = events.find(e => e.type === 'vibe_update')
-  const changes = vibeUpdate?.data.changes || []
+  const changes = vibeUpdate?.data.changes ?? []
 
   // Get queue updates
   const queueUpdates = events.filter(e => e.type === 'queue_update')
@@ -118,7 +120,7 @@ export function SteerProgress({ direction, events, isComplete, onClose }: SteerP
           {/* Error */}
           {errorEvent && (
             <div className={styles.error}>
-              {errorEvent.data.message || 'Something went wrong'}
+              {errorEvent.data.message ?? 'Something went wrong'}
             </div>
           )}
 

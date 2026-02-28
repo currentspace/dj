@@ -16,10 +16,9 @@
 
 import {beforeEach, describe, expect, it} from 'vitest'
 
+import {LastFmService} from '../../services/LastFmService'
 import {KNOWN_TEST_TRACKS, measureExecutionTime} from '../helpers/integration-setup'
 import {INTEGRATION_TEST_TIMEOUT, MockKVNamespace} from './setup'
-
-import {LastFmService} from '../../services/LastFmService'
 
 // Check if Last.fm API key is available
 const hasLastFmKey = !!process.env.LASTFM_API_KEY

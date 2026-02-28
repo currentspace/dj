@@ -9,13 +9,13 @@ import type {QueueOptions} from '../../utils/RateLimitedQueue'
  * Mock RateLimitedQueue that tracks timing and rate compliance
  */
 export class MockRateLimitedQueue<T> {
+  readonly burst: number
+  readonly concurrency: number
+  readonly rate: number
+  private processing = false
   private queue: (() => Promise<T>)[] = []
   private results: (null | T)[] = []
   private timestamps: number[] = []
-  private processing = false
-  readonly rate: number
-  readonly burst: number
-  readonly concurrency: number
 
   constructor(opts: QueueOptions = {}) {
     this.rate = opts.rate ?? 40
@@ -23,8 +23,48 @@ export class MockRateLimitedQueue<T> {
     this.concurrency = opts.concurrency ?? 1
   }
 
+  clear(): void {
+    this.queue = []
+    this.results = []
+    this.timestamps = []
+    this.processing = false
+  }
+
   enqueue(task: () => Promise<T>): void {
     this.queue.push(task)
+  }
+
+  /**
+   * Get the actual rate (tasks per second) based on timestamps
+   */
+  getActualRate(): number {
+    if (this.timestamps.length < 2) return 0
+
+    const first = this.timestamps[0]
+    const last = this.timestamps[this.timestamps.length - 1]
+    const durationMs = last - first
+
+    if (durationMs === 0) return Infinity
+
+    return (this.timestamps.length - 1) / (durationMs / 1000)
+  }
+
+  /**
+   * Get intervals between consecutive tasks (for testing)
+   */
+  getIntervals(): number[] {
+    const intervals: number[] = []
+    for (let i = 1; i < this.timestamps.length; i++) {
+      intervals.push(this.timestamps[i] - this.timestamps[i - 1])
+    }
+    return intervals
+  }
+
+  /**
+   * Get timestamps of task executions (for testing)
+   */
+  getTimestamps(): number[] {
+    return [...this.timestamps]
   }
 
   async processAll(
@@ -52,7 +92,7 @@ export class MockRateLimitedQueue<T> {
         if (onResult) {
           await onResult(result, i, total)
         }
-      } catch (error) {
+      } catch {
         this.results.push(null)
 
         if (onResult) {
@@ -72,35 +112,6 @@ export class MockRateLimitedQueue<T> {
     return this.results
   }
 
-  clear(): void {
-    this.queue = []
-    this.results = []
-    this.timestamps = []
-    this.processing = false
-  }
-
-  /**
-   * Get timestamps of task executions (for testing)
-   */
-  getTimestamps(): number[] {
-    return [...this.timestamps]
-  }
-
-  /**
-   * Get the actual rate (tasks per second) based on timestamps
-   */
-  getActualRate(): number {
-    if (this.timestamps.length < 2) return 0
-
-    const first = this.timestamps[0]
-    const last = this.timestamps[this.timestamps.length - 1]
-    const durationMs = last - first
-
-    if (durationMs === 0) return Infinity
-
-    return (this.timestamps.length - 1) / (durationMs / 1000)
-  }
-
   /**
    * Verify that the rate limit was respected
    */
@@ -110,33 +121,26 @@ export class MockRateLimitedQueue<T> {
 
     return actualRate <= maxAllowedRate
   }
-
-  /**
-   * Get intervals between consecutive tasks (for testing)
-   */
-  getIntervals(): number[] {
-    const intervals: number[] = []
-    for (let i = 1; i < this.timestamps.length; i++) {
-      intervals.push(this.timestamps[i] - this.timestamps[i - 1])
-    }
-    return intervals
-  }
 }
 
 /**
  * Mock RequestOrchestrator for testing
  */
 export class MockRequestOrchestrator {
-  private requests: {url: string; timestamp: number}[] = []
   readonly rate: number
+  private requests: {timestamp: number; url: string;}[] = []
 
   constructor(rate = 40) {
     this.rate = rate
   }
 
+  clear(): void {
+    this.requests = []
+  }
+
   async enqueue<T>(url: string, task: () => Promise<T>): Promise<T> {
     const timestamp = performance.now()
-    this.requests.push({url, timestamp})
+    this.requests.push({timestamp, url})
 
     // Simulate rate limiting
     const minInterval = 1000 / this.rate
@@ -149,13 +153,6 @@ export class MockRequestOrchestrator {
     }
 
     return await task()
-  }
-
-  /**
-   * Get request history (for testing)
-   */
-  getRequests(): {url: string; timestamp: number}[] {
-    return [...this.requests]
   }
 
   /**
@@ -174,6 +171,13 @@ export class MockRequestOrchestrator {
   }
 
   /**
+   * Get request history (for testing)
+   */
+  getRequests(): {timestamp: number; url: string;}[] {
+    return [...this.requests]
+  }
+
+  /**
    * Verify that the rate limit was respected
    */
   verifyRateLimit(tolerance = 0.1): boolean {
@@ -181,81 +185,6 @@ export class MockRequestOrchestrator {
     const maxAllowedRate = this.rate * (1 + tolerance)
 
     return actualRate <= maxAllowedRate
-  }
-
-  clear(): void {
-    this.requests = []
-  }
-}
-
-/**
- * Create a mock RateLimitedQueue with preset options
- */
-export function createMockRateLimitedQueue<T>(
-  options?: QueueOptions,
-): MockRateLimitedQueue<T> {
-  return new MockRateLimitedQueue<T>(options)
-}
-
-/**
- * Create a mock RequestOrchestrator
- */
-export function createMockRequestOrchestrator(rate = 40): MockRequestOrchestrator {
-  return new MockRequestOrchestrator(rate)
-}
-
-/**
- * Helper to verify rate limit compliance from timestamps
- */
-export function verifyRateLimitCompliance(
-  timestamps: number[],
-  maxRate: number,
-  tolerance = 0.1,
-): {
-  compliant: boolean
-  actualRate: number
-  maxAllowedRate: number
-  details: string
-} {
-  if (timestamps.length < 2) {
-    return {
-      compliant: true,
-      actualRate: 0,
-      maxAllowedRate: maxRate * (1 + tolerance),
-      details: 'Not enough timestamps to verify',
-    }
-  }
-
-  const first = timestamps[0]
-  const last = timestamps[timestamps.length - 1]
-  const durationMs = last - first
-  const actualRate = (timestamps.length - 1) / (durationMs / 1000)
-  const maxAllowedRate = maxRate * (1 + tolerance)
-  const compliant = actualRate <= maxAllowedRate
-
-  return {
-    compliant,
-    actualRate,
-    maxAllowedRate,
-    details: compliant
-      ? `Rate ${actualRate.toFixed(2)} TPS is within limit ${maxAllowedRate.toFixed(2)} TPS`
-      : `Rate ${actualRate.toFixed(2)} TPS exceeds limit ${maxAllowedRate.toFixed(2)} TPS`,
-  }
-}
-
-/**
- * Helper to measure execution time of async function
- */
-export async function measureExecutionTime<T>(fn: () => Promise<T>): Promise<{
-  result: T
-  durationMs: number
-}> {
-  const start = performance.now()
-  const result = await fn()
-  const end = performance.now()
-  return {
-    result,
-    durationMs: end - start,
   }
 }
 
@@ -277,6 +206,38 @@ export function createDelayedTaskBatch<T>(
   delayMs = 10,
 ): (() => Promise<T>)[] {
   return values.map(value => createDelayedTask(value, delayMs))
+}
+
+/**
+ * Create a mock RateLimitedQueue with preset options
+ */
+export function createMockRateLimitedQueue<T>(
+  options?: QueueOptions,
+): MockRateLimitedQueue<T> {
+  return new MockRateLimitedQueue<T>(options)
+}
+
+/**
+ * Create a mock RequestOrchestrator
+ */
+export function createMockRequestOrchestrator(rate = 40): MockRequestOrchestrator {
+  return new MockRequestOrchestrator(rate)
+}
+
+/**
+ * Helper to measure execution time of async function
+ */
+export async function measureExecutionTime<T>(fn: () => Promise<T>): Promise<{
+  durationMs: number
+  result: T
+}> {
+  const start = performance.now()
+  const result = await fn()
+  const end = performance.now()
+  return {
+    durationMs: end - start,
+    result,
+  }
 }
 
 /**
@@ -312,5 +273,44 @@ export function verifyBurstBehavior(
     details: burstCompliant
       ? `Burst of ${burstSize} tasks completed in ${burstDuration.toFixed(2)}ms (within ${burstWindowMs}ms window)`
       : `Burst of ${burstSize} tasks took ${burstDuration.toFixed(2)}ms (exceeds ${burstWindowMs}ms window)`,
+  }
+}
+
+/**
+ * Helper to verify rate limit compliance from timestamps
+ */
+export function verifyRateLimitCompliance(
+  timestamps: number[],
+  maxRate: number,
+  tolerance = 0.1,
+): {
+  actualRate: number
+  compliant: boolean
+  details: string
+  maxAllowedRate: number
+} {
+  if (timestamps.length < 2) {
+    return {
+      actualRate: 0,
+      compliant: true,
+      details: 'Not enough timestamps to verify',
+      maxAllowedRate: maxRate * (1 + tolerance),
+    }
+  }
+
+  const first = timestamps[0]
+  const last = timestamps[timestamps.length - 1]
+  const durationMs = last - first
+  const actualRate = (timestamps.length - 1) / (durationMs / 1000)
+  const maxAllowedRate = maxRate * (1 + tolerance)
+  const compliant = actualRate <= maxAllowedRate
+
+  return {
+    actualRate,
+    compliant,
+    details: compliant
+      ? `Rate ${actualRate.toFixed(2)} TPS is within limit ${maxAllowedRate.toFixed(2)} TPS`
+      : `Rate ${actualRate.toFixed(2)} TPS exceeds limit ${maxAllowedRate.toFixed(2)} TPS`,
+    maxAllowedRate,
   }
 }

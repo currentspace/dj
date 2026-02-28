@@ -66,8 +66,7 @@ export const NowPlaying = memo(function NowPlaying({token}: NowPlayingProps) {
 
   // Subscribe to track changes and notify mix API if session exists
   // Re-subscribe only when subscribeToTrackChange identity changes
-  if (!trackChangeUnsubRef.current) {
-    trackChangeUnsubRef.current = subscribeToTrackChange(async (previousTrackId, previousTrackUri, _newTrackId) => {
+  trackChangeUnsubRef.current ??= subscribeToTrackChange(async (previousTrackId, previousTrackUri, _newTrackId) => {
       if (!useMixStore.getState().session || !previousTrackId || !previousTrackUri) {
         return
       }
@@ -84,7 +83,6 @@ export const NowPlaying = memo(function NowPlaying({token}: NowPlayingProps) {
         console.warn('[NowPlaying] Failed to notify track played:', err)
       }
     })
-  }
 
   const fetchQueue = useCallback(async () => {
     if (!token) return
@@ -261,8 +259,8 @@ export const NowPlaying = memo(function NowPlaying({token}: NowPlayingProps) {
   }
 
   // Show error if session expired
-  const error = storeError || controlError
-  if (error && error.includes('expired')) {
+  const error = storeError ?? controlError
+  if (error?.includes('expired')) {
     return (
       <div className="now-playing now-playing--error">
         <span className="now-playing__error-text">{error}</span>
@@ -323,7 +321,34 @@ export const NowPlaying = memo(function NowPlaying({token}: NowPlayingProps) {
 
         <div className="now-playing__progress-container">
           <span className="now-playing__time">{formatTime(progress)}</span>
-          <div className="now-playing__progress" onClick={handleSeek} role="slider" tabIndex={0}>
+          <div
+            aria-label="Seek"
+            aria-valuemax={duration}
+            aria-valuemin={0}
+            aria-valuenow={progress}
+            className="now-playing__progress"
+            onClick={handleSeek}
+            onKeyDown={(e) => {
+              if (!token || !playbackCore?.track) return
+              const seekStep = duration * 0.05
+              let newPosition: null | number = null
+              if (e.key === 'ArrowRight') newPosition = Math.min(progress + seekStep, duration)
+              else if (e.key === 'ArrowLeft') newPosition = Math.max(progress - seekStep, 0)
+              if (newPosition !== null) {
+                e.preventDefault()
+                fetch('/api/player/seek', {
+                  body: JSON.stringify({position_ms: Math.floor(newPosition)}),
+                  headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                  },
+                  method: 'POST',
+                }).catch((err) => console.error('[NowPlaying] Seek error:', err))
+              }
+            }}
+            role="slider"
+            tabIndex={0}
+          >
             <div className="now-playing__progress-bar" style={{width: `${progressPercent}%`}} />
           </div>
           <span className="now-playing__time">{formatTime(duration)}</span>

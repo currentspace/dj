@@ -12,14 +12,15 @@
  */
 
 import type { LogContext } from "./logger.js";
+
 import { logDebug } from "./logger.js";
 
 interface PendingDecision {
   command: string;
   description?: string;
-  timestamp: number;
   reason: string;
-  suggestedRule?: { type: string; pattern: string; reason: string };
+  suggestedRule?: { pattern: string; reason: string; type: string; };
+  timestamp: number;
 }
 
 // In-memory map of pending decisions
@@ -32,14 +33,98 @@ const PENDING_TTL_MS = 5 * 60 * 1000;
 // Cleanup interval (1 minute)
 const CLEANUP_INTERVAL_MS = 60 * 1000;
 
-let cleanupTimer: ReturnType<typeof setInterval> | null = null;
+let cleanupTimer: null | ReturnType<typeof setInterval> = null;
 
 /**
- * Normalize a command for use as a map key.
- * Trims whitespace and collapses multiple spaces.
+ * Add a command to the pending decisions set.
+ * Called when the security gate returns "ask" or LLM "allow" for a Bash command.
  */
-function normalizeCommand(command: string): string {
-  return command.trim().replace(/\s+/g, " ");
+export function addPendingDecision(
+  command: string,
+  reason: string,
+  description?: string,
+  context?: LogContext,
+  suggestedRule?: { pattern: string; reason: string; type: string; }
+): void {
+  ensureCleanupTimer();
+
+  const key = normalizeCommand(command);
+  const decision: PendingDecision = {
+    command,
+    description,
+    reason,
+    suggestedRule,
+    timestamp: Date.now(),
+  };
+
+  pendingDecisions.set(key, decision);
+  logDebug(`Added pending decision for command: ${key.slice(0, 50)}...`, context);
+}
+
+/**
+ * Clear all pending decisions (useful for testing).
+ */
+export function clearPendingDecisions(): void {
+  pendingDecisions.clear();
+}
+
+/**
+ * Check if a command has a pending decision and consume it.
+ * Returns the pending decision if found (and removes it), null otherwise.
+ *
+ * Called from PostToolUse to check if a Bash command had a pending decision.
+ */
+export function consumePendingDecision(
+  command: string,
+  context?: LogContext
+): null | PendingDecision {
+  const key = normalizeCommand(command);
+  const decision = pendingDecisions.get(key);
+
+  if (!decision) {
+    return null;
+  }
+
+  // Check if still within TTL
+  const now = Date.now();
+  if (now - decision.timestamp > PENDING_TTL_MS) {
+    pendingDecisions.delete(key);
+    return null;
+  }
+
+  // Consume the decision (remove from pending)
+  pendingDecisions.delete(key);
+  logDebug(`Consumed pending decision for command: ${key.slice(0, 50)}...`, context);
+
+  return decision;
+}
+
+/**
+ * Get the count of pending decisions (for debugging/stats).
+ */
+export function getPendingCount(): number {
+  return pendingDecisions.size;
+}
+
+/**
+ * Check if a command has a pending decision without consuming it.
+ */
+export function hasPendingDecision(command: string): boolean {
+  const key = normalizeCommand(command);
+  const decision = pendingDecisions.get(key);
+
+  if (!decision) {
+    return false;
+  }
+
+  // Check if still within TTL
+  const now = Date.now();
+  if (now - decision.timestamp > PENDING_TTL_MS) {
+    pendingDecisions.delete(key);
+    return false;
+  }
+
+  return true;
 }
 
 /**
@@ -66,93 +151,9 @@ function ensureCleanupTimer(): void {
 }
 
 /**
- * Add a command to the pending decisions set.
- * Called when the security gate returns "ask" or LLM "allow" for a Bash command.
+ * Normalize a command for use as a map key.
+ * Trims whitespace and collapses multiple spaces.
  */
-export function addPendingDecision(
-  command: string,
-  reason: string,
-  description?: string,
-  context?: LogContext,
-  suggestedRule?: { type: string; pattern: string; reason: string }
-): void {
-  ensureCleanupTimer();
-
-  const key = normalizeCommand(command);
-  const decision: PendingDecision = {
-    command,
-    description,
-    timestamp: Date.now(),
-    reason,
-    suggestedRule,
-  };
-
-  pendingDecisions.set(key, decision);
-  logDebug(`Added pending decision for command: ${key.slice(0, 50)}...`, context);
-}
-
-/**
- * Check if a command has a pending decision and consume it.
- * Returns the pending decision if found (and removes it), null otherwise.
- *
- * Called from PostToolUse to check if a Bash command had a pending decision.
- */
-export function consumePendingDecision(
-  command: string,
-  context?: LogContext
-): PendingDecision | null {
-  const key = normalizeCommand(command);
-  const decision = pendingDecisions.get(key);
-
-  if (!decision) {
-    return null;
-  }
-
-  // Check if still within TTL
-  const now = Date.now();
-  if (now - decision.timestamp > PENDING_TTL_MS) {
-    pendingDecisions.delete(key);
-    return null;
-  }
-
-  // Consume the decision (remove from pending)
-  pendingDecisions.delete(key);
-  logDebug(`Consumed pending decision for command: ${key.slice(0, 50)}...`, context);
-
-  return decision;
-}
-
-/**
- * Check if a command has a pending decision without consuming it.
- */
-export function hasPendingDecision(command: string): boolean {
-  const key = normalizeCommand(command);
-  const decision = pendingDecisions.get(key);
-
-  if (!decision) {
-    return false;
-  }
-
-  // Check if still within TTL
-  const now = Date.now();
-  if (now - decision.timestamp > PENDING_TTL_MS) {
-    pendingDecisions.delete(key);
-    return false;
-  }
-
-  return true;
-}
-
-/**
- * Get the count of pending decisions (for debugging/stats).
- */
-export function getPendingCount(): number {
-  return pendingDecisions.size;
-}
-
-/**
- * Clear all pending decisions (useful for testing).
- */
-export function clearPendingDecisions(): void {
-  pendingDecisions.clear();
+function normalizeCommand(command: string): string {
+  return command.trim().replace(/\s+/g, " ");
 }

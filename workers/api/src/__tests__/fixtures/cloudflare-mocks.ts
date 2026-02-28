@@ -20,7 +20,7 @@ export class MockKVNamespace {
   async get(
     key: string,
     type: 'arrayBuffer' | 'json' | 'stream' | 'text' = 'text',
-  ): Promise<ArrayBuffer | ReadableStream | string | unknown> {
+  ): Promise<unknown> {
     const entry = this.store.get(key)
     if (!entry) return null
 
@@ -64,7 +64,7 @@ export class MockKVNamespace {
     type?: 'arrayBuffer' | 'json' | 'stream' | 'text',
   ): Promise<{
     metadata: Metadata | null
-    value: ArrayBuffer | ReadableStream | string | unknown
+    value: unknown
   }> {
     const value = await this.get(key, type as 'text')
     return { metadata: null, value }
@@ -166,7 +166,7 @@ export function createMockContext(options: {
   return {
     env,
     executionCtx,
-    header: () => {},
+    header: () => { /* noop */ },
     html: (html: string, status = 200) =>
       new Response(html, {
         headers: {'Content-Type': 'text/html'},
@@ -185,7 +185,7 @@ export function createMockContext(options: {
       raw: req,
       url: req.url,
     },
-    status: () => {},
+    status: () => { /* noop */ },
     text: (text: string, status = 200) =>
       new Response(text, {
         headers: {'Content-Type': 'text/plain'},
@@ -234,7 +234,7 @@ export function createMockExecutionContext(): ExecutionContext {
   const promises: Promise<unknown>[] = []
 
   return {
-    passThroughOnException: () => {},
+    passThroughOnException: () => { /* noop */ },
     // For tests: await all promises
     async waitForAll(): Promise<void> {
       await Promise.all(promises)

@@ -15,10 +15,9 @@ import {
   searchSpotify,
 } from '@dj/api-contracts'
 import {SpotifySearchResponseSchema, SpotifyTokenResponseSchema} from '@dj/shared-types'
+import {z} from 'zod'
 
 import type {Env} from '../index'
-
-import {z} from 'zod'
 
 import {isSuccessResponse, parse, safeParse} from '../lib/guards'
 import {getLogger} from '../utils/LoggerContext'

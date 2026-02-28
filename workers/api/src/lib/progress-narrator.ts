@@ -21,20 +21,20 @@ import {ServiceLogger} from '../utils/ServiceLogger'
 interface MessageContext {
   eventType: string
   metadata?: Record<string, unknown>
-  parameters?: Record<string, unknown>
-  previousMessages?: string[]
-  toolName?: string
-  userRequest?: string
   /**
    * Progress milestone: starting, midpoint, finishing, complete
    * Helps narrator adjust tone and pacing
    */
-  milestone?: 'starting' | 'midpoint' | 'finishing' | 'complete'
+  milestone?: 'complete' | 'finishing' | 'midpoint' | 'starting'
+  parameters?: Record<string, unknown>
+  previousMessages?: string[]
   /**
    * Progress percentage (0-100)
    * Optional numeric indicator of completion
    */
   progressPercent?: number
+  toolName?: string
+  userRequest?: string
 }
 
 export class ProgressNarrator {
@@ -215,10 +215,10 @@ export class ProgressNarrator {
     // Add milestone context if provided (subtle hints, not explicit stages)
     if (context.milestone) {
       const milestoneHints = {
-        starting: 'This is the beginning of the operation',
-        midpoint: 'We are making good progress through the operation',
-        finishing: 'This operation is nearly complete',
         complete: 'This operation just finished successfully',
+        finishing: 'This operation is nearly complete',
+        midpoint: 'We are making good progress through the operation',
+        starting: 'This is the beginning of the operation',
       }
       parts.push(`\nContext: ${milestoneHints[context.milestone]}`)
     }
@@ -310,6 +310,18 @@ export class ProgressNarrator {
         break
       }
 
+      case 'enrichment_complete': {
+        const dataTypes = context.metadata?.dataTypes
+        const enrichedCount = context.metadata?.enrichedCount
+        if (dataTypes) {
+          parts.push(`\nData types found: ${dataTypes}`)
+        }
+        if (enrichedCount) {
+          parts.push(`\nTotal enriched: ${enrichedCount} tracks`)
+        }
+        break
+      }
+
       case 'enrichment_deezer': {
         const cacheHitRate = context.metadata?.cacheHitRate as number | undefined
         const enrichingCount = context.metadata?.enrichingCount
@@ -332,18 +344,6 @@ export class ProgressNarrator {
         }
         if (enrichingCount) {
           parts.push(`\nDiscovering tags and signals for ${enrichingCount} tracks`)
-        }
-        break
-      }
-
-      case 'enrichment_complete': {
-        const dataTypes = context.metadata?.dataTypes
-        const enrichedCount = context.metadata?.enrichedCount
-        if (dataTypes) {
-          parts.push(`\nData types found: ${dataTypes}`)
-        }
-        if (enrichedCount) {
-          parts.push(`\nTotal enriched: ${enrichedCount} tracks`)
         }
         break
       }

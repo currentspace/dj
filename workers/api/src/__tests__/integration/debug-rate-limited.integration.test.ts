@@ -1,20 +1,21 @@
-import { describe, it, expect } from 'vitest'
-import { rateLimitedDeezerCall, getGlobalOrchestrator } from '../../utils/RateLimitedAPIClients'
+import { describe, expect, it } from 'vitest'
+
+import { getGlobalOrchestrator, rateLimitedDeezerCall } from '../../utils/RateLimitedAPIClients'
+import { asRecord } from '../contracts/helpers'
 
 describe.skip('Debug Rate Limited API', () => {
   it('should call Deezer via rate limited wrapper', async () => {
     const isrc = 'GBUM71029604'
     const url = `https://api.deezer.com/track/isrc:${isrc}`
-    
+
     console.log('Calling via rate limited wrapper...')
     const response = await rateLimitedDeezerCall(() => fetch(url), undefined, 'test')
-    
+
     console.log('Response:', response)
     console.log('Response ok:', response?.ok)
-    
+
     if (response) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data = await response.json() as Record<string, any>
+      const data = asRecord(await response.json())
       console.log('BPM:', data.bpm)
       expect(data.bpm).toBeDefined()
     }

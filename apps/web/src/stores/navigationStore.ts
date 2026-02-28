@@ -13,33 +13,33 @@ import {subscribeWithSelector} from 'zustand/middleware'
 export type Route = 'chat' | 'debug' | 'mix'
 
 interface NavigationState {
-  // State
-  route: Route
-
   // Actions
   navigate: (route: Route) => void
+
+  // State
+  route: Route
 }
 
 // =============================================================================
 // HELPERS
 // =============================================================================
 
-function getRouteFromPath(pathname: string): Route {
-  if (pathname === '/mix' || pathname === '/dj') return 'mix'
-  if (pathname === '/debug') return 'debug'
-  return 'chat'
-}
-
 function getPathFromRoute(route: Route): string {
   switch (route) {
-    case 'mix':
-      return '/mix'
     case 'debug':
       return '/debug'
+    case 'mix':
+      return '/mix'
     case 'chat':
     default:
       return '/'
   }
+}
+
+function getRouteFromPath(pathname: string): Route {
+  if (pathname === '/mix' || pathname === '/dj') return 'mix'
+  if (pathname === '/debug') return 'debug'
+  return 'chat'
 }
 
 // =============================================================================
@@ -51,8 +51,6 @@ const initialRoute: Route =
 
 export const useNavigationStore = create<NavigationState>()(
   subscribeWithSelector((set, get) => ({
-    route: initialRoute,
-
     navigate: (route) => {
       if (get().route === route) return
 
@@ -60,6 +58,8 @@ export const useNavigationStore = create<NavigationState>()(
       const path = getPathFromRoute(route)
       window.history.pushState({route}, '', path)
     },
+
+    route: initialRoute,
   }))
 )
 

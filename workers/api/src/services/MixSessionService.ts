@@ -3,7 +3,6 @@
  * Manages Live DJ Mode mix sessions with vibe tracking, queue, and history
  */
 
-import { randomUUID } from 'node:crypto'
 import type {
   ListenerSignal,
   MixSession,
@@ -12,7 +11,10 @@ import type {
   SessionPreferences,
   VibeProfile,
 } from '@dj/shared-types'
+
 import { MixSessionSchema } from '@dj/shared-types'
+import { randomUUID } from 'node:crypto'
+
 import { getLogger } from '../utils/LoggerContext'
 
 const logger = getLogger()
@@ -21,169 +23,38 @@ const logger = getLogger()
  * Service for managing mix sessions in KV storage
  */
 export class MixSessionService {
-  private readonly SESSION_TTL = 8 * 60 * 60 // 8 hours in seconds
   private readonly MAX_HISTORY = 20
   private readonly MAX_QUEUE = 10
+  private readonly SESSION_TTL = 8 * 60 * 60 // 8 hours in seconds
 
   constructor(private kv: KVNamespace) {}
 
   /**
-   * Create a new mix session for a user
+   * Add track to history (max 20 tracks, newest first)
    */
-  async createSession(
-    userId: string,
-    preferences?: SessionPreferences,
-  ): Promise<MixSession> {
-    const now = new Date().toISOString()
+  addToHistory(session: MixSession, track: PlayedTrack): void {
+    // Add to beginning (newest first)
+    session.history.unshift(track)
 
-    const session: MixSession = {
-      id: randomUUID(),
-      userId,
-      createdAt: now,
-      updatedAt: now,
-      vibe: {
-        mood: [],
-        genres: [],
-        era: { start: 2000, end: 2025 },
-        bpmRange: { min: 80, max: 140 },
-        energyLevel: 5,
-        energyDirection: 'steady',
-      },
-      history: [],
-      queue: [],
-      preferences: preferences ?? {
-        avoidGenres: [],
-        favoriteArtists: [],
-        bpmLock: null,
-        autoFill: true,
-      },
-      conversation: [],
-      signals: [],
-      plan: null,
-      tasteModel: null,
-      fallbackPool: [],
-    }
-
-    // Validate with Zod schema
-    const validated = MixSessionSchema.parse(session)
-
-    // Store in KV with 8-hour TTL
-    await this.kv.put(`mix:${userId}`, JSON.stringify(validated), {
-      expirationTtl: this.SESSION_TTL,
-    })
-
-    logger?.info(`Created mix session for user ${userId}`, { sessionId: session.id })
-
-    return validated
-  }
-
-  /**
-   * Retrieve existing session for a user
-   */
-  async getSession(userId: string): Promise<MixSession | null> {
-    const stored = await this.kv.get(`mix:${userId}`, 'text')
-
-    if (!stored) {
-      return null
-    }
-
-    try {
-      const parsed = JSON.parse(stored)
-      return MixSessionSchema.parse(parsed)
-    } catch (error) {
-      logger?.error('Failed to parse session from KV', { userId, error })
-      return null
+    // Limit to 20 tracks
+    if (session.history.length > this.MAX_HISTORY) {
+      session.history = session.history.slice(0, this.MAX_HISTORY)
     }
   }
 
   /**
-   * Update existing session in KV
+   * Add track to queue (max 10 tracks)
    */
-  async updateSession(session: MixSession): Promise<void> {
-    // Update timestamp
-    session.updatedAt = new Date().toISOString()
-
-    // Validate before storing
-    const validated = MixSessionSchema.parse(session)
-
-    await this.kv.put(`mix:${session.userId}`, JSON.stringify(validated), {
-      expirationTtl: this.SESSION_TTL,
-    })
-  }
-
-  /**
-   * End session and return stats
-   */
-  async endSession(userId: string): Promise<{ tracksPlayed: number; sessionDuration: number }> {
-    const session = await this.getSession(userId)
-
-    if (!session) {
-      return { tracksPlayed: 0, sessionDuration: 0 }
+  addToQueue(session: MixSession, track: QueuedTrack): void {
+    if (session.queue.length >= this.MAX_QUEUE) {
+      logger?.debug('Queue is full, cannot add more tracks', { userId: session.userId })
+      return
     }
 
-    const tracksPlayed = session.history.length
-    const createdAt = new Date(session.createdAt).getTime()
-    const endedAt = Date.now()
-    const sessionDuration = Math.floor((endedAt - createdAt) / 1000) // in seconds
+    // Set position to end of queue
+    track.position = session.queue.length
 
-    // Delete session from KV
-    await this.kv.delete(`mix:${userId}`)
-
-    logger?.info(`Ended mix session for user ${userId}`, {
-      sessionId: session.id,
-      tracksPlayed,
-      sessionDuration,
-    })
-
-    return { tracksPlayed, sessionDuration }
-  }
-
-  /**
-   * Update vibe profile from a played track
-   */
-  updateVibeFromTrack(session: MixSession, track: PlayedTrack): VibeProfile {
-    const currentVibe = session.vibe
-
-    // Convert track energy (0-1) to energy level (1-10)
-    const trackEnergyLevel = track.energy !== null ? Math.round(track.energy * 10) : null
-
-    // Blend energy levels if we have track energy
-    let newEnergyLevel = currentVibe.energyLevel
-    if (trackEnergyLevel !== null) {
-      // Use weighted average: 70% current, 30% new
-      newEnergyLevel = Math.round(currentVibe.energyLevel * 0.7 + trackEnergyLevel * 0.3)
-      // Clamp to valid range
-      newEnergyLevel = Math.max(1, Math.min(10, newEnergyLevel))
-    }
-
-    // Detect energy direction from recent history
-    const energyDirection = this.detectEnergyDirection(session, track)
-
-    // Update BPM range to include new track
-    // Clamp to schema bounds (20-220) to avoid validation errors
-    // 20 BPM allows for slow classical/ambient (Grave tempo is 20-40 BPM)
-    const BPM_MIN = 20
-    const BPM_MAX = 220
-    let bpmRange = { ...currentVibe.bpmRange }
-    if (track.bpm !== null) {
-      const clampedBpm = Math.max(BPM_MIN, Math.min(BPM_MAX, track.bpm))
-      bpmRange = {
-        min: Math.max(BPM_MIN, Math.min(currentVibe.bpmRange.min, clampedBpm)),
-        max: Math.min(BPM_MAX, Math.max(currentVibe.bpmRange.max, clampedBpm)),
-      }
-    }
-
-    const updatedVibe: VibeProfile = {
-      ...currentVibe,
-      energyLevel: newEnergyLevel,
-      energyDirection,
-      bpmRange,
-    }
-
-    // Update session vibe
-    session.vibe = updatedVibe
-
-    return updatedVibe
+    session.queue.push(track)
   }
 
   /**
@@ -195,7 +66,7 @@ export class MixSessionService {
   blendVibes(
     current: VibeProfile,
     trackVibe: Partial<VibeProfile>,
-    weight: number = 0.3,
+    weight = 0.3,
   ): VibeProfile {
     const blended: VibeProfile = { ...current }
 
@@ -231,16 +102,16 @@ export class MixSessionService {
       const BPM_MIN = 20
       const BPM_MAX = 220
       blended.bpmRange = {
-        min: Math.max(BPM_MIN, Math.min(current.bpmRange.min, trackVibe.bpmRange.min)),
         max: Math.min(BPM_MAX, Math.max(current.bpmRange.max, trackVibe.bpmRange.max)),
+        min: Math.max(BPM_MIN, Math.min(current.bpmRange.min, trackVibe.bpmRange.min)),
       }
     }
 
     // Blend era if provided
     if (trackVibe.era) {
       blended.era = {
-        start: Math.min(current.era.start, trackVibe.era.start),
         end: Math.max(current.era.end, trackVibe.era.end),
+        start: Math.min(current.era.start, trackVibe.era.start),
       }
     }
 
@@ -248,18 +119,107 @@ export class MixSessionService {
   }
 
   /**
-   * Add track to queue (max 10 tracks)
+   * Clear all tracks from queue
    */
-  addToQueue(session: MixSession, track: QueuedTrack): void {
-    if (session.queue.length >= this.MAX_QUEUE) {
-      logger?.debug('Queue is full, cannot add more tracks', { userId: session.userId })
-      return
+  clearQueue(session: MixSession): void {
+    session.queue = []
+    logger?.debug('Cleared queue', { userId: session.userId })
+  }
+
+  /**
+   * Create a new mix session for a user
+   */
+  async createSession(
+    userId: string,
+    preferences?: SessionPreferences,
+  ): Promise<MixSession> {
+    const now = new Date().toISOString()
+
+    const session: MixSession = {
+      conversation: [],
+      createdAt: now,
+      fallbackPool: [],
+      history: [],
+      id: randomUUID(),
+      plan: null,
+      preferences: preferences ?? {
+        autoFill: true,
+        avoidGenres: [],
+        bpmLock: null,
+        favoriteArtists: [],
+      },
+      queue: [],
+      signals: [],
+      tasteModel: null,
+      updatedAt: now,
+      userId,
+      vibe: {
+        bpmRange: { max: 140, min: 80 },
+        energyDirection: 'steady',
+        energyLevel: 5,
+        era: { end: 2025, start: 2000 },
+        genres: [],
+        mood: [],
+      },
     }
 
-    // Set position to end of queue
-    track.position = session.queue.length
+    // Validate with Zod schema
+    const validated = MixSessionSchema.parse(session)
 
-    session.queue.push(track)
+    // Store in KV with 8-hour TTL
+    await this.kv.put(`mix:${userId}`, JSON.stringify(validated), {
+      expirationTtl: this.SESSION_TTL,
+    })
+
+    logger?.info(`Created mix session for user ${userId}`, { sessionId: session.id })
+
+    return validated
+  }
+
+  /**
+   * End session and return stats
+   */
+  async endSession(userId: string): Promise<{ sessionDuration: number; tracksPlayed: number; }> {
+    const session = await this.getSession(userId)
+
+    if (!session) {
+      return { sessionDuration: 0, tracksPlayed: 0 }
+    }
+
+    const tracksPlayed = session.history.length
+    const createdAt = new Date(session.createdAt).getTime()
+    const endedAt = Date.now()
+    const sessionDuration = Math.floor((endedAt - createdAt) / 1000) // in seconds
+
+    // Delete session from KV
+    await this.kv.delete(`mix:${userId}`)
+
+    logger?.info(`Ended mix session for user ${userId}`, {
+      sessionDuration,
+      sessionId: session.id,
+      tracksPlayed,
+    })
+
+    return { sessionDuration, tracksPlayed }
+  }
+
+  /**
+   * Retrieve existing session for a user
+   */
+  async getSession(userId: string): Promise<MixSession | null> {
+    const stored = await this.kv.get(`mix:${userId}`, 'text')
+
+    if (!stored) {
+      return null
+    }
+
+    try {
+      const parsed = JSON.parse(stored)
+      return MixSessionSchema.parse(parsed)
+    } catch (error) {
+      logger?.error('Failed to parse session from KV', { error, userId })
+      return null
+    }
   }
 
   /**
@@ -283,7 +243,7 @@ export class MixSessionService {
    */
   reorderQueue(session: MixSession, from: number, to: number): void {
     if (from < 0 || from >= session.queue.length || to < 0 || to >= session.queue.length) {
-      logger?.debug('Invalid reorder positions', { from, to, queueLength: session.queue.length })
+      logger?.debug('Invalid reorder positions', { from, queueLength: session.queue.length, to })
       return
     }
 
@@ -302,24 +262,102 @@ export class MixSessionService {
   }
 
   /**
-   * Clear all tracks from queue
+   * Update existing session in KV
    */
-  clearQueue(session: MixSession): void {
-    session.queue = []
-    logger?.debug('Cleared queue', { userId: session.userId })
+  async updateSession(session: MixSession): Promise<void> {
+    // Update timestamp
+    session.updatedAt = new Date().toISOString()
+
+    // Validate before storing
+    const validated = MixSessionSchema.parse(session)
+
+    await this.kv.put(`mix:${session.userId}`, JSON.stringify(validated), {
+      expirationTtl: this.SESSION_TTL,
+    })
   }
 
   /**
-   * Add track to history (max 20 tracks, newest first)
+   * Update taste model from a listener signal.
+   * Completed tracks boost genre/artist weights, skips penalize them.
    */
-  addToHistory(session: MixSession, track: PlayedTrack): void {
-    // Add to beginning (newest first)
-    session.history.unshift(track)
-
-    // Limit to 20 tracks
-    if (session.history.length > this.MAX_HISTORY) {
-      session.history = session.history.slice(0, this.MAX_HISTORY)
+  updateTasteFromSignal(session: MixSession, signal: ListenerSignal, trackArtist: string): void {
+    session.tasteModel ??= {
+      artistAffinities: {},
+      bpmPreference: [80, 140],
+      energyPreference: 0.5,
+      genreWeights: {},
+      skipPatterns: [],
+      updatedAt: Date.now(),
     }
+
+    const weight = signal.type === 'completed' ? 0.1 : signal.type === 'skipped' ? -0.2 : 0
+    if (weight === 0) return
+
+    // Update artist affinity
+    // eslint-disable-next-line security/detect-object-injection -- safe: trackArtist is a Spotify artist name string used as a dictionary key
+    const currentAffinity = session.tasteModel.artistAffinities[trackArtist] ?? 0
+    // eslint-disable-next-line security/detect-object-injection -- safe: trackArtist is a Spotify artist name string used as a dictionary key
+    session.tasteModel.artistAffinities[trackArtist] = Math.max(-1, Math.min(1, currentAffinity + weight))
+
+    // Track skip patterns
+    if (signal.type === 'skipped') {
+      if (!session.tasteModel.skipPatterns.includes(trackArtist)) {
+        session.tasteModel.skipPatterns.push(trackArtist)
+        if (session.tasteModel.skipPatterns.length > 20) {
+          session.tasteModel.skipPatterns = session.tasteModel.skipPatterns.slice(-20)
+        }
+      }
+    }
+
+    session.tasteModel.updatedAt = Date.now()
+  }
+
+  /**
+   * Update vibe profile from a played track
+   */
+  updateVibeFromTrack(session: MixSession, track: PlayedTrack): VibeProfile {
+    const currentVibe = session.vibe
+
+    // Convert track energy (0-1) to energy level (1-10)
+    const trackEnergyLevel = track.energy !== null ? Math.round(track.energy * 10) : null
+
+    // Blend energy levels if we have track energy
+    let newEnergyLevel = currentVibe.energyLevel
+    if (trackEnergyLevel !== null) {
+      // Use weighted average: 70% current, 30% new
+      newEnergyLevel = Math.round(currentVibe.energyLevel * 0.7 + trackEnergyLevel * 0.3)
+      // Clamp to valid range
+      newEnergyLevel = Math.max(1, Math.min(10, newEnergyLevel))
+    }
+
+    // Detect energy direction from recent history
+    const energyDirection = this.detectEnergyDirection(session, track)
+
+    // Update BPM range to include new track
+    // Clamp to schema bounds (20-220) to avoid validation errors
+    // 20 BPM allows for slow classical/ambient (Grave tempo is 20-40 BPM)
+    const BPM_MIN = 20
+    const BPM_MAX = 220
+    let bpmRange = { ...currentVibe.bpmRange }
+    if (track.bpm !== null) {
+      const clampedBpm = Math.max(BPM_MIN, Math.min(BPM_MAX, track.bpm))
+      bpmRange = {
+        max: Math.min(BPM_MAX, Math.max(currentVibe.bpmRange.max, clampedBpm)),
+        min: Math.max(BPM_MIN, Math.min(currentVibe.bpmRange.min, clampedBpm)),
+      }
+    }
+
+    const updatedVibe: VibeProfile = {
+      ...currentVibe,
+      bpmRange,
+      energyDirection,
+      energyLevel: newEnergyLevel,
+    }
+
+    // Update session vibe
+    session.vibe = updatedVibe
+
+    return updatedVibe
   }
 
   /**
@@ -362,42 +400,6 @@ export class MixSessionService {
     }
 
     return 'steady'
-  }
-
-  /**
-   * Update taste model from a listener signal.
-   * Completed tracks boost genre/artist weights, skips penalize them.
-   */
-  updateTasteFromSignal(session: MixSession, signal: ListenerSignal, trackArtist: string): void {
-    if (!session.tasteModel) {
-      session.tasteModel = {
-        genreWeights: {},
-        energyPreference: 0.5,
-        bpmPreference: [80, 140],
-        artistAffinities: {},
-        skipPatterns: [],
-        updatedAt: Date.now(),
-      }
-    }
-
-    const weight = signal.type === 'completed' ? 0.1 : signal.type === 'skipped' ? -0.2 : 0
-    if (weight === 0) return
-
-    // Update artist affinity
-    const currentAffinity = session.tasteModel.artistAffinities[trackArtist] ?? 0
-    session.tasteModel.artistAffinities[trackArtist] = Math.max(-1, Math.min(1, currentAffinity + weight))
-
-    // Track skip patterns
-    if (signal.type === 'skipped') {
-      if (!session.tasteModel.skipPatterns.includes(trackArtist)) {
-        session.tasteModel.skipPatterns.push(trackArtist)
-        if (session.tasteModel.skipPatterns.length > 20) {
-          session.tasteModel.skipPatterns = session.tasteModel.skipPatterns.slice(-20)
-        }
-      }
-    }
-
-    session.tasteModel.updatedAt = Date.now()
   }
 
   /**

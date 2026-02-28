@@ -22,21 +22,21 @@ import {
 
 // Mock the rate-limited API clients
 vi.mock('../../utils/RateLimitedAPIClients', () => ({
-  rateLimitedLastFmCall: vi.fn((fn: () => Promise<Response>) => fn()),
   getGlobalOrchestrator: vi.fn(() => ({
     execute: vi.fn((fn: () => Promise<unknown>) => fn()),
     executeBatch: vi.fn(async (tasks: (() => Promise<unknown>)[]) => {
       return Promise.all(tasks.map(task => task()))
     }),
   })),
+  rateLimitedLastFmCall: vi.fn((fn: () => Promise<Response>) => fn()),
 }))
 
 // Mock logger
 vi.mock('../../utils/LoggerContext', () => ({
   getLogger: () => ({
-    info: vi.fn(),
-    error: vi.fn(),
     debug: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
   }),
 }))
 
@@ -46,7 +46,7 @@ describe('LastFmService', () => {
 
   beforeEach(() => {
     mockCache = new MockKVNamespace()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     service = new LastFmService('test-api-key', mockCache as any)
     // Reset the hoisted fetch mock for each test
     fetchMock.mockReset()
@@ -59,30 +59,30 @@ describe('LastFmService', () => {
       fetchMock
         // Correction
         .mockResolvedValueOnce({
-          ok: true,
           json: () => Promise.resolve(buildLastFmCorrection(null)),
+          ok: true,
         } as Response)
         // Track info
         .mockResolvedValueOnce({
-          ok: true,
           json: () =>
             Promise.resolve(buildLastFmTrackInfo({ listeners: 10000, playcount: 50000 })),
+          ok: true,
         } as Response)
         // Top tags
         .mockResolvedValueOnce({
-          ok: true,
           json: () => Promise.resolve(buildLastFmTopTags(['rock', 'classic rock', '70s'])),
+          ok: true,
         } as Response)
         // Similar tracks
         .mockResolvedValueOnce({
-          ok: true,
           json: () =>
             Promise.resolve(
               buildLastFmSimilarTracks([
-                { artist: 'Artist 1', name: 'Track 1', match: 0.9 },
-                { artist: 'Artist 2', name: 'Track 2', match: 0.8 },
+                { artist: 'Artist 1', match: 0.9, name: 'Track 1' },
+                { artist: 'Artist 2', match: 0.8, name: 'Track 2' },
               ]),
             ),
+          ok: true,
         } as Response)
 
       const signals = await service.getTrackSignals(track, true)
@@ -100,8 +100,8 @@ describe('LastFmService', () => {
       const track = buildLastFmTrack({ artist: 'test artist', name: 'test track' })
 
       fetchMock.mockResolvedValue({
-        ok: true,
         json: () => Promise.resolve(buildLastFmCorrection(null)),
+        ok: true,
       } as Response)
 
       await service.getTrackSignals(track, true)
@@ -123,24 +123,24 @@ describe('LastFmService', () => {
       fetchMock
         // Correction returns corrected names
         .mockResolvedValueOnce({
-          ok: true,
           json: () =>
             Promise.resolve(buildLastFmCorrection({ artist: 'Correct Artist', track: 'Correct Track' })),
+          ok: true,
         } as Response)
         // Track info should use corrected names
         .mockResolvedValueOnce({
-          ok: true,
           json: () => Promise.resolve(buildLastFmTrackInfo()),
+          ok: true,
         } as Response)
         // Top tags
         .mockResolvedValueOnce({
-          ok: true,
           json: () => Promise.resolve(buildLastFmTopTags([])),
+          ok: true,
         } as Response)
         // Similar
         .mockResolvedValueOnce({
-          ok: true,
           json: () => Promise.resolve(buildLastFmSimilarTracks([])),
+          ok: true,
         } as Response)
 
       const signals = await service.getTrackSignals(track, true)
@@ -154,15 +154,14 @@ describe('LastFmService', () => {
 
       fetchMock
         .mockResolvedValueOnce({
-          ok: true,
           json: () => Promise.resolve(buildLastFmCorrection(null)),
+          ok: true,
         } as Response)
         .mockResolvedValueOnce({
-          ok: true,
           json: () => Promise.resolve(buildLastFmTrackInfo()),
+          ok: true,
         } as Response)
         .mockResolvedValueOnce({
-          ok: true,
           json: () =>
             Promise.resolve(
               buildLastFmTopTags([
@@ -178,10 +177,11 @@ describe('LastFmService', () => {
                 'hard rock',
               ]),
             ),
+          ok: true,
         } as Response)
         .mockResolvedValueOnce({
-          ok: true,
           json: () => Promise.resolve(buildLastFmSimilarTracks([])),
+          ok: true,
         } as Response)
 
       const signals = await service.getTrackSignals(track, true)
@@ -196,26 +196,26 @@ describe('LastFmService', () => {
 
       fetchMock
         .mockResolvedValueOnce({
-          ok: true,
           json: () => Promise.resolve(buildLastFmCorrection(null)),
+          ok: true,
         } as Response)
         .mockResolvedValueOnce({
-          ok: true,
           json: () => Promise.resolve(buildLastFmTrackInfo()),
+          ok: true,
         } as Response)
         .mockResolvedValueOnce({
-          ok: true,
           json: () => Promise.resolve(buildLastFmTopTags([])),
+          ok: true,
         } as Response)
         .mockResolvedValueOnce({
-          ok: true,
           json: () =>
             Promise.resolve(
               buildLastFmSimilarTracks([
-                { artist: 'Similar Artist 1', name: 'Similar Track 1', match: 0.95 },
-                { artist: 'Similar Artist 2', name: 'Similar Track 2', match: 0.85 },
+                { artist: 'Similar Artist 1', match: 0.95, name: 'Similar Track 1' },
+                { artist: 'Similar Artist 2', match: 0.85, name: 'Similar Track 2' },
               ]),
             ),
+          ok: true,
         } as Response)
 
       const signals = await service.getTrackSignals(track, true)
@@ -223,8 +223,8 @@ describe('LastFmService', () => {
       expect(signals?.similar).toHaveLength(2)
       expect(signals?.similar[0]).toEqual({
         artist: 'Similar Artist 1',
-        name: 'Similar Track 1',
         match: 0.95,
+        name: 'Similar Track 1',
       })
     })
 
@@ -233,21 +233,21 @@ describe('LastFmService', () => {
 
       fetchMock
         .mockResolvedValueOnce({
-          ok: true,
           json: () => Promise.resolve(buildLastFmCorrection(null)),
+          ok: true,
         } as Response)
         .mockResolvedValueOnce({
-          ok: true,
           json: () =>
             Promise.resolve(buildLastFmTrackInfo({ listeners: 25000, playcount: 100000 })),
+          ok: true,
         } as Response)
         .mockResolvedValueOnce({
-          ok: true,
           json: () => Promise.resolve(buildLastFmTopTags([])),
+          ok: true,
         } as Response)
         .mockResolvedValueOnce({
-          ok: true,
           json: () => Promise.resolve(buildLastFmSimilarTracks([])),
+          ok: true,
         } as Response)
 
       const signals = await service.getTrackSignals(track, true)
@@ -261,20 +261,20 @@ describe('LastFmService', () => {
 
       fetchMock
         .mockResolvedValueOnce({
-          ok: true,
           json: () => Promise.resolve(buildLastFmCorrection(null)),
+          ok: true,
         } as Response)
         .mockResolvedValueOnce({
-          ok: true,
           json: () => Promise.resolve(buildLastFmTrackInfo()),
+          ok: true,
         } as Response)
         .mockResolvedValueOnce({
-          ok: true,
           json: () => Promise.resolve(buildLastFmTopTags([])),
+          ok: true,
         } as Response)
         .mockResolvedValueOnce({
-          ok: true,
           json: () => Promise.resolve(buildLastFmSimilarTracks([])),
+          ok: true,
         } as Response)
 
       const signals = await service.getTrackSignals(track, true)
@@ -290,27 +290,27 @@ describe('LastFmService', () => {
       const track = buildLastFmTrack()
 
       const wikiData = {
-        summary: 'Track summary',
         content: 'Full track content',
         published: '2023-01-01',
+        summary: 'Track summary',
       }
 
       fetchMock
         .mockResolvedValueOnce({
-          ok: true,
           json: () => Promise.resolve(buildLastFmCorrection(null)),
+          ok: true,
         } as Response)
         .mockResolvedValueOnce({
-          ok: true,
           json: () => Promise.resolve(buildLastFmTrackInfo({ wiki: wikiData })),
+          ok: true,
         } as Response)
         .mockResolvedValueOnce({
-          ok: true,
           json: () => Promise.resolve(buildLastFmTopTags([])),
+          ok: true,
         } as Response)
         .mockResolvedValueOnce({
-          ok: true,
           json: () => Promise.resolve(buildLastFmSimilarTracks([])),
+          ok: true,
         } as Response)
 
       const signals = await service.getTrackSignals(track, true)
@@ -325,20 +325,20 @@ describe('LastFmService', () => {
 
       fetchMock
         .mockResolvedValueOnce({
-          ok: true,
           json: () => Promise.resolve(buildLastFmCorrection(null)),
+          ok: true,
         } as Response)
         .mockResolvedValueOnce({
-          ok: true,
           json: () => Promise.resolve(buildLastFmTrackInfo()),
+          ok: true,
         } as Response)
         .mockResolvedValueOnce({
-          ok: true,
           json: () => Promise.resolve(buildLastFmTopTags([])),
+          ok: true,
         } as Response)
         .mockResolvedValueOnce({
-          ok: true,
           json: () => Promise.resolve(buildLastFmSimilarTracks([])),
+          ok: true,
         } as Response)
 
       const signals = await service.getTrackSignals(track, true)
@@ -366,27 +366,27 @@ describe('LastFmService', () => {
       const track = buildLastFmTrack({ artist: 'Cached Artist', name: 'Cached Track' })
 
       const cachedSignals: LastFmSignals = {
+        album: null,
+        artistInfo: null,
         canonicalArtist: 'Cached Artist',
         canonicalTrack: 'Cached Track',
-        listeners: 50000,
-        playcount: 200000,
-        topTags: ['rock', 'classic'],
-        similar: [],
-        mbid: 'cached-mbid',
         duration: 180,
+        listeners: 50000,
+        mbid: 'cached-mbid',
+        playcount: 200000,
+        similar: [],
+        topTags: ['rock', 'classic'],
         url: 'https://last.fm/cached',
-        album: null,
         wiki: null,
-        artistInfo: null,
       }
 
       const cacheKey = service.generateCacheKey('Cached Artist', 'Cached Track')
       await mockCache.put(
         `lastfm:${cacheKey}`,
         JSON.stringify({
-          signals: cachedSignals,
           fetched_at: new Date().toISOString(),
           is_miss: false,
+          signals: cachedSignals,
           ttl: 7 * 24 * 60 * 60,
         }),
       )
@@ -402,21 +402,21 @@ describe('LastFmService', () => {
 
       fetchMock
         .mockResolvedValueOnce({
-          ok: true,
           json: () => Promise.resolve(buildLastFmCorrection(null)),
+          ok: true,
         } as Response)
         .mockResolvedValueOnce({
-          ok: true,
           json: () =>
             Promise.resolve(buildLastFmTrackInfo({ listeners: 10000, playcount: 50000 })),
+          ok: true,
         } as Response)
         .mockResolvedValueOnce({
-          ok: true,
           json: () => Promise.resolve(buildLastFmTopTags(['rock'])),
+          ok: true,
         } as Response)
         .mockResolvedValueOnce({
-          ok: true,
           json: () => Promise.resolve(buildLastFmSimilarTracks([])),
+          ok: true,
         } as Response)
 
       await service.getTrackSignals(track, true)
@@ -435,35 +435,35 @@ describe('LastFmService', () => {
         [
           'track1',
           {
-            topTags: ['rock', 'classic rock', '70s'],
+            album: null,
+            artistInfo: null,
             canonicalArtist: 'Artist 1',
             canonicalTrack: 'Track 1',
+            duration: null,
             listeners: 1000,
+            mbid: null,
             playcount: 5000,
             similar: [],
-            mbid: null,
-            duration: null,
+            topTags: ['rock', 'classic rock', '70s'],
             url: null,
-            album: null,
             wiki: null,
-            artistInfo: null,
           },
         ],
         [
           'track2',
           {
-            topTags: ['rock', 'alternative', '90s'],
+            album: null,
+            artistInfo: null,
             canonicalArtist: 'Artist 2',
             canonicalTrack: 'Track 2',
+            duration: null,
             listeners: 2000,
+            mbid: null,
             playcount: 10000,
             similar: [],
-            mbid: null,
-            duration: null,
+            topTags: ['rock', 'alternative', '90s'],
             url: null,
-            album: null,
             wiki: null,
-            artistInfo: null,
           },
         ],
       ])
@@ -480,52 +480,52 @@ describe('LastFmService', () => {
         [
           'track1',
           {
-            topTags: ['indie', 'indie rock'],
+            album: null,
+            artistInfo: null,
             canonicalArtist: 'Artist 1',
             canonicalTrack: 'Track 1',
+            duration: null,
             listeners: 1000,
+            mbid: null,
             playcount: 5000,
             similar: [],
-            mbid: null,
-            duration: null,
+            topTags: ['indie', 'indie rock'],
             url: null,
-            album: null,
             wiki: null,
-            artistInfo: null,
           },
         ],
         [
           'track2',
           {
-            topTags: ['indie', 'alternative'],
+            album: null,
+            artistInfo: null,
             canonicalArtist: 'Artist 2',
             canonicalTrack: 'Track 2',
+            duration: null,
             listeners: 2000,
+            mbid: null,
             playcount: 10000,
             similar: [],
-            mbid: null,
-            duration: null,
+            topTags: ['indie', 'alternative'],
             url: null,
-            album: null,
             wiki: null,
-            artistInfo: null,
           },
         ],
         [
           'track3',
           {
-            topTags: ['indie', 'indie rock'],
+            album: null,
+            artistInfo: null,
             canonicalArtist: 'Artist 3',
             canonicalTrack: 'Track 3',
+            duration: null,
             listeners: 3000,
+            mbid: null,
             playcount: 15000,
             similar: [],
-            mbid: null,
-            duration: null,
+            topTags: ['indie', 'indie rock'],
             url: null,
-            album: null,
             wiki: null,
-            artistInfo: null,
           },
         ],
       ])
@@ -544,52 +544,52 @@ describe('LastFmService', () => {
         [
           'track1',
           {
-            topTags: ['pop', 'dance'],
+            album: null,
+            artistInfo: null,
             canonicalArtist: 'Artist 1',
             canonicalTrack: 'Track 1',
+            duration: null,
             listeners: 1000,
+            mbid: null,
             playcount: 5000,
             similar: [],
-            mbid: null,
-            duration: null,
+            topTags: ['pop', 'dance'],
             url: null,
-            album: null,
             wiki: null,
-            artistInfo: null,
           },
         ],
         [
           'track2',
           {
-            topTags: ['pop', 'electronic'],
+            album: null,
+            artistInfo: null,
             canonicalArtist: 'Artist 2',
             canonicalTrack: 'Track 2',
+            duration: null,
             listeners: 2000,
+            mbid: null,
             playcount: 10000,
             similar: [],
-            mbid: null,
-            duration: null,
+            topTags: ['pop', 'electronic'],
             url: null,
-            album: null,
             wiki: null,
-            artistInfo: null,
           },
         ],
         [
           'track3',
           {
-            topTags: ['pop', 'dance', 'electronic'],
+            album: null,
+            artistInfo: null,
             canonicalArtist: 'Artist 3',
             canonicalTrack: 'Track 3',
+            duration: null,
             listeners: 3000,
+            mbid: null,
             playcount: 15000,
             similar: [],
-            mbid: null,
-            duration: null,
+            topTags: ['pop', 'dance', 'electronic'],
             url: null,
-            album: null,
             wiki: null,
-            artistInfo: null,
           },
         ],
       ])
@@ -607,18 +607,18 @@ describe('LastFmService', () => {
         [
           'track1',
           {
-            topTags: manyTags,
+            album: null,
+            artistInfo: null,
             canonicalArtist: 'Artist 1',
             canonicalTrack: 'Track 1',
+            duration: null,
             listeners: 1000,
+            mbid: null,
             playcount: 5000,
             similar: [],
-            mbid: null,
-            duration: null,
+            topTags: manyTags,
             url: null,
-            album: null,
             wiki: null,
-            artistInfo: null,
           },
         ],
       ])
@@ -633,18 +633,18 @@ describe('LastFmService', () => {
         [
           'track1',
           {
-            topTags: [],
+            album: null,
+            artistInfo: null,
             canonicalArtist: 'Artist 1',
             canonicalTrack: 'Track 1',
+            duration: null,
             listeners: 1000,
+            mbid: null,
             playcount: 5000,
             similar: [],
-            mbid: null,
-            duration: null,
+            topTags: [],
             url: null,
-            album: null,
             wiki: null,
-            artistInfo: null,
           },
         ],
       ])
@@ -659,18 +659,18 @@ describe('LastFmService', () => {
         [
           'track1',
           {
-            topTags: ['Rock', 'rock', 'ROCK'],
+            album: null,
+            artistInfo: null,
             canonicalArtist: 'Artist 1',
             canonicalTrack: 'Track 1',
+            duration: null,
             listeners: 1000,
+            mbid: null,
             playcount: 5000,
             similar: [],
-            mbid: null,
-            duration: null,
+            topTags: ['Rock', 'rock', 'ROCK'],
             url: null,
-            album: null,
             wiki: null,
-            artistInfo: null,
           },
         ],
       ])
@@ -687,35 +687,35 @@ describe('LastFmService', () => {
         [
           'track1',
           {
-            topTags: ['rock'],
+            album: null,
+            artistInfo: null,
             canonicalArtist: 'Artist 1',
             canonicalTrack: 'Track 1',
+            duration: null,
             listeners: 1000,
+            mbid: null,
             playcount: 5000,
             similar: [],
-            mbid: null,
-            duration: null,
+            topTags: ['rock'],
             url: null,
-            album: null,
             wiki: null,
-            artistInfo: null,
           },
         ],
         [
           'track2',
           {
-            topTags: [],
+            album: null,
+            artistInfo: null,
             canonicalArtist: 'Artist 2',
             canonicalTrack: 'Track 2',
+            duration: null,
             listeners: 2000,
+            mbid: null,
             playcount: 10000,
             similar: [],
-            mbid: null,
-            duration: null,
+            topTags: [],
             url: null,
-            album: null,
             wiki: null,
-            artistInfo: null,
           },
         ],
       ])
@@ -730,35 +730,35 @@ describe('LastFmService', () => {
         [
           'track1',
           {
-            topTags: ['a', 'b'],
+            album: null,
+            artistInfo: null,
             canonicalArtist: 'Artist 1',
             canonicalTrack: 'Track 1',
+            duration: null,
             listeners: 1000,
+            mbid: null,
             playcount: 5000,
             similar: [],
-            mbid: null,
-            duration: null,
+            topTags: ['a', 'b'],
             url: null,
-            album: null,
             wiki: null,
-            artistInfo: null,
           },
         ],
         [
           'track2',
           {
-            topTags: ['a'],
+            album: null,
+            artistInfo: null,
             canonicalArtist: 'Artist 2',
             canonicalTrack: 'Track 2',
+            duration: null,
             listeners: 2000,
+            mbid: null,
             playcount: 10000,
             similar: [],
-            mbid: null,
-            duration: null,
+            topTags: ['a'],
             url: null,
-            album: null,
             wiki: null,
-            artistInfo: null,
           },
         ],
       ])
@@ -779,52 +779,52 @@ describe('LastFmService', () => {
         [
           'track1',
           {
-            listeners: 10000,
-            playcount: 50000,
-            topTags: [],
+            album: null,
+            artistInfo: null,
             canonicalArtist: 'Artist 1',
             canonicalTrack: 'Track 1',
-            similar: [],
-            mbid: null,
             duration: null,
+            listeners: 10000,
+            mbid: null,
+            playcount: 50000,
+            similar: [],
+            topTags: [],
             url: null,
-            album: null,
             wiki: null,
-            artistInfo: null,
           },
         ],
         [
           'track2',
           {
-            listeners: 20000,
-            playcount: 100000,
-            topTags: [],
+            album: null,
+            artistInfo: null,
             canonicalArtist: 'Artist 2',
             canonicalTrack: 'Track 2',
-            similar: [],
-            mbid: null,
             duration: null,
+            listeners: 20000,
+            mbid: null,
+            playcount: 100000,
+            similar: [],
+            topTags: [],
             url: null,
-            album: null,
             wiki: null,
-            artistInfo: null,
           },
         ],
         [
           'track3',
           {
-            listeners: 30000,
-            playcount: 150000,
-            topTags: [],
+            album: null,
+            artistInfo: null,
             canonicalArtist: 'Artist 3',
             canonicalTrack: 'Track 3',
-            similar: [],
-            mbid: null,
             duration: null,
+            listeners: 30000,
+            mbid: null,
+            playcount: 150000,
+            similar: [],
+            topTags: [],
             url: null,
-            album: null,
             wiki: null,
-            artistInfo: null,
           },
         ],
       ])
@@ -839,35 +839,35 @@ describe('LastFmService', () => {
         [
           'track1',
           {
-            listeners: 10000,
-            playcount: 50000,
-            topTags: [],
+            album: null,
+            artistInfo: null,
             canonicalArtist: 'Artist 1',
             canonicalTrack: 'Track 1',
-            similar: [],
-            mbid: null,
             duration: null,
+            listeners: 10000,
+            mbid: null,
+            playcount: 50000,
+            similar: [],
+            topTags: [],
             url: null,
-            album: null,
             wiki: null,
-            artistInfo: null,
           },
         ],
         [
           'track2',
           {
-            listeners: 20000,
-            playcount: 100000,
-            topTags: [],
+            album: null,
+            artistInfo: null,
             canonicalArtist: 'Artist 2',
             canonicalTrack: 'Track 2',
-            similar: [],
-            mbid: null,
             duration: null,
+            listeners: 20000,
+            mbid: null,
+            playcount: 100000,
+            similar: [],
+            topTags: [],
             url: null,
-            album: null,
             wiki: null,
-            artistInfo: null,
           },
         ],
       ])
@@ -891,35 +891,35 @@ describe('LastFmService', () => {
         [
           'track1',
           {
-            listeners: 10001,
-            playcount: 50001,
-            topTags: [],
+            album: null,
+            artistInfo: null,
             canonicalArtist: 'Artist 1',
             canonicalTrack: 'Track 1',
-            similar: [],
-            mbid: null,
             duration: null,
+            listeners: 10001,
+            mbid: null,
+            playcount: 50001,
+            similar: [],
+            topTags: [],
             url: null,
-            album: null,
             wiki: null,
-            artistInfo: null,
           },
         ],
         [
           'track2',
           {
-            listeners: 10002,
-            playcount: 50002,
-            topTags: [],
+            album: null,
+            artistInfo: null,
             canonicalArtist: 'Artist 2',
             canonicalTrack: 'Track 2',
-            similar: [],
-            mbid: null,
             duration: null,
+            listeners: 10002,
+            mbid: null,
+            playcount: 50002,
+            similar: [],
+            topTags: [],
             url: null,
-            album: null,
             wiki: null,
-            artistInfo: null,
           },
         ],
       ])
@@ -935,35 +935,35 @@ describe('LastFmService', () => {
         [
           'track1',
           {
-            listeners: 10000,
-            playcount: 50000,
-            topTags: [],
+            album: null,
+            artistInfo: null,
             canonicalArtist: 'Artist 1',
             canonicalTrack: 'Track 1',
-            similar: [],
-            mbid: null,
             duration: null,
+            listeners: 10000,
+            mbid: null,
+            playcount: 50000,
+            similar: [],
+            topTags: [],
             url: null,
-            album: null,
             wiki: null,
-            artistInfo: null,
           },
         ],
         [
           'track2',
           {
-            listeners: 0,
-            playcount: 0,
-            topTags: [],
+            album: null,
+            artistInfo: null,
             canonicalArtist: 'Artist 2',
             canonicalTrack: 'Track 2',
-            similar: [],
-            mbid: null,
             duration: null,
+            listeners: 0,
+            mbid: null,
+            playcount: 0,
+            similar: [],
+            topTags: [],
             url: null,
-            album: null,
             wiki: null,
-            artistInfo: null,
           },
         ],
       ])
@@ -981,8 +981,8 @@ describe('LastFmService', () => {
       const artists = ['Artist A', 'Artist B', 'Artist A', 'Artist C', 'Artist B']
 
       fetchMock.mockResolvedValue({
-        ok: true,
         json: () => Promise.resolve(buildLastFmArtistInfo()),
+        ok: true,
       } as Response)
 
       await service.batchGetArtistInfo(artists)
@@ -995,8 +995,8 @@ describe('LastFmService', () => {
       const artists = ['Artist 1', 'Artist 2', 'Artist 3']
 
       fetchMock.mockResolvedValue({
-        ok: true,
         json: () => Promise.resolve(buildLastFmArtistInfo()),
+        ok: true,
       } as Response)
 
       const results = await service.batchGetArtistInfo(artists)
@@ -1009,21 +1009,22 @@ describe('LastFmService', () => {
 
       // Pre-populate cache with valid artist info
       const artistInfo = {
-        bio: { summary: 'Test bio', content: 'Full bio' },
-        tags: ['rock', 'indie'],
+        bio: { content: 'Full bio', summary: 'Test bio' },
+        images: {
+          large: 'http://example.com/large.jpg',
+          medium: 'http://example.com/medium.jpg',
+          small: 'http://example.com/small.jpg',
+        },
+        listeners: 100000,
+        playcount: 500000,
         similar: [
           { name: 'Similar Artist 1', url: 'https://last.fm/similar1' },
           { name: 'Similar Artist 2', url: 'https://last.fm/similar2' },
         ],
-        images: {
-          small: 'http://example.com/small.jpg',
-          medium: 'http://example.com/medium.jpg',
-          large: 'http://example.com/large.jpg',
-        },
-        listeners: 100000,
-        playcount: 500000,
+        tags: ['rock', 'indie'],
       }
 
+      // eslint-disable-next-line @typescript-eslint/dot-notation -- accessing private method for test setup
       const cacheKey = `artist_${service['hashString']('test artist')}`
       await mockCache.put(cacheKey, JSON.stringify(artistInfo))
 
@@ -1051,14 +1052,15 @@ describe('LastFmService', () => {
       const artists = ['Cached Artist']
 
       const cachedInfo = {
-        bio: { summary: 'Cached bio', content: 'Cached content' },
-        tags: ['cached-tag'],
-        similar: [],
-        images: { small: null, medium: null, large: null },
+        bio: { content: 'Cached content', summary: 'Cached bio' },
+        images: { large: null, medium: null, small: null },
         listeners: 10000,
         playcount: 50000,
+        similar: [],
+        tags: ['cached-tag'],
       }
 
+      // eslint-disable-next-line @typescript-eslint/dot-notation -- accessing private method for test setup
       const cacheKey = `artist_${service['hashString']('cached artist')}`
       await mockCache.put(cacheKey, JSON.stringify(cachedInfo))
 
@@ -1072,11 +1074,11 @@ describe('LastFmService', () => {
       const artists = Array.from({ length: 25 }, (_, i) => `Artist ${i}`)
 
       fetchMock.mockResolvedValue({
-        ok: true,
         json: () => Promise.resolve(buildLastFmArtistInfo()),
+        ok: true,
       } as Response)
 
-      const progressCalls: Array<{ current: number; total: number }> = []
+      const progressCalls: { current: number; total: number }[] = []
       await service.batchGetArtistInfo(artists, (current, total) => {
         progressCalls.push({ current, total })
       })
@@ -1092,27 +1094,27 @@ describe('LastFmService', () => {
       const track = buildLastFmTrack({ artist: 'Cached Artist', name: 'Cached Track' })
 
       const cachedSignals: LastFmSignals = {
+        album: null,
+        artistInfo: null,
         canonicalArtist: 'Cached Artist',
         canonicalTrack: 'Cached Track',
-        listeners: 50000,
-        playcount: 200000,
-        topTags: ['rock'],
-        similar: [],
-        mbid: null,
         duration: null,
+        listeners: 50000,
+        mbid: null,
+        playcount: 200000,
+        similar: [],
+        topTags: ['rock'],
         url: null,
-        album: null,
         wiki: null,
-        artistInfo: null,
       }
 
       const cacheKey = service.generateCacheKey('Cached Artist', 'Cached Track')
       await mockCache.put(
         `lastfm:${cacheKey}`,
         JSON.stringify({
-          signals: cachedSignals,
           fetched_at: new Date().toISOString(),
           is_miss: false,
+          signals: cachedSignals,
           ttl: 7 * 24 * 60 * 60,
         }),
       )
@@ -1128,20 +1130,20 @@ describe('LastFmService', () => {
 
       fetchMock
         .mockResolvedValueOnce({
-          ok: true,
           json: () => Promise.resolve(buildLastFmCorrection(null)),
+          ok: true,
         } as Response)
         .mockResolvedValueOnce({
-          ok: true,
           json: () => Promise.resolve(buildLastFmTrackInfo()),
+          ok: true,
         } as Response)
         .mockResolvedValueOnce({
-          ok: true,
           json: () => Promise.resolve(buildLastFmTopTags(['rock'])),
+          ok: true,
         } as Response)
         .mockResolvedValueOnce({
-          ok: true,
           json: () => Promise.resolve(buildLastFmSimilarTracks([])),
+          ok: true,
         } as Response)
 
       await service.getTrackSignals(track, true)
@@ -1156,27 +1158,27 @@ describe('LastFmService', () => {
       const track = buildLastFmTrack()
 
       const recentMiss: LastFmSignals = {
+        album: null,
+        artistInfo: null,
         canonicalArtist: track.artist,
         canonicalTrack: track.name,
-        listeners: 0,
-        playcount: 0,
-        topTags: [],
-        similar: [],
-        mbid: null,
         duration: null,
+        listeners: 0,
+        mbid: null,
+        playcount: 0,
+        similar: [],
+        topTags: [],
         url: null,
-        album: null,
         wiki: null,
-        artistInfo: null,
       }
 
       const cacheKey = service.generateCacheKey(track.artist, track.name)
       await mockCache.put(
         `lastfm:${cacheKey}`,
         JSON.stringify({
-          signals: recentMiss,
           fetched_at: new Date(Date.now() - 2 * 60 * 1000).toISOString(), // 2 min ago
           is_miss: true,
+          signals: recentMiss,
           ttl: 5 * 60,
         }),
       )
@@ -1191,18 +1193,18 @@ describe('LastFmService', () => {
       const track = buildLastFmTrack()
 
       const oldMiss: LastFmSignals = {
+        album: null,
+        artistInfo: null,
         canonicalArtist: track.artist,
         canonicalTrack: track.name,
-        listeners: 0,
-        playcount: 0,
-        topTags: [],
-        similar: [],
-        mbid: null,
         duration: null,
+        listeners: 0,
+        mbid: null,
+        playcount: 0,
+        similar: [],
+        topTags: [],
         url: null,
-        album: null,
         wiki: null,
-        artistInfo: null,
       }
 
       const cacheKey = service.generateCacheKey(track.artist, track.name)
@@ -1212,29 +1214,29 @@ describe('LastFmService', () => {
       await mockCache.put(
         `lastfm:${cacheKey}`,
         JSON.stringify({
-          signals: oldMiss,
           fetched_at: new Date(Date.now() - 6 * 60 * 1000).toISOString(), // 6 min ago
           is_miss: true,
+          signals: oldMiss,
           ttl: 10 * 60, // 10 minute TTL so it's not expired
         }),
       )
 
       fetchMock
         .mockResolvedValueOnce({
-          ok: true,
           json: () => Promise.resolve(buildLastFmCorrection(null)),
+          ok: true,
         } as Response)
         .mockResolvedValueOnce({
-          ok: true,
           json: () => Promise.resolve(buildLastFmTrackInfo({ listeners: 1000 })),
+          ok: true,
         } as Response)
         .mockResolvedValueOnce({
-          ok: true,
           json: () => Promise.resolve(buildLastFmTopTags(['rock'])),
+          ok: true,
         } as Response)
         .mockResolvedValueOnce({
-          ok: true,
           json: () => Promise.resolve(buildLastFmSimilarTracks([])),
+          ok: true,
         } as Response)
 
       const signals = await service.getTrackSignals(track, true)

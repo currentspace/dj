@@ -1,9 +1,9 @@
 import type {MixSession, PlayedTrack, QueuedTrack, VibeProfile} from '@dj/shared-types'
 
 import {useCallback, useTransition} from 'react'
+
 import {usePlaybackStream} from '../../hooks/usePlaybackStream'
 import {useMixStore} from '../../stores'
-
 import {AutoFillToggle} from '../atoms/AutoFillToggle'
 import {NowPlayingHero} from '../organisms/NowPlayingHero'
 import {QueuePanel} from '../organisms/QueuePanel'
@@ -20,17 +20,17 @@ interface MixLayoutProps {
   onTrackPlayed?: (trackId: string, trackUri: string) => void
   session: MixSession | null
   /** Spotify access token for playback stream */
-  token?: string | null
+  token?: null | string
 }
 
 export function MixLayout({
-  session,
-  token,
+  onEnergyChange,
   onRemoveFromQueue,
   onReorderQueue,
-  onEnergyChange,
   onSteerVibe,
   onTrackPlayed,
+  session,
+  token,
 }: MixLayoutProps) {
   const [_isPending, startTransition] = useTransition()
 
@@ -56,9 +56,9 @@ export function MixLayout({
   })
 
   // Direct state derivation (NOT useEffect)
-  const currentTrack: PlayedTrack | null = session?.history[0] ?? null
+  const currentTrack: null | PlayedTrack = session?.history[0] ?? null
   const queue: QueuedTrack[] = session?.queue ?? []
-  const vibe: VibeProfile | null = session?.vibe ?? null
+  const vibe: null | VibeProfile = session?.vibe ?? null
   const autoFill: boolean = session?.preferences?.autoFill ?? true
 
   const handleRemoveFromQueue = useCallback(
@@ -126,7 +126,7 @@ export function MixLayout({
       <NowPlayingHero playback={playback} queue={queue} token={token} track={currentTrack} />
 
       <div className={styles.panels}>
-        <QueuePanel queue={queue} onRemove={handleRemoveFromQueue} onReorder={handleReorderQueue} />
+        <QueuePanel onRemove={handleRemoveFromQueue} onReorder={handleReorderQueue} queue={queue} />
         <SuggestionsPanel
           isLoading={isLoadingSuggestions}
           onRefresh={handleRefreshSuggestions}

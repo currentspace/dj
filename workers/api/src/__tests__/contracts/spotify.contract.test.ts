@@ -11,7 +11,6 @@
  * - Tests are skipped if credentials are missing
  */
 
-import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 import {
   SpotifyAudioFeaturesSchema,
   SpotifyPlaylistFullSchema,
@@ -21,18 +20,18 @@ import {
   SpotifyTrackFullSchema,
   SpotifyUserSchema,
 } from '@dj/shared-types'
+import { config } from 'dotenv'
+
 // Import setup to restore native fetch and load env vars for contract tests
 import './setup'
-import { getSpotifyAccessToken } from './helpers'
-import { config } from 'dotenv'
 import { resolve } from 'path'
+import { afterEach, beforeAll, describe, expect, it } from 'vitest'
+
+import { asRecord, getSpotifyAccessToken } from './helpers'
 
 // Load environment variables synchronously for skipIf evaluation
 config({ path: resolve(__dirname, '../../../../.dev.vars') })
 config({ path: resolve(__dirname, '../../../../../.env') })
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type ApiResponse = Record<string, any>
 
 // ===== Test Configuration =====
 
@@ -52,7 +51,7 @@ const TEST_ARTIST_ID = '1dfeR4HaWDbWqFHLkxsg1d' // Queen
 // ===== Test Helpers =====
 
 // Token is fetched once in beforeAll and cached here
-let spotifyToken: string | null = null
+let spotifyToken: null | string = null
 
 /**
  * Check if Spotify credentials are available (for skipIf at load time)
@@ -149,16 +148,18 @@ describe('Spotify API Contracts', () => {
       // Fetch multiple tracks at once
       const ids = TEST_TRACK_IDS.join(',')
       const response = await spotifyRequest(`/tracks?ids=${ids}`)
-      const data = await response.json() as ApiResponse
+      const data = asRecord(await response.json())
 
       // Response should have tracks array
       expect(data.tracks).toBeDefined()
-      expect(Array.isArray(data.tracks)).toBe(true)
-      expect(data.tracks.length).toBe(TEST_TRACK_IDS.length)
+      const tracks = data.tracks
+      expect(Array.isArray(tracks)).toBe(true)
+      if (!Array.isArray(tracks)) throw new Error('Expected tracks array')
+      expect(tracks.length).toBe(TEST_TRACK_IDS.length)
 
       // Validate each track against schema
-      for (let i = 0; i < data.tracks.length; i++) {
-        const track = data.tracks[i]
+      for (let i = 0; i < tracks.length; i++) {
+        const track = tracks[i]
         const result = SpotifyTrackFullSchema.safeParse(track)
 
         if (!result.success) {
@@ -307,16 +308,18 @@ describe('Spotify API Contracts', () => {
       // Fetch audio features for multiple tracks
       const ids = TEST_TRACK_IDS.join(',')
       const response = await spotifyRequest(`/audio-features?ids=${ids}`)
-      const data = await response.json() as ApiResponse
+      const data = asRecord(await response.json())
 
       // Response should have audio_features array
       expect(data.audio_features).toBeDefined()
-      expect(Array.isArray(data.audio_features)).toBe(true)
-      expect(data.audio_features.length).toBe(TEST_TRACK_IDS.length)
+      const audioFeatures = data.audio_features
+      expect(Array.isArray(audioFeatures)).toBe(true)
+      if (!Array.isArray(audioFeatures)) throw new Error('Expected audio_features array')
+      expect(audioFeatures.length).toBe(TEST_TRACK_IDS.length)
 
       // Validate each audio feature (note: can be null for some tracks)
-      for (let i = 0; i < data.audio_features.length; i++) {
-        const features = data.audio_features[i]
+      for (let i = 0; i < audioFeatures.length; i++) {
+        const features = audioFeatures[i]
 
         if (features !== null) {
           const result = SpotifyAudioFeaturesSchema.safeParse(features)

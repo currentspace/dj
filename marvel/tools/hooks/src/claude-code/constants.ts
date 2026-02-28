@@ -14,10 +14,10 @@
  * Update this when upgrading Claude Code compatibility
  */
 export const CLAUDE_CODE_VERSION = {
+  full: '2.1.38',
   major: 2,
   minor: 1,
   patch: 38,
-  full: '2.1.38',
   releaseDate: '2026-02-01',
 } as const;
 
@@ -26,39 +26,39 @@ export const CLAUDE_CODE_VERSION = {
  * If Claude Code renames a tool, update here
  */
 export const TOOL_NAMES = {
-  // File operations
-  read: 'Read',
-  write: 'Write',
+  askUserQuestion: 'AskUserQuestion',
+  // Execution
+  bash: 'Bash',
   edit: 'Edit',
+
+  enterPlanMode: 'EnterPlanMode',
+  exitPlanMode: 'ExitPlanMode',
+
+  glob: 'Glob',
 
   // Search operations
   grep: 'Grep',
-  glob: 'Glob',
+  // Notebook
+  notebookEdit: 'NotebookEdit',
 
-  // Execution
-  bash: 'Bash',
+  // File operations
+  read: 'Read',
+  // Other
+  skill: 'Skill',
+  task: 'Task',
+  // Task management
+  taskCreate: 'TaskCreate',
+  taskGet: 'TaskGet',
+  taskList: 'TaskList',
+  taskOutput: 'TaskOutput',
 
+  taskStop: 'TaskStop',
+  taskUpdate: 'TaskUpdate',
   // Web operations
   webFetch: 'WebFetch',
   webSearch: 'WebSearch',
 
-  // Task management
-  taskCreate: 'TaskCreate',
-  taskUpdate: 'TaskUpdate',
-  taskGet: 'TaskGet',
-  taskList: 'TaskList',
-  task: 'Task',
-  taskOutput: 'TaskOutput',
-  taskStop: 'TaskStop',
-
-  // Other
-  skill: 'Skill',
-  askUserQuestion: 'AskUserQuestion',
-  enterPlanMode: 'EnterPlanMode',
-  exitPlanMode: 'ExitPlanMode',
-
-  // Notebook
-  notebookEdit: 'NotebookEdit',
+  write: 'Write',
 } as const;
 
 /**
@@ -66,47 +66,47 @@ export const TOOL_NAMES = {
  * If Claude Code changes parameter names, update here
  */
 export const TOOL_PARAMS = {
-  // Read tool
-  read: {
-    filePath: 'file_path',
-    offset: 'offset',
-    limit: 'limit',
-  },
-
-  // Write tool
-  write: {
-    filePath: 'file_path',
-    content: 'content',
+  // Bash tool
+  bash: {
+    command: 'command',
+    description: 'description',
+    runInBackground: 'run_in_background',
+    timeout: 'timeout',
   },
 
   // Edit tool
   edit: {
     filePath: 'file_path',
-    oldString: 'old_string',
     newString: 'new_string',
+    oldString: 'old_string',
     replaceAll: 'replace_all',
-  },
-
-  // Bash tool
-  bash: {
-    command: 'command',
-    timeout: 'timeout',
-    description: 'description',
-    runInBackground: 'run_in_background',
-  },
-
-  // Grep tool
-  grep: {
-    pattern: 'pattern',
-    path: 'path',
-    glob: 'glob',
-    outputMode: 'output_mode',
   },
 
   // Glob tool
   glob: {
-    pattern: 'pattern',
     path: 'path',
+    pattern: 'pattern',
+  },
+
+  // Grep tool
+  grep: {
+    glob: 'glob',
+    outputMode: 'output_mode',
+    path: 'path',
+    pattern: 'pattern',
+  },
+
+  // Read tool
+  read: {
+    filePath: 'file_path',
+    limit: 'limit',
+    offset: 'offset',
+  },
+
+  // Write tool
+  write: {
+    content: 'content',
+    filePath: 'file_path',
   },
 } as const;
 
@@ -115,42 +115,42 @@ export const TOOL_PARAMS = {
  * If Claude Code adds/removes hook types, update here
  */
 export const HOOK_TYPES = {
-  sessionStart: 'SessionStart',
-  preToolUse: 'PreToolUse',
+  notification: 'Notification',
+  permissionRequest: 'PermissionRequest',
   postToolUse: 'PostToolUse',
   postToolUseFailure: 'PostToolUseFailure',
-  userPromptSubmit: 'UserPromptSubmit',
-  stop: 'Stop',
   preCompact: 'PreCompact',
-  permissionRequest: 'PermissionRequest',
+  preToolUse: 'PreToolUse',
+  sessionEnd: 'SessionEnd',
+  sessionStart: 'SessionStart',
+  stop: 'Stop',
   subagentStart: 'SubagentStart',
   subagentStop: 'SubagentStop',
-  notification: 'Notification',
-  teammateIdle: 'TeammateIdle',
   taskCompleted: 'TaskCompleted',
-  sessionEnd: 'SessionEnd',
+  teammateIdle: 'TeammateIdle',
+  userPromptSubmit: 'UserPromptSubmit',
 } as const;
 
 /**
  * Hook input/output format expectations
  */
 export const HOOK_FORMAT = {
-  // Hook receives JSON on stdin
-  inputFormat: 'json',
-  // Hook returns JSON on stdout
-  outputFormat: 'json',
   // Expected fields in hook input
   inputFields: {
+    sessionId: 'sessionId',
     tool: 'tool',
     toolInput: 'toolInput',
-    sessionId: 'sessionId',
   },
+  // Hook receives JSON on stdin
+  inputFormat: 'json',
   // Expected fields in hook output
   outputFields: {
     decision: 'decision', // 'allow' | 'block' | 'modify'
-    reason: 'reason',
     modifiedInput: 'modifiedInput',
+    reason: 'reason',
   },
+  // Hook returns JSON on stdout
+  outputFormat: 'json',
 } as const;
 
 /**
@@ -158,8 +158,8 @@ export const HOOK_FORMAT = {
  * If Claude Code renames/removes agents, update here
  */
 export const AGENT_TYPES = {
-  generalPurpose: 'general-purpose',
   explore: 'Explore',
+  generalPurpose: 'general-purpose',
   plan: 'Plan',
   // Note: These are built-in agent names
 } as const;
@@ -168,19 +168,19 @@ export const AGENT_TYPES = {
  * Permission format in settings.json
  */
 export const PERMISSION_FORMAT = {
-  // Permission patterns use this format
-  pattern: 'Tool(pattern:*)',
   // Example: 'Bash(pnpm:*)', 'Read(/tmp/**)'
   examples: ['Bash(pnpm:*)', 'Bash(git:*)', 'Read(/tmp/**)', 'WebFetch(domain:github.com)'],
+  // Permission patterns use this format
+  pattern: 'Tool(pattern:*)',
 } as const;
 
 /**
  * Settings.json structure expectations
  */
 export const SETTINGS_STRUCTURE = {
+  hooks: 'hooks',
   // Top-level keys
   permissions: 'permissions',
-  hooks: 'hooks',
 
   // Permission sub-keys
   permissionsAllow: 'allow',
@@ -191,27 +191,13 @@ export const SETTINGS_STRUCTURE = {
  * Token budget expectations
  */
 export const TOKEN_BUDGET = {
-  // Approximate Claude Code system prompt size
-  systemPromptTokens: 15000,
   // Approximate context window
   contextWindow: 200000,
   // Recommended MARVEL overhead
   marvelOverhead: 5000,
+  // Approximate Claude Code system prompt size
+  systemPromptTokens: 15000,
 } as const;
-
-/**
- * Get all tool names as an array
- */
-export function getAllToolNames(): string[] {
-  return Object.values(TOOL_NAMES);
-}
-
-/**
- * Check if a string is a known tool name
- */
-export function isKnownTool(name: string): boolean {
-  return getAllToolNames().includes(name);
-}
 
 /**
  * Get all hook types as an array
@@ -221,8 +207,22 @@ export function getAllHookTypes(): string[] {
 }
 
 /**
+ * Get all tool names as an array
+ */
+export function getAllToolNames(): string[] {
+  return Object.values(TOOL_NAMES);
+}
+
+/**
  * Check if a string is a known hook type
  */
 export function isKnownHookType(type: string): boolean {
   return getAllHookTypes().includes(type);
+}
+
+/**
+ * Check if a string is a known tool name
+ */
+export function isKnownTool(name: string): boolean {
+  return getAllToolNames().includes(name);
 }

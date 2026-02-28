@@ -9,6 +9,7 @@
  */
 
 import type { SyncHookJSONOutput } from "../sdk-types.js";
+
 import { buildHookContext } from "../lib/logger.js";
 import { generatePromotionReport } from "../lib/promote.js";
 

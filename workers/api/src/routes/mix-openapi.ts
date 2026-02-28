@@ -3,7 +3,9 @@
  * Live DJ Mode mix session management
  */
 
+import type {PlayedTrack, QueuedTrack, SpotifyTrackFull} from '@dj/shared-types'
 import type {OpenAPIHono} from '@hono/zod-openapi'
+
 import {
   addToQueue,
   endMix,
@@ -21,11 +23,12 @@ import {
   updatePreferences,
   updateVibe,
 } from '@dj/api-contracts'
-import type {PlayedTrack, QueuedTrack, SpotifyTrackFull} from '@dj/shared-types'
 import {SpotifyPlaylistFullSchema, SpotifyTrackFullSchema, SpotifyUserSchema} from '@dj/shared-types'
+import {z} from 'zod'
+
+import type {Env} from '../index'
 
 import {HTTP_STATUS, PAGINATION, VIBE_DEFAULTS} from '../constants'
-import type {Env} from '../index'
 import {isSuccessResponse} from '../lib/guards'
 import {AudioEnrichmentService} from '../services/AudioEnrichmentService'
 import {LastFmService} from '../services/LastFmService'
@@ -34,39 +37,241 @@ import {SuggestionEngine} from '../services/SuggestionEngine'
 import {getLogger} from '../utils/LoggerContext'
 
 /**
- * Helper to get userId from Spotify token
+ * Validate BPM is within sane bounds (positive, max 500) or return null
+ * Very permissive to allow ambient (<20 BPM) and speedcore (>220 BPM)
  */
-async function getUserIdFromToken(token: string): Promise<string | null> {
+function clampBpm(bpm: null | number): null | number {
+  if (bpm === null) return null
+  if (bpm <= 0 || bpm > 500) return null // Obvious data error, treat as unknown
+  return bpm
+}
+
+/**
+ * Helper to create PlayedTrack from SpotifyTrackFull
+ */
+function createPlayedTrack(
+  track: SpotifyTrackFull,
+  bpm: null | number,
+  energy: null | number
+): PlayedTrack {
+  return {
+    albumArt: track.album?.images?.[0]?.url,
+    artist: track.artists?.[0]?.name || 'Unknown Artist',
+    bpm: clampBpm(bpm),
+    energy,
+    name: track.name,
+    playedAt: new Date().toISOString(),
+    trackId: track.id,
+    trackUri: track.uri,
+  }
+}
+
+/**
+ * Helper to create QueuedTrack from SpotifyTrackFull and enrichment data
+ */
+function createQueuedTrack(
+  track: SpotifyTrackFull,
+  position: number,
+  vibeScore: number,
+  reason: string,
+  addedBy: 'ai' | 'user' = 'user'
+): QueuedTrack {
+  return {
+    addedBy,
+    albumArt: track.album?.images?.[0]?.url,
+    artist: track.artists?.[0]?.name || 'Unknown Artist',
+    name: track.name,
+    position,
+    reason,
+    trackId: track.id,
+    trackUri: track.uri,
+    vibeScore,
+  }
+}
+
+/**
+ * Extract a quick vibe profile from a set of Spotify tracks.
+ * Uses only cached enrichment data (no new external API calls on session start).
+ * Returns vibe + fallback pool of top tracks.
+ */
+async function extractQuickVibe(
+  token: string,
+  tracks: {album?: {images?: {url: string}[], release_date?: string}, artists: {name: string}[], duration_ms?: number; id: string, name: string, popularity?: number, uri: string,}[],
+  env: Env,
+): Promise<{fallbackPool: string[]; vibe: Partial<VibeProfile>,}> {
+  const logger = getLogger()
+
+  // Extract genres from artist data
+  const allGenres: string[] = []
+
+  // Fetch artist IDs for genre data (batch up to 50)
+  const uniqueArtistNames = [...new Set(tracks.flatMap(t => t.artists.map(a => a.name)))]
+
+  // Search for first 10 artists to get genre data
+  for (const artistName of uniqueArtistNames.slice(0, 10)) {
+    try {
+      const searchResp = await fetch(
+        `https://api.spotify.com/v1/search?q=${encodeURIComponent(artistName)}&type=artist&limit=1`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
+      if (searchResp.ok) {
+        const ArtistSearchSchema = z.object({
+          artists: z.object({
+            items: z.array(z.object({
+              genres: z.array(z.string()).optional(),
+            })).optional(),
+          }).optional(),
+        }).passthrough()
+        const parsed = ArtistSearchSchema.safeParse(await searchResp.json())
+        if (parsed.success) {
+          const genres = parsed.data.artists?.items?.[0]?.genres ?? []
+          allGenres.push(...genres)
+        }
+      }
+    } catch {
+      // Non-fatal
+    }
+  }
+
+  // Count genre frequency and pick top 5
+  const genreCount = new Map<string, number>()
+  for (const g of allGenres) {
+    genreCount.set(g, (genreCount.get(g) ?? 0) + 1)
+  }
+  const topGenres = [...genreCount.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([g]) => g)
+
+  // Calculate popularity average
+  const popularities = tracks.filter(t => t.popularity != null).map(t => t.popularity!)
+  const avgPopularity = popularities.length > 0
+    ? popularities.reduce((sum, p) => sum + p, 0) / popularities.length
+    : 50
+
+  // Map popularity (0-100) to energy level (1-10)
+  const energyLevel = Math.max(1, Math.min(10, Math.round(avgPopularity / 10)))
+
+  // Extract release years for era
+  const years = tracks
+    .map(t => t.album?.release_date)
+    .filter(Boolean)
+    .map(d => parseInt(d!.slice(0, 4)))
+    .filter(y => y >= 1900 && y <= 2100)
+
+  const era = years.length > 0
+    ? { end: Math.max(...years), start: Math.min(...years) }
+    : { end: 2025, start: 2000 }
+
+  // Try to get BPM range from cached enrichment data
+  let bpmRange = { max: 140, min: 80 } // default
+  if (env.AUDIO_FEATURES_CACHE) {
+    const audioService = new AudioEnrichmentService(env.AUDIO_FEATURES_CACHE)
+    const bpms: number[] = []
+    for (const track of tracks.slice(0, 20)) {
+      try {
+        const enrichment = await audioService.enrichTrack({
+          artists: track.artists,
+          duration_ms: track.duration_ms ?? 0,
+          id: track.id,
+          name: track.name,
+        })
+        if (enrichment.bpm) bpms.push(enrichment.bpm)
+      } catch {
+        // Non-fatal — skip this track
+      }
+    }
+    if (bpms.length >= 3) {
+      bpmRange = {
+        max: Math.min(220, Math.max(...bpms) + 10),
+        min: Math.max(20, Math.min(...bpms) - 10),
+      }
+    }
+  }
+
+  // Build fallback pool: top 10 tracks by popularity
+  const fallbackPool = tracks
+    .sort((a, b) => (b.popularity ?? 0) - (a.popularity ?? 0))
+    .slice(0, 10)
+    .map(t => t.uri)
+
+  logger?.info('[extractQuickVibe] Extracted vibe from seed tracks', {
+    bpmRange,
+    energyLevel,
+    era,
+    fallbackPool: fallbackPool.length,
+    genres: topGenres.length,
+  })
+
+  return {
+    fallbackPool,
+    vibe: {
+      bpmRange,
+      energyLevel,
+      era,
+      genres: topGenres,
+      mood: [], // Will be filled by AI on first suggestion batch
+    },
+  }
+}
+
+/**
+ * Fetch tracks from a Spotify playlist for seed vibe extraction.
+ */
+async function fetchSeedPlaylistTracks(
+  token: string,
+  playlistId: string,
+): Promise<{album?: {images?: {url: string}[], release_date?: string}, artists: {name: string}[], duration_ms?: number; id: string, name: string, popularity?: number, uri: string,}[]> {
+  const logger = getLogger()
   try {
-    const response = await fetch('https://api.spotify.com/v1/me', {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    })
-
-    if (!isSuccessResponse(response)) {
-      return null
+    const response = await fetch(
+      `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=50&fields=items(track(id,uri,name,artists(name),album(images,release_date),popularity,duration_ms))`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    )
+    if (!response.ok) {
+      logger?.error(`Failed to fetch seed playlist tracks: ${response.status}`)
+      return []
     }
-
-    const rawData = await response.json()
-    const parseResult = SpotifyUserSchema.safeParse(rawData)
-
-    if (!parseResult.success) {
-      getLogger()?.error('Invalid Spotify user response:', parseResult.error)
-      return null
-    }
-
-    return parseResult.data.id
+    const PlaylistTracksSchema = z.object({
+      items: z.array(z.object({
+        track: z.object({
+          album: z.object({
+            images: z.array(z.object({url: z.string()})).optional(),
+            release_date: z.string().optional(),
+          }).optional(),
+          artists: z.array(z.object({name: z.string()})),
+          duration_ms: z.number().optional(),
+          id: z.string(),
+          name: z.string(),
+          popularity: z.number().optional(),
+          uri: z.string(),
+        }).nullable().optional(),
+      })).optional(),
+    }).passthrough()
+    const parsed = PlaylistTracksSchema.safeParse(await response.json())
+    if (!parsed.success) return []
+    return (parsed.data.items ?? [])
+      .map(item => item.track)
+      .filter((t): t is NonNullable<typeof t> => t != null)
+      .map(t => ({
+        album: t.album,
+        artists: t.artists,
+        duration_ms: t.duration_ms,
+        id: t.id,
+        name: t.name,
+        popularity: t.popularity,
+        uri: t.uri,
+      }))
   } catch (error) {
-    getLogger()?.error('Failed to get user ID from token:', error)
-    return null
+    logger?.error('fetchSeedPlaylistTracks error:', error)
+    return []
   }
 }
 
 /**
  * Helper to fetch track details from Spotify
  */
-async function fetchTrackDetails(trackUri: string, token: string): Promise<SpotifyTrackFull | null> {
+async function fetchTrackDetails(trackUri: string, token: string): Promise<null | SpotifyTrackFull> {
   try {
     // Extract track ID from URI (spotify:track:ID)
     const trackId = trackUri.split(':')[2]
@@ -101,79 +306,6 @@ async function fetchTrackDetails(trackUri: string, token: string): Promise<Spoti
   }
 }
 
-/**
- * Helper to create QueuedTrack from SpotifyTrackFull and enrichment data
- */
-function createQueuedTrack(
-  track: SpotifyTrackFull,
-  position: number,
-  vibeScore: number,
-  reason: string,
-  addedBy: 'user' | 'ai' = 'user'
-): QueuedTrack {
-  return {
-    trackId: track.id,
-    trackUri: track.uri,
-    name: track.name,
-    artist: track.artists?.[0]?.name || 'Unknown Artist',
-    albumArt: track.album?.images?.[0]?.url,
-    addedBy,
-    vibeScore,
-    reason,
-    position,
-  }
-}
-
-/**
- * Validate BPM is within sane bounds (positive, max 500) or return null
- * Very permissive to allow ambient (<20 BPM) and speedcore (>220 BPM)
- */
-function clampBpm(bpm: number | null): number | null {
-  if (bpm === null) return null
-  if (bpm <= 0 || bpm > 500) return null // Obvious data error, treat as unknown
-  return bpm
-}
-
-/**
- * Helper to create PlayedTrack from SpotifyTrackFull
- */
-function createPlayedTrack(
-  track: SpotifyTrackFull,
-  bpm: number | null,
-  energy: number | null
-): PlayedTrack {
-  return {
-    trackId: track.id,
-    trackUri: track.uri,
-    name: track.name,
-    artist: track.artists?.[0]?.name || 'Unknown Artist',
-    albumArt: track.album?.images?.[0]?.url,
-    playedAt: new Date().toISOString(),
-    bpm: clampBpm(bpm),
-    energy,
-  }
-}
-
-/**
- * Helper to create PlayedTrack from QueuedTrack (when moving from queue to history)
- */
-function queuedTrackToPlayedTrack(
-  queued: QueuedTrack,
-  bpm: number | null = null,
-  energy: number | null = null
-): PlayedTrack {
-  return {
-    trackId: queued.trackId,
-    trackUri: queued.trackUri,
-    name: queued.name,
-    artist: queued.artist,
-    albumArt: queued.albumArt,
-    playedAt: new Date().toISOString(),
-    bpm: clampBpm(bpm),
-    energy,
-  }
-}
-
 // =============================================================================
 // SEED PLAYLIST & VIBE EXTRACTION (Phase 2)
 // =============================================================================
@@ -181,166 +313,13 @@ function queuedTrackToPlayedTrack(
 import type {VibeProfile} from '@dj/shared-types'
 
 /**
- * Extract a quick vibe profile from a set of Spotify tracks.
- * Uses only cached enrichment data (no new external API calls on session start).
- * Returns vibe + fallback pool of top tracks.
- */
-async function extractQuickVibe(
-  token: string,
-  tracks: Array<{id: string, uri: string, name: string, artists: Array<{name: string}>, album?: {images?: Array<{url: string}>, release_date?: string}, popularity?: number, duration_ms?: number}>,
-  env: Env,
-): Promise<{vibe: Partial<VibeProfile>, fallbackPool: string[]}> {
-  const logger = getLogger()
-
-  // Extract genres from artist data
-  const allGenres: string[] = []
-
-  // Fetch artist IDs for genre data (batch up to 50)
-  const uniqueArtistNames = [...new Set(tracks.flatMap(t => t.artists.map(a => a.name)))]
-
-  // Search for first 10 artists to get genre data
-  for (const artistName of uniqueArtistNames.slice(0, 10)) {
-    try {
-      const searchResp = await fetch(
-        `https://api.spotify.com/v1/search?q=${encodeURIComponent(artistName)}&type=artist&limit=1`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      )
-      if (searchResp.ok) {
-        const data = await searchResp.json() as { artists?: { items?: Array<{ genres?: string[] }> } }
-        const genres = data.artists?.items?.[0]?.genres ?? []
-        allGenres.push(...genres)
-      }
-    } catch {
-      // Non-fatal
-    }
-  }
-
-  // Count genre frequency and pick top 5
-  const genreCount = new Map<string, number>()
-  for (const g of allGenres) {
-    genreCount.set(g, (genreCount.get(g) ?? 0) + 1)
-  }
-  const topGenres = [...genreCount.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([g]) => g)
-
-  // Calculate popularity average
-  const popularities = tracks.filter(t => t.popularity != null).map(t => t.popularity!)
-  const avgPopularity = popularities.length > 0
-    ? popularities.reduce((sum, p) => sum + p, 0) / popularities.length
-    : 50
-
-  // Map popularity (0-100) to energy level (1-10)
-  const energyLevel = Math.max(1, Math.min(10, Math.round(avgPopularity / 10)))
-
-  // Extract release years for era
-  const years = tracks
-    .map(t => t.album?.release_date)
-    .filter(Boolean)
-    .map(d => parseInt(d!.slice(0, 4)))
-    .filter(y => y >= 1900 && y <= 2100)
-
-  const era = years.length > 0
-    ? { start: Math.min(...years), end: Math.max(...years) }
-    : { start: 2000, end: 2025 }
-
-  // Try to get BPM range from cached enrichment data
-  let bpmRange = { min: 80, max: 140 } // default
-  if (env.AUDIO_FEATURES_CACHE) {
-    const audioService = new AudioEnrichmentService(env.AUDIO_FEATURES_CACHE)
-    const bpms: number[] = []
-    for (const track of tracks.slice(0, 20)) {
-      try {
-        const enrichment = await audioService.enrichTrack({
-          id: track.id,
-          name: track.name,
-          artists: track.artists,
-          duration_ms: track.duration_ms ?? 0,
-        })
-        if (enrichment.bpm) bpms.push(enrichment.bpm)
-      } catch {
-        // Non-fatal — skip this track
-      }
-    }
-    if (bpms.length >= 3) {
-      bpmRange = {
-        min: Math.max(20, Math.min(...bpms) - 10),
-        max: Math.min(220, Math.max(...bpms) + 10),
-      }
-    }
-  }
-
-  // Build fallback pool: top 10 tracks by popularity
-  const fallbackPool = tracks
-    .sort((a, b) => (b.popularity ?? 0) - (a.popularity ?? 0))
-    .slice(0, 10)
-    .map(t => t.uri)
-
-  logger?.info('[extractQuickVibe] Extracted vibe from seed tracks', {
-    genres: topGenres.length,
-    energyLevel,
-    era,
-    bpmRange,
-    fallbackPool: fallbackPool.length,
-  })
-
-  return {
-    vibe: {
-      genres: topGenres,
-      energyLevel,
-      era,
-      bpmRange,
-      mood: [], // Will be filled by AI on first suggestion batch
-    },
-    fallbackPool,
-  }
-}
-
-/**
- * Fetch tracks from a Spotify playlist for seed vibe extraction.
- */
-async function fetchSeedPlaylistTracks(
-  token: string,
-  playlistId: string,
-): Promise<Array<{id: string, uri: string, name: string, artists: Array<{name: string}>, album?: {images?: Array<{url: string}>, release_date?: string}, popularity?: number, duration_ms?: number}>> {
-  const logger = getLogger()
-  try {
-    const response = await fetch(
-      `https://api.spotify.com/v1/playlists/${playlistId}/tracks?limit=50&fields=items(track(id,uri,name,artists(name),album(images,release_date),popularity,duration_ms))`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    )
-    if (!response.ok) {
-      logger?.error(`Failed to fetch seed playlist tracks: ${response.status}`)
-      return []
-    }
-    const data = await response.json() as { items?: Array<{ track?: { id?: string, uri?: string, name?: string, artists?: Array<{name: string}>, album?: {images?: Array<{url: string}>, release_date?: string}, popularity?: number, duration_ms?: number } }> }
-    return (data.items ?? [])
-      .map(item => item.track)
-      .filter((t): t is NonNullable<typeof t> => t != null && t.id != null && t.uri != null && t.name != null && t.artists != null)
-      .map(t => ({
-        id: t.id!,
-        uri: t.uri!,
-        name: t.name!,
-        artists: t.artists!,
-        album: t.album,
-        popularity: t.popularity,
-        duration_ms: t.duration_ms,
-      }))
-  } catch (error) {
-    logger?.error('fetchSeedPlaylistTracks error:', error)
-    return []
-  }
-}
-
-/**
  * Fetch user's top tracks + recently played for "surprise me" mode.
  */
 async function fetchUserSeedTracks(
   token: string,
-): Promise<Array<{id: string, uri: string, name: string, artists: Array<{name: string}>, album?: {images?: Array<{url: string}>, release_date?: string}, popularity?: number, duration_ms?: number}>> {
+): Promise<{album?: {images?: {url: string}[], release_date?: string}, artists: {name: string}[], duration_ms?: number; id: string, name: string, popularity?: number, uri: string,}[]> {
   const logger = getLogger()
-  const tracks: Array<{id: string, uri: string, name: string, artists: Array<{name: string}>, album?: {images?: Array<{url: string}>, release_date?: string}, popularity?: number, duration_ms?: number}> = []
+  const tracks: {album?: {images?: {url: string}[], release_date?: string}, artists: {name: string}[], duration_ms?: number; id: string, name: string, popularity?: number, uri: string,}[] = []
   const seenIds = new Set<string>()
 
   // Fetch top tracks (short-term = last 4 weeks)
@@ -350,11 +329,26 @@ async function fetchUserSeedTracks(
       { headers: { Authorization: `Bearer ${token}` } }
     )
     if (topResp.ok) {
-      const data = await topResp.json() as { items?: Array<{id: string, uri: string, name: string, artists: Array<{name: string}>, album?: {images?: Array<{url: string}>, release_date?: string}, popularity?: number, duration_ms?: number}> }
-      for (const t of data.items ?? []) {
-        if (!seenIds.has(t.id)) {
-          seenIds.add(t.id)
-          tracks.push(t)
+      const SeedTrackSchema = z.object({
+        album: z.object({
+          images: z.array(z.object({url: z.string()})).optional(),
+          release_date: z.string().optional(),
+        }).optional(),
+        artists: z.array(z.object({name: z.string()})),
+        duration_ms: z.number().optional(),
+        id: z.string(),
+        name: z.string(),
+        popularity: z.number().optional(),
+        uri: z.string(),
+      }).passthrough()
+      const TopTracksSchema = z.object({items: z.array(SeedTrackSchema).optional()}).passthrough()
+      const parsed = TopTracksSchema.safeParse(await topResp.json())
+      if (parsed.success) {
+        for (const t of parsed.data.items ?? []) {
+          if (!seenIds.has(t.id)) {
+            seenIds.add(t.id)
+            tracks.push(t)
+          }
         }
       }
     }
@@ -369,11 +363,28 @@ async function fetchUserSeedTracks(
       { headers: { Authorization: `Bearer ${token}` } }
     )
     if (recentResp.ok) {
-      const data = await recentResp.json() as { items?: Array<{ track: {id: string, uri: string, name: string, artists: Array<{name: string}>, album?: {images?: Array<{url: string}>, release_date?: string}, popularity?: number, duration_ms?: number} }> }
-      for (const item of data.items ?? []) {
-        if (!seenIds.has(item.track.id)) {
-          seenIds.add(item.track.id)
-          tracks.push(item.track)
+      const RecentTrackSchema = z.object({
+        album: z.object({
+          images: z.array(z.object({url: z.string()})).optional(),
+          release_date: z.string().optional(),
+        }).optional(),
+        artists: z.array(z.object({name: z.string()})),
+        duration_ms: z.number().optional(),
+        id: z.string(),
+        name: z.string(),
+        popularity: z.number().optional(),
+        uri: z.string(),
+      }).passthrough()
+      const RecentlyPlayedSchema = z.object({
+        items: z.array(z.object({track: RecentTrackSchema})).optional(),
+      }).passthrough()
+      const parsed = RecentlyPlayedSchema.safeParse(await recentResp.json())
+      if (parsed.success) {
+        for (const item of parsed.data.items ?? []) {
+          if (!seenIds.has(item.track.id)) {
+            seenIds.add(item.track.id)
+            tracks.push(item.track)
+          }
         }
       }
     }
@@ -385,161 +396,58 @@ async function fetchUserSeedTracks(
   return tracks
 }
 
-// Auto-queue configuration
-const TARGET_QUEUE_SIZE = 5
-
 /**
- * Auto-fill queue to target size with AI suggestions
- * This is the server-side implementation of automatic queue management.
- * Returns the number of tracks added.
+ * Helper to get userId from Spotify token
  */
-async function autoFillQueue(
-  env: Env,
-  token: string,
-  session: import('@dj/shared-types').MixSession,
-  sessionService: MixSessionService
-): Promise<number> {
-  // Check if autoFill is enabled in session preferences (default to true if not set)
-  const autoFillEnabled = session.preferences.autoFill ?? true
-  if (!autoFillEnabled) {
-    getLogger()?.info('Auto-fill disabled in session preferences, skipping')
-    return 0
-  }
-
-  const queueSize = session.queue.length
-  const tracksNeeded = TARGET_QUEUE_SIZE - queueSize
-
-  if (tracksNeeded <= 0) {
-    return 0
-  }
-
-  getLogger()?.info(`Auto-filling queue: ${queueSize} → ${TARGET_QUEUE_SIZE} (need ${tracksNeeded} tracks)`)
-
+async function getUserIdFromToken(token: string): Promise<null | string> {
   try {
-    // Initialize suggestion engine with extended thinking enabled for quality reasoning
-    const lastFmService = new LastFmService(env.LASTFM_API_KEY || '', env.AUDIO_FEATURES_CACHE)
-    const audioService = new AudioEnrichmentService(env.AUDIO_FEATURES_CACHE)
-    const enableThinking = true // Enable extended thinking for deeper track selection reasoning
-    const suggestionEngine = new SuggestionEngine(lastFmService, audioService, token, env.ANTHROPIC_API_KEY, enableThinking)
+    const response = await fetch('https://api.spotify.com/v1/me', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    })
 
-    // Generate suggestions with 8-second timeout (Phase 3c)
-    // If Claude is slow, fall through to fallback pool below
-    const suggestions = await Promise.race([
-      suggestionEngine.generateSuggestions(session, tracksNeeded + 3),
-      new Promise<import('@dj/shared-types').Suggestion[]>(resolve =>
-        setTimeout(() => {
-          getLogger()?.warn('[autoFillQueue] Suggestion generation timed out after 8s, using fallbacks')
-          resolve([])
-        }, 8000)
-      ),
-    ])
-
-    // Log thinking patterns if available (for prompt optimization)
-    if (suggestionEngine.lastThinking) {
-      getLogger()?.info('[autoFillQueue] AI thinking patterns captured for analysis', {
-        thinkingSample: suggestionEngine.lastThinking.slice(0, 1000),
-      })
+    if (!isSuccessResponse(response)) {
+      return null
     }
 
-    if (suggestions.length === 0) {
-      getLogger()?.info('No suggestions generated for auto-fill')
-      return 0
+    const rawData = await response.json()
+    const parseResult = SpotifyUserSchema.safeParse(rawData)
+
+    if (!parseResult.success) {
+      getLogger()?.error('Invalid Spotify user response:', parseResult.error)
+      return null
     }
 
-    // Get URIs already in queue and history to avoid duplicates
-    const existingUris = new Set([
-      ...session.queue.map((t) => t.trackUri),
-      ...session.history.map((t) => t.trackUri),
-    ])
-
-    // Filter out duplicates
-    const availableSuggestions = suggestions.filter((s) => !existingUris.has(s.trackUri))
-
-    if (availableSuggestions.length === 0) {
-      getLogger()?.info('All suggestions are duplicates, skipping auto-fill')
-      return 0
-    }
-
-    // Take only what we need
-    const toAdd = availableSuggestions.slice(0, tracksNeeded)
-    let addedCount = 0
-
-    for (const suggestion of toAdd) {
-      const position = session.queue.length
-
-      const queuedTrack: QueuedTrack = {
-        trackId: suggestion.trackId,
-        trackUri: suggestion.trackUri,
-        name: suggestion.name,
-        artist: suggestion.artist,
-        albumArt: suggestion.albumArt,
-        addedBy: 'ai',
-        vibeScore: suggestion.vibeScore,
-        reason: suggestion.reason,
-        position,
-      }
-
-      sessionService.addToQueue(session, queuedTrack)
-      addedCount++
-
-      // Also queue to Spotify's playback queue (best effort)
-      try {
-        const spotifyResponse = await fetch(
-          `https://api.spotify.com/v1/me/player/queue?uri=${encodeURIComponent(suggestion.trackUri)}`,
-          {
-            method: 'POST',
-            headers: {Authorization: `Bearer ${token}`},
-          }
-        )
-        if (spotifyResponse.status === 204) {
-          getLogger()?.info(`Queued to Spotify: ${suggestion.name}`)
-        }
-      } catch {
-        // Non-fatal - might fail if no active device or not Premium
-        getLogger()?.warn(`Could not queue to Spotify: ${suggestion.name}`)
-      }
-    }
-
-    // Phase 3c: If AI returned nothing (timeout or failure), use fallback pool
-    if (addedCount === 0 && session.fallbackPool.length > 0) {
-      getLogger()?.info('[autoFillQueue] Using fallback pool', { poolSize: session.fallbackPool.length })
-      const fallbacksNeeded = Math.min(tracksNeeded, session.fallbackPool.length)
-
-      for (let i = 0; i < fallbacksNeeded; i++) {
-        const fallbackUri = session.fallbackPool.shift()!
-        // Check it's not already in queue/history
-        if (existingUris.has(fallbackUri)) continue
-
-        const trackDetails = await fetchTrackDetails(fallbackUri, token)
-        if (trackDetails) {
-          const position = session.queue.length
-          const queuedTrack = createQueuedTrack(trackDetails, position, 50, 'Fallback from seed playlist', 'ai')
-          sessionService.addToQueue(session, queuedTrack)
-          addedCount++
-
-          // Queue to Spotify (best effort)
-          try {
-            await fetch(
-              `https://api.spotify.com/v1/me/player/queue?uri=${encodeURIComponent(fallbackUri)}`,
-              { method: 'POST', headers: { Authorization: `Bearer ${token}` } }
-            )
-          } catch {
-            // Non-fatal
-          }
-        }
-      }
-    }
-
-    // Save updated session
-    await sessionService.updateSession(session)
-
-    getLogger()?.info(`Auto-fill complete: added ${addedCount} tracks, queue now has ${session.queue.length} tracks`)
-    return addedCount
+    return parseResult.data.id
   } catch (error) {
-    getLogger()?.error('Auto-fill error:', error)
-    return 0
+    getLogger()?.error('Failed to get user ID from token:', error)
+    return null
   }
 }
+
+/**
+ * Helper to create PlayedTrack from QueuedTrack (when moving from queue to history)
+ */
+function queuedTrackToPlayedTrack(
+  queued: QueuedTrack,
+  bpm: null | number = null,
+  energy: null | number = null
+): PlayedTrack {
+  return {
+    albumArt: queued.albumArt,
+    artist: queued.artist,
+    bpm: clampBpm(bpm),
+    energy,
+    name: queued.name,
+    playedAt: new Date().toISOString(),
+    trackId: queued.trackId,
+    trackUri: queued.trackUri,
+  }
+}
+
+// Auto-queue configuration
+const TARGET_QUEUE_SIZE = 5
 
 /**
  * Register mix routes on the provided OpenAPI app
@@ -585,7 +493,7 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
 
       // Phase 2: Extract vibe from seed playlist or user profile
       try {
-        let seedTracks: Array<{id: string, uri: string, name: string, artists: Array<{name: string}>, album?: {images?: Array<{url: string}>, release_date?: string}, popularity?: number, duration_ms?: number}> = []
+        let seedTracks: {album?: {images?: {url: string}[], release_date?: string}, artists: {name: string}[], duration_ms?: number; id: string, name: string, popularity?: number, uri: string,}[] = []
 
         if (seedPlaylistId) {
           // Seed from specific playlist
@@ -598,7 +506,7 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
         }
 
         if (seedTracks.length > 0) {
-          const { vibe: extractedVibe, fallbackPool } = await extractQuickVibe(token, seedTracks, c.env)
+          const { fallbackPool, vibe: extractedVibe } = await extractQuickVibe(token, seedTracks, c.env)
 
           // Apply extracted vibe to session
           if (extractedVibe.genres?.length) session.vibe.genres = extractedVibe.genres
@@ -608,7 +516,7 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
           session.fallbackPool = fallbackPool
 
           await sessionService.updateSession(session)
-          getLogger()?.info('Applied seed vibe to session', { genres: session.vibe.genres, energy: session.vibe.energyLevel })
+          getLogger()?.info('Applied seed vibe to session', { energy: session.vibe.energyLevel, genres: session.vibe.genres })
         }
       } catch (err) {
         getLogger()?.error('Seed vibe extraction failed (continuing with defaults):', err)
@@ -750,7 +658,7 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       }
 
       const body = await c.req.json()
-      const {trackUri, position} = body
+      const {position, trackUri} = body
 
       if (!c.env.MIX_SESSIONS) {
         return c.json({error: 'Mix sessions not available'}, 500)
@@ -788,7 +696,7 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       // Save updated session
       await sessionService.updateSession(session)
 
-      return c.json({success: true, queue: session.queue}, 200)
+      return c.json({queue: session.queue, success: true}, 200)
     } catch (error) {
       getLogger()?.error('Add to queue error:', error)
       const message = error instanceof Error ? error.message : 'Failed to add track to queue'
@@ -837,7 +745,7 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       // Save updated session
       await sessionService.updateSession(session)
 
-      return c.json({success: true, queue: session.queue}, 200)
+      return c.json({queue: session.queue, success: true}, 200)
     } catch (error) {
       getLogger()?.error('Remove from queue error:', error)
       const message = error instanceof Error ? error.message : 'Failed to remove track from queue'
@@ -882,7 +790,7 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       // Save updated session
       await sessionService.updateSession(session)
 
-      return c.json({success: true, queue: session.queue}, 200)
+      return c.json({queue: session.queue, success: true}, 200)
     } catch (error) {
       getLogger()?.error('Reorder queue error:', error)
       const message = error instanceof Error ? error.message : 'Failed to reorder queue'
@@ -936,7 +844,7 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       }
 
       const body = await c.req.json()
-      const {energyLevel, energyDirection, bpmRange} = body
+      const {bpmRange, energyDirection, energyLevel} = body
 
       if (!c.env.MIX_SESSIONS) {
         return c.json({error: 'Mix sessions not available'}, 500)
@@ -972,7 +880,7 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
         await sessionService.updateSession(session)
       }
 
-      return c.json({vibe: updatedVibe, queue: session.queue}, 200)
+      return c.json({queue: session.queue, vibe: updatedVibe}, 200)
     } catch (error) {
       getLogger()?.error('Update vibe error:', error)
       const message = error instanceof Error ? error.message : 'Failed to update vibe'
@@ -1067,13 +975,13 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       }
 
       getLogger()?.info('Steered vibe for session', {
-        userId,
-        sessionId: session.id,
-        direction,
         changes,
+        direction,
+        sessionId: session.id,
+        userId,
       })
 
-      return c.json({vibe: updatedVibe, changes, queue: session.queue}, 200)
+      return c.json({changes, queue: session.queue, vibe: updatedVibe}, 200)
     } catch (error) {
       getLogger()?.error('Steer vibe error:', error)
       const message = error instanceof Error ? error.message : 'Failed to steer vibe'
@@ -1108,7 +1016,7 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       }
 
       // Initialize services with extended thinking for quality reasoning
-      const lastFmService = new LastFmService(c.env.LASTFM_API_KEY || '', c.env.AUDIO_FEATURES_CACHE)
+      const lastFmService = new LastFmService(c.env.LASTFM_API_KEY ?? '', c.env.AUDIO_FEATURES_CACHE)
       const audioService = new AudioEnrichmentService(c.env.AUDIO_FEATURES_CACHE)
       const enableThinking = true // Enable extended thinking for deeper track selection reasoning
       const suggestionEngine = new SuggestionEngine(lastFmService, audioService, token, c.env.ANTHROPIC_API_KEY, enableThinking)
@@ -1129,11 +1037,11 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
 
       return c.json(
         {
-          suggestions,
           basedOn: {
             currentTrack,
             vibeProfile,
           },
+          suggestions,
         },
         200
       )
@@ -1158,7 +1066,7 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       }
 
       const body = await c.req.json()
-      const {name, description, includeQueue} = body
+      const {description, includeQueue, name} = body
 
       if (!c.env.MIX_SESSIONS) {
         return c.json({error: 'Mix sessions not available'}, 500)
@@ -1194,16 +1102,16 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
 
       // Create playlist on Spotify
       const createResponse = await fetch(`https://api.spotify.com/v1/users/${spotifyUserId}/playlists`, {
-        method: 'POST',
+        body: JSON.stringify({
+          description: description ?? `DJ Mix created on ${new Date().toLocaleDateString()}`,
+          name,
+          public: false,
+        }),
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          name,
-          description: description || `DJ Mix created on ${new Date().toLocaleDateString()}`,
-          public: false,
-        }),
+        method: 'POST',
       })
 
       if (!isSuccessResponse(createResponse)) {
@@ -1229,14 +1137,14 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
 
       for (const batch of batches) {
         const addResponse = await fetch(`https://api.spotify.com/v1/playlists/${playlist.id}/tracks`, {
-          method: 'POST',
+          body: JSON.stringify({
+            uris: batch,
+          }),
           headers: {
             Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            uris: batch,
-          }),
+          method: 'POST',
         })
 
         if (!isSuccessResponse(addResponse)) {
@@ -1252,9 +1160,9 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
 
       return c.json(
         {
-          success: true,
           playlistId: playlist.id,
           playlistUrl: playlist.external_urls.spotify,
+          success: true,
           trackCount: trackUris.length,
         },
         200
@@ -1309,8 +1217,8 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
         sessionService.removeFromQueue(session, queuedTrack.position)
 
         // Try to get audio features for BPM/energy by fetching track details
-        let bpm: number | null = null
-        let energy: number | null = null
+        let bpm: null | number = null
+        const energy: null | number = null
 
         if (c.env.AUDIO_FEATURES_CACHE) {
           const trackDetails = await fetchTrackDetails(trackUri, token)
@@ -1333,17 +1241,17 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
         movedToHistory = true
 
         getLogger()?.info('Moved track from queue to history', {
-          userId,
-          trackId,
-          queueLength: session.queue.length,
           historyLength: session.history.length,
+          queueLength: session.queue.length,
+          trackId,
+          userId,
         })
       } else {
         // Track wasn't in our queue - user might be playing something else
         // Still add to history if we can get track details
         const trackDetails = await fetchTrackDetails(trackUri, token)
         if (trackDetails) {
-          let bpm: number | null = null
+          let bpm: null | number = null
           if (c.env.AUDIO_FEATURES_CACHE) {
             const audioService = new AudioEnrichmentService(c.env.AUDIO_FEATURES_CACHE)
             const enrichment = await audioService.enrichTrack(trackDetails)
@@ -1367,9 +1275,9 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
         c.executionCtx.waitUntil((async () => {
           try {
             // Re-fetch session since we're in background and the response already returned
-            const freshSession = await sessionService.getSession(userId!)
+            const freshSession = await sessionService.getSession(userId)
             if (!freshSession || freshSession.queue.length >= TARGET_QUEUE_SIZE) return
-            const addedCount = await autoFillQueue(c.env, token!, freshSession, sessionService)
+            const addedCount = await autoFillQueue(c.env, token, freshSession, sessionService)
             if (addedCount > 0) {
               getLogger()?.info(`[track-played] Background auto-fill added ${addedCount} tracks`)
             }
@@ -1379,7 +1287,7 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
         })())
       }
 
-      return c.json({success: true, movedToHistory, session}, 200)
+      return c.json({movedToHistory, session, success: true}, 200)
     } catch (error) {
       getLogger()?.error('Track played error:', error)
       const message = error instanceof Error ? error.message : 'Failed to process track played'
@@ -1403,17 +1311,17 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       const response = await fetch(
         `https://api.spotify.com/v1/me/player/queue?uri=${encodeURIComponent(trackUri)}`,
         {
-          method: 'POST',
           headers: {
             Authorization: `Bearer ${token}`,
           },
+          method: 'POST',
         }
       )
 
       if (response.status === 204) {
         // Success - no content
         getLogger()?.info('Track queued to Spotify', {trackUri})
-        return c.json({success: true, queued: true}, 200)
+        return c.json({queued: true, success: true}, 200)
       }
 
       if (response.status === 404) {
@@ -1427,7 +1335,7 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       if (response.status === 403) {
         // Premium required or other restriction
         const errorData = await response.json().catch(() => ({}))
-        const errorMessage = (errorData as {error?: {message?: string}}).error?.message || 'Spotify Premium required'
+        const errorMessage = (errorData as {error?: {message?: string}}).error?.message ?? 'Spotify Premium required'
         return c.json({error: errorMessage}, 403)
       }
 
@@ -1436,7 +1344,7 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
         return c.json({error: `Spotify API error: ${response.status}`}, 500)
       }
 
-      return c.json({success: true, queued: true}, 200)
+      return c.json({queued: true, success: true}, 200)
     } catch (error) {
       getLogger()?.error('Queue to Spotify error:', error)
       const message = error instanceof Error ? error.message : 'Failed to queue to Spotify'
@@ -1494,11 +1402,164 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
         }
       }
 
-      return c.json({success: true, preferences: session.preferences, session}, 200)
+      return c.json({preferences: session.preferences, session, success: true}, 200)
     } catch (error) {
       getLogger()?.error('Update preferences error:', error)
       const message = error instanceof Error ? error.message : 'Failed to update preferences'
       return c.json({error: message}, 500)
     }
   })
+}
+
+/**
+ * Auto-fill queue to target size with AI suggestions
+ * This is the server-side implementation of automatic queue management.
+ * Returns the number of tracks added.
+ */
+async function autoFillQueue(
+  env: Env,
+  token: string,
+  session: import('@dj/shared-types').MixSession,
+  sessionService: MixSessionService
+): Promise<number> {
+  // Check if autoFill is enabled in session preferences (default to true if not set)
+  const autoFillEnabled = session.preferences.autoFill ?? true
+  if (!autoFillEnabled) {
+    getLogger()?.info('Auto-fill disabled in session preferences, skipping')
+    return 0
+  }
+
+  const queueSize = session.queue.length
+  const tracksNeeded = TARGET_QUEUE_SIZE - queueSize
+
+  if (tracksNeeded <= 0) {
+    return 0
+  }
+
+  getLogger()?.info(`Auto-filling queue: ${queueSize} → ${TARGET_QUEUE_SIZE} (need ${tracksNeeded} tracks)`)
+
+  try {
+    // Initialize suggestion engine with extended thinking enabled for quality reasoning
+    const lastFmService = new LastFmService(env.LASTFM_API_KEY ?? '', env.AUDIO_FEATURES_CACHE)
+    const audioService = new AudioEnrichmentService(env.AUDIO_FEATURES_CACHE)
+    const enableThinking = true // Enable extended thinking for deeper track selection reasoning
+    const suggestionEngine = new SuggestionEngine(lastFmService, audioService, token, env.ANTHROPIC_API_KEY, enableThinking)
+
+    // Generate suggestions with 8-second timeout (Phase 3c)
+    // If Claude is slow, fall through to fallback pool below
+    const suggestions = await Promise.race([
+      suggestionEngine.generateSuggestions(session, tracksNeeded + 3),
+      new Promise<import('@dj/shared-types').Suggestion[]>(resolve =>
+        setTimeout(() => {
+          getLogger()?.warn('[autoFillQueue] Suggestion generation timed out after 8s, using fallbacks')
+          resolve([])
+        }, 8000)
+      ),
+    ])
+
+    // Log thinking patterns if available (for prompt optimization)
+    if (suggestionEngine.lastThinking) {
+      getLogger()?.info('[autoFillQueue] AI thinking patterns captured for analysis', {
+        thinkingSample: suggestionEngine.lastThinking.slice(0, 1000),
+      })
+    }
+
+    if (suggestions.length === 0) {
+      getLogger()?.info('No suggestions generated for auto-fill')
+      return 0
+    }
+
+    // Get URIs already in queue and history to avoid duplicates
+    const existingUris = new Set([
+      ...session.history.map((t) => t.trackUri),
+      ...session.queue.map((t) => t.trackUri),
+    ])
+
+    // Filter out duplicates
+    const availableSuggestions = suggestions.filter((s) => !existingUris.has(s.trackUri))
+
+    if (availableSuggestions.length === 0) {
+      getLogger()?.info('All suggestions are duplicates, skipping auto-fill')
+      return 0
+    }
+
+    // Take only what we need
+    const toAdd = availableSuggestions.slice(0, tracksNeeded)
+    let addedCount = 0
+
+    for (const suggestion of toAdd) {
+      const position = session.queue.length
+
+      const queuedTrack: QueuedTrack = {
+        addedBy: 'ai',
+        albumArt: suggestion.albumArt,
+        artist: suggestion.artist,
+        name: suggestion.name,
+        position,
+        reason: suggestion.reason,
+        trackId: suggestion.trackId,
+        trackUri: suggestion.trackUri,
+        vibeScore: suggestion.vibeScore,
+      }
+
+      sessionService.addToQueue(session, queuedTrack)
+      addedCount++
+
+      // Also queue to Spotify's playback queue (best effort)
+      try {
+        const spotifyResponse = await fetch(
+          `https://api.spotify.com/v1/me/player/queue?uri=${encodeURIComponent(suggestion.trackUri)}`,
+          {
+            headers: {Authorization: `Bearer ${token}`},
+            method: 'POST',
+          }
+        )
+        if (spotifyResponse.status === 204) {
+          getLogger()?.info(`Queued to Spotify: ${suggestion.name}`)
+        }
+      } catch {
+        // Non-fatal - might fail if no active device or not Premium
+        getLogger()?.warn(`Could not queue to Spotify: ${suggestion.name}`)
+      }
+    }
+
+    // Phase 3c: If AI returned nothing (timeout or failure), use fallback pool
+    if (addedCount === 0 && session.fallbackPool.length > 0) {
+      getLogger()?.info('[autoFillQueue] Using fallback pool', { poolSize: session.fallbackPool.length })
+      const fallbacksNeeded = Math.min(tracksNeeded, session.fallbackPool.length)
+
+      for (let i = 0; i < fallbacksNeeded; i++) {
+        const fallbackUri = session.fallbackPool.shift()!
+        // Check it's not already in queue/history
+        if (existingUris.has(fallbackUri)) continue
+
+        const trackDetails = await fetchTrackDetails(fallbackUri, token)
+        if (trackDetails) {
+          const position = session.queue.length
+          const queuedTrack = createQueuedTrack(trackDetails, position, 50, 'Fallback from seed playlist', 'ai')
+          sessionService.addToQueue(session, queuedTrack)
+          addedCount++
+
+          // Queue to Spotify (best effort)
+          try {
+            await fetch(
+              `https://api.spotify.com/v1/me/player/queue?uri=${encodeURIComponent(fallbackUri)}`,
+              { headers: { Authorization: `Bearer ${token}` }, method: 'POST' }
+            )
+          } catch {
+            // Non-fatal
+          }
+        }
+      }
+    }
+
+    // Save updated session
+    await sessionService.updateSession(session)
+
+    getLogger()?.info(`Auto-fill complete: added ${addedCount} tracks, queue now has ${session.queue.length} tracks`)
+    return addedCount
+  } catch (error) {
+    getLogger()?.error('Auto-fill error:', error)
+    return 0
+  }
 }

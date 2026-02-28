@@ -13,43 +13,45 @@
  * + evaluation prefix cached after first eval).
  */
 
-import { spawn, type ChildProcess } from "node:child_process";
-import * as os from "os";
 import * as fs from "fs";
+import { type ChildProcess, spawn } from "node:child_process";
+import * as os from "os";
 import * as path from "path";
+
+import type { LogContext } from "./logger.js";
+import type { LlmAnalysisResult } from "./security-llm.js";
+
 import { EvalWsServer, type IEvalWsServer } from "./eval-ws-server.js";
 import {
-  SECURITY_DECISION_SCHEMA,
   isValidSecurityDecision,
+  SECURITY_DECISION_SCHEMA,
 } from "./evaluation-schemas.js";
-import type { LlmAnalysisResult } from "./security-llm.js";
+import { logDebug, logError, logWarn } from "./logger.js";
+import { getSecurityDir } from "./paths.js";
+import { redactSensitive } from "./redact.js";
 import {
   escapeForPrompt,
   logDecision,
   logSuggestion,
 } from "./security-llm.js";
-import type { LogContext } from "./logger.js";
-import { logDebug, logWarn, logError } from "./logger.js";
-import { getSecurityDir } from "./paths.js";
-import { redactSensitive } from "./redact.js";
 
 // Default configuration
 const DEFAULT_CONFIG = {
+  confidence_auto_threshold: 0.85,
   enabled: true,
-  model: "haiku",
   evaluation_timeout_ms: 30000,
   idle_timeout_ms: 3600000,
   max_cumulative_cost_usd: 0.5,
-  confidence_auto_threshold: 0.85,
+  model: "haiku",
 };
 
 interface AgentEvaluatorConfig {
+  confidence_auto_threshold: number;
   enabled: boolean;
-  model: string;
   evaluation_timeout_ms: number;
   idle_timeout_ms: number;
   max_cumulative_cost_usd: number;
-  confidence_auto_threshold: number;
+  model: string;
 }
 
 // Module-level persistent state (lives in daemon process memory)
@@ -57,7 +59,7 @@ let evalServer: IEvalWsServer | null = null;
 let cliProcess: ChildProcess | null = null;
 let generationCounter = 0;
 let evaluationCounter = 0;
-let lastSessionId: string = "";
+let lastSessionId = "";
 
 // ── Concurrency control ─────────────────────────────────────────────
 // The daemon processes multiple hook requests concurrently (pre-tool-use
@@ -73,16 +75,16 @@ let lastSessionId: string = "";
 
 let evalLockTail: Promise<void> = Promise.resolve();
 
+interface CachedResult {
+  expiresAt: number;
+  result: LlmAnalysisResult;
+}
+
 function withEvalLock<T>(fn: () => Promise<T>): Promise<T> {
   const prev = evalLockTail;
   let release: () => void;
   evalLockTail = new Promise<void>((r) => { release = r; });
   return prev.then(fn).finally(() => release!());
-}
-
-interface CachedResult {
-  result: LlmAnalysisResult;
-  expiresAt: number;
 }
 
 const evalResultCache = new Map<string, CachedResult>();
@@ -116,6 +118,60 @@ Decision criteria:
 
 Investigate if needed, then provide your decision with confidence score and reasoning.
 If this command type should be auto-allowed/denied in the future, suggest a pattern rule.`;
+
+/**
+ * Analyze a command using the persistent agent evaluation session.
+ * Returns "ask" on any failure so the user gets prompted.
+ *
+ * Serialized via evalLockTail to prevent concurrent initSession() calls
+ * from destroying each other's WebSocket servers. Inside the lock, a
+ * dedupe cache returns the same result for identical commands evaluated
+ * within EVAL_CACHE_TTL_MS (covers the pre-tool-use + permission-request
+ * pair that fires ~50ms apart for the same command).
+ */
+export async function analyzeWithAgent(
+  command: string,
+  description?: string,
+  context?: LogContext
+): Promise<LlmAnalysisResult> {
+  const config = loadConfig();
+
+  // Feature flag check (no lock needed)
+  if (!config.enabled) {
+    logWarn("Agent evaluator disabled — unknown commands will require manual confirmation", context);
+    return { decision: "ask", reason: "Agent evaluator disabled — user confirmation required" };
+  }
+
+  return withEvalLock(async () => {
+    // Dedupe: check cache for recent evaluation of this exact command
+    const cached = evalResultCache.get(command);
+    if (cached && Date.now() < cached.expiresAt) {
+      logDebug(`Eval dedupe cache hit for command: ${command.slice(0, 50)}...`, context);
+      return cached.result;
+    }
+
+    try {
+      const result = await runAgentEvaluation(command, description, config, context);
+      evalResultCache.set(command, { expiresAt: Date.now() + EVAL_CACHE_TTL_MS, result });
+      pruneEvalCache();
+      return result;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logWarn(`Agent evaluation failed: ${message}`, context);
+
+      // Clean up broken session — next eval will create fresh
+      cleanupSession();
+
+      const fallback: LlmAnalysisResult = {
+        decision: "ask",
+        reason: `Agent evaluation failed — user confirmation required: ${message}`,
+      };
+      // Cache failures too so the dedupe partner doesn't retry and fail again
+      evalResultCache.set(command, { expiresAt: Date.now() + EVAL_CACHE_TTL_MS, result: fallback });
+      return fallback;
+    }
+  });
+}
 
 /**
  * Load agent evaluator configuration from marvel/security/config.json.
@@ -165,7 +221,7 @@ function logAgentEvaluation(
   const dir = path.dirname(logPath);
   try {
     if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+      fs.mkdirSync(dir, { mode: 0o700, recursive: true });
     }
   } catch {
     logWarn(`Failed to create agent evaluations directory: ${dir}`, context);
@@ -173,17 +229,17 @@ function logAgentEvaluation(
   }
 
   const entry = {
-    timestamp: new Date().toISOString(),
     command: redactSensitive(command),
-    description: description ? redactSensitive(description) : null,
-    decision,
-    reasoning,
     confidence,
-    investigated,
     costUsd,
+    decision,
+    description: description ? redactSensitive(description) : null,
     durationMs,
-    numTurns,
     evaluator: "agent",
+    investigated,
+    numTurns,
+    reasoning,
+    timestamp: new Date().toISOString(),
   };
 
   try {
@@ -195,62 +251,38 @@ function logAgentEvaluation(
   }
 }
 
+// Tracked warmup promise — shutdown awaits this to avoid orphaned CLI processes.
+let warmupPromise: null | Promise<void> = null;
+
 /**
- * Analyze a command using the persistent agent evaluation session.
- * Returns "ask" on any failure so the user gets prompted.
- *
- * Serialized via evalLockTail to prevent concurrent initSession() calls
- * from destroying each other's WebSocket servers. Inside the lock, a
- * dedupe cache returns the same result for identical commands evaluated
- * within EVAL_CACHE_TTL_MS (covers the pre-tool-use + permission-request
- * pair that fires ~50ms apart for the same command).
+ * Shut down the evaluation session.
+ * Called from SessionEnd hook or daemon shutdown.
  */
-export async function analyzeWithAgent(
-  command: string,
-  description?: string,
-  context?: LogContext
-): Promise<LlmAnalysisResult> {
+/**
+ * Check whether the agent evaluator is enabled.
+ * Used by session-start to surface a warning when the evaluator is off.
+ */
+export function isEvalEnabled(): { enabled: boolean; reason?: string } {
   const config = loadConfig();
-
-  // Feature flag check (no lock needed)
   if (!config.enabled) {
-    logWarn("Agent evaluator disabled — unknown commands will require manual confirmation", context);
-    return { decision: "ask", reason: "Agent evaluator disabled — user confirmation required" };
+    return { enabled: false, reason: "agent_evaluator.enabled is false in marvel/security/config.json" };
   }
-
-  return withEvalLock(async () => {
-    // Dedupe: check cache for recent evaluation of this exact command
-    const cached = evalResultCache.get(command);
-    if (cached && Date.now() < cached.expiresAt) {
-      logDebug(`Eval dedupe cache hit for command: ${command.slice(0, 50)}...`, context);
-      return cached.result;
-    }
-
-    try {
-      const result = await runAgentEvaluation(command, description, config, context);
-      evalResultCache.set(command, { result, expiresAt: Date.now() + EVAL_CACHE_TTL_MS });
-      pruneEvalCache();
-      return result;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      logWarn(`Agent evaluation failed: ${message}`, context);
-
-      // Clean up broken session — next eval will create fresh
-      cleanupSession();
-
-      const fallback: LlmAnalysisResult = {
-        decision: "ask",
-        reason: `Agent evaluation failed — user confirmation required: ${message}`,
-      };
-      // Cache failures too so the dedupe partner doesn't retry and fail again
-      evalResultCache.set(command, { result: fallback, expiresAt: Date.now() + EVAL_CACHE_TTL_MS });
-      return fallback;
-    }
-  });
+  return { enabled: true };
 }
 
-// Tracked warmup promise — shutdown awaits this to avoid orphaned CLI processes.
-let warmupPromise: Promise<void> | null = null;
+export async function shutdownEvalSession(): Promise<void> {
+  logDebug("Shutting down agent evaluation session");
+  // Await in-flight warmup so we don't orphan a CLI process
+  if (warmupPromise) {
+    try {
+      await warmupPromise;
+    } catch {
+      // Warmup already logs its own errors
+    }
+  }
+  cleanupSession();
+  evalResultCache.clear();
+}
 
 /**
  * Pre-warm the evaluation session: start WS server + spawn CLI.
@@ -278,6 +310,69 @@ export function warmupEvalSession(): void {
 }
 
 /**
+ * Clean up the evaluation session.
+ */
+function cleanupSession(): void {
+  if (evalServer) {
+    evalServer.close();
+    evalServer = null;
+  }
+
+  if (cliProcess) {
+    try {
+      cliProcess.kill("SIGTERM");
+    } catch {
+      // Process may already be dead
+    }
+    cliProcess = null;
+  }
+}
+
+/**
+ * Initialize the evaluation session: start WS server, spawn Claude CLI.
+ * If lastSessionId is available, attempts --resume for faster startup;
+ * falls back to fresh session if CLI exits within 2s (resume rejection).
+ */
+async function initSession(
+  config: AgentEvaluatorConfig,
+  context?: LogContext
+): Promise<void> {
+  // Clean up any previous session
+  cleanupSession();
+
+  logDebug("Initializing agent evaluation session", context);
+
+  // Start WebSocket server
+  evalServer = new EvalWsServer(config.idle_timeout_ms);
+  const port = await evalServer.start();
+
+  const resumeId = lastSessionId;
+  spawnCli(config, port, resumeId, context);
+
+  // Quick-death fallback: if CLI exits within 2s after resume, clear
+  // lastSessionId and retry with a fresh session
+  if (resumeId) {
+    const quickDeathDetected = await new Promise<boolean>((resolve) => {
+      const timer = setTimeout(() => resolve(false), 2000);
+      if (timer.unref) timer.unref();
+      cliProcess?.on("exit", () => {
+        clearTimeout(timer);
+        resolve(true);
+      });
+    });
+
+    if (quickDeathDetected) {
+      logWarn(`CLI quick-death after --resume ${resumeId.slice(0, 8)}… — retrying fresh`, context);
+      lastSessionId = "";
+      cleanupSession();
+      evalServer = new EvalWsServer(config.idle_timeout_ms);
+      const freshPort = await evalServer.start();
+      spawnCli(config, freshPort, "", context);
+    }
+  }
+}
+
+/**
  * Run the agent evaluation. Throws on failure (caller catches and falls back).
  */
 async function runAgentEvaluation(
@@ -300,7 +395,7 @@ async function runAgentEvaluation(
   }
 
   // Lazy init — create server + spawn CLI if needed
-  if (!evalServer || !evalServer.isAlive) {
+  if (!evalServer?.isAlive) {
     await initSession(config, context);
   }
 
@@ -365,7 +460,7 @@ async function runAgentEvaluation(
   logDecision(
     command,
     description,
-    finalDecision as "allow" | "deny" | "ask",
+    finalDecision,
     decision.reasoning,
     result.durationMs,
     context
@@ -395,8 +490,9 @@ async function runAgentEvaluation(
   }
 
   return {
-    decision: finalDecision as "allow" | "deny" | "ask",
+    decision: finalDecision,
     reason: decision.reasoning,
+    suggestedRule: decision.suggested_rule,
     suggestions: decision.suggested_rule
       ? {
           [finalDecision === "deny" ? "deny" : "allow"]: [
@@ -407,52 +503,7 @@ async function runAgentEvaluation(
           ],
         }
       : undefined,
-    suggestedRule: decision.suggested_rule,
   };
-}
-
-/**
- * Initialize the evaluation session: start WS server, spawn Claude CLI.
- * If lastSessionId is available, attempts --resume for faster startup;
- * falls back to fresh session if CLI exits within 2s (resume rejection).
- */
-async function initSession(
-  config: AgentEvaluatorConfig,
-  context?: LogContext
-): Promise<void> {
-  // Clean up any previous session
-  cleanupSession();
-
-  logDebug("Initializing agent evaluation session", context);
-
-  // Start WebSocket server
-  evalServer = new EvalWsServer(config.idle_timeout_ms);
-  const port = await evalServer.start();
-
-  const resumeId = lastSessionId;
-  spawnCli(config, port, resumeId, context);
-
-  // Quick-death fallback: if CLI exits within 2s after resume, clear
-  // lastSessionId and retry with a fresh session
-  if (resumeId) {
-    const quickDeathDetected = await new Promise<boolean>((resolve) => {
-      const timer = setTimeout(() => resolve(false), 2000);
-      if (timer.unref) timer.unref();
-      cliProcess?.on("exit", () => {
-        clearTimeout(timer);
-        resolve(true);
-      });
-    });
-
-    if (quickDeathDetected) {
-      logWarn(`CLI quick-death after --resume ${resumeId.slice(0, 8)}… — retrying fresh`, context);
-      lastSessionId = "";
-      cleanupSession();
-      evalServer = new EvalWsServer(config.idle_timeout_ms);
-      const freshPort = await evalServer.start();
-      spawnCli(config, freshPort, "", context);
-    }
-  }
 }
 
 /**
@@ -501,18 +552,18 @@ function spawnCli(
   // Additionally, MARVEL_SECURITY_EVAL=1 causes bash-security-gate.isRecursiveCall() to
   // return true, preventing infinite recursion if hooks somehow fire.
   cliProcess = spawn("claude", args, {
-    stdio: ["pipe", "pipe", "pipe"],
     cwd: os.tmpdir(),
     env: {
       ...process.env,
-      MARVEL_SECURITY_EVAL: "1",
       CLAUDE_PROJECT_DIR: "",
       // Unset CLAUDECODE to allow nested claude invocation for security eval.
       // The parent session sets this; without clearing it, the child refuses
       // to start ("cannot be launched inside another Claude Code session").
       CLAUDECODE: undefined,
+      MARVEL_SECURITY_EVAL: "1",
       MAX_THINKING_TOKENS: undefined,
     },
+    stdio: ["pipe", "pipe", "pipe"],
   });
 
   generationCounter++;
@@ -558,53 +609,4 @@ function spawnCli(
       logDebug(`Eval CLI stderr: ${msg.slice(0, 500)}`, context);
     }
   });
-}
-
-/**
- * Clean up the evaluation session.
- */
-function cleanupSession(): void {
-  if (evalServer) {
-    evalServer.close();
-    evalServer = null;
-  }
-
-  if (cliProcess) {
-    try {
-      cliProcess.kill("SIGTERM");
-    } catch {
-      // Process may already be dead
-    }
-    cliProcess = null;
-  }
-}
-
-/**
- * Shut down the evaluation session.
- * Called from SessionEnd hook or daemon shutdown.
- */
-/**
- * Check whether the agent evaluator is enabled.
- * Used by session-start to surface a warning when the evaluator is off.
- */
-export function isEvalEnabled(): { enabled: boolean; reason?: string } {
-  const config = loadConfig();
-  if (!config.enabled) {
-    return { enabled: false, reason: "agent_evaluator.enabled is false in marvel/security/config.json" };
-  }
-  return { enabled: true };
-}
-
-export async function shutdownEvalSession(): Promise<void> {
-  logDebug("Shutting down agent evaluation session");
-  // Await in-flight warmup so we don't orphan a CLI process
-  if (warmupPromise) {
-    try {
-      await warmupPromise;
-    } catch {
-      // Warmup already logs its own errors
-    }
-  }
-  cleanupSession();
-  evalResultCache.clear();
 }

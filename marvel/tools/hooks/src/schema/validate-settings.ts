@@ -14,14 +14,62 @@
 import * as fs from "fs";
 import * as path from "path";
 import { fileURLToPath } from "url";
+
 import {
   type HookEventType,
   type HookHandlerType,
-  type ValidationResult,
-  VALID_HOOK_EVENTS,
-  VALID_HANDLER_TYPES,
   MATCHERLESS_EVENTS,
+  VALID_HANDLER_TYPES,
+  VALID_HOOK_EVENTS,
+  type ValidationResult,
 } from "./settings-types.js";
+
+/**
+ * Validate a Claude Code settings object
+ */
+export function validateSettings(settings: unknown): ValidationResult {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  // Must be an object
+  if (!settings || typeof settings !== "object") {
+    return { errors: ["Settings must be an object"], valid: false, warnings: [] };
+  }
+
+  const s = settings as Record<string, unknown>;
+
+  // Validate hooks if present
+  if (s.hooks !== undefined) {
+    if (typeof s.hooks !== "object" || s.hooks === null) {
+      errors.push("hooks must be an object");
+    } else {
+      validateHooks(s.hooks as Record<string, unknown>, errors, warnings);
+    }
+  }
+
+  return {
+    errors,
+    valid: errors.length === 0,
+    warnings,
+  };
+}
+
+/**
+ * Find the project root by looking for .claude directory
+ */
+function findProjectRoot(startDir: string): null | string {
+  let current = startDir;
+  const root = path.parse(current).root;
+
+  while (current !== root) {
+    if (fs.existsSync(path.join(current, ".claude"))) {
+      return current;
+    }
+    current = path.dirname(current);
+  }
+
+  return null;
+}
 
 // Type guards
 function isHookEventType(value: string): value is HookEventType {
@@ -37,33 +85,172 @@ function isMatcherlessEvent(value: string): boolean {
 }
 
 /**
- * Validate a Claude Code settings object
+ * CLI entry point
  */
-export function validateSettings(settings: unknown): ValidationResult {
-  const errors: string[] = [];
-  const warnings: string[] = [];
+async function main(): Promise<void> {
+  const args = process.argv.slice(2);
 
-  // Must be an object
-  if (!settings || typeof settings !== "object") {
-    return { valid: false, errors: ["Settings must be an object"], warnings: [] };
+  // Determine settings path
+  let settingsPath: string;
+
+  if (args[0]) {
+    settingsPath = path.resolve(args[0]);
+  } else {
+    // Find project root from current directory or __dirname
+    const __dirname = path.dirname(fileURLToPath(import.meta.url));
+    const projectRoot = findProjectRoot(process.cwd()) || findProjectRoot(__dirname);
+
+    if (!projectRoot) {
+      console.error("Error: Could not find project root (no .claude directory found)");
+      console.error("Usage: node validate-settings.js [path-to-settings.json]");
+      process.exit(1);
+    }
+
+    settingsPath = path.join(projectRoot, ".claude", "settings.json");
   }
 
-  const s = settings as Record<string, unknown>;
+  // Check file exists
+  if (!fs.existsSync(settingsPath)) {
+    console.error(`Error: Settings file not found: ${settingsPath}`);
+    process.exit(1);
+  }
 
-  // Validate hooks if present
-  if (s.hooks !== undefined) {
-    if (typeof s.hooks !== "object" || s.hooks === null) {
-      errors.push("hooks must be an object");
-    } else {
-      validateHooks(s.hooks as Record<string, unknown>, errors, warnings);
+  console.log(`Validating: ${settingsPath}\n`);
+
+  // Read and parse JSON
+  let content: string;
+  let settings: unknown;
+
+  try {
+    content = fs.readFileSync(settingsPath, "utf-8");
+  } catch (e) {
+    console.error(`Error reading file: ${e}`);
+    process.exit(1);
+  }
+
+  try {
+    settings = JSON.parse(content);
+  } catch (e) {
+    console.error(`Error: Invalid JSON in settings.json`);
+    console.error(`  ${e}`);
+    process.exit(1);
+  }
+
+  // Validate
+  const result = validateSettings(settings);
+
+  // Print warnings
+  if (result.warnings.length > 0) {
+    console.log("Warnings:");
+    for (const warning of result.warnings) {
+      console.log(`  \u26A0  ${warning}`);
+    }
+    console.log("");
+  }
+
+  // Print errors
+  if (result.errors.length > 0) {
+    console.log("Errors:");
+    for (const error of result.errors) {
+      console.log(`  \u2717  ${error}`);
+    }
+    console.log("");
+    console.error(`Validation FAILED with ${result.errors.length} error(s)`);
+    process.exit(1);
+  }
+
+  console.log("\u2713 Settings validated successfully");
+  if (result.warnings.length > 0) {
+    console.log(`  (${result.warnings.length} warning(s))`);
+  }
+}
+
+/**
+ * Validate a command hook handler
+ */
+function validateCommandHandler(
+  prefix: string,
+  handler: Record<string, unknown>,
+  errors: string[],
+  warnings: string[]
+): void {
+  // command is required
+  if (typeof handler.command !== "string") {
+    errors.push(`${prefix}.command: required string field`);
+    return;
+  }
+
+  const cmd = handler.command;
+
+  // Check for working directory independence
+  if (!cmd.includes("$CLAUDE_PROJECT_DIR") && !cmd.startsWith("/")) {
+    // Check if it's a relative path that could break
+    if (cmd.includes("/") || cmd.startsWith("node ") || cmd.startsWith("./")) {
+      warnings.push(
+        `${prefix}.command: Uses relative path "${cmd.substring(0, 50)}...". ` +
+        `Consider using $CLAUDE_PROJECT_DIR for working directory independence: ` +
+        `node "$CLAUDE_PROJECT_DIR/path/to/script.js"`
+      );
     }
   }
 
-  return {
-    valid: errors.length === 0,
-    errors,
-    warnings,
-  };
+  // Validate async field
+  if (handler.async !== undefined && typeof handler.async !== "boolean") {
+    errors.push(`${prefix}.async: must be a boolean`);
+  }
+}
+
+/**
+ * Validate a single hook handler
+ */
+function validateHookHandler(
+  prefix: string,
+  index: number,
+  handler: unknown,
+  errors: string[],
+  warnings: string[]
+): void {
+  const hPrefix = `${prefix}.hooks[${index}]`;
+
+  if (!handler || typeof handler !== "object") {
+    errors.push(`${hPrefix}: must be an object`);
+    return;
+  }
+
+  const h = handler as Record<string, unknown>;
+
+  // type is required
+  if (!h.type) {
+    errors.push(`${hPrefix}.type: required field missing`);
+    return;
+  }
+
+  if (!isHookHandlerType(h.type)) {
+    errors.push(
+      `${hPrefix}.type: "${h.type}" is not valid. Must be: ${VALID_HANDLER_TYPES.join(", ")}`
+    );
+    return;
+  }
+
+  // Validate based on handler type
+  switch (h.type) {
+    case "agent":
+    case "prompt":
+      validatePromptHandler(hPrefix, h, errors, warnings);
+      break;
+    case "command":
+      validateCommandHandler(hPrefix, h, errors, warnings);
+      break;
+  }
+
+  // Validate optional common fields
+  if (h.timeout !== undefined && typeof h.timeout !== "number") {
+    errors.push(`${hPrefix}.timeout: must be a number (seconds)`);
+  }
+
+  if (h.statusMessage !== undefined && typeof h.statusMessage !== "string") {
+    errors.push(`${hPrefix}.statusMessage: must be a string`);
+  }
 }
 
 /**
@@ -167,94 +354,6 @@ function validateMatcherGroup(
 }
 
 /**
- * Validate a single hook handler
- */
-function validateHookHandler(
-  prefix: string,
-  index: number,
-  handler: unknown,
-  errors: string[],
-  warnings: string[]
-): void {
-  const hPrefix = `${prefix}.hooks[${index}]`;
-
-  if (!handler || typeof handler !== "object") {
-    errors.push(`${hPrefix}: must be an object`);
-    return;
-  }
-
-  const h = handler as Record<string, unknown>;
-
-  // type is required
-  if (!h.type) {
-    errors.push(`${hPrefix}.type: required field missing`);
-    return;
-  }
-
-  if (!isHookHandlerType(h.type)) {
-    errors.push(
-      `${hPrefix}.type: "${h.type}" is not valid. Must be: ${VALID_HANDLER_TYPES.join(", ")}`
-    );
-    return;
-  }
-
-  // Validate based on handler type
-  switch (h.type) {
-    case "command":
-      validateCommandHandler(hPrefix, h, errors, warnings);
-      break;
-    case "prompt":
-    case "agent":
-      validatePromptHandler(hPrefix, h, errors, warnings);
-      break;
-  }
-
-  // Validate optional common fields
-  if (h.timeout !== undefined && typeof h.timeout !== "number") {
-    errors.push(`${hPrefix}.timeout: must be a number (seconds)`);
-  }
-
-  if (h.statusMessage !== undefined && typeof h.statusMessage !== "string") {
-    errors.push(`${hPrefix}.statusMessage: must be a string`);
-  }
-}
-
-/**
- * Validate a command hook handler
- */
-function validateCommandHandler(
-  prefix: string,
-  handler: Record<string, unknown>,
-  errors: string[],
-  warnings: string[]
-): void {
-  // command is required
-  if (typeof handler.command !== "string") {
-    errors.push(`${prefix}.command: required string field`);
-    return;
-  }
-
-  const cmd = handler.command;
-
-  // Check for working directory independence
-  if (!cmd.includes("$CLAUDE_PROJECT_DIR") && !cmd.startsWith("/")) {
-    // Check if it's a relative path that could break
-    if (cmd.includes("/") || cmd.startsWith("node ") || cmd.startsWith("./")) {
-      warnings.push(
-        `${prefix}.command: Uses relative path "${cmd.substring(0, 50)}...". ` +
-        `Consider using $CLAUDE_PROJECT_DIR for working directory independence: ` +
-        `node "$CLAUDE_PROJECT_DIR/path/to/script.js"`
-      );
-    }
-  }
-
-  // Validate async field
-  if (handler.async !== undefined && typeof handler.async !== "boolean") {
-    errors.push(`${prefix}.async: must be a boolean`);
-  }
-}
-
-/**
  * Validate a prompt or agent hook handler
  */
 function validatePromptHandler(
@@ -280,104 +379,6 @@ function validatePromptHandler(
   // Validate model field
   if (handler.model !== undefined && typeof handler.model !== "string") {
     errors.push(`${prefix}.model: must be a string`);
-  }
-}
-
-/**
- * Find the project root by looking for .claude directory
- */
-function findProjectRoot(startDir: string): string | null {
-  let current = startDir;
-  const root = path.parse(current).root;
-
-  while (current !== root) {
-    if (fs.existsSync(path.join(current, ".claude"))) {
-      return current;
-    }
-    current = path.dirname(current);
-  }
-
-  return null;
-}
-
-/**
- * CLI entry point
- */
-async function main(): Promise<void> {
-  const args = process.argv.slice(2);
-
-  // Determine settings path
-  let settingsPath: string;
-
-  if (args[0]) {
-    settingsPath = path.resolve(args[0]);
-  } else {
-    // Find project root from current directory or __dirname
-    const __dirname = path.dirname(fileURLToPath(import.meta.url));
-    const projectRoot = findProjectRoot(process.cwd()) || findProjectRoot(__dirname);
-
-    if (!projectRoot) {
-      console.error("Error: Could not find project root (no .claude directory found)");
-      console.error("Usage: node validate-settings.js [path-to-settings.json]");
-      process.exit(1);
-    }
-
-    settingsPath = path.join(projectRoot, ".claude", "settings.json");
-  }
-
-  // Check file exists
-  if (!fs.existsSync(settingsPath)) {
-    console.error(`Error: Settings file not found: ${settingsPath}`);
-    process.exit(1);
-  }
-
-  console.log(`Validating: ${settingsPath}\n`);
-
-  // Read and parse JSON
-  let content: string;
-  let settings: unknown;
-
-  try {
-    content = fs.readFileSync(settingsPath, "utf-8");
-  } catch (e) {
-    console.error(`Error reading file: ${e}`);
-    process.exit(1);
-  }
-
-  try {
-    settings = JSON.parse(content);
-  } catch (e) {
-    console.error(`Error: Invalid JSON in settings.json`);
-    console.error(`  ${e}`);
-    process.exit(1);
-  }
-
-  // Validate
-  const result = validateSettings(settings);
-
-  // Print warnings
-  if (result.warnings.length > 0) {
-    console.log("Warnings:");
-    for (const warning of result.warnings) {
-      console.log(`  \u26A0  ${warning}`);
-    }
-    console.log("");
-  }
-
-  // Print errors
-  if (result.errors.length > 0) {
-    console.log("Errors:");
-    for (const error of result.errors) {
-      console.log(`  \u2717  ${error}`);
-    }
-    console.log("");
-    console.error(`Validation FAILED with ${result.errors.length} error(s)`);
-    process.exit(1);
-  }
-
-  console.log("\u2713 Settings validated successfully");
-  if (result.warnings.length > 0) {
-    console.log(`  (${result.warnings.length} warning(s))`);
   }
 }
 

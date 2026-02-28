@@ -9,40 +9,42 @@
  * 2. Domain: guidance.jsonl to packs lessons.jsonl
  */
 
+import { spawnSync } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
-import { spawnSync } from "child_process";
+
 import type {
   ExternalRule,
-  RuleFile,
   Guidance,
   Lesson,
-  PromotionCandidate,
   LessonCandidate,
+  PromotionCandidate,
   PromotionReport,
+  RuleFile,
 } from "../types.js";
 import type { LogContext } from "./logger.js";
-import { logDebug, logWarn } from "./logger.js";
+
+import { loadAllPacks } from "../loaders/pack-loader.js";
+import { matchesAllowlist } from "./external-rules.js";
 import {
+  safeAppendFile,
   safeParseJsonl,
   safeReadJson,
   safeWriteJson,
-  safeAppendFile,
 } from "./file-ops.js";
-import { matchesAllowlist } from "./external-rules.js";
 import { isPatternSafe } from "./learned-rules.js";
-import { redactSensitive } from "./redact.js";
-import { loadAllPacks } from "../loaders/pack-loader.js";
+import { logDebug, logWarn } from "./logger.js";
 import { findMarvelRoot, getSecurityDir } from "./paths.js";
+import { redactSensitive } from "./redact.js";
 
 interface LearnedRuleEntry {
+  approvedCommand: string;
   id: string;
-  type: "regex" | "prefix" | "contains";
+  learnedAt: string;
   pattern: string;
   reason: string;
-  learnedAt: string;
-  approvedCommand: string;
   sessionId?: string;
+  type: "contains" | "prefix" | "regex";
 }
 
 // ─── Security Candidates ────────────────────────────────────────
@@ -67,7 +69,7 @@ export function findSecurityCandidates(
     if (!byPattern.has(key)) {
       byPattern.set(key, {
         entries: [],
-        rule: { id: entry.id, type: entry.type, pattern: entry.pattern, reason: entry.reason },
+        rule: { id: entry.id, pattern: entry.pattern, reason: entry.reason, type: entry.type },
       });
     }
     byPattern.get(key)!.entries.push(entry);
@@ -105,11 +107,11 @@ export function findSecurityCandidates(
       reason: redactSensitive(rule.reason),
     };
     candidates.push({
-      source: "learned",
-      rule: redactedRule,
-      frequency: group.length,
       firstSeen: sorted[0].learnedAt,
+      frequency: group.length,
       lastSeen: sorted[sorted.length - 1].learnedAt,
+      rule: redactedRule,
+      source: "learned",
     });
   }
 
@@ -137,6 +139,75 @@ const GENERALIZE_TIMEOUT_MS = 8000;
 const GENERALIZE_MODEL = "haiku";
 
 /**
+ * Commit approved domain lessons to their pack's lessons.jsonl.
+ */
+export function commitDomainPromotions(
+  lessons: LessonCandidate[],
+  marvelRoot: string,
+  context: LogContext
+): { added: number } {
+  if (lessons.length === 0) {
+    return { added: 0 };
+  }
+
+  let added = 0;
+  for (const candidate of lessons) {
+    const lessonsPath = path.join(
+      marvelRoot,
+      "packs",
+      candidate.suggestedPack,
+      "lessons.jsonl"
+    );
+
+    const line = JSON.stringify(candidate.suggestedLesson) + "\n";
+    if (safeAppendFile(lessonsPath, line, context)) {
+      added++;
+    }
+  }
+
+  logDebug(`Committed ${added} domain promotions`, context);
+  return { added };
+}
+
+/**
+ * Commit approved security rules to allowlist.json.
+ */
+export function commitSecurityPromotions(
+  rules: ExternalRule[],
+  context: LogContext
+): { added: number } {
+  if (rules.length === 0) {
+    return { added: 0 };
+  }
+
+  const allowlistPath = path.join(getSecurityDir(), "allowlist.json");
+
+  const existing = safeReadJson<RuleFile>(allowlistPath, context) || { rules: [] };
+  const existingIds = new Set(existing.rules.map((r) => r.id));
+
+  let added = 0;
+  for (const rule of rules) {
+    // Generate a promotion-prefixed ID to avoid conflicts
+    const promotedRule: ExternalRule = {
+      ...rule,
+      id: existingIds.has(rule.id) ? `promoted-${Date.now()}-${rule.id}` : rule.id,
+    };
+    existing.rules.push(promotedRule);
+    added++;
+  }
+
+  safeWriteJson(allowlistPath, existing, context);
+  logDebug(`Committed ${added} security promotions`, context);
+
+  // Clean promoted entries from learned.jsonl
+  cleanPromotedFromLearned(rules, context);
+
+  return { added };
+}
+
+// ─── Domain Candidates ──────────────────────────────────────────
+
+/**
  * Escape a string for safe interpolation into a prompt template.
  * Uses JSON.stringify internals to correctly handle all special characters
  * (backslashes, quotes, newlines, tabs, control chars, etc.).
@@ -145,84 +216,7 @@ export function escapeForPromptTemplate(value: string): string {
   return JSON.stringify(value).slice(1, -1);
 }
 
-/**
- * Generalize raw guidance text into a reusable lesson using an LLM.
- * Falls back to verbatim guidance on any failure (fail-open).
- */
-function generalizeLessonWithLLM(
-  content: string,
-  category: string,
-  context: LogContext
-): { title: string; description: string; actionable: string } | null {
-  const prompt = GENERALIZE_PROMPT
-    .replace("{content}", escapeForPromptTemplate(content))
-    .replace("{category}", escapeForPromptTemplate(category));
-
-  try {
-    const result = spawnSync(
-      "claude",
-      ["-p", prompt, "--model", GENERALIZE_MODEL, "--output-format", "json", "--tools", ""],
-      {
-        timeout: GENERALIZE_TIMEOUT_MS,
-        encoding: "utf-8",
-        stdio: ["pipe", "pipe", "pipe"],
-        input: "",
-        env: {
-          ...process.env,
-          MARVEL_SECURITY_EVAL: "1",
-          CLAUDE_PROJECT_DIR: undefined,
-          MAX_THINKING_TOKENS: undefined,
-        },
-      }
-    );
-
-    if (result.error || result.status !== 0 || !result.stdout) {
-      logDebug("LLM generalization failed — using verbatim", context);
-      return null;
-    }
-
-    // Parse the JSON response — claude --output-format json wraps in {"result": "..."}
-    let responseText = result.stdout;
-    try {
-      const jsonWrapper = JSON.parse(result.stdout) as { result?: string };
-      if (jsonWrapper.result) {
-        responseText = jsonWrapper.result;
-      }
-    } catch {
-      // Not wrapped, use as-is
-    }
-
-    // Remove markdown code fences if present
-    const fenceMatch = responseText.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (fenceMatch) {
-      responseText = fenceMatch[1].trim();
-    }
-
-    const parsed = JSON.parse(responseText.trim()) as {
-      title?: string;
-      description?: string;
-      actionable?: string;
-    };
-
-    if (!parsed.title?.trim() || !parsed.description?.trim() || !parsed.actionable?.trim()) {
-      logDebug("LLM returned incomplete generalization — using verbatim", context);
-      return null;
-    }
-
-    logDebug(`Generalized lesson: "${parsed.title}"`, context);
-    return {
-      title: parsed.title.trim(),
-      description: parsed.description.trim(),
-      actionable: parsed.actionable.trim(),
-    };
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-    logWarn(`LLM generalization error: ${msg}`, context);
-    return null;
-  }
-}
-
-// ─── Domain Candidates ──────────────────────────────────────────
+// ─── Commit Promotions ──────────────────────────────────────────
 
 /**
  * Find domain lesson candidates for promotion from guidance → pack lessons.
@@ -308,19 +302,19 @@ export async function findDomainCandidates(
     const generalized = generalizeLessonWithLLM(g.content, g.category || "general", context);
     const fallbackTitle = g.content.split(/[.!?\n]/)[0].trim().slice(0, 80);
     const suggestedLesson: Lesson = {
-      timestamp: new Date().toISOString(),
-      run_id: g.run_id,
-      category: g.category || "general",
-      title: generalized?.title || fallbackTitle,
-      description: generalized?.description || g.content,
       actionable: generalized?.actionable || g.content,
+      category: g.category || "general",
+      description: generalized?.description || g.content,
+      run_id: g.run_id,
+      timestamp: new Date().toISOString(),
+      title: generalized?.title || fallbackTitle,
     };
 
     candidates.push({
-      guidance: g,
-      suggestedPack,
-      suggestedLesson,
       confidence: g.confidence,
+      guidance: g,
+      suggestedLesson,
+      suggestedPack,
     });
   }
 
@@ -334,42 +328,22 @@ export async function findDomainCandidates(
   return { candidates, totalGuidance: allGuidance.length };
 }
 
-// ─── Commit Promotions ──────────────────────────────────────────
-
 /**
- * Commit approved security rules to allowlist.json.
+ * Generate a full promotion report (security + domain).
  */
-export function commitSecurityPromotions(
-  rules: ExternalRule[],
+export async function generatePromotionReport(
   context: LogContext
-): { added: number } {
-  if (rules.length === 0) {
-    return { added: 0 };
-  }
+): Promise<PromotionReport> {
+  const marvelRoot = findMarvelRoot();
+  const security = findSecurityCandidates(context);
+  const domain = marvelRoot
+    ? await findDomainCandidates(marvelRoot, context)
+    : { candidates: [], totalGuidance: 0 };
 
-  const allowlistPath = path.join(getSecurityDir(), "allowlist.json");
-
-  const existing = safeReadJson<RuleFile>(allowlistPath, context) || { rules: [] };
-  const existingIds = new Set(existing.rules.map((r) => r.id));
-
-  let added = 0;
-  for (const rule of rules) {
-    // Generate a promotion-prefixed ID to avoid conflicts
-    const promotedRule: ExternalRule = {
-      ...rule,
-      id: existingIds.has(rule.id) ? `promoted-${Date.now()}-${rule.id}` : rule.id,
-    };
-    existing.rules.push(promotedRule);
-    added++;
-  }
-
-  safeWriteJson(allowlistPath, existing, context);
-  logDebug(`Committed ${added} security promotions`, context);
-
-  // Clean promoted entries from learned.jsonl
-  cleanPromotedFromLearned(rules, context);
-
-  return { added };
+  return {
+    domain,
+    security,
+  };
 }
 
 /**
@@ -400,53 +374,81 @@ function cleanPromotedFromLearned(
   }
 }
 
-/**
- * Commit approved domain lessons to their pack's lessons.jsonl.
- */
-export function commitDomainPromotions(
-  lessons: LessonCandidate[],
-  marvelRoot: string,
-  context: LogContext
-): { added: number } {
-  if (lessons.length === 0) {
-    return { added: 0 };
-  }
-
-  let added = 0;
-  for (const candidate of lessons) {
-    const lessonsPath = path.join(
-      marvelRoot,
-      "packs",
-      candidate.suggestedPack,
-      "lessons.jsonl"
-    );
-
-    const line = JSON.stringify(candidate.suggestedLesson) + "\n";
-    if (safeAppendFile(lessonsPath, line, context)) {
-      added++;
-    }
-  }
-
-  logDebug(`Committed ${added} domain promotions`, context);
-  return { added };
-}
-
 // ─── Full Report ────────────────────────────────────────────────
 
 /**
- * Generate a full promotion report (security + domain).
+ * Generalize raw guidance text into a reusable lesson using an LLM.
+ * Falls back to verbatim guidance on any failure (fail-open).
  */
-export async function generatePromotionReport(
+function generalizeLessonWithLLM(
+  content: string,
+  category: string,
   context: LogContext
-): Promise<PromotionReport> {
-  const marvelRoot = findMarvelRoot();
-  const security = findSecurityCandidates(context);
-  const domain = marvelRoot
-    ? await findDomainCandidates(marvelRoot, context)
-    : { candidates: [], totalGuidance: 0 };
+): null | { actionable: string; description: string; title: string; } {
+  const prompt = GENERALIZE_PROMPT
+    .replace("{content}", escapeForPromptTemplate(content))
+    .replace("{category}", escapeForPromptTemplate(category));
 
-  return {
-    security,
-    domain,
-  };
+  try {
+    const result = spawnSync(
+      "claude",
+      ["-p", prompt, "--model", GENERALIZE_MODEL, "--output-format", "json", "--tools", ""],
+      {
+        encoding: "utf-8",
+        env: {
+          ...process.env,
+          CLAUDE_PROJECT_DIR: undefined,
+          MARVEL_SECURITY_EVAL: "1",
+          MAX_THINKING_TOKENS: undefined,
+        },
+        input: "",
+        stdio: ["pipe", "pipe", "pipe"],
+        timeout: GENERALIZE_TIMEOUT_MS,
+      }
+    );
+
+    if (result.error || result.status !== 0 || !result.stdout) {
+      logDebug("LLM generalization failed — using verbatim", context);
+      return null;
+    }
+
+    // Parse the JSON response — claude --output-format json wraps in {"result": "..."}
+    let responseText = result.stdout;
+    try {
+      const jsonWrapper = JSON.parse(result.stdout) as { result?: string };
+      if (jsonWrapper.result) {
+        responseText = jsonWrapper.result;
+      }
+    } catch {
+      // Not wrapped, use as-is
+    }
+
+    // Remove markdown code fences if present
+    const fenceMatch = /```(?:json)?\s*([\s\S]*?)```/.exec(responseText);
+    if (fenceMatch) {
+      responseText = fenceMatch[1].trim();
+    }
+
+    const parsed = JSON.parse(responseText.trim()) as {
+      actionable?: string;
+      description?: string;
+      title?: string;
+    };
+
+    if (!parsed.title?.trim() || !parsed.description?.trim() || !parsed.actionable?.trim()) {
+      logDebug("LLM returned incomplete generalization — using verbatim", context);
+      return null;
+    }
+
+    logDebug(`Generalized lesson: "${parsed.title}"`, context);
+    return {
+      actionable: parsed.actionable.trim(),
+      description: parsed.description.trim(),
+      title: parsed.title.trim(),
+    };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    logWarn(`LLM generalization error: ${msg}`, context);
+    return null;
+  }
 }

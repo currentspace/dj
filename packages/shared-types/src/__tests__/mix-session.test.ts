@@ -7,31 +7,77 @@ import {describe, expect, it} from 'vitest'
 import {z} from 'zod'
 
 import {
-  VibeProfileSchema,
+  AddToQueueRequestSchema,
+  MixSessionSchema,
   PlayedTrackSchema,
   QueuedTrackSchema,
-  SuggestionSchema,
-  SessionPreferencesSchema,
-  MixSessionSchema,
-  StartMixRequestSchema,
-  AddToQueueRequestSchema,
-  UpdateVibeRequestSchema,
-  SteerVibeRequestSchema,
   SaveMixRequestSchema,
+  SessionPreferencesSchema,
+  StartMixRequestSchema,
+  SteerVibeRequestSchema,
+  SuggestionSchema,
+  UpdateVibeRequestSchema,
+  VibeProfileSchema,
 } from '../schemas/mix-session-schemas'
 
 // ===== Helper Functions =====
 
-function expectSchemaToPass<T>(schema: z.ZodSchema<T>, data: unknown, description?: string) {
-  try {
-    schema.parse(data)
-  } catch (error) {
-    throw new Error(
-      `Schema validation failed${description ? `: ${description}` : ''}\nData: ${JSON.stringify(data)}\nError: ${error}`,
-    )
+function createTestPlayedTrack() {
+  return {
+    albumArt: 'https://example.com/album.jpg',
+    artist: 'Test Artist',
+    bpm: 120,
+    energy: 0.8,
+    name: 'Test Song',
+    playedAt: new Date().toISOString(),
+    trackId: 'track123',
+    trackUri: 'spotify:track:track123',
   }
-  const result = schema.safeParse(data)
-  expect(result.success).toBe(true)
+}
+
+function createTestQueuedTrack() {
+  return {
+    addedBy: 'ai' as const,
+    albumArt: 'https://example.com/queued.jpg',
+    artist: 'Queued Artist',
+    name: 'Queued Song',
+    position: 0,
+    reason: 'Great energy match for the current vibe',
+    trackId: 'track456',
+    trackUri: 'spotify:track:track456',
+    vibeScore: 85,
+  }
+}
+
+// ===== Test Fixtures =====
+
+function createTestSession() {
+  return {
+    createdAt: new Date().toISOString(),
+    history: [createTestPlayedTrack()],
+    id: '123e4567-e89b-12d3-a456-426614174000',
+    preferences: {
+      autoFill: true,
+      avoidGenres: ['metal'],
+      bpmLock: null,
+      favoriteArtists: ['Radiohead'],
+    },
+    queue: [createTestQueuedTrack()],
+    updatedAt: new Date().toISOString(),
+    userId: 'user123',
+    vibe: createTestVibeProfile(),
+  }
+}
+
+function createTestVibeProfile() {
+  return {
+    bpmRange: {max: 140, min: 100},
+    energyDirection: 'building' as const,
+    energyLevel: 7,
+    era: {end: 2024, start: 2010},
+    genres: ['indie rock', 'alt pop'],
+    mood: ['upbeat', 'energetic'],
+  }
 }
 
 function expectSchemaToFail<T>(schema: z.ZodSchema<T>, data: unknown, description?: string) {
@@ -44,62 +90,16 @@ function expectSchemaToFail<T>(schema: z.ZodSchema<T>, data: unknown, descriptio
   expect(result.success).toBe(false)
 }
 
-// ===== Test Fixtures =====
-
-function createTestVibeProfile() {
-  return {
-    mood: ['upbeat', 'energetic'],
-    genres: ['indie rock', 'alt pop'],
-    era: {start: 2010, end: 2024},
-    bpmRange: {min: 100, max: 140},
-    energyLevel: 7,
-    energyDirection: 'building' as const,
+function expectSchemaToPass<T>(schema: z.ZodSchema<T>, data: unknown, description?: string) {
+  try {
+    schema.parse(data)
+  } catch (error) {
+    throw new Error(
+      `Schema validation failed${description ? `: ${description}` : ''}\nData: ${JSON.stringify(data)}\nError: ${error}`,
+    )
   }
-}
-
-function createTestPlayedTrack() {
-  return {
-    trackId: 'track123',
-    trackUri: 'spotify:track:track123',
-    name: 'Test Song',
-    artist: 'Test Artist',
-    albumArt: 'https://example.com/album.jpg',
-    playedAt: new Date().toISOString(),
-    bpm: 120,
-    energy: 0.8,
-  }
-}
-
-function createTestQueuedTrack() {
-  return {
-    trackId: 'track456',
-    trackUri: 'spotify:track:track456',
-    name: 'Queued Song',
-    artist: 'Queued Artist',
-    albumArt: 'https://example.com/queued.jpg',
-    addedBy: 'ai' as const,
-    vibeScore: 85,
-    reason: 'Great energy match for the current vibe',
-    position: 0,
-  }
-}
-
-function createTestSession() {
-  return {
-    id: '123e4567-e89b-12d3-a456-426614174000',
-    userId: 'user123',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    vibe: createTestVibeProfile(),
-    history: [createTestPlayedTrack()],
-    queue: [createTestQueuedTrack()],
-    preferences: {
-      avoidGenres: ['metal'],
-      favoriteArtists: ['Radiohead'],
-      bpmLock: null,
-      autoFill: true,
-    },
-  }
+  const result = schema.safeParse(data)
+  expect(result.success).toBe(true)
 }
 
 // ===== Vibe Profile Tests =====
@@ -126,18 +126,18 @@ describe('VibeProfile Schema', () => {
   })
 
   it('enforces BPM range bounds (20-220)', () => {
-    const lowBpm = {...createTestVibeProfile(), bpmRange: {min: 10, max: 100}}
+    const lowBpm = {...createTestVibeProfile(), bpmRange: {max: 100, min: 10}}
     expectSchemaToFail(VibeProfileSchema, lowBpm, 'BPM too low')
 
-    const highBpm = {...createTestVibeProfile(), bpmRange: {min: 100, max: 250}}
+    const highBpm = {...createTestVibeProfile(), bpmRange: {max: 250, min: 100}}
     expectSchemaToFail(VibeProfileSchema, highBpm, 'BPM too high')
   })
 
   it('validates era bounds (1900-2100)', () => {
-    const oldEra = {...createTestVibeProfile(), era: {start: 1850, end: 2000}}
+    const oldEra = {...createTestVibeProfile(), era: {end: 2000, start: 1850}}
     expectSchemaToFail(VibeProfileSchema, oldEra, 'era too old')
 
-    const futureEra = {...createTestVibeProfile(), era: {start: 2000, end: 2150}}
+    const futureEra = {...createTestVibeProfile(), era: {end: 2150, start: 2000}}
     expectSchemaToFail(VibeProfileSchema, futureEra, 'era too far future')
   })
 
@@ -181,7 +181,7 @@ describe('PlayedTrack Schema', () => {
   })
 
   it('allows missing optional albumArt', () => {
-    const {albumArt, ...track} = createTestPlayedTrack()
+    const {albumArt: _albumArt, ...track} = createTestPlayedTrack()
     expectSchemaToPass(PlayedTrackSchema, track)
   })
 
@@ -229,7 +229,7 @@ describe('QueuedTrack Schema', () => {
   })
 
   it('allows missing optional reason', () => {
-    const {reason, ...track} = createTestQueuedTrack()
+    const {reason: _reason, ...track} = createTestQueuedTrack()
     expectSchemaToPass(QueuedTrackSchema, track)
   })
 
@@ -244,39 +244,39 @@ describe('QueuedTrack Schema', () => {
 describe('Suggestion Schema', () => {
   it('validates complete suggestion', () => {
     const suggestion = {
+      albumArt: 'https://example.com/suggested.jpg',
+      artist: 'Suggested Artist',
+      bpm: 125,
+      name: 'Suggested Song',
+      reason: 'Perfect BPM transition from current track',
       trackId: 'track789',
       trackUri: 'spotify:track:track789',
-      name: 'Suggested Song',
-      artist: 'Suggested Artist',
-      albumArt: 'https://example.com/suggested.jpg',
       vibeScore: 92,
-      reason: 'Perfect BPM transition from current track',
-      bpm: 125,
     }
     expectSchemaToPass(SuggestionSchema, suggestion)
   })
 
   it('requires reason field (unlike QueuedTrack)', () => {
     const noReason = {
+      artist: 'Suggested Artist',
+      bpm: 125,
+      name: 'Suggested Song',
       trackId: 'track789',
       trackUri: 'spotify:track:track789',
-      name: 'Suggested Song',
-      artist: 'Suggested Artist',
       vibeScore: 92,
-      bpm: 125,
     }
     expectSchemaToFail(SuggestionSchema, noReason)
   })
 
   it('allows null BPM', () => {
     const suggestion = {
+      artist: 'Suggested Artist',
+      bpm: null,
+      name: 'Suggested Song',
+      reason: 'Great vibe match',
       trackId: 'track789',
       trackUri: 'spotify:track:track789',
-      name: 'Suggested Song',
-      artist: 'Suggested Artist',
       vibeScore: 92,
-      reason: 'Great vibe match',
-      bpm: null,
     }
     expectSchemaToPass(SuggestionSchema, suggestion)
   })
@@ -287,20 +287,20 @@ describe('Suggestion Schema', () => {
 describe('SessionPreferences Schema', () => {
   it('validates complete preferences', () => {
     const preferences = {
-      avoidGenres: ['metal', 'country'],
-      favoriteArtists: ['Radiohead', 'Arcade Fire'],
-      bpmLock: {min: 110, max: 130},
       autoFill: true,
+      avoidGenres: ['metal', 'country'],
+      bpmLock: {max: 130, min: 110},
+      favoriteArtists: ['Radiohead', 'Arcade Fire'],
     }
     expectSchemaToPass(SessionPreferencesSchema, preferences)
   })
 
   it('allows null bpmLock', () => {
     const preferences = {
-      avoidGenres: [],
-      favoriteArtists: [],
-      bpmLock: null,
       autoFill: false,
+      avoidGenres: [],
+      bpmLock: null,
+      favoriteArtists: [],
     }
     expectSchemaToPass(SessionPreferencesSchema, preferences)
   })
@@ -316,10 +316,10 @@ describe('SessionPreferences Schema', () => {
 
   it('enforces BPM lock bounds when set', () => {
     const invalid = {
-      avoidGenres: [],
-      favoriteArtists: [],
-      bpmLock: {min: 10, max: 100}, // 10 is below minimum of 20
       autoFill: true,
+      avoidGenres: [],
+      bpmLock: {max: 100, min: 10}, // 10 is below minimum of 20
+      favoriteArtists: [],
     }
     expectSchemaToFail(SessionPreferencesSchema, invalid)
   })
@@ -350,9 +350,9 @@ describe('MixSession Schema', () => {
   it('enforces max 10 tracks in queue', () => {
     const manyTracks = Array(15).fill(null).map((_, i) => ({
       ...createTestQueuedTrack(),
+      position: i,
       trackId: `track${i}`,
       trackUri: `spotify:track:track${i}`,
-      position: i,
     }))
     const invalid = {...createTestSession(), queue: manyTracks}
     expectSchemaToFail(MixSessionSchema, invalid)
@@ -382,8 +382,8 @@ describe('API Request Schemas', () => {
   describe('StartMixRequest', () => {
     it('validates with seed playlist', () => {
       const request = {
-        seedPlaylistId: 'playlist123',
         preferences: {autoFill: true},
+        seedPlaylistId: 'playlist123',
       }
       expectSchemaToPass(StartMixRequestSchema, request)
     })
@@ -396,8 +396,8 @@ describe('API Request Schemas', () => {
   describe('AddToQueueRequest', () => {
     it('validates with position', () => {
       const request = {
-        trackUri: 'spotify:track:track123',
         position: 0,
+        trackUri: 'spotify:track:track123',
       }
       expectSchemaToPass(AddToQueueRequestSchema, request)
     })
@@ -423,9 +423,9 @@ describe('API Request Schemas', () => {
 
     it('validates multiple fields', () => {
       const request = {
-        energyLevel: 7,
+        bpmRange: {max: 140, min: 120},
         energyDirection: 'building' as const,
-        bpmRange: {min: 120, max: 140},
+        energyLevel: 7,
       }
       expectSchemaToPass(UpdateVibeRequestSchema, request)
     })
@@ -470,9 +470,9 @@ describe('API Request Schemas', () => {
   describe('SaveMixRequest', () => {
     it('validates complete save request', () => {
       const request = {
-        name: 'My Party Mix',
         description: 'Songs from the party last night',
         includeQueue: true,
+        name: 'My Party Mix',
       }
       expectSchemaToPass(SaveMixRequestSchema, request)
     })
@@ -520,13 +520,13 @@ describe('Schema Type Inference', () => {
 
   it('Optional fields are properly typed', () => {
     const track = {
+      addedBy: 'user' as const,
+      artist: 'Artist',
+      name: 'Song',
+      position: 0,
       trackId: 'track123',
       trackUri: 'spotify:track:track123',
-      name: 'Song',
-      artist: 'Artist',
-      addedBy: 'user' as const,
       vibeScore: 80,
-      position: 0,
     }
     const parsed = QueuedTrackSchema.parse(track)
 

@@ -2,21 +2,22 @@ import type {SpotifyTrackFull} from '@dj/shared-types'
 
 import type {Env} from '../../../index'
 import type {ProgressNarrator} from '../../../lib/progress-narrator'
+import type {SSEWriter} from '../streaming/sse-writer'
+import type {DeezerAnalysisData} from '../types'
+
 import {AudioEnrichmentService} from '../../../services/AudioEnrichmentService'
 import {getChildLogger, getLogger} from '../../../utils/LoggerContext'
 import {ProgressMessageThrottler} from '../../../utils/ProgressMessageThrottler'
 import {getSubrequestTracker} from '../../../utils/SubrequestTracker'
-import type {SSEWriter} from '../streaming/sse-writer'
-import type {DeezerAnalysisData} from '../types'
 
 // Enrichment limits to stay within Cloudflare Workers subrequest cap (1000 on paid tier)
 export const MAX_DEEZER_ENRICHMENT = 500
 
 interface DeezerEnrichmentResult {
-  data: DeezerAnalysisData | null
   bpmResults: number[]
-  rankResults: number[]
+  data: DeezerAnalysisData | null
   gainResults: number[]
+  rankResults: number[]
 }
 
 /**
@@ -33,10 +34,10 @@ export async function performDeezerEnrichment(
   recentMessages?: string[],
 ): Promise<DeezerEnrichmentResult> {
   const result: DeezerEnrichmentResult = {
-    data: null,
     bpmResults: [],
-    rankResults: [],
+    data: null,
     gainResults: [],
+    rankResults: [],
   }
 
   if (!env?.AUDIO_FEATURES_CACHE) {
@@ -100,14 +101,14 @@ export async function performDeezerEnrichment(
       const message = await narrator.generateMessage({
         eventType: 'enrichment_deezer',
         metadata: {
-          cacheHitRate,
           cachedCount: cachedTracks.length,
+          cacheHitRate,
           enrichCount: tracksToEnrich.length,
           playlistName,
         },
         milestone: 'midpoint',
-        progressPercent: 35,
         previousMessages: recentMessages,
+        progressPercent: 35,
         userRequest,
       })
       sseWriter.writeAsync({data: message, type: 'thinking'})

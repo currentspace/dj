@@ -10,14 +10,14 @@
  * - Response caching to minimize API calls
  */
 
-import { beforeAll, afterAll } from 'vitest'
+import { afterAll, beforeAll } from 'vitest'
 
 // Get native globals that were stored before mocking in test-setup.ts
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 const nativeFetch = (global as any).__nativeFetch as typeof fetch
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 const nativeSetTimeout = (global as any).__nativeSetTimeout as typeof setTimeout
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 const nativeClearTimeout = (global as any).__nativeClearTimeout as typeof clearTimeout
 
 // Restore native globals for contract tests (they need real network access and timers)
@@ -39,11 +39,11 @@ if (nativeClearTimeout) {
  * Required environment variables for contract tests
  */
 const REQUIRED_ENV_VARS = {
-  // Spotify API (OAuth)
-  SPOTIFY_ACCESS_TOKEN: 'Get from developer.spotify.com after OAuth flow',
-
   // Last.fm API (API key)
   LASTFM_API_KEY: 'Get from last.fm/api/account/create',
+
+  // Spotify API (OAuth)
+  SPOTIFY_ACCESS_TOKEN: 'Get from developer.spotify.com after OAuth flow',
 }
 
 /**
@@ -61,10 +61,10 @@ export const CONTRACT_TEST_TIMEOUT = 30000
  * Rate limiting configuration (respect API quotas)
  */
 export const RATE_LIMITS = {
-  SPOTIFY: 1000, // 1 request per second
   DEEZER: 1000, // Self-limit to 1 request per second
   LASTFM: 200, // 5 requests per second (200ms between calls)
   MUSICBRAINZ: 1000, // 1 request per second (be nice!)
+  SPOTIFY: 1000, // 1 request per second
 }
 
 /**
@@ -78,9 +78,19 @@ const responseCache = new Map<string, { data: unknown; timestamp: number }>()
 const CACHE_TTL = 5 * 60 * 1000
 
 /**
+ * Cache API response
+ */
+export function cacheResponse(key: string, data: unknown): void {
+  responseCache.set(key, {
+    data,
+    timestamp: Date.now(),
+  })
+}
+
+/**
  * Get cached response if available and not expired
  */
-export function getCachedResponse(key: string): unknown | null {
+export function getCachedResponse(key: string): unknown {
   const cached = responseCache.get(key)
   if (!cached) return null
 
@@ -91,16 +101,6 @@ export function getCachedResponse(key: string): unknown | null {
   }
 
   return cached.data
-}
-
-/**
- * Cache API response
- */
-export function cacheResponse(key: string, data: unknown): void {
-  responseCache.set(key, {
-    data,
-    timestamp: Date.now(),
-  })
 }
 
 /**
@@ -162,16 +162,16 @@ afterAll(() => {
  * Export default environment variables for convenience
  */
 export const TEST_DEFAULTS = {
+  // Known artist/track for Last.fm testing
+  ARTIST_NAME: 'Queen',
+
   // Spotify's official "Today's Top Hits" playlist (public, always available)
-  PLAYLIST_ID: process.env.TEST_PLAYLIST_ID || '37i9dQZF1DXcBWIGoYBM5M',
+  PLAYLIST_ID: process.env.TEST_PLAYLIST_ID ?? '37i9dQZF1DXcBWIGoYBM5M',
 
   // Queen - Bohemian Rhapsody (well-known track with complete metadata)
-  TRACK_ID: process.env.TEST_TRACK_ID || '6rqhFgbbKwnb9MLmUQDhG6',
+  TRACK_ID: process.env.TEST_TRACK_ID ?? '6rqhFgbbKwnb9MLmUQDhG6',
 
   // Known ISRC for testing Deezer enrichment
   TRACK_ISRC: 'GBUM71029604', // Bohemian Rhapsody
-
-  // Known artist/track for Last.fm testing
-  ARTIST_NAME: 'Queen',
   TRACK_NAME: 'Bohemian Rhapsody',
 }

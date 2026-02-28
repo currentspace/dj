@@ -23,18 +23,21 @@
 import * as fs from "fs";
 import * as net from "net";
 import * as path from "path";
-import { handleSessionStart } from "./hooks/session-start.js";
-import { handleUserPromptSubmit } from "./hooks/user-prompt-submit.js";
-import { handlePreToolUse, clearInjectionCache } from "./hooks/pre-tool-use.js";
-import { handlePostToolUse } from "./hooks/post-tool-use.js";
-import { handleStop } from "./hooks/stop.js";
+
+import type { SyncHookJSONOutput } from "./sdk-types.js";
+
+import { handleNotification, handleSubagentStart, handleSubagentStop, handleTaskCompleted, handleTeammateIdle } from "./hooks/lifecycle-hooks.js";
 import { handlePermissionRequest } from "./hooks/permission-request.js";
-import { handlePreCompact } from "./hooks/pre-compact.js";
-import { handlePostToolUseFailure } from "./hooks/post-tool-use-failure.js";
-import { handleSubagentStart, handleSubagentStop, handleNotification, handleTeammateIdle, handleTaskCompleted } from "./hooks/lifecycle-hooks.js";
 import { handlePostCompactAgents } from "./hooks/post-compact-agents.js";
-import { clearSession } from "./lib/agent-registry.js";
+import { handlePostToolUseFailure } from "./hooks/post-tool-use-failure.js";
+import { handlePostToolUse } from "./hooks/post-tool-use.js";
+import { handlePreCompact } from "./hooks/pre-compact.js";
+import { clearInjectionCache, handlePreToolUse } from "./hooks/pre-tool-use.js";
+import { handleSessionStart } from "./hooks/session-start.js";
+import { handleStop } from "./hooks/stop.js";
+import { handleUserPromptSubmit } from "./hooks/user-prompt-submit.js";
 import { shutdownEvalSession, warmupEvalSession } from "./lib/agent-evaluator.js";
+import { clearSession } from "./lib/agent-registry.js";
 import {
   buildHookContext,
   generateRequestId,
@@ -44,7 +47,19 @@ import {
 } from "./lib/logger.js";
 import { getTempDir } from "./lib/paths.js";
 import { buildTimeoutResponse } from "./lib/timeout-response.js";
-import type { SyncHookJSONOutput } from "./sdk-types.js";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type HookHandler = (input: any) => Promise<SyncHookJSONOutput> | SyncHookJSONOutput;
+
+interface HookRequest {
+  hook: string;
+  input: Record<string, unknown>;
+  request_id?: string;
+}
+
+function getPidPath(daemonId: string): string {
+  return path.join(getTempDir(), `p-${daemonId}.pid`);
+}
 
 // Per-daemon paths derived from daemon_id (project hash).
 // Short prefixes ("p-" for files, "mhd-{uid}" for dir) keep the full socket
@@ -55,19 +70,6 @@ function getSocketPath(daemonId: string): string {
   return path.join(getTempDir(), `p-${daemonId}.sock`);
 }
 
-function getPidPath(daemonId: string): string {
-  return path.join(getTempDir(), `p-${daemonId}.pid`);
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type HookHandler = (input: any) => SyncHookJSONOutput | Promise<SyncHookJSONOutput>;
-
-interface HookRequest {
-  hook: string;
-  input: Record<string, unknown>;
-  request_id?: string;
-}
-
 // ── Multi-session tracking ──────────────────────────────────────────
 // The daemon is shared by all sessions in a project directory (main sessions,
 // peer CLI sessions, subagents). We track active session_ids to:
@@ -76,10 +78,51 @@ interface HookRequest {
 //      clear the cache and re-initialize (daemon survived a crash)
 //   3. Shutdown: Only shut down eval when the last session leaves
 const activeSessions = new Set<string>();
-let sessionStartPromise: Promise<SyncHookJSONOutput> | null = null;
-let sessionStartResult: SyncHookJSONOutput | null = null;
+let sessionStartPromise: null | Promise<SyncHookJSONOutput> = null;
+let sessionStartResult: null | SyncHookJSONOutput = null;
 
 const handlers: Record<string, HookHandler> = {
+  "notification": handleNotification,
+  "permission-request": handlePermissionRequest,
+  "post-compact-agents": handlePostCompactAgents,
+  "post-tool-use": handlePostToolUse,
+  "post-tool-use-failure": handlePostToolUseFailure,
+  "pre-compact": async (input) => {
+    // Clear injection cache so lessons re-inject after context compaction
+    clearInjectionCache();
+    return handlePreCompact(input);
+  },
+  "pre-tool-use": handlePreToolUse,
+  "session-end": async (input) => {
+    const sid = input?.session_id as string | undefined;
+    if (sid) {
+      activeSessions.delete(sid);
+      clearSession(sid);
+    }
+
+    if (activeSessions.size === 0) {
+      // Last session leaving — full cleanup + self-terminate
+      logDebug("session-end: last session leaving, shutting down", {
+        hookType: "session-end",
+        sessionId: sid,
+      });
+      await shutdownEvalSession();
+      sessionStartPromise = null;
+      sessionStartResult = null;
+      // Schedule self-termination after response is sent.
+      // The 500ms delay ensures the JSON response reaches the caller (nc)
+      // before the process exits and cleans up the socket.
+      setTimeout(() => {
+        process.kill(process.pid, "SIGTERM");
+      }, 500);
+    } else {
+      logDebug("session-end: session leaving, daemon stays alive", {
+        hookType: "session-end",
+        sessionId: sid,
+      });
+    }
+    return {};
+  },
   "session-start": async (input) => {
     const sid = input?.session_id as string | undefined;
     const wasEmpty = activeSessions.size === 0;
@@ -129,53 +172,12 @@ const handlers: Record<string, HookHandler> = {
     });
     return sessionStartResult;
   },
-  "user-prompt-submit": handleUserPromptSubmit,
-  "pre-tool-use": handlePreToolUse,
-  "post-tool-use": handlePostToolUse,
   stop: handleStop,
-  "permission-request": handlePermissionRequest,
-  "session-end": async (input) => {
-    const sid = input?.session_id as string | undefined;
-    if (sid) {
-      activeSessions.delete(sid);
-      clearSession(sid);
-    }
-
-    if (activeSessions.size === 0) {
-      // Last session leaving — full cleanup + self-terminate
-      logDebug("session-end: last session leaving, shutting down", {
-        hookType: "session-end",
-        sessionId: sid,
-      });
-      await shutdownEvalSession();
-      sessionStartPromise = null;
-      sessionStartResult = null;
-      // Schedule self-termination after response is sent.
-      // The 500ms delay ensures the JSON response reaches the caller (nc)
-      // before the process exits and cleans up the socket.
-      setTimeout(() => {
-        process.kill(process.pid, "SIGTERM");
-      }, 500);
-    } else {
-      logDebug("session-end: session leaving, daemon stays alive", {
-        hookType: "session-end",
-        sessionId: sid,
-      });
-    }
-    return {};
-  },
-  "pre-compact": async (input) => {
-    // Clear injection cache so lessons re-inject after context compaction
-    clearInjectionCache();
-    return handlePreCompact(input);
-  },
-  "post-tool-use-failure": handlePostToolUseFailure,
-  "post-compact-agents": handlePostCompactAgents,
   "subagent-start": handleSubagentStart,
   "subagent-stop": handleSubagentStop,
-  "notification": handleNotification,
-  "teammate-idle": handleTeammateIdle,
   "task-completed": handleTaskCompleted,
+  "teammate-idle": handleTeammateIdle,
+  "user-prompt-submit": handleUserPromptSubmit,
 };
 
 async function handleRequest(data: string): Promise<string> {
@@ -217,7 +219,7 @@ async function handleRequest(data: string): Promise<string> {
   // longer because they run agent evaluations (CLI spawn + Haiku thinking).
   const HANDLER_TIMEOUT_MS_DEFAULT = 9000;
   const HANDLER_TIMEOUT_MS_SECURITY = 35000; // Must exceed evaluator's 30s timeout
-  const SECURITY_HOOKS = new Set(["pre-tool-use", "permission-request"]);
+  const SECURITY_HOOKS = new Set(["permission-request", "pre-tool-use"]);
   const handlerTimeoutMs = SECURITY_HOOKS.has(request.hook)
     ? HANDLER_TIMEOUT_MS_SECURITY
     : HANDLER_TIMEOUT_MS_DEFAULT;
@@ -260,7 +262,7 @@ function startDaemon(daemonId: string): void {
     logError(
       `Socket path too long (${socketPath.length} chars, max 103): ${socketPath}`,
       new Error("Socket path exceeds macOS sun_path limit"),
-      { hookType: "daemon", daemonId },
+      { daemonId, hookType: "daemon" },
     );
     process.exit(1);
   }
@@ -271,9 +273,9 @@ function startDaemon(daemonId: string): void {
       fs.unlinkSync(socketPath);
     } catch (error) {
       logDebug("Failed to remove stale socket", {
-        hookType: "daemon",
         daemonId,
         filePath: socketPath,
+        hookType: "daemon",
       });
     }
   }
@@ -326,8 +328,8 @@ function startDaemon(daemonId: string): void {
       if (fs.existsSync(pidPath)) fs.unlinkSync(pidPath);
     } catch (error) {
       logDebug("Failed to clean up daemon files during shutdown", {
-        hookType: "daemon",
         daemonId,
+        hookType: "daemon",
       });
     }
     logDebug("Daemon shutdown complete", { daemonId, hookType: "daemon" });
@@ -336,45 +338,6 @@ function startDaemon(daemonId: string): void {
 
   process.on("SIGTERM", shutdown);
   process.on("SIGINT", shutdown);
-}
-
-function stopDaemon(daemonId: string): void {
-  const pidPath = getPidPath(daemonId);
-  const socketPath = getSocketPath(daemonId);
-
-  if (fs.existsSync(pidPath)) {
-    try {
-      const pid = parseInt(fs.readFileSync(pidPath, "utf-8").trim(), 10);
-      process.kill(pid, "SIGTERM");
-    } catch (error) {
-      logDebug("Failed to kill daemon process (may already be dead)", {
-        hookType: "daemon",
-        daemonId,
-        filePath: pidPath,
-      });
-    }
-    try {
-      fs.unlinkSync(pidPath);
-    } catch (error) {
-      logDebug("Failed to remove pid file", {
-        hookType: "daemon",
-        daemonId,
-        filePath: pidPath,
-      });
-    }
-  }
-
-  if (fs.existsSync(socketPath)) {
-    try {
-      fs.unlinkSync(socketPath);
-    } catch (error) {
-      logDebug("Failed to remove socket file", {
-        hookType: "daemon",
-        daemonId,
-        filePath: socketPath,
-      });
-    }
-  }
 }
 
 function statusDaemon(daemonId: string): void {
@@ -399,6 +362,45 @@ function statusDaemon(daemonId: string): void {
   }
 }
 
+function stopDaemon(daemonId: string): void {
+  const pidPath = getPidPath(daemonId);
+  const socketPath = getSocketPath(daemonId);
+
+  if (fs.existsSync(pidPath)) {
+    try {
+      const pid = parseInt(fs.readFileSync(pidPath, "utf-8").trim(), 10);
+      process.kill(pid, "SIGTERM");
+    } catch (error) {
+      logDebug("Failed to kill daemon process (may already be dead)", {
+        daemonId,
+        filePath: pidPath,
+        hookType: "daemon",
+      });
+    }
+    try {
+      fs.unlinkSync(pidPath);
+    } catch (error) {
+      logDebug("Failed to remove pid file", {
+        daemonId,
+        filePath: pidPath,
+        hookType: "daemon",
+      });
+    }
+  }
+
+  if (fs.existsSync(socketPath)) {
+    try {
+      fs.unlinkSync(socketPath);
+    } catch (error) {
+      logDebug("Failed to remove socket file", {
+        daemonId,
+        filePath: socketPath,
+        hookType: "daemon",
+      });
+    }
+  }
+}
+
 // CLI
 const command = process.argv[2];
 const daemonId = process.argv[3];
@@ -410,15 +412,6 @@ if (!daemonId && command !== "cleanup") {
 }
 
 switch (command) {
-  case "start":
-    startDaemon(daemonId);
-    break;
-  case "stop":
-    stopDaemon(daemonId);
-    break;
-  case "status":
-    statusDaemon(daemonId);
-    break;
   case "cleanup": {
     // Clean up all stale daemons from secure temp dir (current + legacy naming)
     const tempDir = getTempDir();
@@ -432,14 +425,23 @@ switch (command) {
         cleanedCount++;
       } catch (error) {
         logDebug("Failed to clean up file during cleanup", {
-          hookType: "daemon",
           filePath: path.join(tempDir, file),
+          hookType: "daemon",
         });
       }
     }
     console.log(`[marvel-daemon] Cleaned up ${cleanedCount}/${files.length} files`);
     break;
   }
+  case "start":
+    startDaemon(daemonId);
+    break;
+  case "status":
+    statusDaemon(daemonId);
+    break;
+  case "stop":
+    stopDaemon(daemonId);
+    break;
   default:
     console.error("Usage: daemon.js <start|stop|status|cleanup> [daemon_id]");
     process.exit(1);

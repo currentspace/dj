@@ -7,7 +7,7 @@ import styles from './vibe-controls.module.css'
 interface VibeControlsProps {
   onEnergyChange: (level: number) => void
   onSteer: (direction: string) => void
-  vibe: VibeProfile | null
+  vibe: null | VibeProfile
 }
 
 const ENERGY_DIRECTION_MAP = {
@@ -23,7 +23,7 @@ const QUICK_PRESETS = [
   {direction: 'Something fresh and unexpected', label: 'Something Fresh'},
 ] as const
 
-export function VibeControls({vibe, onEnergyChange, onSteer}: VibeControlsProps) {
+export function VibeControls({onEnergyChange, onSteer, vibe}: VibeControlsProps) {
   const [customInput, setCustomInput] = useState('')
 
   const handleEnergySliderChange = useCallback(

@@ -98,13 +98,15 @@ export function orderByTransition(
   let phaseIndex = 0
   let tracksInCurrentPhase = 0
 
-  for (let i = 0; i < candidates.length; i++) {
+  for (const _candidate of candidates) {
     // Advance to next phase if needed
+    // eslint-disable-next-line security/detect-object-injection -- safe: phaseIndex is a controlled integer incremented within bounds of arcPhases.length
     while (phaseIndex < arcPhases.length - 1 && tracksInCurrentPhase >= tracksPerPhase[phaseIndex]) {
       phaseIndex++
       tracksInCurrentPhase = 0
     }
 
+    // eslint-disable-next-line security/detect-object-injection -- safe: phaseIndex is a controlled integer bounded by arcPhases.length - 1 check above
     const currentPhase = arcPhases[phaseIndex]
 
     // Score all remaining tracks and pick the best
@@ -112,6 +114,7 @@ export function orderByTransition(
     let bestScore = -1
 
     for (let j = 0; j < remaining.length; j++) {
+      // eslint-disable-next-line security/detect-object-injection -- safe: j is a controlled loop index bounded by remaining.length
       const score = scoreTransition(previous, remaining[j], currentPhase, recentArtists)
       if (score.overall > bestScore) {
         bestScore = score.overall

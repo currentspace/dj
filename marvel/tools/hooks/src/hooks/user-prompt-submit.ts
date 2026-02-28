@@ -8,14 +8,16 @@
  */
 
 import * as path from "path";
-import type { UserPromptSubmitHookInput, SyncHookJSONOutput } from "../sdk-types.js";
+
+import type { SyncHookJSONOutput, UserPromptSubmitHookInput } from "../sdk-types.js";
 import type { Guidance, RunState } from "../types.js";
-import { findRunDir } from "../lib/paths.js";
-import { detectGuidanceType, detectCategory } from "../lib/guidance.js";
+
 import { safeAppendFile, safeReadJson, safeWriteJson } from "../lib/file-ops.js";
-import { logDebug, buildHookContext } from "../lib/logger.js";
-import { redactSensitive } from "../lib/redact.js";
+import { detectCategory, detectGuidanceType } from "../lib/guidance.js";
+import { buildHookContext, logDebug } from "../lib/logger.js";
 import { compileMarvelStatus } from "../lib/marvel-status.js";
+import { findRunDir } from "../lib/paths.js";
+import { redactSensitive } from "../lib/redact.js";
 
 const STATUS_PATTERN = /^\/?\s*marvel[\s-]+(status|info|health)\s*$/i;
 
@@ -39,10 +41,6 @@ const CORRECTION_PATTERNS = [
   /misunderstand/i,
   /^(the|this)\s+is\s+(wrong|incorrect)/i,
 ];
-
-function generateGuidanceId(): string {
-  return `g_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-}
 
 export async function handleUserPromptSubmit(
   input: UserPromptSubmitHookInput
@@ -81,17 +79,17 @@ export async function handleUserPromptSubmit(
   }
 
   const guidance: Guidance = {
-    id: generateGuidanceId(),
-    timestamp: new Date().toISOString(),
-    run_id: path.basename(runDir),
-    type: guidanceType,
-    content: redactSensitive(prompt),
     category: detectCategory(prompt),
     confidence,
-    // Capture preceding context from the most recent injection
-    preceding_tool: runState?.lastInjection ? "Edit" : undefined,
+    content: redactSensitive(prompt),
+    id: generateGuidanceId(),
     preceding_file: runState?.lastInjection?.file,
     preceding_injections: runState?.lastInjection?.packs,
+    // Capture preceding context from the most recent injection
+    preceding_tool: runState?.lastInjection ? "Edit" : undefined,
+    run_id: path.basename(runDir),
+    timestamp: new Date().toISOString(),
+    type: guidanceType,
   };
 
   // Append to guidance.jsonl
@@ -106,9 +104,9 @@ export async function handleUserPromptSubmit(
       runState.correctionCount = (runState.correctionCount || 0) + 1;
       runState.recentActivity = runState.recentActivity || [];
       runState.recentActivity.push({
-        type: "capture",
+        data: { category: guidance.category, guidanceType },
         timestamp: guidance.timestamp,
-        data: { guidanceType, category: guidance.category },
+        type: "capture",
       });
       // Keep only last 20 activities
       if (runState.recentActivity.length > 20) {
@@ -119,4 +117,8 @@ export async function handleUserPromptSubmit(
   }
 
   return {};
+}
+
+function generateGuidanceId(): string {
+  return `g_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }

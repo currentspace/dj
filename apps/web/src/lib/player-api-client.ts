@@ -4,8 +4,8 @@
 
 import {storage, STORAGE_KEYS} from '../hooks/useLocalStorage'
 
-function getSpotifyToken(): string | null {
-  const tokenData = storage.get<{token: string; expiresAt: number | null} | null>(
+function getSpotifyToken(): null | string {
+  const tokenData = storage.get<null | {expiresAt: null | number; token: string;}>(
     STORAGE_KEYS.SPOTIFY_TOKEN_DATA,
     null,
   )
@@ -23,17 +23,17 @@ async function playerRequest<T>(
   }
 
   const response = await fetch(`/api/player${endpoint}`, {
-    method,
+    body: body ? JSON.stringify(body) : undefined,
     headers: {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
     },
-    body: body ? JSON.stringify(body) : undefined,
+    method,
   })
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({error: 'Request failed'}))
-    throw new Error(error.error || 'Request failed')
+    throw new Error(error.error ?? 'Request failed')
   }
 
   return response.json()
@@ -41,10 +41,10 @@ async function playerRequest<T>(
 
 export const playerApiClient = {
   /**
-   * Start or resume playback
+   * Skip to next track
    */
-  async play(): Promise<{success: boolean}> {
-    return playerRequest('/play', 'POST')
+  async next(): Promise<{success: boolean}> {
+    return playerRequest('/next', 'POST')
   },
 
   /**
@@ -55,10 +55,10 @@ export const playerApiClient = {
   },
 
   /**
-   * Skip to next track
+   * Start or resume playback
    */
-  async next(): Promise<{success: boolean}> {
-    return playerRequest('/next', 'POST')
+  async play(): Promise<{success: boolean}> {
+    return playerRequest('/play', 'POST')
   },
 
   /**
@@ -69,16 +69,16 @@ export const playerApiClient = {
   },
 
   /**
-   * Set volume (0-100)
-   */
-  async setVolume(volumePercent: number): Promise<{success: boolean; volume_percent: number}> {
-    return playerRequest('/volume', 'PUT', {volume_percent: volumePercent})
-  },
-
-  /**
    * Seek to position
    */
   async seek(positionMs: number): Promise<{success: boolean}> {
     return playerRequest('/seek', 'POST', {position_ms: positionMs})
+  },
+
+  /**
+   * Set volume (0-100)
+   */
+  async setVolume(volumePercent: number): Promise<{success: boolean; volume_percent: number}> {
+    return playerRequest('/volume', 'PUT', {volume_percent: volumePercent})
   },
 }

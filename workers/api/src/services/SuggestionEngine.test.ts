@@ -90,7 +90,7 @@ function buildSpotifyTrack(id: string, name: string, artist: string, overrides?:
     album: {
       images: [{ url: 'https://example.com/image.jpg' }],
       name: 'Test Album',
-      release_date: overrides?.release_date || '2015-01-01',
+      release_date: overrides?.release_date ?? '2015-01-01',
     },
     artists: [{ name: artist }],
     duration_ms: 200000,

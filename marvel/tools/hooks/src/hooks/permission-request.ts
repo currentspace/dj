@@ -13,9 +13,10 @@
  */
 
 import type { PermissionRequestHookInput, SyncHookJSONOutput } from "../sdk-types.js";
+
 import { evaluateBashCommand } from "../lib/bash-security-gate.js";
-import { allow, deny, askUser } from "../lib/security-llm.js";
 import { buildHookContext } from "../lib/logger.js";
+import { allow, askUser, deny } from "../lib/security-llm.js";
 
 /**
  * Handle a permission request from Claude Code.

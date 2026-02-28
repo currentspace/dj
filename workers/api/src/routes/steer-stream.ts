@@ -284,6 +284,7 @@ async function generateSteeringSuggestions(
 }
 
 function getRandomTemplate(stage: keyof typeof PROGRESS_TEMPLATES): string {
+  // eslint-disable-next-line security/detect-object-injection -- safe: stage is typed as keyof typeof PROGRESS_TEMPLATES (a const object)
   const templates = PROGRESS_TEMPLATES[stage]
   return templates[Math.floor(Math.random() * templates.length)]
 }
@@ -407,7 +408,7 @@ async function searchSpotifyTrack(
     const json: unknown = await response.json()
     const parsed = SpotifySearchHitSchema.safeParse(json)
     if (!parsed.success) return null
-    return parsed.data.tracks?.items?.[0] || null
+    return parsed.data.tracks?.items?.[0] ?? null
   } catch {
     return null
   }
@@ -551,7 +552,7 @@ Just the message, no quotes or extra formatting.`,
     })
 
     const textBlock = response.content.find(b => b.type === 'text')
-    return textBlock?.text || getRandomTemplate(stage)
+    return textBlock?.text ?? getRandomTemplate(stage)
   } catch {
     return getRandomTemplate(stage)
   }

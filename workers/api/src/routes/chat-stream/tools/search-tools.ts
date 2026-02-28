@@ -1,9 +1,10 @@
 import {z} from 'zod'
 
-import {executeSpotifyTool} from '../../../lib/spotify-tools'
+import type {Env} from '../../../index'
 import type {SSEWriter} from '../streaming/sse-writer'
 import type {NativeTool} from '../types'
-import type {Env} from '../../../index'
+
+import {executeSpotifyTool} from '../../../lib/spotify-tools'
 
 /**
  * Create search-related Spotify tools

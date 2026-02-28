@@ -12,135 +12,49 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as readline from "readline";
+
 import { getSecurityDir } from "../lib/paths.js";
 
-interface Decision {
-  timestamp: string;
-  command: string;
-  description: string | null;
-  decision: "allow" | "deny" | "ask";
-  reasoning: string;
-  durationMs: number;
-  model: string;
-}
-
 interface AnalysisResult {
-  period: { start: string; end: string };
-  summary: {
-    total: number;
-    allowed: number;
-    denied: number;
-    asked: number;
-    avgDurationMs: number;
-  };
-  slowest: Decision[];
   byDecision: {
     allow: Decision[];
-    deny: Decision[];
     ask: Decision[];
+    deny: Decision[];
   };
   patterns: {
     command: string;
     count: number;
     decisions: Record<string, number>;
   }[];
+  period: { end: string; start: string; };
+  slowest: Decision[];
+  summary: {
+    allowed: number;
+    asked: number;
+    avgDurationMs: number;
+    denied: number;
+    total: number;
+  };
 }
 
-function parseArgs(): { since: Date | null; json: boolean; help: boolean } {
-  const args = process.argv.slice(2);
-  let since: Date | null = null;
-  let json = false;
-  let help = false;
-
-  for (const arg of args) {
-    if (arg.startsWith("--since=")) {
-      since = new Date(arg.slice(8));
-    } else if (arg === "--json") {
-      json = true;
-    } else if (arg === "--help" || arg === "-h") {
-      help = true;
-    }
-  }
-
-  return { since, json, help };
-}
-
-function printHelp(): void {
-  console.log(`
-Security Decision Analyzer
-
-Analyzes security decisions logged during Claude Code sessions to help
-identify patterns, slow decisions, and opportunities for rule improvements.
-
-Usage:
-  pnpm analyze-decisions [options]
-
-Options:
-  --since=YYYY-MM-DD  Only analyze decisions after this date
-  --json              Output raw JSON instead of formatted report
-  --help, -h          Show this help message
-
-Output:
-  - Summary statistics (total, by decision type, avg latency)
-  - Slowest decisions (potential optimization targets)
-  - Decisions grouped by type for review
-  - Command patterns with mixed decisions (rule candidates)
-
-Files:
-  Reads from: marvel/security/decisions.jsonl
-`);
-}
-
-async function loadDecisions(filePath: string, since: Date | null): Promise<Decision[]> {
-  const decisions: Decision[] = [];
-
-  if (!fs.existsSync(filePath)) {
-    return decisions;
-  }
-
-  const fileStream = fs.createReadStream(filePath);
-  const rl = readline.createInterface({
-    input: fileStream,
-    crlfDelay: Infinity,
-  });
-
-  for await (const line of rl) {
-    if (!line.trim()) continue;
-    try {
-      const decision = JSON.parse(line) as Decision;
-      if (since && new Date(decision.timestamp) < since) {
-        continue;
-      }
-      decisions.push(decision);
-    } catch {
-      // Skip malformed lines
-    }
-  }
-
-  return decisions;
-}
-
-function extractCommandPrefix(command: string): string {
-  // Extract the base command for pattern grouping
-  const parts = command.trim().split(/\s+/);
-  const base = parts[0];
-
-  // For common tools, include subcommand
-  if (["git", "pnpm", "npm", "yarn", "docker", "kubectl"].includes(base) && parts.length > 1) {
-    return `${base} ${parts[1]}`;
-  }
-
-  return base;
+interface Decision {
+  command: string;
+  decision: "allow" | "ask" | "deny";
+  description: null | string;
+  durationMs: number;
+  model: string;
+  reasoning: string;
+  timestamp: string;
 }
 
 function analyzeDecisions(decisions: Decision[]): AnalysisResult {
   if (decisions.length === 0) {
     return {
-      period: { start: "", end: "" },
-      summary: { total: 0, allowed: 0, denied: 0, asked: 0, avgDurationMs: 0 },
-      slowest: [],
-      byDecision: { allow: [], deny: [], ask: [] },
+      byDecision: { allow: [], ask: [], deny: [] },
       patterns: [],
+      period: { end: "", start: "" },
+      slowest: [],
+      summary: { allowed: 0, asked: 0, avgDurationMs: 0, denied: 0, total: 0 },
     };
   }
 
@@ -148,13 +62,13 @@ function analyzeDecisions(decisions: Decision[]): AnalysisResult {
   decisions.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
   const summary = {
-    total: decisions.length,
     allowed: decisions.filter((d) => d.decision === "allow").length,
-    denied: decisions.filter((d) => d.decision === "deny").length,
     asked: decisions.filter((d) => d.decision === "ask").length,
     avgDurationMs: Math.round(
       decisions.reduce((sum, d) => sum + d.durationMs, 0) / decisions.length
     ),
+    denied: decisions.filter((d) => d.decision === "deny").length,
+    total: decisions.length,
   };
 
   // Find slowest decisions
@@ -165,8 +79,8 @@ function analyzeDecisions(decisions: Decision[]): AnalysisResult {
   // Group by decision type
   const byDecision = {
     allow: decisions.filter((d) => d.decision === "allow"),
-    deny: decisions.filter((d) => d.decision === "deny"),
     ask: decisions.filter((d) => d.decision === "ask"),
+    deny: decisions.filter((d) => d.decision === "deny"),
   };
 
   // Find command patterns
@@ -187,15 +101,28 @@ function analyzeDecisions(decisions: Decision[]): AnalysisResult {
     .slice(0, 10);
 
   return {
-    period: {
-      start: decisions[0].timestamp,
-      end: decisions[decisions.length - 1].timestamp,
-    },
-    summary,
-    slowest,
     byDecision,
     patterns,
+    period: {
+      end: decisions[decisions.length - 1].timestamp,
+      start: decisions[0].timestamp,
+    },
+    slowest,
+    summary,
   };
+}
+
+function extractCommandPrefix(command: string): string {
+  // Extract the base command for pattern grouping
+  const parts = command.trim().split(/\s+/);
+  const base = parts[0];
+
+  // For common tools, include subcommand
+  if (["docker", "git", "kubectl", "npm", "pnpm", "yarn"].includes(base) && parts.length > 1) {
+    return `${base} ${parts[1]}`;
+  }
+
+  return base;
 }
 
 function formatReport(analysis: AnalysisResult): string {
@@ -275,8 +202,37 @@ function formatReport(analysis: AnalysisResult): string {
   return lines.join("\n");
 }
 
+async function loadDecisions(filePath: string, since: Date | null): Promise<Decision[]> {
+  const decisions: Decision[] = [];
+
+  if (!fs.existsSync(filePath)) {
+    return decisions;
+  }
+
+  const fileStream = fs.createReadStream(filePath);
+  const rl = readline.createInterface({
+    crlfDelay: Infinity,
+    input: fileStream,
+  });
+
+  for await (const line of rl) {
+    if (!line.trim()) continue;
+    try {
+      const decision = JSON.parse(line) as Decision;
+      if (since && new Date(decision.timestamp) < since) {
+        continue;
+      }
+      decisions.push(decision);
+    } catch {
+      // Skip malformed lines
+    }
+  }
+
+  return decisions;
+}
+
 async function main(): Promise<void> {
-  const { since, json, help } = parseArgs();
+  const { help, json, since } = parseArgs();
 
   if (help) {
     printHelp();
@@ -294,6 +250,51 @@ async function main(): Promise<void> {
   } else {
     console.log(formatReport(analysis));
   }
+}
+
+function parseArgs(): { help: boolean; json: boolean; since: Date | null; } {
+  const args = process.argv.slice(2);
+  let since: Date | null = null;
+  let json = false;
+  let help = false;
+
+  for (const arg of args) {
+    if (arg.startsWith("--since=")) {
+      since = new Date(arg.slice(8));
+    } else if (arg === "--json") {
+      json = true;
+    } else if (arg === "--help" || arg === "-h") {
+      help = true;
+    }
+  }
+
+  return { help, json, since };
+}
+
+function printHelp(): void {
+  console.log(`
+Security Decision Analyzer
+
+Analyzes security decisions logged during Claude Code sessions to help
+identify patterns, slow decisions, and opportunities for rule improvements.
+
+Usage:
+  pnpm analyze-decisions [options]
+
+Options:
+  --since=YYYY-MM-DD  Only analyze decisions after this date
+  --json              Output raw JSON instead of formatted report
+  --help, -h          Show this help message
+
+Output:
+  - Summary statistics (total, by decision type, avg latency)
+  - Slowest decisions (potential optimization targets)
+  - Decisions grouped by type for review
+  - Command patterns with mixed decisions (rule candidates)
+
+Files:
+  Reads from: marvel/security/decisions.jsonl
+`);
 }
 
 main().catch((err) => {

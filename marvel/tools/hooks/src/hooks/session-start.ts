@@ -9,20 +9,15 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import type { SessionStartHookInput, SyncHookJSONOutput, SessionStartHookSpecificOutput } from "../sdk-types.js";
-import type { RunState } from "../types.js";
-import { loadAllPacks } from "../loaders/pack-loader.js";
-import { findMarvelRoot, getTempDir } from "../lib/paths.js";
-import { safeMkdir, safeWriteJson } from "../lib/file-ops.js";
-import { logDebug, logWarn, buildHookContext } from "../lib/logger.js";
-import { isEvalEnabled } from "../lib/agent-evaluator.js";
 
-function generateRunId(): string {
-  const now = new Date();
-  const datePart = now.toISOString().slice(0, 10).replace(/-/g, "");
-  const timePart = now.toISOString().slice(11, 19).replace(/:/g, "");
-  return `run_${datePart}_${timePart}`;
-}
+import type { SessionStartHookInput, SessionStartHookSpecificOutput, SyncHookJSONOutput } from "../sdk-types.js";
+import type { RunState } from "../types.js";
+
+import { isEvalEnabled } from "../lib/agent-evaluator.js";
+import { safeMkdir, safeWriteJson } from "../lib/file-ops.js";
+import { buildHookContext, logDebug, logWarn } from "../lib/logger.js";
+import { findMarvelRoot, getTempDir } from "../lib/paths.js";
+import { loadAllPacks } from "../loaders/pack-loader.js";
 
 export async function handleSessionStart(
   input: SessionStartHookInput
@@ -49,12 +44,12 @@ export async function handleSessionStart(
 
   // Initialize run state
   const runState: RunState = {
-    runId,
-    startedAt: new Date().toISOString(),
     activePacks: packNames,
-    toolCallCount: 0,
     correctionCount: 0,
     recentActivity: [],
+    runId,
+    startedAt: new Date().toISOString(),
+    toolCallCount: 0,
   };
 
   // Write run.json
@@ -113,8 +108,15 @@ export async function handleSessionStart(
   logDebug("Session started successfully", { ...context, runId });
 
   const hookSpecificOutput: SessionStartHookSpecificOutput = {
-    hookEventName: "SessionStart",
     additionalContext: contextMessage,
+    hookEventName: "SessionStart",
   };
   return { hookSpecificOutput };
+}
+
+function generateRunId(): string {
+  const now = new Date();
+  const datePart = now.toISOString().slice(0, 10).replace(/-/g, "");
+  const timePart = now.toISOString().slice(11, 19).replace(/:/g, "");
+  return `run_${datePart}_${timePart}`;
 }

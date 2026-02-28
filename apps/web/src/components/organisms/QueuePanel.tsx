@@ -9,7 +9,7 @@ interface QueuePanelProps {
   queue: QueuedTrack[]
 }
 
-export function QueuePanel({queue, onRemove, onReorder: _onReorder}: QueuePanelProps) {
+export function QueuePanel({onRemove, onReorder: _onReorder, queue}: QueuePanelProps) {
   return (
     <div className={styles.queuePanel}>
       <div className={sharedStyles.panelHeader}>

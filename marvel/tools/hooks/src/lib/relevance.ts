@@ -8,7 +8,8 @@
  */
 
 import * as path from "path";
-import type { LoadedPack, Guidance } from "../types.js";
+
+import type { Guidance, LoadedPack } from "../types.js";
 
 /**
  * Simple glob pattern matching for sensitive_paths.
@@ -55,12 +56,12 @@ function matchGlob(pattern: string, filePath: string): boolean {
 
 // Scoring weights
 const WEIGHTS = {
-  FILE_PATTERN_MATCH: 15,
-  EXTENSION_MATCH: 5,
-  SENSITIVE_PATH: 20,
-  RECENT_CORRECTION: 20,
   CATEGORY_MATCH: 8,
   DEPENDENCY_BOOST: 3,
+  EXTENSION_MATCH: 5,
+  FILE_PATTERN_MATCH: 15,
+  RECENT_CORRECTION: 20,
+  SENSITIVE_PATH: 20,
 };
 
 const MAX_PACKS = 4;
@@ -72,15 +73,20 @@ const MAX_PACKS = 4;
 // Path keyword to category mapping for file path boosting.
 // Projects should extend this map when adding domain-specific packs.
 const PATH_KEYWORD_CATEGORIES: Record<string, string[]> = {
-  test: ["testing", "test-quality"],
-  spec: ["testing", "test-quality"],
   auth: ["security", "auth"],
-  middleware: ["security", "auth"],
   config: ["configuration"],
   env: ["configuration"],
-  schema: ["database", "schema"],
+  middleware: ["security", "auth"],
   migration: ["database", "schema"],
+  schema: ["database", "schema"],
+  spec: ["testing", "test-quality"],
+  test: ["testing", "test-quality"],
 };
+
+interface ScoredPack {
+  pack: LoadedPack;
+  score: number;
+}
 
 /**
  * Calculate relevance score for a pack given a file path.
@@ -174,15 +180,28 @@ export function calculateRelevance(
   return score;
 }
 
-interface ScoredPack {
-  pack: LoadedPack;
-  score: number;
-}
-
 // Packs that scored only via extension match (no path, sensitive, or correction signal)
 // need a higher threshold to avoid injecting noise for generic .ts files.
 const MIN_STRONG_RELEVANCE_SCORE = 10;
 const MIN_WEAK_RELEVANCE_SCORE = 20;
+
+/**
+ * Select top packs by relevance score.
+ * Packs with only weak signals (extension match) need a higher minimum score.
+ */
+export function selectTopPacks(scored: ScoredPack[], filePath?: string, recentGuidance?: Guidance[]): LoadedPack[] {
+  return scored
+    .filter((s) => {
+      const strong = filePath && recentGuidance
+        ? hasStrongSignal(s.pack, filePath, recentGuidance)
+        : true;
+      const threshold = strong ? MIN_STRONG_RELEVANCE_SCORE : MIN_WEAK_RELEVANCE_SCORE;
+      return s.score >= threshold;
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, MAX_PACKS)
+    .map((s) => s.pack);
+}
 
 /**
  * Check if a pack has a "strong" relevance signal beyond just file extension.
@@ -207,22 +226,4 @@ function hasStrongSignal(pack: LoadedPack, filePath: string, recentGuidance: Gui
   if (hasCorrection) return true;
 
   return false;
-}
-
-/**
- * Select top packs by relevance score.
- * Packs with only weak signals (extension match) need a higher minimum score.
- */
-export function selectTopPacks(scored: ScoredPack[], filePath?: string, recentGuidance?: Guidance[]): LoadedPack[] {
-  return scored
-    .filter((s) => {
-      const strong = filePath && recentGuidance
-        ? hasStrongSignal(s.pack, filePath, recentGuidance)
-        : true;
-      const threshold = strong ? MIN_STRONG_RELEVANCE_SCORE : MIN_WEAK_RELEVANCE_SCORE;
-      return s.score >= threshold;
-    })
-    .sort((a, b) => b.score - a.score)
-    .slice(0, MAX_PACKS)
-    .map((s) => s.pack);
 }

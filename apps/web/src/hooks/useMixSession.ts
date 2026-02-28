@@ -4,30 +4,31 @@
  * Manages mix session state with automatic initialization.
  */
 
-import {useRef} from 'react'
 import type {MixSession, SessionPreferences} from '@dj/shared-types'
+
+import {useRef} from 'react'
 
 import {initializeMixStore, useMixStore} from '../stores'
 
 interface UseMixSessionReturn {
-  // State
-  error: string | null
-  isLoading: boolean
-  session: MixSession | null
-
-  // Session actions
-  endSession: () => Promise<void>
-  setSession: (session: MixSession | null) => void
-  startSession: (preferences?: SessionPreferences, seedPlaylistId?: string) => Promise<void>
-
   // Queue actions
   addToQueue: (trackUri: string, position?: number) => Promise<void>
-  removeFromQueue: (position: number) => Promise<void>
-  reorderQueue: (from: number, to: number) => Promise<void>
-
   // Utility
   clearError: () => void
+  // Session actions
+  endSession: () => Promise<void>
+
+  // State
+  error: null | string
+  isLoading: boolean
   refreshSession: () => Promise<MixSession | null>
+
+  removeFromQueue: (position: number) => Promise<void>
+  reorderQueue: (from: number, to: number) => Promise<void>
+  session: MixSession | null
+
+  setSession: (session: MixSession | null) => void
+  startSession: (preferences?: SessionPreferences, seedPlaylistId?: string) => Promise<void>
 }
 
 export function useMixSession(): UseMixSessionReturn {
@@ -49,29 +50,31 @@ export function useMixSession(): UseMixSessionReturn {
   const refreshSession = useMixStore((s) => s.refreshSession)
 
   // Direct state sync: Initialize store on first render (React 19 pattern)
+  /* eslint-disable react-hooks/refs -- intentional: one-time store initialization in hook body per React 19 project guidelines (no useEffect) */
   if (!hasInitialized.current) {
     hasInitialized.current = true
     initializeMixStore()
   }
+  /* eslint-enable react-hooks/refs */
 
   return {
+    // Queue actions
+    addToQueue,
+    // Utility
+    clearError,
+    // Session actions
+    endSession,
+
     // State
     error,
     isLoading,
-    session,
+    refreshSession,
 
-    // Session actions
-    endSession,
-    setSession,
-    startSession,
-
-    // Queue actions
-    addToQueue,
     removeFromQueue,
     reorderQueue,
+    session,
 
-    // Utility
-    clearError,
-    refreshSession,
+    setSession,
+    startSession,
   }
 }

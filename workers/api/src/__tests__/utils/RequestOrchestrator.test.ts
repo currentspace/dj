@@ -4,6 +4,7 @@
  */
 
 import {afterEach, beforeEach, describe, expect, it} from 'vitest'
+
 import {RequestOrchestrator} from '../../utils/RequestOrchestrator'
 import {measureExecutionTime, verifyRateLimitCompliance} from '../fixtures/rate-limit-mocks'
 
@@ -11,7 +12,7 @@ describe('RequestOrchestrator', () => {
   let orchestrator: RequestOrchestrator
 
   beforeEach(() => {
-    orchestrator = new RequestOrchestrator({rate: 40, minTickMs: 1})
+    orchestrator = new RequestOrchestrator({minTickMs: 1, rate: 40})
   })
 
   afterEach(() => {

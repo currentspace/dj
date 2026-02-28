@@ -15,10 +15,11 @@
  * Run: pnpm test:integration AudioEnrichmentService
  */
 
-import { describe, it, expect, beforeEach } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
+
 import { AudioEnrichmentService } from '../../services/AudioEnrichmentService'
+import { createTestTrack, KNOWN_TEST_TRACKS, measureExecutionTime } from '../helpers/integration-setup'
 import { MockKVNamespace } from './setup'
-import { KNOWN_TEST_TRACKS, createTestTrack, measureExecutionTime } from '../helpers/integration-setup'
 
 // These integration tests make real API calls to Deezer (public API)
 // Run with: pnpm test:integration AudioEnrichmentService
@@ -28,7 +29,7 @@ describe('AudioEnrichmentService Integration', () => {
 
   beforeEach(() => {
     mockKv = new MockKVNamespace()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     service = new AudioEnrichmentService(mockKv as any)
   })
 
@@ -64,8 +65,8 @@ describe('AudioEnrichmentService Integration', () => {
 
       console.log('✓ Bohemian Rhapsody enrichment:', {
         bpm: result.bpm,
-        rank: result.rank,
         gain: result.gain,
+        rank: result.rank,
         release_date: result.release_date,
       })
     })
@@ -88,9 +89,9 @@ describe('AudioEnrichmentService Integration', () => {
       }
 
       console.log('✓ Mr. Brightside enrichment:', {
-        bpm: result.bpm || 'not analyzed',
+        bpm: result.bpm ?? 'not analyzed',
         rank: result.rank,
-        source: result.source || 'not in Deezer',
+        source: result.source ?? 'not in Deezer',
       })
     })
 
@@ -114,7 +115,7 @@ describe('AudioEnrichmentService Integration', () => {
       console.log('✓ Stairway to Heaven enrichment:', {
         bpm: result.bpm,
         rank: result.rank,
-        source: result.source || 'not in Deezer',
+        source: result.source ?? 'not in Deezer',
       })
     })
   })
@@ -159,8 +160,8 @@ describe('AudioEnrichmentService Integration', () => {
       expect(cacheData.ttl).toBe(90 * 24 * 60 * 60) // 90 days in seconds
 
       console.log('✓ Cache TTL verified:', {
-        ttl_days: Math.round(cacheData.ttl / 86400),
         is_miss: cacheData.is_miss,
+        ttl_days: Math.round(cacheData.ttl / 86400),
       })
     })
   })
@@ -173,16 +174,16 @@ describe('AudioEnrichmentService Integration', () => {
       const [firstResult, firstDuration] = await measureExecutionTime(() => service.enrichTrack(track))
 
       console.log('  First call (cache miss):', {
-        duration: `${firstDuration}ms`,
         bpm: firstResult.bpm,
+        duration: `${firstDuration}ms`,
       })
 
       // Second call: cache hit (fast - no API call)
       const [secondResult, secondDuration] = await measureExecutionTime(() => service.enrichTrack(track))
 
       console.log('  Second call (cache hit):', {
-        duration: `${secondDuration}ms`,
         bpm: secondResult.bpm,
+        duration: `${secondDuration}ms`,
       })
 
       // Cache hit should be MUCH faster (<50ms vs potentially >100ms for API)
@@ -221,9 +222,9 @@ describe('AudioEnrichmentService Integration', () => {
       }
 
       console.log('✓ Batch enrichment completed:', {
-        tracks: results.size,
-        duration: `${duration}ms`,
         avg_per_track: `${Math.round(duration / results.size)}ms`,
+        duration: `${duration}ms`,
+        tracks: results.size,
       })
 
       // Note: Rate limiting is controlled by global orchestrator
@@ -295,15 +296,15 @@ describe('AudioEnrichmentService Integration', () => {
   describe('Error Handling - Invalid ISRC', () => {
     it('should handle invalid ISRC gracefully', async () => {
       const track = createTestTrack({
-        id: 'invalid-track',
-        name: 'Invalid Track',
         artistName: 'Invalid Artist',
-        isrc: 'INVALID_ISRC',
         duration_ms: 300000,
+        id: 'invalid-track',
+        isrc: 'INVALID_ISRC',
+        name: 'Invalid Track',
       })
 
       // Should not throw, should return null enrichment
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const result = await service.enrichTrack(track as any)
 
       expect(result).toBeDefined()
@@ -320,13 +321,13 @@ describe('AudioEnrichmentService Integration', () => {
 
     it('should cache null results with shorter TTL (5 minutes)', async () => {
       const track = createTestTrack({
-        id: 'not-found-track',
-        name: 'Not Found Track',
-        isrc: 'XXXX00000000', // Unlikely to exist in Deezer
         duration_ms: 300000,
+        id: 'not-found-track',
+        isrc: 'XXXX00000000', // Unlikely to exist in Deezer
+        name: 'Not Found Track',
       })
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       await service.enrichTrack(track as any)
 
       // Verify cache was populated even for miss
@@ -338,8 +339,8 @@ describe('AudioEnrichmentService Integration', () => {
       expect(cacheData.ttl).toBe(5 * 60) // 5 minutes in seconds
 
       console.log('✓ Null result cached with short TTL:', {
-        ttl_minutes: Math.round(cacheData.ttl / 60),
         is_miss: cacheData.is_miss,
+        ttl_minutes: Math.round(cacheData.ttl / 60),
       })
     })
   })
@@ -347,14 +348,14 @@ describe('AudioEnrichmentService Integration', () => {
   describe('Track Not in Deezer Catalog', () => {
     it('should handle track not found in Deezer', async () => {
       const track = createTestTrack({
-        id: 'obscure-track',
-        name: 'Very Obscure Track',
         artistName: 'Unknown Artist',
-        isrc: 'YYYY00000000', // Very unlikely ISRC
         duration_ms: 180000,
+        id: 'obscure-track',
+        isrc: 'YYYY00000000', // Very unlikely ISRC
+        name: 'Very Obscure Track',
       })
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const result = await service.enrichTrack(track as any)
 
       // Should return null enrichment, not throw
@@ -370,10 +371,10 @@ describe('AudioEnrichmentService Integration', () => {
     it('should fallback to MusicBrainz for ISRC lookup when Spotify has no ISRC', async () => {
       // Create track without ISRC (simulating Spotify track without external_ids.isrc)
       const track = {
-        id: 'no-isrc-track',
-        name: 'Bohemian Rhapsody',
         artists: [{ id: '1', name: 'Queen' }],
         duration_ms: 354320, // Match Bohemian Rhapsody duration
+        id: 'no-isrc-track',
+        name: 'Bohemian Rhapsody',
         // No external_ids.isrc!
       }
 
@@ -395,10 +396,10 @@ describe('AudioEnrichmentService Integration', () => {
 
     it('should cache MusicBrainz ISRC lookups to avoid repeated API calls', async () => {
       const track = {
-        id: 'no-isrc-track-2',
-        name: 'Stairway to Heaven',
         artists: [{ id: '1', name: 'Led Zeppelin' }],
         duration_ms: 482000,
+        id: 'no-isrc-track-2',
+        name: 'Stairway to Heaven',
       }
 
       // First call: may query MusicBrainz
@@ -409,10 +410,10 @@ describe('AudioEnrichmentService Integration', () => {
 
       // Second call should be faster (cache hit)
       console.log('✓ MusicBrainz caching verified:', {
-        first_duration: `${firstDuration}ms`,
-        second_duration: `${secondDuration}ms`,
         first_bpm: firstResult.bpm,
+        first_duration: `${firstDuration}ms`,
         second_bpm: secondResult.bpm,
+        second_duration: `${secondDuration}ms`,
       })
 
       // Results should be identical
@@ -435,15 +436,15 @@ describe('AudioEnrichmentService Integration', () => {
         expect(result.source).toBe('deezer')
 
         console.log('⚠ BPM is null (acceptable - Deezer data incomplete):', {
-          rank: result.rank,
           gain: result.gain,
           has_other_enrichment: result.rank !== null || result.gain !== null,
+          rank: result.rank,
         })
       } else {
         console.log('✓ BPM present:', {
           bpm: result.bpm,
-          rank: result.rank,
           gain: result.gain,
+          rank: result.rank,
         })
       }
 

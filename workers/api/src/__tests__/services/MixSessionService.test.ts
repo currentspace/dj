@@ -3,9 +3,6 @@
  * Tests for Live DJ Mode mix session management
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { MixSessionService } from '../../services/MixSessionService'
-import { MockKVNamespace } from '../fixtures/cloudflare-mocks'
 import type {
   MixSession,
   PlayedTrack,
@@ -14,46 +11,51 @@ import type {
   VibeProfile,
 } from '@dj/shared-types'
 
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+import { MixSessionService } from '../../services/MixSessionService'
+import { MockKVNamespace } from '../fixtures/cloudflare-mocks'
+
 // Mock logger
 vi.mock('../../utils/LoggerContext', () => ({
   getLogger: () => ({
-    info: vi.fn(),
-    error: vi.fn(),
     debug: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
   }),
 }))
 
 /** Default fields for new MixSession properties (Phase 1-4) */
-const newSessionDefaults: Pick<MixSession, 'conversation' | 'signals' | 'plan' | 'tasteModel' | 'fallbackPool'> = {
+const newSessionDefaults: Pick<MixSession, 'conversation' | 'fallbackPool' | 'plan' | 'signals' | 'tasteModel'> = {
   conversation: [],
-  signals: [],
-  plan: null,
-  tasteModel: null,
   fallbackPool: [],
+  plan: null,
+  signals: [],
+  tasteModel: null,
 }
 
 /** Create a test MixSession with all required fields */
 function createTestMixSession(overrides: Partial<MixSession> = {}): MixSession {
   return {
-    id: 'session-1',
-    userId: 'user-1',
     createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    vibe: {
-      mood: [],
-      genres: [],
-      era: {start: 2000, end: 2025},
-      bpmRange: {min: 80, max: 140},
-      energyLevel: 5,
-      energyDirection: 'steady',
-    },
     history: [],
-    queue: [],
+    id: 'session-1',
     preferences: {
-      avoidGenres: [],
-      favoriteArtists: [],
-      bpmLock: null,
       autoFill: true,
+      avoidGenres: [],
+      bpmLock: null,
+      favoriteArtists: [],
+    },
+    queue: [],
+    updatedAt: new Date().toISOString(),
+    userId: 'user-1',
+    vibe: {
+      bpmRange: {max: 140, min: 80},
+      energyDirection: 'steady',
+      energyLevel: 5,
+      era: {end: 2025, start: 2000},
+      genres: [],
+      mood: [],
     },
     ...newSessionDefaults,
     ...overrides,
@@ -66,7 +68,7 @@ describe('MixSessionService', () => {
 
   beforeEach(() => {
     mockKV = new MockKVNamespace()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     service = new MixSessionService(mockKV as any)
   })
 
@@ -80,30 +82,30 @@ describe('MixSessionService', () => {
       expect(session.createdAt).toBeDefined()
       expect(session.updatedAt).toBeDefined()
       expect(session.vibe).toEqual({
-        mood: [],
-        genres: [],
-        era: { start: 2000, end: 2025 },
-        bpmRange: { min: 80, max: 140 },
-        energyLevel: 5,
+        bpmRange: { max: 140, min: 80 },
         energyDirection: 'steady',
+        energyLevel: 5,
+        era: { end: 2025, start: 2000 },
+        genres: [],
+        mood: [],
       })
       expect(session.history).toEqual([])
       expect(session.queue).toEqual([])
       expect(session.preferences).toEqual({
-        avoidGenres: [],
-        favoriteArtists: [],
-        bpmLock: null,
         autoFill: true,
+        avoidGenres: [],
+        bpmLock: null,
+        favoriteArtists: [],
       })
     })
 
     it('should create session with custom preferences', async () => {
       const userId = 'user-456'
       const preferences: SessionPreferences = {
-        avoidGenres: ['country', 'metal'],
-        favoriteArtists: ['Daft Punk', 'Caribou'],
-        bpmLock: { min: 120, max: 130 },
         autoFill: false,
+        avoidGenres: ['country', 'metal'],
+        bpmLock: { max: 130, min: 120 },
+        favoriteArtists: ['Daft Punk', 'Caribou'],
       }
 
       const session = await service.createSession(userId, preferences)
@@ -176,22 +178,22 @@ describe('MixSessionService', () => {
 
       // Add some played tracks
       const track1: PlayedTrack = {
-        trackId: 'track-1',
-        trackUri: 'spotify:track:1',
-        name: 'Track 1',
         artist: 'Artist 1',
-        playedAt: new Date().toISOString(),
         bpm: 120,
         energy: 0.8,
+        name: 'Track 1',
+        playedAt: new Date().toISOString(),
+        trackId: 'track-1',
+        trackUri: 'spotify:track:1',
       }
       const track2: PlayedTrack = {
-        trackId: 'track-2',
-        trackUri: 'spotify:track:2',
-        name: 'Track 2',
         artist: 'Artist 2',
-        playedAt: new Date(Date.now() + 200000).toISOString(),
         bpm: 125,
         energy: 0.7,
+        name: 'Track 2',
+        playedAt: new Date(Date.now() + 200000).toISOString(),
+        trackId: 'track-2',
+        trackUri: 'spotify:track:2',
       }
 
       service.addToHistory(session, track1)
@@ -221,13 +223,13 @@ describe('MixSessionService', () => {
       const session = createTestMixSession()
 
       const track: PlayedTrack = {
-        trackId: 'track-1',
-        trackUri: 'spotify:track:1',
-        name: 'High Energy Track',
         artist: 'DJ Artist',
-        playedAt: new Date().toISOString(),
         bpm: 130,
         energy: 0.9,
+        name: 'High Energy Track',
+        playedAt: new Date().toISOString(),
+        trackId: 'track-1',
+        trackUri: 'spotify:track:1',
       }
 
       const updatedVibe = service.updateVibeFromTrack(session, track)
@@ -241,44 +243,44 @@ describe('MixSessionService', () => {
 
     it('should detect building energy direction from history', () => {
       const session = createTestMixSession({
-        vibe: {
-          mood: [],
-          genres: [],
-          era: { start: 2000, end: 2025 },
-          bpmRange: { min: 100, max: 140 },
-          energyLevel: 5,
-          energyDirection: 'steady',
-        },
         history: [
           {
-            trackId: 'track-1',
-            trackUri: 'spotify:track:1',
-            name: 'Track 1',
             artist: 'Artist 1',
-            playedAt: new Date(Date.now() - 600000).toISOString(),
             bpm: 100,
             energy: 0.5,
+            name: 'Track 1',
+            playedAt: new Date(Date.now() - 600000).toISOString(),
+            trackId: 'track-1',
+            trackUri: 'spotify:track:1',
           },
           {
-            trackId: 'track-2',
-            trackUri: 'spotify:track:2',
-            name: 'Track 2',
             artist: 'Artist 2',
-            playedAt: new Date(Date.now() - 300000).toISOString(),
             bpm: 120,
             energy: 0.7,
+            name: 'Track 2',
+            playedAt: new Date(Date.now() - 300000).toISOString(),
+            trackId: 'track-2',
+            trackUri: 'spotify:track:2',
           },
         ],
+        vibe: {
+          bpmRange: { max: 140, min: 100 },
+          energyDirection: 'steady',
+          energyLevel: 5,
+          era: { end: 2025, start: 2000 },
+          genres: [],
+          mood: [],
+        },
       })
 
       const track: PlayedTrack = {
-        trackId: 'track-3',
-        trackUri: 'spotify:track:3',
-        name: 'High Energy Track',
         artist: 'DJ Artist',
-        playedAt: new Date().toISOString(),
         bpm: 135,
         energy: 0.9,
+        name: 'High Energy Track',
+        playedAt: new Date().toISOString(),
+        trackId: 'track-3',
+        trackUri: 'spotify:track:3',
       }
 
       const updatedVibe = service.updateVibeFromTrack(session, track)
@@ -288,44 +290,44 @@ describe('MixSessionService', () => {
 
     it('should detect winding down energy direction', () => {
       const session = createTestMixSession({
-        vibe: {
-          mood: [],
-          genres: [],
-          era: { start: 2000, end: 2025 },
-          bpmRange: { min: 100, max: 140 },
-          energyLevel: 8,
-          energyDirection: 'steady',
-        },
         history: [
           {
-            trackId: 'track-1',
-            trackUri: 'spotify:track:1',
-            name: 'Track 1',
             artist: 'Artist 1',
-            playedAt: new Date(Date.now() - 600000).toISOString(),
             bpm: 140,
             energy: 0.9,
+            name: 'Track 1',
+            playedAt: new Date(Date.now() - 600000).toISOString(),
+            trackId: 'track-1',
+            trackUri: 'spotify:track:1',
           },
           {
-            trackId: 'track-2',
-            trackUri: 'spotify:track:2',
-            name: 'Track 2',
             artist: 'Artist 2',
-            playedAt: new Date(Date.now() - 300000).toISOString(),
             bpm: 120,
             energy: 0.6,
+            name: 'Track 2',
+            playedAt: new Date(Date.now() - 300000).toISOString(),
+            trackId: 'track-2',
+            trackUri: 'spotify:track:2',
           },
         ],
+        vibe: {
+          bpmRange: { max: 140, min: 100 },
+          energyDirection: 'steady',
+          energyLevel: 8,
+          era: { end: 2025, start: 2000 },
+          genres: [],
+          mood: [],
+        },
       })
 
       const track: PlayedTrack = {
-        trackId: 'track-3',
-        trackUri: 'spotify:track:3',
-        name: 'Low Energy Track',
         artist: 'Artist',
-        playedAt: new Date().toISOString(),
         bpm: 90,
         energy: 0.3,
+        name: 'Low Energy Track',
+        playedAt: new Date().toISOString(),
+        trackId: 'track-3',
+        trackUri: 'spotify:track:3',
       }
 
       const updatedVibe = service.updateVibeFromTrack(session, track)
@@ -335,12 +337,12 @@ describe('MixSessionService', () => {
 
     it('should blend vibes using weighted average (70% current, 30% new)', () => {
       const currentVibe: VibeProfile = {
-        mood: ['energetic'],
-        genres: ['house'],
-        era: { start: 2000, end: 2025 },
-        bpmRange: { min: 120, max: 130 },
-        energyLevel: 6,
+        bpmRange: { max: 130, min: 120 },
         energyDirection: 'steady',
+        energyLevel: 6,
+        era: { end: 2025, start: 2000 },
+        genres: ['house'],
+        mood: ['energetic'],
       }
 
       const trackVibe: Partial<VibeProfile> = {
@@ -356,12 +358,12 @@ describe('MixSessionService', () => {
 
     it('should use custom weight in vibe blending', () => {
       const currentVibe: VibeProfile = {
-        mood: [],
-        genres: [],
-        era: { start: 2000, end: 2025 },
-        bpmRange: { min: 120, max: 130 },
-        energyLevel: 5,
+        bpmRange: { max: 130, min: 120 },
         energyDirection: 'steady',
+        energyLevel: 5,
+        era: { end: 2025, start: 2000 },
+        genres: [],
+        mood: [],
       }
 
       const trackVibe: Partial<VibeProfile> = {
@@ -377,12 +379,12 @@ describe('MixSessionService', () => {
 
     it('should add new moods up to 5 total', () => {
       const currentVibe: VibeProfile = {
-        mood: ['energetic', 'uplifting'],
-        genres: [],
-        era: { start: 2000, end: 2025 },
-        bpmRange: { min: 120, max: 130 },
-        energyLevel: 7,
+        bpmRange: { max: 130, min: 120 },
         energyDirection: 'steady',
+        energyLevel: 7,
+        era: { end: 2025, start: 2000 },
+        genres: [],
+        mood: ['energetic', 'uplifting'],
       }
 
       const trackVibe: Partial<VibeProfile> = {
@@ -400,12 +402,12 @@ describe('MixSessionService', () => {
 
     it('should limit moods to 5', () => {
       const currentVibe: VibeProfile = {
-        mood: ['energetic', 'uplifting', 'happy', 'groovy'],
-        genres: [],
-        era: { start: 2000, end: 2025 },
-        bpmRange: { min: 120, max: 130 },
-        energyLevel: 7,
+        bpmRange: { max: 130, min: 120 },
         energyDirection: 'steady',
+        energyLevel: 7,
+        era: { end: 2025, start: 2000 },
+        genres: [],
+        mood: ['energetic', 'uplifting', 'happy', 'groovy'],
       }
 
       const trackVibe: Partial<VibeProfile> = {
@@ -419,12 +421,12 @@ describe('MixSessionService', () => {
 
     it('should add new genres up to 5 total', () => {
       const currentVibe: VibeProfile = {
-        mood: [],
-        genres: ['house', 'techno'],
-        era: { start: 2000, end: 2025 },
-        bpmRange: { min: 120, max: 130 },
-        energyLevel: 7,
+        bpmRange: { max: 130, min: 120 },
         energyDirection: 'steady',
+        energyLevel: 7,
+        era: { end: 2025, start: 2000 },
+        genres: ['house', 'techno'],
+        mood: [],
       }
 
       const trackVibe: Partial<VibeProfile> = {
@@ -450,13 +452,13 @@ describe('MixSessionService', () => {
 
     it('should add track to queue at end', () => {
       const track: QueuedTrack = {
+        addedBy: 'user',
+        artist: 'Artist 1',
+        name: 'Track 1',
+        position: 0,
         trackId: 'track-1',
         trackUri: 'spotify:track:1',
-        name: 'Track 1',
-        artist: 'Artist 1',
-        addedBy: 'user',
         vibeScore: 85,
-        position: 0,
       }
 
       service.addToQueue(session, track)
@@ -467,23 +469,23 @@ describe('MixSessionService', () => {
 
     it('should maintain position order when adding tracks', () => {
       const track1: QueuedTrack = {
+        addedBy: 'ai',
+        artist: 'Artist 1',
+        name: 'Track 1',
+        position: 0,
         trackId: 'track-1',
         trackUri: 'spotify:track:1',
-        name: 'Track 1',
-        artist: 'Artist 1',
-        addedBy: 'ai',
         vibeScore: 90,
-        position: 0,
       }
 
       const track2: QueuedTrack = {
+        addedBy: 'user',
+        artist: 'Artist 2',
+        name: 'Track 2',
+        position: 1,
         trackId: 'track-2',
         trackUri: 'spotify:track:2',
-        name: 'Track 2',
-        artist: 'Artist 2',
-        addedBy: 'user',
         vibeScore: 75,
-        position: 1,
       }
 
       service.addToQueue(session, track1)
@@ -498,13 +500,13 @@ describe('MixSessionService', () => {
       // Add 10 tracks
       for (let i = 0; i < 10; i++) {
         service.addToQueue(session, {
+          addedBy: 'ai',
+          artist: `Artist ${i}`,
+          name: `Track ${i}`,
+          position: i,
           trackId: `track-${i}`,
           trackUri: `spotify:track:${i}`,
-          name: `Track ${i}`,
-          artist: `Artist ${i}`,
-          addedBy: 'ai',
           vibeScore: 80,
-          position: i,
         })
       }
 
@@ -512,13 +514,13 @@ describe('MixSessionService', () => {
 
       // Try to add 11th track
       service.addToQueue(session, {
+        addedBy: 'user',
+        artist: 'Artist 11',
+        name: 'Track 11',
+        position: 10,
         trackId: 'track-11',
         trackUri: 'spotify:track:11',
-        name: 'Track 11',
-        artist: 'Artist 11',
-        addedBy: 'user',
         vibeScore: 95,
-        position: 10,
       })
 
       // Should still be 10
@@ -527,31 +529,31 @@ describe('MixSessionService', () => {
 
     it('should remove track from queue by position', () => {
       service.addToQueue(session, {
+        addedBy: 'ai',
+        artist: 'Artist 1',
+        name: 'Track 1',
+        position: 0,
         trackId: 'track-1',
         trackUri: 'spotify:track:1',
-        name: 'Track 1',
-        artist: 'Artist 1',
-        addedBy: 'ai',
         vibeScore: 90,
-        position: 0,
       })
       service.addToQueue(session, {
+        addedBy: 'ai',
+        artist: 'Artist 2',
+        name: 'Track 2',
+        position: 1,
         trackId: 'track-2',
         trackUri: 'spotify:track:2',
-        name: 'Track 2',
-        artist: 'Artist 2',
-        addedBy: 'ai',
         vibeScore: 85,
-        position: 1,
       })
       service.addToQueue(session, {
+        addedBy: 'user',
+        artist: 'Artist 3',
+        name: 'Track 3',
+        position: 2,
         trackId: 'track-3',
         trackUri: 'spotify:track:3',
-        name: 'Track 3',
-        artist: 'Artist 3',
-        addedBy: 'user',
         vibeScore: 80,
-        position: 2,
       })
 
       service.removeFromQueue(session, 1)
@@ -571,13 +573,13 @@ describe('MixSessionService', () => {
 
     it('should handle removing invalid position gracefully', () => {
       service.addToQueue(session, {
+        addedBy: 'ai',
+        artist: 'Artist 1',
+        name: 'Track 1',
+        position: 0,
         trackId: 'track-1',
         trackUri: 'spotify:track:1',
-        name: 'Track 1',
-        artist: 'Artist 1',
-        addedBy: 'ai',
         vibeScore: 90,
-        position: 0,
       })
 
       service.removeFromQueue(session, 5)
@@ -587,31 +589,31 @@ describe('MixSessionService', () => {
 
     it('should reorder queue tracks', () => {
       service.addToQueue(session, {
+        addedBy: 'ai',
+        artist: 'Artist 1',
+        name: 'Track 1',
+        position: 0,
         trackId: 'track-1',
         trackUri: 'spotify:track:1',
-        name: 'Track 1',
-        artist: 'Artist 1',
-        addedBy: 'ai',
         vibeScore: 90,
-        position: 0,
       })
       service.addToQueue(session, {
+        addedBy: 'ai',
+        artist: 'Artist 2',
+        name: 'Track 2',
+        position: 1,
         trackId: 'track-2',
         trackUri: 'spotify:track:2',
-        name: 'Track 2',
-        artist: 'Artist 2',
-        addedBy: 'ai',
         vibeScore: 85,
-        position: 1,
       })
       service.addToQueue(session, {
+        addedBy: 'user',
+        artist: 'Artist 3',
+        name: 'Track 3',
+        position: 2,
         trackId: 'track-3',
         trackUri: 'spotify:track:3',
-        name: 'Track 3',
-        artist: 'Artist 3',
-        addedBy: 'user',
         vibeScore: 80,
-        position: 2,
       })
 
       // Move track at position 2 to position 0
@@ -628,13 +630,13 @@ describe('MixSessionService', () => {
 
     it('should handle reordering to same position', () => {
       service.addToQueue(session, {
+        addedBy: 'ai',
+        artist: 'Artist 1',
+        name: 'Track 1',
+        position: 0,
         trackId: 'track-1',
         trackUri: 'spotify:track:1',
-        name: 'Track 1',
-        artist: 'Artist 1',
-        addedBy: 'ai',
         vibeScore: 90,
-        position: 0,
       })
 
       service.reorderQueue(session, 0, 0)
@@ -645,13 +647,13 @@ describe('MixSessionService', () => {
 
     it('should handle invalid reorder positions gracefully', () => {
       service.addToQueue(session, {
+        addedBy: 'ai',
+        artist: 'Artist 1',
+        name: 'Track 1',
+        position: 0,
         trackId: 'track-1',
         trackUri: 'spotify:track:1',
-        name: 'Track 1',
-        artist: 'Artist 1',
-        addedBy: 'ai',
         vibeScore: 90,
-        position: 0,
       })
 
       // Try to reorder with invalid positions
@@ -673,13 +675,13 @@ describe('MixSessionService', () => {
 
     it('should add track to history', () => {
       const track: PlayedTrack = {
-        trackId: 'track-1',
-        trackUri: 'spotify:track:1',
-        name: 'Track 1',
         artist: 'Artist 1',
-        playedAt: new Date().toISOString(),
         bpm: 120,
         energy: 0.8,
+        name: 'Track 1',
+        playedAt: new Date().toISOString(),
+        trackId: 'track-1',
+        trackUri: 'spotify:track:1',
       }
 
       service.addToHistory(session, track)
@@ -690,23 +692,23 @@ describe('MixSessionService', () => {
 
     it('should maintain chronological order (newest first)', () => {
       const track1: PlayedTrack = {
-        trackId: 'track-1',
-        trackUri: 'spotify:track:1',
-        name: 'Track 1',
         artist: 'Artist 1',
-        playedAt: new Date(Date.now() - 10000).toISOString(),
         bpm: 120,
         energy: 0.8,
+        name: 'Track 1',
+        playedAt: new Date(Date.now() - 10000).toISOString(),
+        trackId: 'track-1',
+        trackUri: 'spotify:track:1',
       }
 
       const track2: PlayedTrack = {
-        trackId: 'track-2',
-        trackUri: 'spotify:track:2',
-        name: 'Track 2',
         artist: 'Artist 2',
-        playedAt: new Date().toISOString(),
         bpm: 125,
         energy: 0.7,
+        name: 'Track 2',
+        playedAt: new Date().toISOString(),
+        trackId: 'track-2',
+        trackUri: 'spotify:track:2',
       }
 
       service.addToHistory(session, track1)
@@ -721,13 +723,13 @@ describe('MixSessionService', () => {
       // Add 25 tracks
       for (let i = 0; i < 25; i++) {
         service.addToHistory(session, {
-          trackId: `track-${i}`,
-          trackUri: `spotify:track:${i}`,
-          name: `Track ${i}`,
           artist: `Artist ${i}`,
-          playedAt: new Date(Date.now() - (25 - i) * 1000).toISOString(),
           bpm: 120,
           energy: 0.7,
+          name: `Track ${i}`,
+          playedAt: new Date(Date.now() - (25 - i) * 1000).toISOString(),
+          trackId: `track-${i}`,
+          trackUri: `spotify:track:${i}`,
         })
       }
 
@@ -743,13 +745,13 @@ describe('MixSessionService', () => {
       // Add 20 tracks
       for (let i = 0; i < 20; i++) {
         service.addToHistory(session, {
-          trackId: `track-${i}`,
-          trackUri: `spotify:track:${i}`,
-          name: `Track ${i}`,
           artist: `Artist ${i}`,
-          playedAt: new Date(Date.now() - (20 - i) * 1000).toISOString(),
           bpm: 120,
           energy: 0.7,
+          name: `Track ${i}`,
+          playedAt: new Date(Date.now() - (20 - i) * 1000).toISOString(),
+          trackId: `track-${i}`,
+          trackUri: `spotify:track:${i}`,
         })
       }
 
@@ -757,13 +759,13 @@ describe('MixSessionService', () => {
 
       // Add one more
       service.addToHistory(session, {
-        trackId: 'track-20',
-        trackUri: 'spotify:track:20',
-        name: 'Track 20',
         artist: 'Artist 20',
-        playedAt: new Date().toISOString(),
         bpm: 130,
         energy: 0.9,
+        name: 'Track 20',
+        playedAt: new Date().toISOString(),
+        trackId: 'track-20',
+        trackUri: 'spotify:track:20',
       })
 
       // Should still be 20, oldest removed
@@ -776,13 +778,13 @@ describe('MixSessionService', () => {
 
     it('should handle tracks with null BPM and energy', () => {
       const track: PlayedTrack = {
-        trackId: 'track-1',
-        trackUri: 'spotify:track:1',
-        name: 'Track without data',
         artist: 'Artist',
-        playedAt: new Date().toISOString(),
         bpm: null,
         energy: null,
+        name: 'Track without data',
+        playedAt: new Date().toISOString(),
+        trackId: 'track-1',
+        trackUri: 'spotify:track:1',
       }
 
       service.addToHistory(session, track)

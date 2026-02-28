@@ -3,6 +3,7 @@
  * Comprehensive tests for token bucket rate limiter with timing verification
  */
 import {describe, expect, it} from 'vitest'
+
 import {RateLimitedQueue} from '../../utils/RateLimitedQueue'
 import {
   measureExecutionTime,
@@ -13,7 +14,7 @@ describe('RateLimitedQueue', () => {
   // Fake timers would interfere with the token bucket refill mechanism
   describe('Token Bucket Mechanics', () => {
     it('should initialize with burst allocation equal to rate', async () => {
-      const queue = new RateLimitedQueue({rate: 10, burst: 10})
+      const queue = new RateLimitedQueue({burst: 10, rate: 10})
       const timestamps: number[] = []
       // Queue 10 tasks instantly (should use all burst tokens)
       for (let i = 0; i < 10; i++) {
@@ -30,7 +31,7 @@ describe('RateLimitedQueue', () => {
       expect(burstDuration).toBeLessThanOrEqual(150) // Burst should be fast
     })
     it('should refill tokens over time at specified rate', async () => {
-      const queue = new RateLimitedQueue({rate: 10, burst: 10})
+      const queue = new RateLimitedQueue({burst: 10, rate: 10})
       const timestamps: number[] = []
       // Queue 15 tasks (10 burst + 5 that need token refill)
       for (let i = 0; i < 15; i++) {
@@ -53,7 +54,7 @@ describe('RateLimitedQueue', () => {
       expect(avgInterval).toBeGreaterThanOrEqual(80) // Allow some variance
     })
     it('should respect rate (TPS) correctly', async () => {
-      const queue = new RateLimitedQueue({rate: 40, burst: 5})
+      const queue = new RateLimitedQueue({burst: 5, rate: 40})
       const timestamps: number[] = []
       // Queue 50 tasks (more than burst)
       for (let i = 0; i < 50; i++) {
@@ -75,7 +76,7 @@ describe('RateLimitedQueue', () => {
       expect(compliance.compliant).toBe(true)
     })
     it('should never exceed burst limit', async () => {
-      const queue = new RateLimitedQueue({rate: 100, burst: 10})
+      const queue = new RateLimitedQueue({burst: 10, rate: 100})
       let concurrent = 0
       let maxConcurrent = 0
       // Queue 20 tasks that track concurrency
@@ -111,7 +112,7 @@ describe('RateLimitedQueue', () => {
       expect(timestamps[0] % 1).not.toBe(0) // Should have decimal precision
     })
     it('should handle negative tokens correctly when burst is used up', async () => {
-      const queue = new RateLimitedQueue({rate: 10, burst: 5})
+      const queue = new RateLimitedQueue({burst: 5, rate: 10})
       const timestamps: number[] = []
       // Queue 15 tasks (burst 5, need 10 more tokens)
       for (let i = 0; i < 15; i++) {
@@ -163,7 +164,7 @@ describe('RateLimitedQueue', () => {
       expect(results).toEqual([0, 1, 2, 3, 4])
     })
     it('should respect concurrent task limit', async () => {
-      const queue = new RateLimitedQueue({rate: 100, concurrency: 3})
+      const queue = new RateLimitedQueue({concurrency: 3, rate: 100})
       let concurrent = 0
       let maxConcurrent = 0
       // Queue 20 tasks with delays
@@ -251,33 +252,33 @@ describe('RateLimitedQueue', () => {
   describe('Result Callbacks', () => {
     it('should invoke callback for each completed task', async () => {
       const queue = new RateLimitedQueue({rate: 100})
-      const callbackResults: Array<{result: number | null; index: number; total: number}> = []
+      const callbackResults: {index: number; result: null | number; total: number}[] = []
       for (let i = 0; i < 10; i++) {
         queue.enqueue(async () => i)
       }
       await queue.processAllWithCallback((result, index, total) => {
-        callbackResults.push({result: result as number | null, index, total})
+        callbackResults.push({index, result: result as null | number, total})
       })
       expect(callbackResults).toHaveLength(10)
-      expect(callbackResults[0]).toEqual({result: 0, index: 0, total: 10})
-      expect(callbackResults[9]).toEqual({result: 9, index: 9, total: 10})
+      expect(callbackResults[0]).toEqual({index: 0, result: 0, total: 10})
+      expect(callbackResults[9]).toEqual({index: 9, result: 9, total: 10})
     })
     it('should pass correct (result, index, total) to callback', async () => {
       const queue = new RateLimitedQueue({rate: 100})
-      const callbackData: Array<{result: string | null; index: number; total: number}> = []
+      const callbackData: {index: number; result: null | string; total: number}[] = []
       for (let i = 0; i < 5; i++) {
         queue.enqueue(async () => `task-${i}`)
       }
       await queue.processAllWithCallback((result, index, total) => {
-        callbackData.push({result: result as string | null, index, total})
+        callbackData.push({index, result: result as null | string, total})
       })
       // Verify all callbacks received correct parameters
       expect(callbackData).toEqual([
-        {result: 'task-0', index: 0, total: 5},
-        {result: 'task-1', index: 1, total: 5},
-        {result: 'task-2', index: 2, total: 5},
-        {result: 'task-3', index: 3, total: 5},
-        {result: 'task-4', index: 4, total: 5},
+        {index: 0, result: 'task-0', total: 5},
+        {index: 1, result: 'task-1', total: 5},
+        {index: 2, result: 'task-2', total: 5},
+        {index: 3, result: 'task-3', total: 5},
+        {index: 4, result: 'task-4', total: 5},
       ])
     })
     it('should not poison processing loop when callback throws error', async () => {
@@ -298,7 +299,7 @@ describe('RateLimitedQueue', () => {
     })
     it('should pass null to callback for failed tasks', async () => {
       const queue = new RateLimitedQueue({rate: 100})
-      const callbackResults: Array<number | null> = []
+      const callbackResults: (null | number)[] = []
       // Queue mix of successful and failing tasks
       queue.enqueue(async () => 0)
       queue.enqueue(async () => {
@@ -310,7 +311,7 @@ describe('RateLimitedQueue', () => {
       })
       queue.enqueue(async () => 4)
       await queue.processAllWithCallback((result) => {
-        callbackResults.push(result as number | null)
+        callbackResults.push(result as null | number)
       })
       expect(callbackResults).toEqual([0, null, 2, null, 4])
     })
@@ -345,7 +346,7 @@ describe('RateLimitedQueue', () => {
     }, 10000)
     it('should apply jitter correctly (randomized delay)', async () => {
       // Use burst of 1 to force rate limiting after first task
-      const queue = new RateLimitedQueue({rate: 20, jitterMs: 50, burst: 1})
+      const queue = new RateLimitedQueue({burst: 1, jitterMs: 50, rate: 20})
       const timestamps: number[] = []
       for (let i = 0; i < 10; i++) {
         queue.enqueue(async () => {
@@ -371,7 +372,7 @@ describe('RateLimitedQueue', () => {
       })
     })
     it('should respect min tick delay', async () => {
-      const queue = new RateLimitedQueue({rate: 1000, minTickMs: 10})
+      const queue = new RateLimitedQueue({minTickMs: 10, rate: 1000})
       const timestamps: number[] = []
       for (let i = 0; i < 20; i++) {
         queue.enqueue(async () => {
@@ -416,7 +417,7 @@ describe('RateLimitedQueue', () => {
       })
     })
     it('should handle very fast rate (1000 TPS)', async () => {
-      const queue = new RateLimitedQueue({rate: 1000, minTickMs: 0})
+      const queue = new RateLimitedQueue({minTickMs: 0, rate: 1000})
       const timestamps: number[] = []
       for (let i = 0; i < 100; i++) {
         queue.enqueue(async () => {
@@ -444,7 +445,7 @@ describe('RateLimitedQueue', () => {
       expect(results).toEqual(['success-1', null, 'success-2'])
     })
     it('should handle tasks that take longer than rate window', async () => {
-      const queue = new RateLimitedQueue({rate: 20, concurrency: 2})
+      const queue = new RateLimitedQueue({concurrency: 2, rate: 20})
       const timestamps: number[] = []
       // Tasks that take 100ms each (rate window is 50ms at 20 TPS)
       for (let i = 0; i < 5; i++) {
@@ -459,7 +460,7 @@ describe('RateLimitedQueue', () => {
       expect(timestamps).toHaveLength(5)
     })
     it('should handle concurrent limit of 1 (sequential)', async () => {
-      const queue = new RateLimitedQueue({rate: 100, concurrency: 1})
+      const queue = new RateLimitedQueue({concurrency: 1, rate: 100})
       let concurrent = 0
       let maxConcurrent = 0
       for (let i = 0; i < 10; i++) {
@@ -476,7 +477,7 @@ describe('RateLimitedQueue', () => {
       expect(maxConcurrent).toBe(1)
     })
     it('should handle burst behavior (many tasks enqueued instantly)', async () => {
-      const queue = new RateLimitedQueue({rate: 40, burst: 20})
+      const queue = new RateLimitedQueue({burst: 20, rate: 40})
       const timestamps: number[] = []
       // Enqueue 50 tasks instantly
       for (let i = 0; i < 50; i++) {
@@ -558,7 +559,7 @@ describe('RateLimitedQueue', () => {
       expect(timestamps).toHaveLength(30)
     })
     it('should accept custom burst option', async () => {
-      const queue = new RateLimitedQueue({rate: 10, burst: 15})
+      const queue = new RateLimitedQueue({burst: 15, rate: 10})
       const timestamps: number[] = []
       for (let i = 0; i < 20; i++) {
         queue.enqueue(async () => {
@@ -573,7 +574,7 @@ describe('RateLimitedQueue', () => {
       expect(burstDuration).toBeLessThanOrEqual(150)
     })
     it('should accept custom concurrency option', async () => {
-      const queue = new RateLimitedQueue({rate: 100, concurrency: 5})
+      const queue = new RateLimitedQueue({concurrency: 5, rate: 100})
       let concurrent = 0
       let maxConcurrent = 0
       for (let i = 0; i < 20; i++) {
@@ -589,7 +590,7 @@ describe('RateLimitedQueue', () => {
       expect(maxConcurrent).toBe(5)
     })
     it('should enforce minimum concurrency of 1', async () => {
-      const queue = new RateLimitedQueue({rate: 100, concurrency: 0})
+      const queue = new RateLimitedQueue({concurrency: 0, rate: 100})
       let concurrent = 0
       let maxConcurrent = 0
       for (let i = 0; i < 5; i++) {

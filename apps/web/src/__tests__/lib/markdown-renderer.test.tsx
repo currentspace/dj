@@ -8,7 +8,8 @@
 import {render, screen} from '@testing-library/react'
 import {describe, expect, it} from 'vitest'
 
-import {hasMarkdownSyntax, MarkdownContent} from '../../lib/markdown-renderer'
+import {MarkdownContent} from '../../lib/markdown-renderer'
+import {hasMarkdownSyntax} from '../../lib/markdown-utils'
 
 describe('MarkdownContent', () => {
   describe('basic markdown rendering', () => {

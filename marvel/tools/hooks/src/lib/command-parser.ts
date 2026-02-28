@@ -10,27 +10,9 @@
  */
 
 export interface CommandSegment {
-  raw: string;
-  executable: string;
   args: string[];
-}
-
-/**
- * Strip leading `# ...` comment lines from a command string.
- * Preserves inline comments (e.g., `cat file # this stays`).
- */
-export function stripLeadingComments(command: string): string {
-  const lines = command.split("\n");
-  let i = 0;
-  while (i < lines.length) {
-    const trimmed = lines[i].trim();
-    if (trimmed === "" || trimmed.startsWith("#")) {
-      i++;
-    } else {
-      break;
-    }
-  }
-  return lines.slice(i).join("\n").trim();
+  executable: string;
+  raw: string;
 }
 
 /**
@@ -140,49 +122,33 @@ export function splitCompoundCommand(command: string): string[] {
   return segments;
 }
 
+/**
+ * Strip leading `# ...` comment lines from a command string.
+ * Preserves inline comments (e.g., `cat file # this stays`).
+ */
+export function stripLeadingComments(command: string): string {
+  const lines = command.split("\n");
+  let i = 0;
+  while (i < lines.length) {
+    const trimmed = lines[i].trim();
+    if (trimmed === "" || trimmed.startsWith("#")) {
+      i++;
+    } else {
+      break;
+    }
+  }
+  return lines.slice(i).join("\n").trim();
+}
+
 // Commands that are "preamble" — they set up environment but aren't the
 // meaningful command the user is actually running.
 const PREAMBLE_COMMANDS = new Set([
-  "cd", "pushd", "popd",
-  "set", "shopt",
-  "source", ".",
-  "export", "unset",
-  "true", "false",
+  ".", "cd", "export",
+  "false", "popd",
+  "pushd", "set",
+  "shopt", "source",
+  "true", "unset",
 ]);
-
-/**
- * Returns true if a command segment is a preamble (cd, source, export, VAR=val, etc.).
- */
-export function isPreambleCommand(segment: string): boolean {
-  const trimmed = segment.trim();
-
-  // Bare VAR=value assignment (no command after it)
-  if (/^[A-Za-z_][A-Za-z0-9_]*=\S*$/.test(trimmed)) {
-    return true;
-  }
-
-  // VAR=value with spaces in quoted value
-  if (/^[A-Za-z_][A-Za-z0-9_]*=["']/.test(trimmed) && !trimmed.includes(" ")) {
-    return true;
-  }
-
-  // Extract the first token
-  const firstToken = trimmed.split(/\s+/)[0];
-  return PREAMBLE_COMMANDS.has(firstToken);
-}
-
-/**
- * Parse a single command segment into its components.
- */
-export function parseSegment(segment: string): CommandSegment {
-  const trimmed = segment.trim();
-  const parts = trimmed.split(/\s+/);
-  return {
-    raw: trimmed,
-    executable: parts[0] || "",
-    args: parts.slice(1),
-  };
-}
 
 /**
  * Extract the first meaningful (non-preamble) command from a compound command string.
@@ -219,6 +185,40 @@ export function getAllSegments(command: string): CommandSegment[] {
   if (!stripped) return [];
 
   return splitCompoundCommand(stripped).map(parseSegment);
+}
+
+/**
+ * Returns true if a command segment is a preamble (cd, source, export, VAR=val, etc.).
+ */
+export function isPreambleCommand(segment: string): boolean {
+  const trimmed = segment.trim();
+
+  // Bare VAR=value assignment (no command after it)
+  if (/^[A-Za-z_][A-Za-z0-9_]*=\S*$/.test(trimmed)) {
+    return true;
+  }
+
+  // VAR=value with spaces in quoted value
+  if (/^[A-Za-z_][A-Za-z0-9_]*=["']/.test(trimmed) && !trimmed.includes(" ")) {
+    return true;
+  }
+
+  // Extract the first token
+  const firstToken = trimmed.split(/\s+/)[0];
+  return PREAMBLE_COMMANDS.has(firstToken);
+}
+
+/**
+ * Parse a single command segment into its components.
+ */
+export function parseSegment(segment: string): CommandSegment {
+  const trimmed = segment.trim();
+  const parts = trimmed.split(/\s+/);
+  return {
+    args: parts.slice(1),
+    executable: parts[0] || "",
+    raw: trimmed,
+  };
 }
 
 /**

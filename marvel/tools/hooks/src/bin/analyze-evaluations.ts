@@ -12,149 +12,58 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as readline from "readline";
+
 import { getSecurityDir } from "../lib/paths.js";
 
 interface AgentEvaluation {
-  timestamp: string;
   command: string;
-  description: string | null;
-  decision: string;
-  reasoning: string;
   confidence: number;
-  investigated: string[];
   costUsd: number;
+  decision: string;
+  description: null | string;
   durationMs: number;
-  numTurns: number;
   evaluator: string;
+  investigated: string[];
+  numTurns: number;
+  reasoning: string;
+  timestamp: string;
+}
+
+interface AnalysisResult {
+  patterns: {
+    avgConfidence: number;
+    count: number;
+    decisions: Record<string, number>;
+    prefix: string;
+  }[];
+  period: { end: string; start: string; };
+  proposedAllowlist: ProposedRule[];
+  proposedDenylist: ProposedRule[];
+  summary: {
+    allowed: number;
+    asked: number;
+    avgCostUsd: number;
+    avgDurationMs: number;
+    denied: number;
+    total: number;
+    totalCostUsd: number;
+  };
+}
+
+interface ProposedRule {
+  avgConfidence: number;
+  count: number;
+  pattern: string;
+  reason: string;
+  source: "both" | "evaluation" | "suggestion";
 }
 
 interface Suggestion {
   command: string;
   suggestions: {
-    allow?: Array<{ pattern: string; reason: string }>;
-    deny?: Array<{ pattern: string; reason: string }>;
+    allow?: { pattern: string; reason: string }[];
+    deny?: { pattern: string; reason: string }[];
   };
-}
-
-interface ProposedRule {
-  pattern: string;
-  reason: string;
-  count: number;
-  avgConfidence: number;
-  source: "evaluation" | "suggestion" | "both";
-}
-
-interface AnalysisResult {
-  period: { start: string; end: string };
-  summary: {
-    total: number;
-    allowed: number;
-    denied: number;
-    asked: number;
-    avgDurationMs: number;
-    avgCostUsd: number;
-    totalCostUsd: number;
-  };
-  proposedAllowlist: ProposedRule[];
-  proposedDenylist: ProposedRule[];
-  patterns: {
-    prefix: string;
-    count: number;
-    decisions: Record<string, number>;
-    avgConfidence: number;
-  }[];
-}
-
-function parseArgs(): { since: Date | null; autoSuggest: boolean; json: boolean; help: boolean } {
-  const args = process.argv.slice(2);
-  let since: Date | null = null;
-  let autoSuggest = false;
-  let json = false;
-  let help = false;
-
-  for (const arg of args) {
-    if (arg.startsWith("--since=")) {
-      since = new Date(arg.slice(8));
-    } else if (arg === "--auto-suggest") {
-      autoSuggest = true;
-    } else if (arg === "--json") {
-      json = true;
-    } else if (arg === "--help" || arg === "-h") {
-      help = true;
-    }
-  }
-
-  return { since, autoSuggest, json, help };
-}
-
-function printHelp(): void {
-  console.log(`
-Agent Evaluation Analyzer
-
-Analyzes agent security evaluations to identify consistent patterns and
-propose allowlist/denylist rules for automatic future handling.
-
-Usage:
-  pnpm analyze-evaluations [options]
-
-Options:
-  --since=YYYY-MM-DD  Only analyze evaluations after this date
-  --auto-suggest      Write proposed rules to proposed-allowlist.json / proposed-denylist.json
-  --json              Output raw JSON instead of formatted report
-  --help, -h          Show this help message
-
-Rule proposal criteria:
-  - Command prefix always gets the same decision (allow or deny)
-  - Average confidence > 0.9
-  - At least 3 occurrences
-  - Cross-referenced with LLM suggestions for priority boosting
-
-Files:
-  Reads from: marvel/security/agent-evaluations.jsonl
-              marvel/security/suggestions.jsonl (optional)
-  Writes to:  marvel/security/proposed-allowlist.json (--auto-suggest)
-              marvel/security/proposed-denylist.json (--auto-suggest)
-`);
-}
-
-async function loadJsonl<T>(filePath: string, since: Date | null): Promise<T[]> {
-  const items: T[] = [];
-
-  if (!fs.existsSync(filePath)) {
-    return items;
-  }
-
-  const fileStream = fs.createReadStream(filePath);
-  const rl = readline.createInterface({
-    input: fileStream,
-    crlfDelay: Infinity,
-  });
-
-  for await (const line of rl) {
-    if (!line.trim()) continue;
-    try {
-      const item = JSON.parse(line) as T & { timestamp?: string };
-      if (since && item.timestamp && new Date(item.timestamp) < since) {
-        continue;
-      }
-      items.push(item);
-    } catch {
-      // Skip malformed lines
-    }
-  }
-
-  return items;
-}
-
-function extractCommandPrefix(command: string): string {
-  const parts = command.trim().split(/\s+/);
-  const base = parts[0];
-
-  if (["git", "pnpm", "npm", "yarn", "docker", "kubectl"].includes(base) && parts.length > 1) {
-    return `${base} ${parts[1]}`;
-  }
-
-  return base;
 }
 
 function analyzeEvaluations(
@@ -163,11 +72,11 @@ function analyzeEvaluations(
 ): AnalysisResult {
   if (evaluations.length === 0) {
     return {
-      period: { start: "", end: "" },
-      summary: { total: 0, allowed: 0, denied: 0, asked: 0, avgDurationMs: 0, avgCostUsd: 0, totalCostUsd: 0 },
+      patterns: [],
+      period: { end: "", start: "" },
       proposedAllowlist: [],
       proposedDenylist: [],
-      patterns: [],
+      summary: { allowed: 0, asked: 0, avgCostUsd: 0, avgDurationMs: 0, denied: 0, total: 0, totalCostUsd: 0 },
     };
   }
 
@@ -176,26 +85,26 @@ function analyzeEvaluations(
   const totalCost = evaluations.reduce((sum, e) => sum + e.costUsd, 0);
 
   const summary = {
-    total: evaluations.length,
     allowed: evaluations.filter((e) => e.decision === "allow").length,
-    denied: evaluations.filter((e) => e.decision === "deny").length,
     asked: evaluations.filter((e) => e.decision === "ask").length,
-    avgDurationMs: Math.round(evaluations.reduce((sum, e) => sum + e.durationMs, 0) / evaluations.length),
     avgCostUsd: totalCost / evaluations.length,
+    avgDurationMs: Math.round(evaluations.reduce((sum, e) => sum + e.durationMs, 0) / evaluations.length),
+    denied: evaluations.filter((e) => e.decision === "deny").length,
+    total: evaluations.length,
     totalCostUsd: totalCost,
   };
 
   // Group by command prefix
   const prefixMap = new Map<string, {
+    commands: string[];
     count: number;
     decisions: Record<string, number>;
     totalConfidence: number;
-    commands: string[];
   }>();
 
   for (const e of evaluations) {
     const prefix = extractCommandPrefix(e.command);
-    const existing = prefixMap.get(prefix) || { count: 0, decisions: {}, totalConfidence: 0, commands: [] };
+    const existing = prefixMap.get(prefix) || { commands: [], count: 0, decisions: {}, totalConfidence: 0 };
     existing.count++;
     existing.decisions[e.decision] = (existing.decisions[e.decision] || 0) + 1;
     existing.totalConfidence += e.confidence;
@@ -236,10 +145,10 @@ function analyzeEvaluations(
     const source: ProposedRule["source"] = hasSuggestion ? "both" : "evaluation";
 
     const rule: ProposedRule = {
+      avgConfidence,
+      count: data.count,
       pattern: prefix,
       reason: `Consistently ${decision}ed ${data.count} times (avg confidence: ${avgConfidence.toFixed(2)})`,
-      count: data.count,
-      avgConfidence,
       source,
     };
 
@@ -261,24 +170,35 @@ function analyzeEvaluations(
 
   const patterns = Array.from(prefixMap.entries())
     .map(([prefix, data]) => ({
-      prefix,
+      avgConfidence: data.totalConfidence / data.count,
       count: data.count,
       decisions: data.decisions,
-      avgConfidence: data.totalConfidence / data.count,
+      prefix,
     }))
     .sort((a, b) => b.count - a.count)
     .slice(0, 20);
 
   return {
+    patterns,
     period: {
-      start: evaluations[0].timestamp,
       end: evaluations[evaluations.length - 1].timestamp,
+      start: evaluations[0].timestamp,
     },
-    summary,
     proposedAllowlist,
     proposedDenylist,
-    patterns,
+    summary,
   };
+}
+
+function extractCommandPrefix(command: string): string {
+  const parts = command.trim().split(/\s+/);
+  const base = parts[0];
+
+  if (["docker", "git", "kubectl", "npm", "pnpm", "yarn"].includes(base) && parts.length > 1) {
+    return `${base} ${parts[1]}`;
+  }
+
+  return base;
 }
 
 function formatReport(analysis: AnalysisResult): string {
@@ -347,8 +267,37 @@ function formatReport(analysis: AnalysisResult): string {
   return lines.join("\n");
 }
 
+async function loadJsonl<T>(filePath: string, since: Date | null): Promise<T[]> {
+  const items: T[] = [];
+
+  if (!fs.existsSync(filePath)) {
+    return items;
+  }
+
+  const fileStream = fs.createReadStream(filePath);
+  const rl = readline.createInterface({
+    crlfDelay: Infinity,
+    input: fileStream,
+  });
+
+  for await (const line of rl) {
+    if (!line.trim()) continue;
+    try {
+      const item = JSON.parse(line) as T & { timestamp?: string };
+      if (since && item.timestamp && new Date(item.timestamp) < since) {
+        continue;
+      }
+      items.push(item);
+    } catch {
+      // Skip malformed lines
+    }
+  }
+
+  return items;
+}
+
 async function main(): Promise<void> {
-  const { since, autoSuggest, json, help } = parseArgs();
+  const { autoSuggest, help, json, since } = parseArgs();
 
   if (help) {
     printHelp();
@@ -381,6 +330,58 @@ async function main(): Promise<void> {
       console.log(`Wrote ${analysis.proposedDenylist.length} proposed denylist rules to ${outPath}`);
     }
   }
+}
+
+function parseArgs(): { autoSuggest: boolean; help: boolean; json: boolean; since: Date | null; } {
+  const args = process.argv.slice(2);
+  let since: Date | null = null;
+  let autoSuggest = false;
+  let json = false;
+  let help = false;
+
+  for (const arg of args) {
+    if (arg.startsWith("--since=")) {
+      since = new Date(arg.slice(8));
+    } else if (arg === "--auto-suggest") {
+      autoSuggest = true;
+    } else if (arg === "--json") {
+      json = true;
+    } else if (arg === "--help" || arg === "-h") {
+      help = true;
+    }
+  }
+
+  return { autoSuggest, help, json, since };
+}
+
+function printHelp(): void {
+  console.log(`
+Agent Evaluation Analyzer
+
+Analyzes agent security evaluations to identify consistent patterns and
+propose allowlist/denylist rules for automatic future handling.
+
+Usage:
+  pnpm analyze-evaluations [options]
+
+Options:
+  --since=YYYY-MM-DD  Only analyze evaluations after this date
+  --auto-suggest      Write proposed rules to proposed-allowlist.json / proposed-denylist.json
+  --json              Output raw JSON instead of formatted report
+  --help, -h          Show this help message
+
+Rule proposal criteria:
+  - Command prefix always gets the same decision (allow or deny)
+  - Average confidence > 0.9
+  - At least 3 occurrences
+  - Cross-referenced with LLM suggestions for priority boosting
+
+Files:
+  Reads from: marvel/security/agent-evaluations.jsonl
+              marvel/security/suggestions.jsonl (optional)
+  Writes to:  marvel/security/proposed-allowlist.json (--auto-suggest)
+              marvel/security/proposed-denylist.json (--auto-suggest)
+`);
 }
 
 main().catch((err) => {

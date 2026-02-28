@@ -13,14 +13,14 @@
  * Key Principle: Test real behavior, not mocks
  */
 
-import { beforeAll, afterAll } from 'vitest'
+import { afterAll, beforeAll } from 'vitest'
 
 // Get native globals that were stored before mocking in test-setup.ts
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 const nativeFetch = (global as any).__nativeFetch as typeof fetch
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 const nativeSetTimeout = (global as any).__nativeSetTimeout as typeof setTimeout
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 const nativeClearTimeout = (global as any).__nativeClearTimeout as typeof clearTimeout
 
 // Restore native globals for integration tests (they need real network access and timers)
@@ -63,13 +63,20 @@ export const RATE_LIMITS = {
  * but we still test real caching logic with a real in-memory store.
  */
 export class MockKVNamespace {
-  private store = new Map<string, { value: string; expirationTtl?: number; timestamp: number }>()
+  private store = new Map<string, { expirationTtl?: number; timestamp: number; value: string; }>()
 
+  // Method to clear all data (useful for test cleanup)
+  clear(): void {
+    this.store.clear()
+  }
+  async delete(key: string): Promise<void> {
+    this.store.delete(key)
+  }
   // Overload signatures to match Cloudflare KV API
-  async get(key: string): Promise<string | null>
-  async get(key: string, type: 'text'): Promise<string | null>
-  async get(key: string, type: 'json'): Promise<unknown | null>
-  async get(key: string, type?: 'text' | 'json'): Promise<string | unknown | null> {
+  async get(key: string): Promise<null | string>
+  async get(key: string, type: 'text'): Promise<null | string>
+  async get(key: string, type: 'json'): Promise<unknown>
+  async get(key: string, type?: 'json' | 'text'): Promise<unknown> {
     const entry = this.store.get(key)
     if (!entry) return null
 
@@ -95,19 +102,7 @@ export class MockKVNamespace {
     return entry.value
   }
 
-  async put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void> {
-    this.store.set(key, {
-      expirationTtl: options?.expirationTtl,
-      timestamp: Date.now(),
-      value,
-    })
-  }
-
-  async delete(key: string): Promise<void> {
-    this.store.delete(key)
-  }
-
-  async list(options?: { prefix?: string; limit?: number }): Promise<{ keys: Array<{ name: string }> }> {
+  async list(options?: { limit?: number; prefix?: string; }): Promise<{ keys: { name: string }[] }> {
     const keys = Array.from(this.store.keys())
       .filter(key => !options?.prefix || key.startsWith(options.prefix))
       .slice(0, options?.limit)
@@ -116,9 +111,12 @@ export class MockKVNamespace {
     return { keys }
   }
 
-  // Method to clear all data (useful for test cleanup)
-  clear(): void {
-    this.store.clear()
+  async put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void> {
+    this.store.set(key, {
+      expirationTtl: options?.expirationTtl,
+      timestamp: Date.now(),
+      value,
+    })
   }
 
   // Method to get store size (useful for debugging)
@@ -145,13 +143,13 @@ export function createMockEnv(): {
   SPOTIFY_CLIENT_SECRET: string
 } {
   return {
-    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || 'test-key',
+    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ?? 'test-key',
     AUDIO_FEATURES_CACHE: new MockKVNamespace(),
     ENVIRONMENT: 'test',
     LASTFM_API_KEY: process.env.LASTFM_API_KEY, // Optional
     SESSIONS: new MockKVNamespace(),
-    SPOTIFY_CLIENT_ID: process.env.SPOTIFY_CLIENT_ID || 'test-client-id',
-    SPOTIFY_CLIENT_SECRET: process.env.SPOTIFY_CLIENT_SECRET || 'test-client-secret',
+    SPOTIFY_CLIENT_ID: process.env.SPOTIFY_CLIENT_ID ?? 'test-client-id',
+    SPOTIFY_CLIENT_SECRET: process.env.SPOTIFY_CLIENT_SECRET ?? 'test-client-secret',
   }
 }
 

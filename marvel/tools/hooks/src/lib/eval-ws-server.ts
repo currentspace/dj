@@ -11,198 +11,128 @@
  * Protocol follows the Companion project's reverse-engineered NDJSON format.
  */
 
-import { WebSocketServer, type WebSocket } from "ws";
-import { createServer, type Server } from "node:http";
 import { randomUUID } from "node:crypto";
+import { createServer, type Server } from "node:http";
+import { type WebSocket, WebSocketServer } from "ws";
+
 import type { AgentSecurityDecision } from "./evaluation-schemas.js";
+
 import { logDebug, logWarn } from "./logger.js";
 
 export interface EvalSessionResult {
-  decision: AgentSecurityDecision;
   costUsd: number; // cost for this evaluation (delta)
+  decision: AgentSecurityDecision;
   durationMs: number;
   numTurns: number; // turns for this evaluation (delta)
 }
 
-const READ_ONLY_TOOLS = new Set(["Read", "Grep", "Glob"]);
-
-// NDJSON message types from the --sdk-url protocol
-interface NdjsonMessage {
-  type: string;
-  subtype?: string;
-  request_id?: string;
-  request?: Record<string, unknown>;
-  response?: Record<string, unknown>;
-  // Result fields
-  is_error?: boolean;
-  result?: string;
-  structured_output?: unknown;
-  total_cost_usd?: number;
-  num_turns?: number;
-  duration_ms?: number;
-  session_id?: string;
-}
-
-// Pending control request awaiting a response from CLI
-interface PendingRequest {
-  requestId: string;
-  resolve: (msg: NdjsonMessage) => void;
-  reject: (err: Error) => void;
-  timer: NodeJS.Timeout;
-}
-
-// Pending evaluation awaiting a result message
-interface PendingEvaluation {
-  resolve: (result: EvalSessionResult) => void;
-  reject: (err: Error) => void;
-  timer: NodeJS.Timeout;
-  startTime: number;
-  prevCostUsd: number;
-  prevNumTurns: number;
-}
-
-function send(ws: WebSocket, msg: object): void {
-  const json = JSON.stringify(msg);
-  logDebug(`[WS→CLI] ${json.slice(0, 300)}`);
-  ws.send(json + "\n");
-}
+const READ_ONLY_TOOLS = new Set(["Glob", "Grep", "Read"]);
 
 /** Public interface for EvalWsServer — depend on this for testability. */
 export interface IEvalWsServer {
-  start(): Promise<number>;
+  close(): void;
   evaluate(
     prompt: string,
     jsonSchema: Record<string, unknown>,
     timeoutMs: number
   ): Promise<EvalSessionResult>;
-  close(): void;
   readonly isAlive: boolean;
   readonly port: number;
-  readonly totalCostUsd: number;
   readonly sessionId: string;
+  start(): Promise<number>;
+  readonly totalCostUsd: number;
+}
+
+// NDJSON message types from the --sdk-url protocol
+interface NdjsonMessage {
+  duration_ms?: number;
+  // Result fields
+  is_error?: boolean;
+  num_turns?: number;
+  request?: Record<string, unknown>;
+  request_id?: string;
+  response?: Record<string, unknown>;
+  result?: string;
+  session_id?: string;
+  structured_output?: unknown;
+  subtype?: string;
+  total_cost_usd?: number;
+  type: string;
+}
+
+// Pending evaluation awaiting a result message
+interface PendingEvaluation {
+  prevCostUsd: number;
+  prevNumTurns: number;
+  reject: (err: Error) => void;
+  resolve: (result: EvalSessionResult) => void;
+  startTime: number;
+  timer: NodeJS.Timeout;
+}
+
+// Pending control request awaiting a response from CLI
+interface PendingRequest {
+  reject: (err: Error) => void;
+  requestId: string;
+  resolve: (msg: NdjsonMessage) => void;
+  timer: NodeJS.Timeout;
 }
 
 export class EvalWsServer implements IEvalWsServer {
-  private httpServer: Server | null = null;
-  private wss: WebSocketServer | null = null;
-  private ws: WebSocket | null = null;
-  private _port: number = 0;
-  private initialized: boolean = false;
-  private _sessionId: string = "";
-  private cumulativeCostUsd: number = 0;
-  private cumulativeNumTurns: number = 0;
-  private idleTimer: NodeJS.Timeout | null = null;
-  private readonly idleTimeoutMs: number;
-  private _alive: boolean = false;
-  private buffer: string = "";
-
-  // Pending control requests (server → CLI, awaiting control_response)
-  private pendingRequests = new Map<string, PendingRequest>();
-
-  // Current evaluation awaiting a result
-  private pendingEvaluation: PendingEvaluation | null = null;
-
-  // Connection promise for first evaluation
-  private connectionPromise: Promise<void> | null = null;
-  private connectionResolve: (() => void) | null = null;
-  private connectionReject: ((err: Error) => void) | null = null;
-
-  constructor(idleTimeoutMs: number = 60_000) {
-    this.idleTimeoutMs = idleTimeoutMs;
-  }
-
-  /**
-   * Start WS server on OS-assigned port.
-   * Returns the port for --sdk-url.
-   */
-  async start(): Promise<number> {
-    return new Promise<number>((resolve, reject) => {
-      this.httpServer = createServer();
-      this.wss = new WebSocketServer({ server: this.httpServer });
-
-      this.wss.on("connection", (ws) => {
-        this.handleConnection(ws);
-      });
-
-      this.httpServer.on("error", (err) => {
-        reject(err);
-      });
-
-      this.httpServer.listen(0, "127.0.0.1", () => {
-        const addr = this.httpServer!.address();
-        if (addr && typeof addr === "object") {
-          this._port = addr.port;
-          logDebug(`Eval WS server listening on port ${this._port}`);
-          // Set up connection promise for first evaluation
-          this.connectionPromise = new Promise<void>((res, rej) => {
-            this.connectionResolve = res;
-            this.connectionReject = rej;
-          });
-          // Prevent unhandled rejection if close() is called before evaluate()
-          this.connectionPromise.catch(() => {});
-          resolve(this._port);
-        } else {
-          reject(new Error("Failed to get server address"));
-        }
-      });
-    });
-  }
-
-  /**
-   * Run one evaluation. If this is the first call, waits for CLI to connect
-   * and sends initialize. For subsequent calls, sends a new user message
-   * to the existing session (prompt cache hit).
-   */
-  async evaluate(
-    prompt: string,
-    jsonSchema: Record<string, unknown>,
-    timeoutMs: number
-  ): Promise<EvalSessionResult> {
-    this.resetIdleTimer();
-
-    if (!this.initialized) {
-      // First evaluation — wait for CLI to connect
-      await this.waitForConnection(timeoutMs);
-
-      // Send initialize with JSON schema
-      await this.sendInitialize(jsonSchema, timeoutMs);
-      this.initialized = true;
-    }
-
-    if (!this.ws || !this._alive) {
-      throw new Error("WebSocket not connected");
-    }
-
-    // Send user message and wait for result
-    return this.sendUserMessage(prompt, timeoutMs);
-  }
-
   /**
    * Whether the session is alive and connected.
    */
   get isAlive(): boolean {
     return this._alive;
   }
-
   /**
    * The port the server is listening on.
    */
   get port(): number {
     return this._port;
   }
-
+  /**
+   * Session ID from the CLI's system/init message (used for --resume).
+   */
+  get sessionId(): string {
+    return this._sessionId;
+  }
   /**
    * Cumulative cost across all evaluations in this session.
    */
   get totalCostUsd(): number {
     return this.cumulativeCostUsd;
   }
+  private _alive = false;
+  private _port = 0;
+  private _sessionId = "";
+  private buffer = "";
+  // Connection promise for first evaluation
+  private connectionPromise: null | Promise<void> = null;
+  private connectionReject: ((err: Error) => void) | null = null;
+  private connectionResolve: (() => void) | null = null;
+  private cumulativeCostUsd = 0;
 
-  /**
-   * Session ID from the CLI's system/init message (used for --resume).
-   */
-  get sessionId(): string {
-    return this._sessionId;
+  private cumulativeNumTurns = 0;
+
+  private httpServer: null | Server = null;
+
+  private readonly idleTimeoutMs: number;
+  private idleTimer: NodeJS.Timeout | null = null;
+  private initialized = false;
+
+  // Current evaluation awaiting a result
+  private pendingEvaluation: null | PendingEvaluation = null;
+
+  // Pending control requests (server → CLI, awaiting control_response)
+  private pendingRequests = new Map<string, PendingRequest>();
+
+  private ws: null | WebSocket = null;
+
+  private wss: null | WebSocketServer = null;
+
+  constructor(idleTimeoutMs = 60_000) {
+    this.idleTimeoutMs = idleTimeoutMs;
   }
 
   /**
@@ -266,6 +196,72 @@ export class EvalWsServer implements IEvalWsServer {
     }
   }
 
+  /**
+   * Run one evaluation. If this is the first call, waits for CLI to connect
+   * and sends initialize. For subsequent calls, sends a new user message
+   * to the existing session (prompt cache hit).
+   */
+  async evaluate(
+    prompt: string,
+    jsonSchema: Record<string, unknown>,
+    timeoutMs: number
+  ): Promise<EvalSessionResult> {
+    this.resetIdleTimer();
+
+    if (!this.initialized) {
+      // First evaluation — wait for CLI to connect
+      await this.waitForConnection(timeoutMs);
+
+      // Send initialize with JSON schema
+      await this.sendInitialize(jsonSchema, timeoutMs);
+      this.initialized = true;
+    }
+
+    if (!this.ws || !this._alive) {
+      throw new Error("WebSocket not connected");
+    }
+
+    // Send user message and wait for result
+    return this.sendUserMessage(prompt, timeoutMs);
+  }
+
+  /**
+   * Start WS server on OS-assigned port.
+   * Returns the port for --sdk-url.
+   */
+  async start(): Promise<number> {
+    return new Promise<number>((resolve, reject) => {
+      this.httpServer = createServer();
+      this.wss = new WebSocketServer({ server: this.httpServer });
+
+      this.wss.on("connection", (ws) => {
+        this.handleConnection(ws);
+      });
+
+      this.httpServer.on("error", (err) => {
+        reject(err);
+      });
+
+      this.httpServer.listen(0, "127.0.0.1", () => {
+        const addr = this.httpServer!.address();
+        if (addr && typeof addr === "object") {
+          this._port = addr.port;
+          logDebug(`Eval WS server listening on port ${this._port}`);
+          // Set up connection promise for first evaluation
+          this.connectionPromise = new Promise<void>((res, rej) => {
+            this.connectionResolve = res;
+            this.connectionReject = rej;
+          });
+          // Prevent unhandled rejection if close() is called before evaluate()
+          this.connectionPromise.catch(() => {});
+          resolve(this._port);
+        } else {
+          reject(new Error("Failed to get server address"));
+        }
+      });
+    });
+  }
+
   private handleConnection(ws: WebSocket): void {
     if (this.ws) {
       logWarn(`[WS] Rejecting duplicate connection on port ${this._port}`);
@@ -313,62 +309,6 @@ export class EvalWsServer implements IEvalWsServer {
   }
 
   /**
-   * NDJSON parsing — matches daemon.ts and Companion pattern.
-   */
-  private handleRawData(data: string): void {
-    this.buffer += data;
-    const lines = this.buffer.split("\n");
-    this.buffer = lines.pop() || "";
-
-    for (const line of lines) {
-      if (!line.trim()) continue;
-      try {
-        logDebug(`[WS←CLI] ${line.slice(0, 300)}`);
-        const msg = JSON.parse(line) as NdjsonMessage;
-        this.handleMessage(msg);
-      } catch (err) {
-        logWarn(`Failed to parse NDJSON line: ${line.slice(0, 100)}`);
-      }
-    }
-  }
-
-  private handleMessage(msg: NdjsonMessage): void {
-    switch (msg.type) {
-      case "system":
-        if (msg.subtype === "init") {
-          this._sessionId = (msg.session_id as string) || "";
-          logDebug(`Eval session initialized: ${this._sessionId}`);
-          // session_id captured for prompt cache. Connection promise
-          // is already resolved by handleConnection (WS connect).
-        }
-        break;
-
-      case "control_request":
-        this.handleControlRequest(msg);
-        break;
-
-      case "control_response":
-        this.handleControlResponse(msg);
-        break;
-
-      case "result":
-        this.handleResult(msg);
-        break;
-
-      case "keep_alive":
-      case "stream_event":
-      case "assistant":
-      case "tool_progress":
-        // Silently consume
-        break;
-
-      default:
-        logDebug(`Unknown eval message type: ${msg.type}`);
-        break;
-    }
-  }
-
-  /**
    * Handle can_use_tool permission requests from CLI (safety net).
    */
   private handleControlRequest(msg: NdjsonMessage): void {
@@ -382,29 +322,29 @@ export class EvalWsServer implements IEvalWsServer {
       if (READ_ONLY_TOOLS.has(toolName)) {
         // Allow read-only tools
         send(this.ws, {
-          type: "control_response",
           response: {
-            subtype: "success",
             request_id: requestId,
             response: {
               behavior: "allow",
               updatedInput: request.input || {},
             },
+            subtype: "success",
           },
+          type: "control_response",
         });
       } else {
         // Deny everything else
         logWarn(`Eval agent attempted non-read-only tool: ${toolName}`);
         send(this.ws, {
-          type: "control_response",
           response: {
-            subtype: "success",
             request_id: requestId,
             response: {
               behavior: "deny",
               message: "Only read-only tools (Read, Grep, Glob) are allowed in evaluation",
             },
+            subtype: "success",
           },
+          type: "control_response",
         });
       }
     }
@@ -425,6 +365,62 @@ export class EvalWsServer implements IEvalWsServer {
       clearTimeout(pending.timer);
       this.pendingRequests.delete(requestId);
       pending.resolve(msg);
+    }
+  }
+
+  private handleMessage(msg: NdjsonMessage): void {
+    switch (msg.type) {
+      case "assistant":
+
+      case "keep_alive":
+
+      case "stream_event":
+
+      case "tool_progress":
+        // Silently consume
+        break;
+
+      case "control_request":
+        this.handleControlRequest(msg);
+        break;
+      case "control_response":
+        this.handleControlResponse(msg);
+        break;
+      case "result":
+        this.handleResult(msg);
+        break;
+      case "system":
+        if (msg.subtype === "init") {
+          this._sessionId = (msg.session_id!) || "";
+          logDebug(`Eval session initialized: ${this._sessionId}`);
+          // session_id captured for prompt cache. Connection promise
+          // is already resolved by handleConnection (WS connect).
+        }
+        break;
+
+      default:
+        logDebug(`Unknown eval message type: ${msg.type}`);
+        break;
+    }
+  }
+
+  /**
+   * NDJSON parsing — matches daemon.ts and Companion pattern.
+   */
+  private handleRawData(data: string): void {
+    this.buffer += data;
+    const lines = this.buffer.split("\n");
+    this.buffer = lines.pop() || "";
+
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      try {
+        logDebug(`[WS←CLI] ${line.slice(0, 300)}`);
+        const msg = JSON.parse(line) as NdjsonMessage;
+        this.handleMessage(msg);
+      } catch (err) {
+        logWarn(`Failed to parse NDJSON line: ${line.slice(0, 100)}`);
+      }
     }
   }
 
@@ -466,23 +462,30 @@ export class EvalWsServer implements IEvalWsServer {
     }
 
     pending.resolve({
-      decision: structuredOutput as AgentSecurityDecision,
       costUsd: costDelta,
+      decision: structuredOutput as AgentSecurityDecision,
       durationMs: Date.now() - pending.startTime,
       numTurns: turnsDelta,
     });
   }
 
-  private async waitForConnection(timeoutMs: number): Promise<void> {
-    if (!this.connectionPromise) {
-      throw new Error("Server not started");
+  /**
+   * Reset idle timer (called on each evaluation).
+   */
+  private resetIdleTimer(): void {
+    if (this.idleTimer) {
+      clearTimeout(this.idleTimer);
     }
 
-    const timeout = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error("Connection timeout")), timeoutMs);
-    });
+    this.idleTimer = setTimeout(() => {
+      logDebug("Eval session idle timeout — closing");
+      this.close();
+    }, this.idleTimeoutMs);
 
-    await Promise.race([this.connectionPromise, timeout]);
+    // Don't prevent process exit
+    if (this.idleTimer.unref) {
+      this.idleTimer.unref();
+    }
   }
 
   /**
@@ -502,16 +505,16 @@ export class EvalWsServer implements IEvalWsServer {
         reject(new Error("Initialize timeout"));
       }, timeoutMs);
 
-      this.pendingRequests.set(requestId, { requestId, resolve, reject, timer });
+      this.pendingRequests.set(requestId, { reject, requestId, resolve, timer });
     });
 
     send(this.ws, {
-      type: "control_request",
-      request_id: requestId,
       request: {
-        subtype: "initialize",
         jsonSchema,
+        subtype: "initialize",
       },
+      request_id: requestId,
+      type: "control_request",
     });
 
     await responsePromise;
@@ -538,12 +541,12 @@ export class EvalWsServer implements IEvalWsServer {
       }, timeoutMs);
 
       this.pendingEvaluation = {
-        resolve,
-        reject,
-        timer,
-        startTime: Date.now(),
         prevCostUsd: this.cumulativeCostUsd,
         prevNumTurns: this.cumulativeNumTurns,
+        reject,
+        resolve,
+        startTime: Date.now(),
+        timer,
       };
 
       // --sdk-url / stream-json protocol: the `message` field must be an
@@ -551,31 +554,30 @@ export class EvalWsServer implements IEvalWsServer {
       // Discovered via CLI v2.1.42 error: "Expected message role 'user', got 'undefined'"
       // which traces to `R.message.role` in the CLI's stream-json parser.
       send(this.ws!, {
-        type: "user",
         message: {
+          content: [{ text: prompt, type: "text" }],
           role: "user",
-          content: [{ type: "text", text: prompt }],
         },
+        type: "user",
       });
     });
   }
 
-  /**
-   * Reset idle timer (called on each evaluation).
-   */
-  private resetIdleTimer(): void {
-    if (this.idleTimer) {
-      clearTimeout(this.idleTimer);
+  private async waitForConnection(timeoutMs: number): Promise<void> {
+    if (!this.connectionPromise) {
+      throw new Error("Server not started");
     }
 
-    this.idleTimer = setTimeout(() => {
-      logDebug("Eval session idle timeout — closing");
-      this.close();
-    }, this.idleTimeoutMs);
+    const timeout = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error("Connection timeout")), timeoutMs);
+    });
 
-    // Don't prevent process exit
-    if (this.idleTimer.unref) {
-      this.idleTimer.unref();
-    }
+    await Promise.race([this.connectionPromise, timeout]);
   }
+}
+
+function send(ws: WebSocket, msg: object): void {
+  const json = JSON.stringify(msg);
+  logDebug(`[WS→CLI] ${json.slice(0, 300)}`);
+  ws.send(json + "\n");
 }

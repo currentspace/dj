@@ -3,18 +3,18 @@ import {Hono} from 'hono'
 import {z} from 'zod'
 
 import type {Env} from '../../index'
+import type {AnthropicToolCall} from './types'
+
 import {LLM} from '../../constants'
 import {ProgressNarrator} from '../../lib/progress-narrator'
 import {getLogger, runWithLogger} from '../../utils/LoggerContext'
-import {runWithSubrequestTracker, SubrequestTracker} from '../../utils/SubrequestTracker'
 import {ServiceLogger} from '../../utils/ServiceLogger'
-
+import {runWithSubrequestTracker, SubrequestTracker} from '../../utils/SubrequestTracker'
+import {processAgenticLoop} from './agentic-loop'
+import {buildDJSystemPrompt, buildStandardSystemPrompt} from './prompts'
 import {convertToAnthropicTools, isString} from './streaming'
 import {SSEWriter} from './streaming/sse-writer'
 import {createStreamingSpotifyTools} from './tools'
-import type {AnthropicToolCall} from './types'
-import {buildDJSystemPrompt, buildStandardSystemPrompt} from './prompts'
-import {processAgenticLoop} from './agentic-loop'
 
 // Request schema
 const ChatRequestSchema = z.object({
@@ -247,7 +247,7 @@ chatStreamRouter.post('/message', async c => {
           const anthropicTools = convertToAnthropicTools(tools)
 
           // DJ Mode: Fetch current playback context for real-time DJ assistant
-          let djContext: {nowPlaying?: {artist: string; progress: string; track: string}; queueDepth?: number} | null =
+          let djContext: null | {nowPlaying?: {artist: string; progress: string; track: string}; queueDepth?: number} =
             null
           if (request.mode === 'dj') {
             djContext = await fetchDJContext(spotifyToken)
@@ -555,7 +555,7 @@ chatStreamRouter.get('/events', async c => {
  */
 async function fetchDJContext(
   spotifyToken: string,
-): Promise<{nowPlaying?: {artist: string; progress: string; track: string}; queueDepth?: number} | null> {
+): Promise<null | {nowPlaying?: {artist: string; progress: string; track: string}; queueDepth?: number}> {
   try {
     const [nowPlayingRes, queueRes] = await Promise.all([
       fetch('https://api.spotify.com/v1/me/player/currently-playing', {
@@ -566,28 +566,42 @@ async function fetchDJContext(
       }),
     ])
 
-    let djContext: {nowPlaying?: {artist: string; progress: string; track: string}; queueDepth?: number} | null = null
+    let djContext: null | {nowPlaying?: {artist: string; progress: string; track: string}; queueDepth?: number} = null
+
+    const NowPlayingSchema = z.object({
+      item: z.object({
+        artists: z.array(z.object({name: z.string()})).optional(),
+        duration_ms: z.number().optional(),
+        name: z.string().optional(),
+      }).optional(),
+      progress_ms: z.number().optional(),
+    }).passthrough()
+
+    const QueueSchema = z.object({
+      queue: z.array(z.unknown()).optional(),
+    }).passthrough()
 
     if (nowPlayingRes.ok && nowPlayingRes.status !== 204) {
-      const npData = (await nowPlayingRes.json()) as {
-        is_playing: boolean
-        item?: {artists?: Array<{name: string}>; duration_ms?: number; name?: string}
-        progress_ms?: number
-      }
-      const progress = npData.progress_ms ?? 0
-      const duration = npData.item?.duration_ms ?? 0
-      djContext = {
-        nowPlaying: {
-          artist: npData.item?.artists?.map(a => a.name).join(', ') ?? 'Unknown',
-          progress: `${Math.floor(progress / 1000)}s / ${Math.floor(duration / 1000)}s`,
-          track: npData.item?.name ?? 'Unknown',
-        },
+      const npParsed = NowPlayingSchema.safeParse(await nowPlayingRes.json())
+      if (npParsed.success) {
+        const npData = npParsed.data
+        const progress = npData.progress_ms ?? 0
+        const duration = npData.item?.duration_ms ?? 0
+        djContext = {
+          nowPlaying: {
+            artist: npData.item?.artists?.map((a) => a.name).join(', ') ?? 'Unknown',
+            progress: `${Math.floor(progress / 1000)}s / ${Math.floor(duration / 1000)}s`,
+            track: npData.item?.name ?? 'Unknown',
+          },
+        }
       }
     }
 
     if (queueRes.ok) {
-      const qData = (await queueRes.json()) as {queue?: unknown[]}
-      djContext = {...djContext, queueDepth: qData.queue?.length ?? 0}
+      const qParsed = QueueSchema.safeParse(await queueRes.json())
+      if (qParsed.success) {
+        djContext = {...djContext, queueDepth: qParsed.data.queue?.length ?? 0}
+      }
     }
 
     return djContext

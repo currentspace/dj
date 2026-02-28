@@ -18,6 +18,30 @@ export class EnrichmentResultBuilder {
     source: 'deezer',
   }
 
+  asNull(): this {
+    this.data = {
+      bpm: null,
+      gain: null,
+      rank: null,
+      release_date: null,
+      source: null,
+    }
+    return this
+  }
+
+  build(): BPMEnrichment {
+    return {...this.data}
+  }
+
+  buildCached(ttl = 90 * 24 * 60 * 60, isMiss = false): EnrichmentCache {
+    return {
+      enrichment: this.build(),
+      fetched_at: new Date().toISOString(),
+      is_miss: isMiss,
+      ttl,
+    }
+  }
+
   withBPM(bpm: null | number): this {
     this.data.bpm = bpm
     return this
@@ -42,30 +66,6 @@ export class EnrichmentResultBuilder {
     this.data.source = source
     return this
   }
-
-  asNull(): this {
-    this.data = {
-      bpm: null,
-      gain: null,
-      rank: null,
-      release_date: null,
-      source: null,
-    }
-    return this
-  }
-
-  build(): BPMEnrichment {
-    return {...this.data}
-  }
-
-  buildCached(ttl = 90 * 24 * 60 * 60, isMiss = false): EnrichmentCache {
-    return {
-      enrichment: this.build(),
-      fetched_at: new Date().toISOString(),
-      ttl,
-      is_miss: isMiss,
-    }
-  }
 }
 
 /**
@@ -73,48 +73,57 @@ export class EnrichmentResultBuilder {
  */
 export class LastFmSignalsBuilder {
   private data: LastFmSignals = {
-    canonicalArtist: 'Test Artist',
-    canonicalTrack: 'Test Track',
-    url: 'https://www.last.fm/music/Test+Artist/_/Test+Track',
-    mbid: 'track-mbid-123',
-    listeners: 125000,
-    playcount: 2500000,
-    duration: 240,
-    topTags: ['indie', 'alternative', 'rock'],
-    similar: [
-      {artist: 'Similar Artist 1', name: 'Similar Track 1', match: 0.95},
-      {artist: 'Similar Artist 2', name: 'Similar Track 2', match: 0.85},
-    ],
     album: {
-      title: 'Test Album',
       artist: 'Test Artist',
-      mbid: 'album-mbid-789',
-      url: 'https://www.last.fm/music/Test+Artist/Test+Album',
       image: 'https://lastfm.freetls.fastly.net/i/u/174s/test.jpg',
-    },
-    wiki: {
-      summary: 'Test track summary',
-      content: 'Test track full content',
-      published: 'Sat, 1 Jan 2023 00:00:00 +0000',
+      mbid: 'album-mbid-789',
+      title: 'Test Album',
+      url: 'https://www.last.fm/music/Test+Artist/Test+Album',
     },
     artistInfo: {
+      bio: {
+        content: 'Test artist bio full content',
+        summary: 'Test artist bio summary',
+      },
+      images: {
+        large: 'https://lastfm.freetls.fastly.net/i/u/174s/artist.jpg',
+        medium: 'https://lastfm.freetls.fastly.net/i/u/64s/artist.jpg',
+        small: 'https://lastfm.freetls.fastly.net/i/u/34s/artist.jpg',
+      },
       listeners: 500000,
       playcount: 10000000,
-      tags: ['indie', 'alternative'],
       similar: [
         {name: 'Similar Artist 1', url: 'https://www.last.fm/music/Similar+Artist+1'},
         {name: 'Similar Artist 2', url: 'https://www.last.fm/music/Similar+Artist+2'},
       ],
-      bio: {
-        summary: 'Test artist bio summary',
-        content: 'Test artist bio full content',
-      },
-      images: {
-        small: 'https://lastfm.freetls.fastly.net/i/u/34s/artist.jpg',
-        medium: 'https://lastfm.freetls.fastly.net/i/u/64s/artist.jpg',
-        large: 'https://lastfm.freetls.fastly.net/i/u/174s/artist.jpg',
-      },
+      tags: ['indie', 'alternative'],
     },
+    canonicalArtist: 'Test Artist',
+    canonicalTrack: 'Test Track',
+    duration: 240,
+    listeners: 125000,
+    mbid: 'track-mbid-123',
+    playcount: 2500000,
+    similar: [
+      {artist: 'Similar Artist 1', match: 0.95, name: 'Similar Track 1'},
+      {artist: 'Similar Artist 2', match: 0.85, name: 'Similar Track 2'},
+    ],
+    topTags: ['indie', 'alternative', 'rock'],
+    url: 'https://www.last.fm/music/Test+Artist/_/Test+Track',
+    wiki: {
+      content: 'Test track full content',
+      published: 'Sat, 1 Jan 2023 00:00:00 +0000',
+      summary: 'Test track summary',
+    },
+  }
+
+  build(): LastFmSignals {
+    return {...this.data}
+  }
+
+  withArtistInfo(info: LastFmSignals['artistInfo']): this {
+    this.data.artistInfo = info
+    return this
   }
 
   withCanonicalNames(artist: string, track: string): this {
@@ -128,26 +137,6 @@ export class LastFmSignalsBuilder {
     return this
   }
 
-  withPlaycount(playcount: number): this {
-    this.data.playcount = playcount
-    return this
-  }
-
-  withTags(tags: string[]): this {
-    this.data.topTags = tags
-    return this
-  }
-
-  withSimilar(similar: {artist: string; name: string; match: number}[]): this {
-    this.data.similar = similar
-    return this
-  }
-
-  withArtistInfo(info: LastFmSignals['artistInfo']): this {
-    this.data.artistInfo = info
-    return this
-  }
-
   withoutArtistInfo(): this {
     this.data.artistInfo = null
     return this
@@ -158,8 +147,19 @@ export class LastFmSignalsBuilder {
     return this
   }
 
-  build(): LastFmSignals {
-    return {...this.data}
+  withPlaycount(playcount: number): this {
+    this.data.playcount = playcount
+    return this
+  }
+
+  withSimilar(similar: {artist: string; match: number; name: string;}[]): this {
+    this.data.similar = similar
+    return this
+  }
+
+  withTags(tags: string[]): this {
+    this.data.topTags = tags
+    return this
   }
 }
 
@@ -168,76 +168,110 @@ export class LastFmSignalsBuilder {
  */
 export class PlaylistAnalysisBuilder {
   private data = {
-    playlist_name: 'Test Playlist',
-    playlist_description: 'A test playlist',
-    total_tracks: 10,
-    metadata_analysis: {
-      avg_popularity: 75,
-      avg_duration_ms: 240000,
-      avg_duration_minutes: 4,
-      explicit_tracks: 2,
-      explicit_percentage: 20,
-      top_genres: ['indie', 'alternative', 'rock'],
-      release_year_range: {
-        oldest: 2015,
-        newest: 2023,
-        average: 2019,
-      },
-      total_artists: 8,
-    },
     deezer_analysis: {
-      total_checked: 10,
-      tracks_found: 7,
       bpm: {
         avg: 120,
-        range: {min: 90, max: 150},
-        sample_size: 7,
-      },
-      rank: {
-        avg: 850000,
-        range: {min: 500000, max: 1200000},
+        range: {max: 150, min: 90},
         sample_size: 7,
       },
       gain: {
         avg: -8.5,
-        range: {min: -12, max: -6},
+        range: {max: -6, min: -12},
+        sample_size: 7,
+      },
+      rank: {
+        avg: 850000,
+        range: {max: 1200000, min: 500000},
         sample_size: 7,
       },
       source: 'deezer' as const,
+      total_checked: 10,
+      tracks_found: 7,
     },
     lastfm_analysis: {
-      crowd_tags: [
-        {tag: 'indie', count: 8},
-        {tag: 'alternative', count: 6},
-        {tag: 'rock', count: 5},
-      ],
+      artists_enriched: 8,
       avg_listeners: 125000,
       avg_playcount: 2500000,
-      similar_tracks: ['Artist 1 - Track 1', 'Artist 2 - Track 2'],
+      crowd_tags: [
+        {count: 8, tag: 'indie'},
+        {count: 6, tag: 'alternative'},
+        {count: 5, tag: 'rock'},
+      ],
       sample_size: 10,
-      artists_enriched: 8,
+      similar_tracks: ['Artist 1 - Track 1', 'Artist 2 - Track 2'],
       source: 'lastfm' as const,
     },
+    message: 'Analysis complete',
+    metadata_analysis: {
+      avg_duration_minutes: 4,
+      avg_duration_ms: 240000,
+      avg_popularity: 75,
+      explicit_percentage: 20,
+      explicit_tracks: 2,
+      release_year_range: {
+        average: 2019,
+        newest: 2023,
+        oldest: 2015,
+      },
+      top_genres: ['indie', 'alternative', 'rock'],
+      total_artists: 8,
+    },
+    playlist_description: 'A test playlist',
+    playlist_name: 'Test Playlist',
+    total_tracks: 10,
     track_ids: [
       'spotify:track:track1',
       'spotify:track:track2',
       'spotify:track:track3',
     ],
-    message: 'Analysis complete',
   }
 
-  withPlaylistName(name: string): this {
-    this.data.playlist_name = name
-    return this
-  }
-
-  withTotalTracks(count: number): this {
-    this.data.total_tracks = count
-    return this
+  build() {
+    return {...this.data}
   }
 
   withAvgPopularity(popularity: number): this {
     this.data.metadata_analysis.avg_popularity = popularity
+    return this
+  }
+
+  withBPMStats(avg: number, min: number, max: number, sampleSize: number): this {
+    this.data.deezer_analysis.bpm = {avg, range: {max, min}, sample_size: sampleSize}
+    return this
+  }
+
+  withCrowdTags(tags: {count: number; tag: string;}[]): this {
+    this.data.lastfm_analysis.crowd_tags = tags
+    return this
+  }
+
+  withoutDeezerAnalysis(): this {
+    this.data.deezer_analysis = {
+      bpm: {avg: 0, range: {max: 0, min: 0}, sample_size: 0},
+      gain: {avg: 0, range: {max: 0, min: 0}, sample_size: 0},
+      rank: {avg: 0, range: {max: 0, min: 0}, sample_size: 0},
+      source: 'deezer',
+      total_checked: 0,
+      tracks_found: 0,
+    }
+    return this
+  }
+
+  withoutLastFmAnalysis(): this {
+    this.data.lastfm_analysis = {
+      artists_enriched: 0,
+      avg_listeners: 0,
+      avg_playcount: 0,
+      crowd_tags: [],
+      sample_size: 0,
+      similar_tracks: [],
+      source: 'lastfm',
+    }
+    return this
+  }
+
+  withPlaylistName(name: string): this {
+    this.data.playlist_name = name
     return this
   }
 
@@ -246,43 +280,9 @@ export class PlaylistAnalysisBuilder {
     return this
   }
 
-  withBPMStats(avg: number, min: number, max: number, sampleSize: number): this {
-    this.data.deezer_analysis.bpm = {avg, range: {min, max}, sample_size: sampleSize}
+  withTotalTracks(count: number): this {
+    this.data.total_tracks = count
     return this
-  }
-
-  withCrowdTags(tags: {tag: string; count: number}[]): this {
-    this.data.lastfm_analysis.crowd_tags = tags
-    return this
-  }
-
-  withoutDeezerAnalysis(): this {
-    this.data.deezer_analysis = {
-      total_checked: 0,
-      tracks_found: 0,
-      bpm: {avg: 0, range: {min: 0, max: 0}, sample_size: 0},
-      rank: {avg: 0, range: {min: 0, max: 0}, sample_size: 0},
-      gain: {avg: 0, range: {min: 0, max: 0}, sample_size: 0},
-      source: 'deezer',
-    }
-    return this
-  }
-
-  withoutLastFmAnalysis(): this {
-    this.data.lastfm_analysis = {
-      crowd_tags: [],
-      avg_listeners: 0,
-      avg_playcount: 0,
-      similar_tracks: [],
-      sample_size: 0,
-      artists_enriched: 0,
-      source: 'lastfm',
-    }
-    return this
-  }
-
-  build() {
-    return {...this.data}
   }
 }
 
@@ -295,38 +295,30 @@ export class SSEWriterBuilder {
 
   build(): WritableStreamDefaultWriter<Uint8Array> {
     return {
-      ready: Promise.resolve(),
-      desiredSize: 1,
+      abort: async () => {
+        this.closed = true
+      },
+      close: async () => {
+        this.closed = true
+      },
       closed: Promise.resolve(),
+      desiredSize: 1,
+      ready: Promise.resolve(),
+      releaseLock: () => { /* noop */ },
       write: async (chunk: Uint8Array) => {
         if (this.closed) {
           throw new Error('Writer is closed')
         }
         this.chunks.push(new TextDecoder().decode(chunk))
       },
-      close: async () => {
-        this.closed = true
-      },
-      abort: async () => {
-        this.closed = true
-      },
-      releaseLock: () => {},
     }
   }
 
-  getWrittenChunks(): string[] {
-    return [...this.chunks]
-  }
-
-  getWrittenText(): string {
-    return this.chunks.join('')
-  }
-
-  getSSEEvents(): {event?: string; data?: string}[] {
-    const events: {event?: string; data?: string}[] = []
+  getSSEEvents(): {data?: string; event?: string;}[] {
+    const events: {data?: string; event?: string;}[] = []
     const lines = this.getWrittenText().split('\n')
 
-    let currentEvent: {event?: string; data?: string} = {}
+    let currentEvent: {data?: string; event?: string;} = {}
     for (const line of lines) {
       if (line.startsWith('event:')) {
         currentEvent.event = line.substring(6).trim()
@@ -342,32 +334,20 @@ export class SSEWriterBuilder {
 
     return events
   }
+
+  getWrittenChunks(): string[] {
+    return [...this.chunks]
+  }
+
+  getWrittenText(): string {
+    return this.chunks.join('')
+  }
 }
 
 /**
  * Faker-style data generation utilities
  */
 export const faker = {
-  /**
-   * Generate a random ISRC code
-   */
-  isrc(): string {
-    const country = ['US', 'GB', 'DE', 'FR', 'JP'][Math.floor(Math.random() * 5)]
-    const registrant = Math.random().toString(36).substring(2, 5).toUpperCase()
-    const year = (Math.floor(Math.random() * 50) + 70).toString().padStart(2, '0')
-    const designation = Math.floor(Math.random() * 100000)
-      .toString()
-      .padStart(5, '0')
-    return `${country}${registrant}${year}${designation}`
-  },
-
-  /**
-   * Generate a random Spotify ID
-   */
-  spotifyId(): string {
-    return Math.random().toString(36).substring(2, 24)
-  },
-
   /**
    * Generate a random artist name
    */
@@ -391,16 +371,6 @@ export const faker = {
   },
 
   /**
-   * Generate a random track name
-   */
-  trackName(): string {
-    const adjectives = ['Lost', 'Broken', 'Golden', 'Silent', 'Wild', 'Eternal']
-    const nouns = ['Dreams', 'Hearts', 'Lights', 'Roads', 'Nights', 'Days']
-
-    return `${adjectives[Math.floor(Math.random() * adjectives.length)]} ${nouns[Math.floor(Math.random() * nouns.length)]}`
-  },
-
-  /**
    * Generate a random BPM
    */
   bpm(): number {
@@ -408,24 +378,10 @@ export const faker = {
   },
 
   /**
-   * Generate a random popularity score
-   */
-  popularity(): number {
-    return Math.floor(Math.random() * 100)
-  },
-
-  /**
    * Generate a random duration in milliseconds
    */
   durationMs(): number {
     return Math.floor(Math.random() * 300000) + 120000 // 2-7 minutes
-  },
-
-  /**
-   * Generate a random release year
-   */
-  releaseYear(): number {
-    return Math.floor(Math.random() * 50) + 1974 // 1974-2024
   },
 
   /**
@@ -446,6 +402,76 @@ export const faker = {
     ]
     return genres[Math.floor(Math.random() * genres.length)]
   },
+
+  /**
+   * Generate a random ISRC code
+   */
+  isrc(): string {
+    const country = ['US', 'GB', 'DE', 'FR', 'JP'][Math.floor(Math.random() * 5)]
+    const registrant = Math.random().toString(36).substring(2, 5).toUpperCase()
+    const year = (Math.floor(Math.random() * 50) + 70).toString().padStart(2, '0')
+    const designation = Math.floor(Math.random() * 100000)
+      .toString()
+      .padStart(5, '0')
+    return `${country}${registrant}${year}${designation}`
+  },
+
+  /**
+   * Generate a random popularity score
+   */
+  popularity(): number {
+    return Math.floor(Math.random() * 100)
+  },
+
+  /**
+   * Generate a random release year
+   */
+  releaseYear(): number {
+    return Math.floor(Math.random() * 50) + 1974 // 1974-2024
+  },
+
+  /**
+   * Generate a random Spotify ID
+   */
+  spotifyId(): string {
+    return Math.random().toString(36).substring(2, 24)
+  },
+
+  /**
+   * Generate a random track name
+   */
+  trackName(): string {
+    const adjectives = ['Lost', 'Broken', 'Golden', 'Silent', 'Wild', 'Eternal']
+    const nouns = ['Dreams', 'Hearts', 'Lights', 'Roads', 'Nights', 'Days']
+
+    return `${adjectives[Math.floor(Math.random() * adjectives.length)]} ${nouns[Math.floor(Math.random() * nouns.length)]}`
+  },
+}
+
+/**
+ * Build a mock Deezer track response
+ * Must match DeezerTrackSchema from shared-types
+ * NOTE: Use explicit undefined check for nullable fields to allow passing null
+ */
+export function buildDeezerTrack(overrides?: {
+  bpm?: null | number
+  duration?: number
+  gain?: null | number
+  id?: number
+  rank?: null | number
+  release_date?: null | string
+  title?: string
+}) {
+  return {
+    // Use undefined check (not ??) to allow explicit null to pass through
+    bpm: overrides?.bpm !== undefined ? overrides.bpm : 120,
+    duration: overrides?.duration ?? 180, // seconds
+    gain: overrides?.gain !== undefined ? overrides.gain : -8.5,
+    id: overrides?.id ?? 12345,
+    rank: overrides?.rank !== undefined ? overrides.rank : 500000,
+    release_date: overrides?.release_date !== undefined ? overrides.release_date : '2023-01-15',
+    title: overrides?.title ?? 'Test Track',
+  }
 }
 
 /**
@@ -463,253 +489,30 @@ export function buildEnrichmentResult(overrides?: Partial<BPMEnrichment>): BPMEn
   return builder.build()
 }
 
-export function buildLastFmSignals(overrides?: Partial<LastFmSignals>): LastFmSignals {
-  const builder = new LastFmSignalsBuilder()
-  if (overrides) {
-    if (overrides.canonicalArtist && overrides.canonicalTrack) {
-      builder.withCanonicalNames(overrides.canonicalArtist, overrides.canonicalTrack)
-    }
-    if (overrides.listeners !== undefined) builder.withListeners(overrides.listeners)
-    if (overrides.playcount !== undefined) builder.withPlaycount(overrides.playcount)
-    if (overrides.topTags) builder.withTags(overrides.topTags)
-    if (overrides.similar) builder.withSimilar(overrides.similar)
-    if (overrides.artistInfo !== undefined) builder.withArtistInfo(overrides.artistInfo)
-  }
-  return builder.build()
-}
-
-export function buildPlaylistAnalysis() {
-  return new PlaylistAnalysisBuilder()
-}
-
-export function buildSSEWriter() {
-  return new SSEWriterBuilder()
-}
-
-/**
- * Build a mock Spotify track
- */
-export function buildSpotifyTrack(overrides?: {
-  id?: string
-  name?: string
-  artists?: { name: string }[]
-  duration_ms?: number
-  external_ids?: { isrc?: string }
-}): {
-  id: string
-  name: string
-  artists: { name: string }[]
-  duration_ms: number
-  external_ids?: { isrc?: string }
-} {
-  return {
-    id: overrides?.id ?? 'track123',
-    name: overrides?.name ?? 'Test Track',
-    artists: overrides?.artists ?? [{ name: 'Test Artist' }],
-    duration_ms: overrides?.duration_ms ?? 180000, // 3 minutes
-    external_ids: overrides?.external_ids,
-  }
-}
-
-/**
- * Build a mock Deezer track response
- * Must match DeezerTrackSchema from shared-types
- * NOTE: Use explicit undefined check for nullable fields to allow passing null
- */
-export function buildDeezerTrack(overrides?: {
-  id?: number
-  title?: string
-  duration?: number
-  bpm?: number | null
-  gain?: number | null
-  rank?: number | null
-  release_date?: string | null
-}) {
-  return {
-    id: overrides?.id ?? 12345,
-    title: overrides?.title ?? 'Test Track',
-    duration: overrides?.duration ?? 180, // seconds
-    // Use undefined check (not ??) to allow explicit null to pass through
-    bpm: overrides?.bpm !== undefined ? overrides.bpm : 120,
-    gain: overrides?.gain !== undefined ? overrides.gain : -8.5,
-    rank: overrides?.rank !== undefined ? overrides.rank : 500000,
-    release_date: overrides?.release_date !== undefined ? overrides.release_date : '2023-01-15',
-  }
-}
-
-/**
- * Build a mock MusicBrainz recording
- * Must match MusicBrainzRecordingSchema from shared-types
- */
-export function buildMusicBrainzRecording(overrides?: {
-  id?: string
-  title?: string
-  length?: number
-  isrcs?: string[]
-  'artist-credit'?: { artist: { id: string; name: string }; name: string }[]
-}) {
-  return {
-    id: overrides?.id ?? 'mbid-12345',
-    title: overrides?.title ?? 'Test Track',
-    length: overrides?.length ?? 180000, // milliseconds
-    isrcs: overrides?.isrcs ?? ['USRC12345678'],
-    // artist-credit must match MusicBrainzArtistCreditSchema
-    'artist-credit': overrides?.['artist-credit'] ?? [{
-      artist: { id: 'artist-mbid-123', name: 'Test Artist' },
-      name: 'Test Artist',
-    }],
-  }
-}
-
-/**
- * Build a mock MusicBrainz search response
- * Must match MusicBrainzSearchResponseSchema from shared-types
- * The schema requires count and offset fields, not just recordings!
- */
-export function buildMusicBrainzSearchResponse(recordings: ReturnType<typeof buildMusicBrainzRecording>[]) {
-  return {
-    count: recordings.length,
-    offset: 0,
-    recordings,
-  }
-}
-
-/**
- * Build a mock Last.fm track
- */
-export function buildLastFmTrack(overrides?: {
-  artist?: string
-  name?: string
-  duration_ms?: number
-}): {
-  artist: string
-  name: string
-  duration_ms?: number
-} {
-  return {
-    artist: overrides?.artist ?? 'Test Artist',
-    name: overrides?.name ?? 'Test Track',
-    duration_ms: overrides?.duration_ms,
-  }
-}
-
-/**
- * Build a mock Last.fm track info response
- * Must match LastFmTrackInfoResponseSchema from shared-types
- * Note: wiki field is optional() not nullable(), so omit it when not provided
- */
-export function buildLastFmTrackInfo(overrides?: {
-  listeners?: number
-  playcount?: number
-  mbid?: string | null
-  url?: string
-  duration?: number | null
-  album?: {
-    artist: string
-    title: string
-    mbid: string | null
-    url: string
-    image: { '#text': string; size: string }[]
-  }
-  wiki?: {
-    summary: string
-    content: string
-    published: string
-  }
-}) {
-  // Build base track object
-  const track: Record<string, unknown> = {
-    name: 'Test Track',
-    mbid: overrides?.mbid ?? 'mbid-12345',
-    url: overrides?.url ?? 'https://www.last.fm/music/test',
-    duration: overrides?.duration ?? 180000,
-    listeners: overrides?.listeners ?? 10000,
-    playcount: overrides?.playcount ?? 50000,
-    artist: {
-      name: 'Test Artist',
-      mbid: 'artist-mbid',
-      url: 'https://www.last.fm/music/test+artist',
-    },
-    album: overrides?.album ?? {
-      artist: 'Test Artist',
-      title: 'Test Album',
-      mbid: 'album-mbid',
-      url: 'https://www.last.fm/music/test+album',
-      image: [
-        { '#text': 'https://lastfm.freetls.fastly.net/i/u/34s/small.jpg', size: 'small' },
-        { '#text': 'https://lastfm.freetls.fastly.net/i/u/64s/medium.jpg', size: 'medium' },
-        { '#text': 'https://lastfm.freetls.fastly.net/i/u/174s/large.jpg', size: 'large' },
-      ],
-    },
-  }
-
-  // Only include wiki if explicitly provided (schema says optional(), not nullable())
-  if (overrides?.wiki) {
-    track.wiki = overrides.wiki
-  }
-
-  return { track }
-}
-
-/**
- * Build a mock Last.fm top tags response
- */
-export function buildLastFmTopTags(tags: string[]) {
-  return {
-    toptags: {
-      tag: tags.map(name => ({ name, count: 100, url: `https://last.fm/tag/${name}` })),
-    },
-  }
-}
-
-/**
- * Build a mock Last.fm similar tracks response
- * Must match LastFmTrackSimilarResponseSchema from shared-types
- */
-export function buildLastFmSimilarTracks(
-  tracks: { artist: string; name: string; match: number }[],
-) {
-  return {
-    similartracks: {
-      track: tracks.map(t => ({
-        name: t.name,
-        match: t.match,
-        // artist must include url (required by LastFmArtistSchema)
-        artist: {
-          name: t.artist,
-          url: `https://www.last.fm/music/${encodeURIComponent(t.artist)}`,
-        },
-        url: `https://www.last.fm/music/${encodeURIComponent(t.artist)}/_/${encodeURIComponent(t.name)}`,
-      })),
-    },
-  }
-}
-
 /**
  * Build a mock Last.fm artist info response
  */
 export function buildLastFmArtistInfo(overrides?: {
+  bio?: { content: string; summary: string; }
+  images?: { '#text': string; size: string }[]
   listeners?: number
   playcount?: number
-  tags?: string[]
   similar?: { name: string; url: string }[]
-  bio?: { summary: string; content: string }
-  images?: { '#text': string; size: string }[]
+  tags?: string[]
 }) {
   return {
     artist: {
-      name: 'Test Artist',
-      mbid: 'artist-mbid',
-      url: 'https://last.fm/music/test+artist',
+      bio: overrides?.bio ?? {
+        content: 'Test artist bio content',
+        summary: 'Test artist bio summary',
+      },
       image: overrides?.images ?? [
         { '#text': 'http://example.com/small.jpg', size: 'small' },
         { '#text': 'http://example.com/medium.jpg', size: 'medium' },
         { '#text': 'http://example.com/large.jpg', size: 'large' },
       ],
-      stats: {
-        listeners: overrides?.listeners ?? 100000,
-        playcount: overrides?.playcount ?? 500000,
-      },
+      mbid: 'artist-mbid',
+      name: 'Test Artist',
       similar: {
         artist:
           overrides?.similar?.map(s => ({
@@ -717,13 +520,14 @@ export function buildLastFmArtistInfo(overrides?: {
             url: s.url,
           })) ?? [],
       },
+      stats: {
+        listeners: overrides?.listeners ?? 100000,
+        playcount: overrides?.playcount ?? 500000,
+      },
       tags: {
         tag: overrides?.tags?.map(name => ({ name })) ?? [],
       },
-      bio: overrides?.bio ?? {
-        summary: 'Test artist bio summary',
-        content: 'Test artist bio content',
-      },
+      url: 'https://last.fm/music/test+artist',
     },
   }
 }
@@ -732,10 +536,10 @@ export function buildLastFmArtistInfo(overrides?: {
  * Build a mock Last.fm track correction response
  * Must match LastFmTrackCorrectionResponseSchema from shared-types
  */
-export function buildLastFmCorrection(overrides?: {
+export function buildLastFmCorrection(overrides?: null | {
   artist?: string
   track?: string
-} | null) {
+}) {
   if (overrides === null) {
     // No correction available - schema allows null
     return {
@@ -762,4 +566,200 @@ export function buildLastFmCorrection(overrides?: {
       },
     },
   }
+}
+
+export function buildLastFmSignals(overrides?: Partial<LastFmSignals>): LastFmSignals {
+  const builder = new LastFmSignalsBuilder()
+  if (overrides) {
+    if (overrides.canonicalArtist && overrides.canonicalTrack) {
+      builder.withCanonicalNames(overrides.canonicalArtist, overrides.canonicalTrack)
+    }
+    if (overrides.listeners !== undefined) builder.withListeners(overrides.listeners)
+    if (overrides.playcount !== undefined) builder.withPlaycount(overrides.playcount)
+    if (overrides.topTags) builder.withTags(overrides.topTags)
+    if (overrides.similar) builder.withSimilar(overrides.similar)
+    if (overrides.artistInfo !== undefined) builder.withArtistInfo(overrides.artistInfo)
+  }
+  return builder.build()
+}
+
+/**
+ * Build a mock Last.fm similar tracks response
+ * Must match LastFmTrackSimilarResponseSchema from shared-types
+ */
+export function buildLastFmSimilarTracks(
+  tracks: { artist: string; match: number; name: string; }[],
+) {
+  return {
+    similartracks: {
+      track: tracks.map(t => ({
+        // artist must include url (required by LastFmArtistSchema)
+        artist: {
+          name: t.artist,
+          url: `https://www.last.fm/music/${encodeURIComponent(t.artist)}`,
+        },
+        match: t.match,
+        name: t.name,
+        url: `https://www.last.fm/music/${encodeURIComponent(t.artist)}/_/${encodeURIComponent(t.name)}`,
+      })),
+    },
+  }
+}
+
+/**
+ * Build a mock Last.fm top tags response
+ */
+export function buildLastFmTopTags(tags: string[]) {
+  return {
+    toptags: {
+      tag: tags.map(name => ({ count: 100, name, url: `https://last.fm/tag/${name}` })),
+    },
+  }
+}
+
+/**
+ * Build a mock Last.fm track
+ */
+export function buildLastFmTrack(overrides?: {
+  artist?: string
+  duration_ms?: number
+  name?: string
+}): {
+  artist: string
+  duration_ms?: number
+  name: string
+} {
+  return {
+    artist: overrides?.artist ?? 'Test Artist',
+    duration_ms: overrides?.duration_ms,
+    name: overrides?.name ?? 'Test Track',
+  }
+}
+
+/**
+ * Build a mock Last.fm track info response
+ * Must match LastFmTrackInfoResponseSchema from shared-types
+ * Note: wiki field is optional() not nullable(), so omit it when not provided
+ */
+export function buildLastFmTrackInfo(overrides?: {
+  album?: {
+    artist: string
+    image: { '#text': string; size: string }[]
+    mbid: null | string
+    title: string
+    url: string
+  }
+  duration?: null | number
+  listeners?: number
+  mbid?: null | string
+  playcount?: number
+  url?: string
+  wiki?: {
+    content: string
+    published: string
+    summary: string
+  }
+}) {
+  // Build base track object
+  const track: Record<string, unknown> = {
+    album: overrides?.album ?? {
+      artist: 'Test Artist',
+      image: [
+        { '#text': 'https://lastfm.freetls.fastly.net/i/u/34s/small.jpg', size: 'small' },
+        { '#text': 'https://lastfm.freetls.fastly.net/i/u/64s/medium.jpg', size: 'medium' },
+        { '#text': 'https://lastfm.freetls.fastly.net/i/u/174s/large.jpg', size: 'large' },
+      ],
+      mbid: 'album-mbid',
+      title: 'Test Album',
+      url: 'https://www.last.fm/music/test+album',
+    },
+    artist: {
+      mbid: 'artist-mbid',
+      name: 'Test Artist',
+      url: 'https://www.last.fm/music/test+artist',
+    },
+    duration: overrides?.duration ?? 180000,
+    listeners: overrides?.listeners ?? 10000,
+    mbid: overrides?.mbid ?? 'mbid-12345',
+    name: 'Test Track',
+    playcount: overrides?.playcount ?? 50000,
+    url: overrides?.url ?? 'https://www.last.fm/music/test',
+  }
+
+  // Only include wiki if explicitly provided (schema says optional(), not nullable())
+  if (overrides?.wiki) {
+    track.wiki = overrides.wiki
+  }
+
+  return { track }
+}
+
+/**
+ * Build a mock MusicBrainz recording
+ * Must match MusicBrainzRecordingSchema from shared-types
+ */
+export function buildMusicBrainzRecording(overrides?: {
+  'artist-credit'?: { artist: { id: string; name: string }; name: string }[]
+  id?: string
+  isrcs?: string[]
+  length?: number
+  title?: string
+}) {
+  return {
+    // artist-credit must match MusicBrainzArtistCreditSchema
+    'artist-credit': overrides?.['artist-credit'] ?? [{
+      artist: { id: 'artist-mbid-123', name: 'Test Artist' },
+      name: 'Test Artist',
+    }],
+    id: overrides?.id ?? 'mbid-12345',
+    isrcs: overrides?.isrcs ?? ['USRC12345678'],
+    length: overrides?.length ?? 180000, // milliseconds
+    title: overrides?.title ?? 'Test Track',
+  }
+}
+
+/**
+ * Build a mock MusicBrainz search response
+ * Must match MusicBrainzSearchResponseSchema from shared-types
+ * The schema requires count and offset fields, not just recordings!
+ */
+export function buildMusicBrainzSearchResponse(recordings: ReturnType<typeof buildMusicBrainzRecording>[]) {
+  return {
+    count: recordings.length,
+    offset: 0,
+    recordings,
+  }
+}
+
+export function buildPlaylistAnalysis() {
+  return new PlaylistAnalysisBuilder()
+}
+
+/**
+ * Build a mock Spotify track
+ */
+export function buildSpotifyTrack(overrides?: {
+  artists?: { name: string }[]
+  duration_ms?: number
+  external_ids?: { isrc?: string }
+  id?: string
+  name?: string
+}): {
+  artists: { name: string }[]
+  duration_ms: number
+  external_ids?: { isrc?: string }
+  id: string
+  name: string
+} {
+  return {
+    artists: overrides?.artists ?? [{ name: 'Test Artist' }],
+    duration_ms: overrides?.duration_ms ?? 180000, // 3 minutes
+    external_ids: overrides?.external_ids,
+    id: overrides?.id ?? 'track123',
+    name: overrides?.name ?? 'Test Track',
+  }
+}
+
+export function buildSSEWriter() {
+  return new SSEWriterBuilder()
 }

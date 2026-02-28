@@ -1,21 +1,20 @@
 import {useCallback, useState} from 'react'
 
 import {playerApiClient} from '../../lib/player-api-client'
-
 import styles from './playback-controls.module.css'
 
 interface PlaybackControlsProps {
   isPlaying: boolean
-  volumePercent: number | null
-  supportsVolume: boolean
   onPlaybackChange?: () => void
+  supportsVolume: boolean
+  volumePercent: null | number
 }
 
 export function PlaybackControls({
   isPlaying,
-  volumePercent,
-  supportsVolume,
   onPlaybackChange,
+  supportsVolume,
+  volumePercent,
 }: PlaybackControlsProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [localVolume, setLocalVolume] = useState(volumePercent ?? 50)

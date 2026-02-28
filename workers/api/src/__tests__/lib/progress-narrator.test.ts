@@ -10,19 +10,19 @@ import { ServiceLogger } from '../../utils/ServiceLogger'
 
 // Mock the Anthropic API and rate limiter
 vi.mock('../../utils/RateLimitedAPIClients', () => ({
-  rateLimitedAnthropicCall: vi.fn(async (fn: () => Promise<unknown>) => {
-    return fn()
-  }),
   getGlobalOrchestrator: vi.fn(() => ({
     execute: vi.fn((fn: () => Promise<unknown>) => fn()),
   })),
+  rateLimitedAnthropicCall: vi.fn(async (fn: () => Promise<unknown>) => {
+    return fn()
+  }),
 }))
 
 vi.mock('../../utils/LoggerContext', () => ({
   getLogger: () => ({
-    info: vi.fn(),
-    error: vi.fn(),
     debug: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
   }),
 }))
 
@@ -33,8 +33,8 @@ vi.mock('@anthropic-ai/sdk', () => {
         create: vi.fn(async () => ({
           content: [
             {
-              type: 'text',
               text: 'Digging through Spotify crates...',
+              type: 'text',
             },
           ],
         })),
@@ -73,8 +73,8 @@ describe('ProgressNarrator', () => {
       eventType: 'enriching_tracks',
       metadata: {
         enrichedCount: 10,
-        totalTracks: 50,
         recentTrackName: 'Test Track',
+        totalTracks: 50,
       },
     })
 

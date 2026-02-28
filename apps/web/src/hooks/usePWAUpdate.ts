@@ -162,23 +162,21 @@ export function usePWAUpdate(): UsePWAUpdateReturn {
       })
 
       // Start periodic update checks
-      if (!intervalRef.current) {
-        intervalRef.current = window.setInterval(() => {
-          if (document.visibilityState === 'visible') {
-            console.log('[PWA] Periodic update check')
-            registration.update().catch(() => {}).then(() => {
-              checkWaitingWorker(registration)
-            })
-          }
-        }, UPDATE_CHECK_INTERVAL)
-      }
+      intervalRef.current ??= window.setInterval(() => {
+        if (document.visibilityState === 'visible') {
+          console.log('[PWA] Periodic update check')
+          registration.update().catch(() => { /* noop */ }).then(() => {
+            checkWaitingWorker(registration)
+          })
+        }
+      }, UPDATE_CHECK_INTERVAL)
 
       // Set up visibility change handler
       if (!visibilityHandlerRef.current) {
         visibilityHandlerRef.current = () => {
           if (document.visibilityState === 'visible') {
             console.log('[PWA] App became visible, checking for updates')
-            registration.update().catch(() => {}).then(() => {
+            registration.update().catch(() => { /* noop */ }).then(() => {
               checkWaitingWorker(registration)
             })
           }

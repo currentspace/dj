@@ -24,6 +24,14 @@ export default [
       '**/build/**',
       '**/.turbo/**',
       '**/*.d.ts',
+      // Files not in any tsconfig project (causes parsing errors)
+      'apps/web/e2e/**',
+      'apps/web/playwright.config.ts',
+      'marvel/tools/hooks/**',
+      '**/vitest.config.ts',
+      '**/vitest.*.config.ts',
+      'vitest.shared.ts',
+      '**/tsup.config.ts',
     ],
   },
 
@@ -91,6 +99,18 @@ export default [
   {
     files: ['**/*.{js,mjs,cjs}'],
     ...tseslint.configs.disableTypeChecked,
+  },
+
+  // ============================================================================
+  // SERVICE WORKER - Needs webworker globals
+  // ============================================================================
+  {
+    files: ['apps/web/public/**/*.js'],
+    languageOptions: {
+      globals: {
+        ...globals.serviceworker,
+      },
+    },
   },
 
   // ============================================================================
@@ -200,6 +220,8 @@ export default [
           type: 'natural',
         },
       ],
+      // False positive: flags fetch() with dynamic URLs as filesystem access
+      'security/detect-non-literal-fs-filename': 'off',
       'security/detect-non-literal-regexp': 'warn',
 
       // Security is critical for workers

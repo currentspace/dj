@@ -1,15 +1,6 @@
 import type {StreamDebugData, StreamLogData, StreamToolData, StreamToolResult} from '@dj/shared-types'
 import type {z} from 'zod'
 
-// Native tool definition (replaces DynamicStructuredTool)
-export interface NativeTool {
-  description: string
-  func: (args: Record<string, unknown>) => Promise<unknown>
-  name: string
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  schema: z.ZodObject<any>
-}
-
 // Analysis result types
 export interface AnalysisResult {
   deezer_analysis?: {
@@ -62,23 +53,19 @@ export interface AnalysisResult {
   track_ids: string[]
 }
 
+// Tool call structure from Anthropic
+export interface AnthropicToolCall {
+  args: Record<string, unknown>
+  id: string
+  name: string
+}
+
 export interface CreatePlaylistResult {
   id: string
   name: string
   snapshot_id: string
   url: string
 }
-
-// SSE message types
-export type StreamEvent =
-  | {data: null; type: 'done'}
-  | {data: StreamDebugData; type: 'debug'}
-  | {data: StreamLogData; type: 'log'}
-  | {data: StreamToolData; type: 'tool_start'}
-  | {data: StreamToolResult; type: 'tool_end'}
-  | {data: string; type: 'content'}
-  | {data: string; type: 'error'}
-  | {data: string; type: 'thinking'}
 
 // Deezer analysis data structure
 export interface DeezerAnalysisData {
@@ -102,9 +89,22 @@ export interface DeezerAnalysisData {
   tracks_found: number
 }
 
-// Tool call structure from Anthropic
-export interface AnthropicToolCall {
-  args: Record<string, unknown>
-  id: string
+// Native tool definition (replaces DynamicStructuredTool)
+export interface NativeTool {
+  description: string
+  func: (args: Record<string, unknown>) => Promise<unknown>
   name: string
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  schema: z.ZodObject<any>
 }
+
+// SSE message types
+export type StreamEvent =
+  | {data: null; type: 'done'}
+  | {data: StreamDebugData; type: 'debug'}
+  | {data: StreamLogData; type: 'log'}
+  | {data: StreamToolData; type: 'tool_start'}
+  | {data: StreamToolResult; type: 'tool_end'}
+  | {data: string; type: 'content'}
+  | {data: string; type: 'error'}
+  | {data: string; type: 'thinking'}

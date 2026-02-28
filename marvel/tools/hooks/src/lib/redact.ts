@@ -8,6 +8,32 @@
  */
 
 /**
+ * Redact secrets from an object recursively.
+ */
+export function redactObject(obj: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    const sensitiveKey = /key|secret|password|token|auth/i.test(key);
+    if (sensitiveKey && typeof value === "string") {
+      result[key] = "[REDACTED]";
+    } else if (typeof value === "string") {
+      result[key] = redactSensitive(value);
+    } else if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+      result[key] = redactObject(value as Record<string, unknown>);
+    } else if (Array.isArray(value)) {
+      result[key] = value.map((item: unknown) => {
+        if (typeof item === "string") return redactSensitive(item);
+        if (typeof item === "object" && item !== null) return redactObject(item as Record<string, unknown>);
+        return item;
+      });
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
+/**
  * Redact sensitive content from strings.
  * Catches API keys, tokens, passwords, env var assignments, and inline secrets.
  */
@@ -62,35 +88,9 @@ export function redactSensitive(content: string): string {
 }
 
 /**
- * Redact secrets from an object recursively.
- */
-export function redactObject(obj: Record<string, unknown>): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(obj)) {
-    const sensitiveKey = /key|secret|password|token|auth/i.test(key);
-    if (sensitiveKey && typeof value === "string") {
-      result[key] = "[REDACTED]";
-    } else if (typeof value === "string") {
-      result[key] = redactSensitive(value);
-    } else if (typeof value === "object" && value !== null && !Array.isArray(value)) {
-      result[key] = redactObject(value as Record<string, unknown>);
-    } else if (Array.isArray(value)) {
-      result[key] = value.map((item: unknown) => {
-        if (typeof item === "string") return redactSensitive(item);
-        if (typeof item === "object" && item !== null) return redactObject(item as Record<string, unknown>);
-        return item;
-      });
-    } else {
-      result[key] = value;
-    }
-  }
-  return result;
-}
-
-/**
  * Truncate a string to max bytes for trace storage.
  */
-export function truncateForTrace(content: string, maxBytes: number = 10240): string {
+export function truncateForTrace(content: string, maxBytes = 10240): string {
   const encoder = new TextEncoder();
   const bytes = encoder.encode(content);
   if (bytes.length <= maxBytes) return content;

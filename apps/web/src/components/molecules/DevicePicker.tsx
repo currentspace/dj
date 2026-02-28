@@ -6,6 +6,17 @@ import {useCallback, useState} from 'react'
 
 import styles from './device-picker.module.css'
 
+interface DevicePickerProps {
+  /** Currently active device ID from playback state */
+  currentDeviceId?: null | string
+  /** Currently active device name from playback state */
+  currentDeviceName?: string
+  /** Callback when device is selected */
+  onDeviceSelect?: (deviceId: string) => void
+  /** Auth token for API calls */
+  token: null | string
+}
+
 interface SpotifyDevice {
   id: string
   is_active: boolean
@@ -13,18 +24,7 @@ interface SpotifyDevice {
   is_restricted: boolean
   name: string
   type: string
-  volume_percent: number | null
-}
-
-interface DevicePickerProps {
-  /** Currently active device ID from playback state */
-  currentDeviceId?: string | null
-  /** Currently active device name from playback state */
-  currentDeviceName?: string
-  /** Callback when device is selected */
-  onDeviceSelect?: (deviceId: string) => void
-  /** Auth token for API calls */
-  token: string | null
+  volume_percent: null | number
 }
 
 export function DevicePicker({
@@ -36,7 +36,7 @@ export function DevicePicker({
   const [devices, setDevices] = useState<SpotifyDevice[]>([])
   const [isOpen, setIsOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<null | string>(null)
 
   const fetchDevices = useCallback(async () => {
     if (!token) return
@@ -103,27 +103,27 @@ export function DevicePicker({
 
   const getDeviceIcon = (type: string): string => {
     switch (type.toLowerCase()) {
+      case 'audio_dongle':
+        return '🔌'
+      case 'automobile':
+        return '🚗'
+      case 'avr':
+        return '🎛️'
+      case 'cast_audio':
+      case 'cast_video':
+        return '📡'
       case 'computer':
         return '💻'
+      case 'game_console':
+        return '🎮'
       case 'smartphone':
         return '📱'
       case 'speaker':
         return '🔊'
-      case 'tv':
-        return '📺'
-      case 'avr':
-        return '🎛️'
       case 'stb':
         return '📡'
-      case 'audio_dongle':
-        return '🔌'
-      case 'game_console':
-        return '🎮'
-      case 'cast_video':
-      case 'cast_audio':
-        return '📡'
-      case 'automobile':
-        return '🚗'
+      case 'tv':
+        return '📺'
       default:
         return '🎵'
     }
@@ -140,7 +140,7 @@ export function DevicePicker({
       >
         <span className={styles.deviceIcon}>🔊</span>
         <span className={styles.deviceCurrentName}>
-          {currentDeviceName || 'Select device'}
+          {currentDeviceName ?? 'Select device'}
         </span>
         <span className={styles.deviceDropdownArrow}>{isOpen ? '▲' : '▼'}</span>
       </button>

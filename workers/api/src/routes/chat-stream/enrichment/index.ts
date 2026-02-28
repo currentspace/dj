@@ -1,3 +1,3 @@
 export {executeAnalyzePlaylist} from './analyze-playlist'
-export {performDeezerEnrichment, MAX_DEEZER_ENRICHMENT} from './deezer'
-export {performLastFmEnrichment, MAX_LASTFM_ENRICHMENT} from './lastfm'
+export {MAX_DEEZER_ENRICHMENT, performDeezerEnrichment} from './deezer'
+export {MAX_LASTFM_ENRICHMENT, performLastFmEnrichment} from './lastfm'

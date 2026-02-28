@@ -20,28 +20,11 @@ export interface ProgressMessageThrottlerOptions {
 
 export class ProgressMessageThrottler {
   private lastMessageTime = 0
-  private readonly minInterval: number
   private messageCount = 0
+  private readonly minInterval: number
 
   constructor(options: ProgressMessageThrottlerOptions = {}) {
     this.minInterval = options.minInterval ?? 5000 // 5 seconds default
-  }
-
-  /**
-   * Check if enough time has passed to send another message
-   * Returns true if message should be sent
-   */
-  shouldSend(): boolean {
-    const now = Date.now()
-    const elapsed = now - this.lastMessageTime
-
-    if (this.lastMessageTime === 0 || elapsed >= this.minInterval) {
-      this.lastMessageTime = now
-      this.messageCount++
-      return true
-    }
-
-    return false
   }
 
   /**
@@ -54,11 +37,27 @@ export class ProgressMessageThrottler {
   }
 
   /**
-   * Reset throttler for new operation
+   * Get total messages sent
    */
-  reset(): void {
-    this.lastMessageTime = 0
-    this.messageCount = 0
+  getMessageCount(): number {
+    return this.messageCount
+  }
+
+  /**
+   * Get summary for debugging
+   */
+  getSummary(): {
+    canSendNow: boolean
+    messageCount: number
+    timeSinceLastMessage: number
+    timeUntilNextMessage: number
+  } {
+    return {
+      canSendNow: this.shouldSend(),
+      messageCount: this.messageCount,
+      timeSinceLastMessage: this.getTimeSinceLastMessage(),
+      timeUntilNextMessage: this.getTimeUntilNextMessage(),
+    }
   }
 
   /**
@@ -79,26 +78,27 @@ export class ProgressMessageThrottler {
   }
 
   /**
-   * Get total messages sent
+   * Reset throttler for new operation
    */
-  getMessageCount(): number {
-    return this.messageCount
+  reset(): void {
+    this.lastMessageTime = 0
+    this.messageCount = 0
   }
 
   /**
-   * Get summary for debugging
+   * Check if enough time has passed to send another message
+   * Returns true if message should be sent
    */
-  getSummary(): {
-    messageCount: number
-    timeSinceLastMessage: number
-    timeUntilNextMessage: number
-    canSendNow: boolean
-  } {
-    return {
-      messageCount: this.messageCount,
-      timeSinceLastMessage: this.getTimeSinceLastMessage(),
-      timeUntilNextMessage: this.getTimeUntilNextMessage(),
-      canSendNow: this.shouldSend(),
+  shouldSend(): boolean {
+    const now = Date.now()
+    const elapsed = now - this.lastMessageTime
+
+    if (this.lastMessageTime === 0 || elapsed >= this.minInterval) {
+      this.lastMessageTime = now
+      this.messageCount++
+      return true
     }
+
+    return false
   }
 }

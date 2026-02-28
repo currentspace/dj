@@ -12,12 +12,14 @@
 
 import * as fs from "fs";
 import * as path from "path";
+
+import type { AgentEntry, SerializedAgentState } from "../lib/agent-registry.js";
 import type { BaseHookInput, SyncHookJSONOutput } from "../sdk-types.js";
-import type { SerializedAgentState, AgentEntry } from "../lib/agent-registry.js";
+
 import { getSessionAgents, getTeamState } from "../lib/agent-registry.js";
-import { getTempDir } from "../lib/paths.js";
 import { safeReadJson } from "../lib/file-ops.js";
-import { logDebug, logWarn, buildHookContext } from "../lib/logger.js";
+import { buildHookContext, logDebug, logWarn } from "../lib/logger.js";
+import { getTempDir } from "../lib/paths.js";
 
 /** Max chars for the injected context (~500 tokens at 4 chars/token) */
 const MAX_CONTEXT_CHARS = 2000;
@@ -25,42 +27,56 @@ const MAX_CONTEXT_CHARS = 2000;
 /** Max chars for an individual agent's result summary */
 const MAX_RESULT_CHARS = 80;
 
-function getAgentStateFilePath(sessionId: string): string {
-  return path.join(getTempDir(), `agents-${sessionId}.json`);
-}
+export async function handlePostCompactAgents(
+  input: BaseHookInput,
+): Promise<SyncHookJSONOutput> {
+  const context = buildHookContext("post-compact-agents", input);
+  const sessionId = (input as Record<string, unknown>).session_id as string | undefined;
 
-function truncate(text: string, maxLen: number): string {
-  if (text.length <= maxLen) return text;
-  return text.slice(0, maxLen - 3) + "...";
-}
+  if (!sessionId) {
+    logWarn("No session_id in input, skipping post-compact agent recovery", context);
+    return {};
+  }
 
-function formatAgentRow(agent: AgentEntry): string {
-  const status = agent.status;
-  let result: string;
+  const agentFilePath = getAgentStateFilePath(sessionId);
 
-  switch (status) {
-    case "completed": {
-      result = agent.resultSummary
-        ? truncate(agent.resultSummary, MAX_RESULT_CHARS)
-        : "Completed (result in transcript)";
-      break;
-    }
-    case "errored": {
-      result = agent.errorMessage
-        ? `Error: ${truncate(agent.errorMessage, MAX_RESULT_CHARS - 7)}`
-        : "Errored (unknown error)";
-      break;
-    }
-    case "running": {
-      result = "Still running — await with TaskOutput";
-      break;
+  // Primary: check daemon in-memory registry (survives compaction)
+  let agents = getSessionAgents(sessionId);
+
+  // Fallback: read temp file (covers daemon restart between pre/post compact)
+  if (agents.length === 0) {
+    logDebug("No agents in daemon registry, checking temp file fallback", context);
+    const serialized = safeReadJson<SerializedAgentState>(agentFilePath, context);
+    if (serialized?.version === 1 && Array.isArray(serialized.agents)) {
+      agents = serialized.agents;
+      logDebug(`Loaded ${agents.length} agents from temp file fallback`, context);
     }
   }
 
-  return `| ${agent.id} | ${agent.agentType} | ${status} | ${result} |`;
+  // Clean up temp file regardless of source
+  cleanupTempFile(agentFilePath, context);
+
+  if (agents.length === 0) {
+    logDebug("No agents to recover after compaction", context);
+    return {};
+  }
+
+  // Get team state
+  const teamState = getTeamState(sessionId);
+  const teamName = teamState?.name ?? null;
+
+  // Build and return context injection
+  const contextInjection = buildContextInjection(agents, teamName);
+  logDebug(`Injecting agent recovery context: ${agents.length} agents, ${contextInjection.length} chars`, context);
+
+  return {
+    hookSpecificOutput: {
+      additionalContext: contextInjection,
+    },
+  } as SyncHookJSONOutput;
 }
 
-function buildContextInjection(agents: AgentEntry[], teamName: string | null): string {
+function buildContextInjection(agents: AgentEntry[], teamName: null | string): string {
   const lines: string[] = [
     "<agent-state-recovery>",
     "## Agents Active Before Compaction",
@@ -122,51 +138,37 @@ function cleanupTempFile(filePath: string, context: ReturnType<typeof buildHookC
   }
 }
 
-export async function handlePostCompactAgents(
-  input: BaseHookInput,
-): Promise<SyncHookJSONOutput> {
-  const context = buildHookContext("post-compact-agents", input);
-  const sessionId = (input as Record<string, unknown>).session_id as string | undefined;
+function formatAgentRow(agent: AgentEntry): string {
+  const status = agent.status;
+  let result: string;
 
-  if (!sessionId) {
-    logWarn("No session_id in input, skipping post-compact agent recovery", context);
-    return {};
-  }
-
-  const agentFilePath = getAgentStateFilePath(sessionId);
-
-  // Primary: check daemon in-memory registry (survives compaction)
-  let agents = getSessionAgents(sessionId);
-
-  // Fallback: read temp file (covers daemon restart between pre/post compact)
-  if (agents.length === 0) {
-    logDebug("No agents in daemon registry, checking temp file fallback", context);
-    const serialized = safeReadJson<SerializedAgentState>(agentFilePath, context);
-    if (serialized && serialized.version === 1 && Array.isArray(serialized.agents)) {
-      agents = serialized.agents;
-      logDebug(`Loaded ${agents.length} agents from temp file fallback`, context);
+  switch (status) {
+    case "completed": {
+      result = agent.resultSummary
+        ? truncate(agent.resultSummary, MAX_RESULT_CHARS)
+        : "Completed (result in transcript)";
+      break;
+    }
+    case "errored": {
+      result = agent.errorMessage
+        ? `Error: ${truncate(agent.errorMessage, MAX_RESULT_CHARS - 7)}`
+        : "Errored (unknown error)";
+      break;
+    }
+    case "running": {
+      result = "Still running — await with TaskOutput";
+      break;
     }
   }
 
-  // Clean up temp file regardless of source
-  cleanupTempFile(agentFilePath, context);
+  return `| ${agent.id} | ${agent.agentType} | ${status} | ${result} |`;
+}
 
-  if (agents.length === 0) {
-    logDebug("No agents to recover after compaction", context);
-    return {};
-  }
+function getAgentStateFilePath(sessionId: string): string {
+  return path.join(getTempDir(), `agents-${sessionId}.json`);
+}
 
-  // Get team state
-  const teamState = getTeamState(sessionId);
-  const teamName = teamState?.name ?? null;
-
-  // Build and return context injection
-  const contextInjection = buildContextInjection(agents, teamName);
-  logDebug(`Injecting agent recovery context: ${agents.length} agents, ${contextInjection.length} chars`, context);
-
-  return {
-    hookSpecificOutput: {
-      additionalContext: contextInjection,
-    },
-  } as SyncHookJSONOutput;
+function truncate(text: string, maxLen: number): string {
+  if (text.length <= maxLen) return text;
+  return text.slice(0, maxLen - 3) + "...";
 }

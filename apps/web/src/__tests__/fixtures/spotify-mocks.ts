@@ -9,6 +9,11 @@ import type {SpotifyPlaylist, SpotifyTrack, SpotifyUser} from '@dj/shared-types'
 // TOKEN MOCKS
 // ============================================================================
 
+export interface MockArtist {
+  id: string
+  name: string
+}
+
 export interface MockTokenData {
   createdAt: number
   expiresAt: null | number
@@ -16,15 +21,13 @@ export interface MockTokenData {
 }
 
 /**
- * Create a mock Spotify token with optional expiry
- * @param expiresInMs - Optional expiry time in milliseconds from now (null = no expiry)
+ * Create a mock artist
  */
-export function mockSpotifyToken(expiresInMs: null | number = 3600000): MockTokenData {
-  const now = Date.now()
+export function mockArtist(overrides?: Partial<MockArtist>): MockArtist {
   return {
-    createdAt: now,
-    expiresAt: expiresInMs ? now + expiresInMs : null,
-    token: `mock_access_token_${Math.random().toString(36).slice(2)}`,
+    id: `artist_${Math.random().toString(36).slice(2, 8)}`,
+    name: 'Test Artist',
+    ...overrides,
   }
 }
 
@@ -41,6 +44,10 @@ export function mockExpiredToken(): MockTokenData {
   }
 }
 
+// ============================================================================
+// USER MOCKS
+// ============================================================================
+
 /**
  * Create a legacy token (old format without metadata)
  */
@@ -49,8 +56,21 @@ export function mockLegacyToken(): string {
 }
 
 // ============================================================================
-// USER MOCKS
+// ARTIST MOCKS
 // ============================================================================
+
+/**
+ * Create a mock Spotify token with optional expiry
+ * @param expiresInMs - Optional expiry time in milliseconds from now (null = no expiry)
+ */
+export function mockSpotifyToken(expiresInMs: null | number = 3600000): MockTokenData {
+  const now = Date.now()
+  return {
+    createdAt: now,
+    expiresAt: expiresInMs ? now + expiresInMs : null,
+    token: `mock_access_token_${Math.random().toString(36).slice(2)}`,
+  }
+}
 
 /**
  * Create a mock Spotify user profile
@@ -67,26 +87,6 @@ export function mockUserProfile(overrides?: Partial<SpotifyUser>): SpotifyUser {
         width: 300,
       },
     ],
-    ...overrides,
-  }
-}
-
-// ============================================================================
-// ARTIST MOCKS
-// ============================================================================
-
-export interface MockArtist {
-  id: string
-  name: string
-}
-
-/**
- * Create a mock artist
- */
-export function mockArtist(overrides?: Partial<MockArtist>): MockArtist {
-  return {
-    id: `artist_${Math.random().toString(36).slice(2, 8)}`,
-    name: 'Test Artist',
     ...overrides,
   }
 }
@@ -109,6 +109,41 @@ export interface MockAlbum {
   id: string
   images: {height: number; url: string; width: number}[]
   name: string
+}
+
+/**
+ * Build a mock Spotify track with sensible defaults
+ * @param overrides - Partial track properties to override
+ * @returns Complete SpotifyTrack object
+ */
+export function buildTrack(overrides?: Partial<SpotifyTrack>): SpotifyTrack {
+  const trackId = overrides?.id ?? `track_${Math.random().toString(36).slice(2, 8)}`
+  const trackName = overrides?.name ?? 'Test Track'
+
+  return {
+    album: mockAlbum({name: 'Test Album'}),
+    artists: [mockArtist({name: 'Test Artist'})],
+    external_urls: {spotify: `https://open.spotify.com/track/${trackId}`},
+    id: trackId,
+    name: trackName,
+    preview_url: `https://p.scdn.co/mp3-preview/${trackId}`,
+    uri: `spotify:track:${trackId}`,
+    ...overrides,
+  }
+}
+
+// ============================================================================
+// TRACK MOCKS
+// ============================================================================
+
+/**
+ * Create a track without preview URL (common scenario)
+ */
+export function buildTrackNoPreview(overrides?: Partial<SpotifyTrack>): SpotifyTrack {
+  return buildTrack({
+    ...overrides,
+    preview_url: null,
+  })
 }
 
 /**
@@ -137,41 +172,6 @@ export function mockAlbum(overrides?: Partial<MockAlbum>): MockAlbum {
     name: 'Test Album',
     ...overrides,
   }
-}
-
-// ============================================================================
-// TRACK MOCKS
-// ============================================================================
-
-/**
- * Build a mock Spotify track with sensible defaults
- * @param overrides - Partial track properties to override
- * @returns Complete SpotifyTrack object
- */
-export function buildTrack(overrides?: Partial<SpotifyTrack>): SpotifyTrack {
-  const trackId = overrides?.id || `track_${Math.random().toString(36).slice(2, 8)}`
-  const trackName = overrides?.name || 'Test Track'
-
-  return {
-    album: mockAlbum({name: 'Test Album'}),
-    artists: [mockArtist({name: 'Test Artist'})],
-    external_urls: {spotify: `https://open.spotify.com/track/${trackId}`},
-    id: trackId,
-    name: trackName,
-    preview_url: `https://p.scdn.co/mp3-preview/${trackId}`,
-    uri: `spotify:track:${trackId}`,
-    ...overrides,
-  }
-}
-
-/**
- * Create a track without preview URL (common scenario)
- */
-export function buildTrackNoPreview(overrides?: Partial<SpotifyTrack>): SpotifyTrack {
-  return buildTrack({
-    ...overrides,
-    preview_url: null,
-  })
 }
 
 /**
@@ -208,6 +208,32 @@ export const MOCK_TRACKS = {
 }
 
 /**
+ * Create an empty playlist
+ */
+export function buildEmptyPlaylist(): SpotifyPlaylist {
+  return buildPlaylist({
+    description: 'Empty playlist',
+    name: 'Empty Playlist',
+    tracks: {total: 0},
+  })
+}
+
+// ============================================================================
+// PLAYLIST MOCKS
+// ============================================================================
+
+/**
+ * Create a playlist with many tracks
+ */
+export function buildLargePlaylist(trackCount = 100): SpotifyPlaylist {
+  return buildPlaylist({
+    description: `Large playlist with ${trackCount} tracks`,
+    name: 'Large Test Playlist',
+    tracks: {total: trackCount},
+  })
+}
+
+/**
  * Generate an array of mock tracks
  * @param count - Number of tracks to generate
  * @returns Array of tracks with unique IDs
@@ -221,17 +247,13 @@ export function buildMockTracks(count: number): SpotifyTrack[] {
   )
 }
 
-// ============================================================================
-// PLAYLIST MOCKS
-// ============================================================================
-
 /**
  * Build a mock Spotify playlist with sensible defaults
  * @param overrides - Partial playlist properties to override
  * @returns Complete SpotifyPlaylist object
  */
 export function buildPlaylist(overrides?: Partial<SpotifyPlaylist>): SpotifyPlaylist {
-  const playlistId = overrides?.id || `playlist_${Math.random().toString(36).slice(2, 8)}`
+  const playlistId = overrides?.id ?? `playlist_${Math.random().toString(36).slice(2, 8)}`
 
   return {
     description: 'A test playlist for unit testing',
@@ -250,28 +272,6 @@ export function buildPlaylist(overrides?: Partial<SpotifyPlaylist>): SpotifyPlay
     tracks: {total: 10},
     ...overrides,
   }
-}
-
-/**
- * Create a playlist with many tracks
- */
-export function buildLargePlaylist(trackCount: number = 100): SpotifyPlaylist {
-  return buildPlaylist({
-    description: `Large playlist with ${trackCount} tracks`,
-    name: 'Large Test Playlist',
-    tracks: {total: trackCount},
-  })
-}
-
-/**
- * Create an empty playlist
- */
-export function buildEmptyPlaylist(): SpotifyPlaylist {
-  return buildPlaylist({
-    description: 'Empty playlist',
-    name: 'Empty Playlist',
-    tracks: {total: 0},
-  })
 }
 
 /**
@@ -352,11 +352,11 @@ export const MOCK_SPOTIFY_RESPONSES = {
 // ============================================================================
 
 /**
- * Seed localStorage with a valid Spotify token
+ * Clear all Spotify-related localStorage items
  */
-export function seedSpotifyToken(token?: MockTokenData): void {
-  const tokenData = token || mockSpotifyToken()
-  localStorage.setItem('spotify_token_data', JSON.stringify(tokenData))
+export function clearSpotifyStorage(): void {
+  localStorage.removeItem('spotify_token_data')
+  localStorage.removeItem('spotify_token') // Legacy cleanup
 }
 
 /**
@@ -367,9 +367,9 @@ export function seedExpiredToken(): void {
 }
 
 /**
- * Clear all Spotify-related localStorage items
+ * Seed localStorage with a valid Spotify token
  */
-export function clearSpotifyStorage(): void {
-  localStorage.removeItem('spotify_token_data')
-  localStorage.removeItem('spotify_token') // Legacy cleanup
+export function seedSpotifyToken(token?: MockTokenData): void {
+  const tokenData = token ?? mockSpotifyToken()
+  localStorage.setItem('spotify_token_data', JSON.stringify(tokenData))
 }

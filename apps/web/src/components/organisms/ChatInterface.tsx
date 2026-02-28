@@ -1,8 +1,9 @@
 import {useCallback, useRef, useState, useTransition} from 'react'
 import {flushSync} from 'react-dom'
 
+import {MarkdownContent} from '../../lib/markdown-renderer'
+import {hasMarkdownSyntax} from '../../lib/markdown-utils'
 import {chatStreamClient} from '../../lib/streaming-client'
-import {hasMarkdownSyntax, MarkdownContent} from '../../lib/markdown-renderer'
 import {selectCurrentMessages, usePlaylistStore} from '../../stores'
 import '../../styles/streaming.css'
 import '../../styles/chat-interface.css'
@@ -56,7 +57,6 @@ export function ChatInterface() {
       let userMessage = input.trim()
 
       // Inject playlist ID for analyze/edit/dj modes
-      const playlistId = selectedPlaylist?.id
       console.log(`[ChatInterface] Pre-injection - Mode: ${mode}, SelectedID: ${playlistId}`)
       if ((mode === 'analyze' || mode === 'edit' || mode === 'dj') && playlistId) {
         userMessage = `[Playlist ID: ${playlistId}] ${userMessage}`

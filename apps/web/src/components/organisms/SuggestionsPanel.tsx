@@ -9,7 +9,7 @@ interface SuggestionsPanelProps {
   suggestions: Suggestion[]
 }
 
-export function SuggestionsPanel({suggestions, onRefresh, isLoading}: SuggestionsPanelProps) {
+export function SuggestionsPanel({isLoading, onRefresh, suggestions}: SuggestionsPanelProps) {
   return (
     <div className={styles.suggestionsPanel}>
       <div className={sharedStyles.panelHeader}>

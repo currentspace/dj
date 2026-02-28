@@ -10,122 +10,85 @@
 
 import * as fs from "fs";
 import * as path from "path";
+
 import type { ExternalRule, RuleFile } from "../types.js";
-import { getAllSegments } from "./command-parser.js";
 import type { LogContext } from "./logger.js";
+
+import { getAllSegments } from "./command-parser.js";
 import { logDebug, logWarn } from "./logger.js";
 import { findSecurityDir } from "./paths.js";
 
 // Hardcoded fallback rules if external files are missing
 const DEFAULT_ALLOW_RULES: ExternalRule[] = [
-  { id: "allow-git-status", type: "prefix", pattern: "git status", reason: "Read-only git operation" },
-  { id: "allow-git-diff", type: "prefix", pattern: "git diff", reason: "Read-only git operation" },
-  { id: "allow-git-log", type: "prefix", pattern: "git log", reason: "Read-only git operation" },
-  { id: "allow-git-branch", type: "prefix", pattern: "git branch", reason: "Read-only git operation" },
-  { id: "allow-git-show", type: "prefix", pattern: "git show", reason: "Read-only git operation" },
-  { id: "allow-pnpm-safe", type: "regex", pattern: "^pnpm\\s+(install|dev|build|lint|test|run|typecheck)\\b", reason: "Safe pnpm dev operations" },
-  { id: "allow-npm-safe", type: "regex", pattern: "^npm\\s+(run|test|start)\\b", reason: "Safe npm dev operations" },
-  { id: "allow-ls", type: "prefix", pattern: "ls", reason: "Read-only directory listing" },
-  { id: "allow-pwd", type: "prefix", pattern: "pwd", reason: "Print working directory" },
-  { id: "allow-echo", type: "prefix", pattern: "echo ", reason: "Print to stdout" },
-  { id: "allow-which", type: "prefix", pattern: "which ", reason: "Locate command" },
-  { id: "allow-cat", type: "prefix", pattern: "cat ", reason: "Read file contents" },
-  { id: "allow-head", type: "prefix", pattern: "head ", reason: "Read file head" },
-  { id: "allow-tail", type: "prefix", pattern: "tail ", reason: "Read file tail" },
-  { id: "allow-wc", type: "prefix", pattern: "wc ", reason: "Word count" },
+  { id: "allow-git-status", pattern: "git status", reason: "Read-only git operation", type: "prefix" },
+  { id: "allow-git-diff", pattern: "git diff", reason: "Read-only git operation", type: "prefix" },
+  { id: "allow-git-log", pattern: "git log", reason: "Read-only git operation", type: "prefix" },
+  { id: "allow-git-branch", pattern: "git branch", reason: "Read-only git operation", type: "prefix" },
+  { id: "allow-git-show", pattern: "git show", reason: "Read-only git operation", type: "prefix" },
+  { id: "allow-pnpm-safe", pattern: "^pnpm\\s+(install|dev|build|lint|test|run|typecheck)\\b", reason: "Safe pnpm dev operations", type: "regex" },
+  { id: "allow-npm-safe", pattern: "^npm\\s+(run|test|start)\\b", reason: "Safe npm dev operations", type: "regex" },
+  { id: "allow-ls", pattern: "ls", reason: "Read-only directory listing", type: "prefix" },
+  { id: "allow-pwd", pattern: "pwd", reason: "Print working directory", type: "prefix" },
+  { id: "allow-echo", pattern: "echo ", reason: "Print to stdout", type: "prefix" },
+  { id: "allow-which", pattern: "which ", reason: "Locate command", type: "prefix" },
+  { id: "allow-cat", pattern: "cat ", reason: "Read file contents", type: "prefix" },
+  { id: "allow-head", pattern: "head ", reason: "Read file head", type: "prefix" },
+  { id: "allow-tail", pattern: "tail ", reason: "Read file tail", type: "prefix" },
+  { id: "allow-wc", pattern: "wc ", reason: "Word count", type: "prefix" },
 ];
 
 const DEFAULT_DENY_RULES: ExternalRule[] = [
   // Package manager enforcement - use pnpm/uv instead
-  { id: "deny-npx", type: "prefix", pattern: "npx ", reason: "Project uses pnpm - use 'pnpm exec' or 'pnpm dlx' instead of npx" },
-  { id: "deny-npm-install", type: "regex", pattern: "^npm\\s+(install|i|add|ci)\\b", reason: "Project uses pnpm - use 'pnpm install' or 'pnpm add' instead" },
-  { id: "deny-yarn", type: "regex", pattern: "^yarn\\s+(install|add)\\b", reason: "Project uses pnpm - use 'pnpm install' or 'pnpm add' instead" },
+  { id: "deny-npx", pattern: "npx ", reason: "Project uses pnpm - use 'pnpm exec' or 'pnpm dlx' instead of npx", type: "prefix" },
+  { id: "deny-npm-install", pattern: "^npm\\s+(install|i|add|ci)\\b", reason: "Project uses pnpm - use 'pnpm install' or 'pnpm add' instead", type: "regex" },
+  { id: "deny-yarn", pattern: "^yarn\\s+(install|add)\\b", reason: "Project uses pnpm - use 'pnpm install' or 'pnpm add' instead", type: "regex" },
 
   // Python environment enforcement - use uv per CLAUDE.md
-  { id: "deny-python-direct", type: "regex", pattern: "^python3?\\s", reason: "Use 'uv run python' per CLAUDE.md" },
-  { id: "deny-pip-direct", type: "regex", pattern: "^pip3?\\s", reason: "Use 'uv pip' per CLAUDE.md" },
+  { id: "deny-python-direct", pattern: "^python3?\\s", reason: "Use 'uv run python' per CLAUDE.md", type: "regex" },
+  { id: "deny-pip-direct", pattern: "^pip3?\\s", reason: "Use 'uv pip' per CLAUDE.md", type: "regex" },
 
   // rm - destructive file removal
   // Use (?:\s+\S+)*\s+ instead of .*\s+ to prevent ReDoS from overlapping quantifiers
-  { id: "deny-rm-rf-root", type: "regex", pattern: "rm\\s+(-[a-zA-Z]*r[a-zA-Z]*f|\\-[a-zA-Z]*f[a-zA-Z]*r)[a-zA-Z]*\\s+/(?!Users|home|tmp)", reason: "Destructive: removes root filesystem paths" },
-  { id: "deny-rm-rf-slash", type: "regex", pattern: "rm\\s+(-[a-zA-Z]*r[a-zA-Z]*|--recursive)(?:\\s+\\S+)*\\s+/\\s*$", reason: "Destructive: removes root filesystem" },
-  { id: "deny-rm-rf-home", type: "regex", pattern: "rm\\s+(-[a-zA-Z]*r[a-zA-Z]*|--recursive)(?:\\s+\\S+)*\\s+~/?\\s*$", reason: "Destructive: removes entire home directory" },
-  { id: "deny-rm-rf-star", type: "regex", pattern: "rm\\s+(-[a-zA-Z]*r[a-zA-Z]*|--recursive)(?:\\s+\\S+)*\\s+/\\*", reason: "Destructive: removes all root level directories" },
-  { id: "deny-rm-system-dirs", type: "regex", pattern: "rm\\s+(-[a-zA-Z]*r[a-zA-Z]*|--recursive)(?:\\s+\\S+)*\\s+/(etc|var|usr|bin|sbin|lib|boot|sys|proc)\\b", reason: "Destructive: removes system directories" },
-  { id: "deny-rm-no-preserve-root", type: "contains", pattern: "--no-preserve-root", reason: "Destructive: bypasses rm safety" },
+  { id: "deny-rm-rf-root", pattern: "rm\\s+(-[a-zA-Z]*r[a-zA-Z]*f|\\-[a-zA-Z]*f[a-zA-Z]*r)[a-zA-Z]*\\s+/(?!Users|home|tmp)", reason: "Destructive: removes root filesystem paths", type: "regex" },
+  { id: "deny-rm-rf-slash", pattern: "rm\\s+(-[a-zA-Z]*r[a-zA-Z]*|--recursive)(?:\\s+\\S+)*\\s+/\\s*$", reason: "Destructive: removes root filesystem", type: "regex" },
+  { id: "deny-rm-rf-home", pattern: "rm\\s+(-[a-zA-Z]*r[a-zA-Z]*|--recursive)(?:\\s+\\S+)*\\s+~/?\\s*$", reason: "Destructive: removes entire home directory", type: "regex" },
+  { id: "deny-rm-rf-star", pattern: "rm\\s+(-[a-zA-Z]*r[a-zA-Z]*|--recursive)(?:\\s+\\S+)*\\s+/\\*", reason: "Destructive: removes all root level directories", type: "regex" },
+  { id: "deny-rm-system-dirs", pattern: "rm\\s+(-[a-zA-Z]*r[a-zA-Z]*|--recursive)(?:\\s+\\S+)*\\s+/(etc|var|usr|bin|sbin|lib|boot|sys|proc)\\b", reason: "Destructive: removes system directories", type: "regex" },
+  { id: "deny-rm-no-preserve-root", pattern: "--no-preserve-root", reason: "Destructive: bypasses rm safety", type: "contains" },
 
   // chmod - dangerous permission changes
   // Use -[a-zA-Z]+ (not *) inside ()* to prevent nested zero-length match (exponential ReDoS)
-  { id: "deny-chmod-777", type: "regex", pattern: "chmod\\s+(-[a-zA-Z]+\\s+)*777", reason: "Insecure permissions: world-writable" },
-  { id: "deny-chmod-666", type: "regex", pattern: "chmod\\s+(-[a-zA-Z]+\\s+)*666", reason: "Insecure permissions: world-writable files" },
-  { id: "deny-chmod-recursive-system", type: "regex", pattern: "chmod\\s+(-[a-zA-Z]*R[a-zA-Z]*|--recursive)(?:\\s+\\S+)*\\s+/(etc|var|usr|bin|sbin|lib)", reason: "Destructive: recursive chmod on system dirs" },
+  { id: "deny-chmod-777", pattern: "chmod\\s+(-[a-zA-Z]+\\s+)*777", reason: "Insecure permissions: world-writable", type: "regex" },
+  { id: "deny-chmod-666", pattern: "chmod\\s+(-[a-zA-Z]+\\s+)*666", reason: "Insecure permissions: world-writable files", type: "regex" },
+  { id: "deny-chmod-recursive-system", pattern: "chmod\\s+(-[a-zA-Z]*R[a-zA-Z]*|--recursive)(?:\\s+\\S+)*\\s+/(etc|var|usr|bin|sbin|lib)", reason: "Destructive: recursive chmod on system dirs", type: "regex" },
 
   // chown - dangerous ownership changes
-  { id: "deny-chown-recursive-system", type: "regex", pattern: "chown\\s+(-[a-zA-Z]*R[a-zA-Z]*|--recursive)(?:\\s+\\S+)*\\s+/(etc|var|usr|bin|sbin|lib)", reason: "Destructive: recursive chown on system dirs" },
-  { id: "deny-chown-root", type: "regex", pattern: "chown\\s+(-[a-zA-Z]*R[a-zA-Z]*|--recursive)(?:\\s+\\S+)*\\s+/\\s*$", reason: "Destructive: chown on root" },
+  { id: "deny-chown-recursive-system", pattern: "chown\\s+(-[a-zA-Z]*R[a-zA-Z]*|--recursive)(?:\\s+\\S+)*\\s+/(etc|var|usr|bin|sbin|lib)", reason: "Destructive: recursive chown on system dirs", type: "regex" },
+  { id: "deny-chown-root", pattern: "chown\\s+(-[a-zA-Z]*R[a-zA-Z]*|--recursive)(?:\\s+\\S+)*\\s+/\\s*$", reason: "Destructive: chown on root", type: "regex" },
 
   // Remote code execution
   // Use [^|]* instead of .* before pipe to prevent backtracking
-  { id: "deny-curl-pipe-bash", type: "regex", pattern: "curl[^|]*\\|\\s*(bash|sh|zsh|python|perl|ruby)", reason: "Remote code execution via curl pipe" },
-  { id: "deny-wget-pipe-bash", type: "regex", pattern: "wget[^|]*\\|\\s*(bash|sh|zsh|python|perl|ruby)", reason: "Remote code execution via wget pipe" },
-  { id: "deny-curl-pipe-sudo", type: "regex", pattern: "curl[^|]*\\|\\s*sudo", reason: "Remote code execution with elevated privileges" },
+  { id: "deny-curl-pipe-bash", pattern: "curl[^|]*\\|\\s*(bash|sh|zsh|python|perl|ruby)", reason: "Remote code execution via curl pipe", type: "regex" },
+  { id: "deny-wget-pipe-bash", pattern: "wget[^|]*\\|\\s*(bash|sh|zsh|python|perl|ruby)", reason: "Remote code execution via wget pipe", type: "regex" },
+  { id: "deny-curl-pipe-sudo", pattern: "curl[^|]*\\|\\s*sudo", reason: "Remote code execution with elevated privileges", type: "regex" },
 
   // Disk/filesystem operations
-  { id: "deny-dd-of-dev", type: "regex", pattern: "dd\\s+[^ ]*of=/dev/", reason: "Destructive: writes to device" },
-  { id: "deny-mkfs", type: "prefix", pattern: "mkfs", reason: "Destructive: formats filesystem" },
-  { id: "deny-format", type: "prefix", pattern: "format ", reason: "Destructive: formats disk" },
-  { id: "deny-fdisk", type: "prefix", pattern: "fdisk", reason: "Destructive: disk partitioning" },
-  { id: "deny-parted", type: "prefix", pattern: "parted", reason: "Destructive: disk partitioning" },
+  { id: "deny-dd-of-dev", pattern: "dd\\s+[^ ]*of=/dev/", reason: "Destructive: writes to device", type: "regex" },
+  { id: "deny-mkfs", pattern: "mkfs", reason: "Destructive: formats filesystem", type: "prefix" },
+  { id: "deny-format", pattern: "format ", reason: "Destructive: formats disk", type: "prefix" },
+  { id: "deny-fdisk", pattern: "fdisk", reason: "Destructive: disk partitioning", type: "prefix" },
+  { id: "deny-parted", pattern: "parted", reason: "Destructive: disk partitioning", type: "prefix" },
 
   // System control
-  { id: "deny-shutdown", type: "prefix", pattern: "shutdown", reason: "System shutdown" },
-  { id: "deny-reboot", type: "prefix", pattern: "reboot", reason: "System reboot" },
-  { id: "deny-init-0", type: "contains", pattern: "init 0", reason: "System shutdown" },
-  { id: "deny-init-6", type: "contains", pattern: "init 6", reason: "System reboot" },
-  { id: "deny-systemctl-disable", type: "regex", pattern: "systemctl\\s+(disable|mask)\\s+(sshd|networking|network|firewalld|iptables)", reason: "Disabling critical services" },
+  { id: "deny-shutdown", pattern: "shutdown", reason: "System shutdown", type: "prefix" },
+  { id: "deny-reboot", pattern: "reboot", reason: "System reboot", type: "prefix" },
+  { id: "deny-init-0", pattern: "init 0", reason: "System shutdown", type: "contains" },
+  { id: "deny-init-6", pattern: "init 6", reason: "System reboot", type: "contains" },
+  { id: "deny-systemctl-disable", pattern: "systemctl\\s+(disable|mask)\\s+(sshd|networking|network|firewalld|iptables)", reason: "Disabling critical services", type: "regex" },
 
   // sudo with dangerous commands (catch-all for above with sudo prefix)
-  { id: "deny-sudo-rm-rf", type: "regex", pattern: "sudo\\s+rm\\s+(-[a-zA-Z]*r[a-zA-Z]*|--recursive)", reason: "Elevated destructive file removal" },
+  { id: "deny-sudo-rm-rf", pattern: "sudo\\s+rm\\s+(-[a-zA-Z]*r[a-zA-Z]*|--recursive)", reason: "Elevated destructive file removal", type: "regex" },
 ];
-
-/**
- * Load rules from an external JSON file.
- */
-function loadRulesFromFile(filePath: string, context: LogContext): ExternalRule[] | null {
-  try {
-    if (!fs.existsSync(filePath)) {
-      return null;
-    }
-
-    const content = fs.readFileSync(filePath, "utf-8");
-    const parsed = JSON.parse(content) as RuleFile;
-
-    if (!parsed.rules || !Array.isArray(parsed.rules)) {
-      logWarn(`Invalid rule file format: ${filePath}`, context);
-      return null;
-    }
-
-    // Validate rules
-    const validRules = parsed.rules.filter((rule) => {
-      if (!rule.id || !rule.type || !rule.pattern || !rule.reason) {
-        logWarn(`Invalid rule missing required fields: ${JSON.stringify(rule)}`, context);
-        return false;
-      }
-      if (!["regex", "prefix", "contains"].includes(rule.type)) {
-        logWarn(`Invalid rule type "${rule.type}" for rule ${rule.id}`, context);
-        return false;
-      }
-      return true;
-    });
-
-    logDebug(`Loaded ${validRules.length} rules from ${filePath}`, context);
-    return validRules;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    logWarn(`Failed to load rules from ${filePath}: ${message}`, context);
-    return null;
-  }
-}
 
 /**
  * Load allowlist rules.
@@ -161,62 +124,6 @@ export function loadDenyRules(context: LogContext): ExternalRule[] {
 
   logDebug("Using default denylist rules", context);
   return DEFAULT_DENY_RULES;
-}
-
-/**
- * Check if a command matches a single rule.
- */
-function matchesRule(command: string, rule: ExternalRule): boolean {
-  const trimmed = command.trim();
-
-  switch (rule.type) {
-    case "prefix":
-      return trimmed.startsWith(rule.pattern);
-
-    case "contains":
-      return trimmed.includes(rule.pattern);
-
-    case "regex":
-      try {
-        const regex = new RegExp(rule.pattern);
-        return regex.test(trimmed);
-      } catch {
-        // Invalid regex, treat as no match
-        return false;
-      }
-
-    default:
-      return false;
-  }
-}
-
-/**
- * Normalize a compound command for allowlist matching.
- * Strips safe shell constructs to expose the primary command.
- */
-function normalizeCommand(command: string): string {
-  let normalized = command.trim();
-
-  // Strip leading `cd /path &&` or `cd /path;`
-  normalized = normalized.replace(/^cd\s+\S+\s*(?:&&|;)\s*/, "");
-
-  // Strip leading VAR=value env assignments (e.g., LOG=1 FOO=bar grep ...)
-  normalized = normalized.replace(/^(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)+/, "");
-  // Also strip VAR=value && (with explicit &&)
-  normalized = normalized.replace(/^(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s*&&\s*)+/, "");
-
-  // Strip trailing shell redirections (2>/dev/null, >/dev/null 2>&1, etc.)
-  // Use [ \t] instead of \s to avoid ReDoS from \s matching \r\n overlapping with .*
-  normalized = normalized.replace(/[ \t]+\d*>[ \t]*\/dev\/null(?:[ \t]+2>&1)?$/, "");
-  normalized = normalized.replace(/[ \t]+2>&1[ \t]*$/, "");
-
-  // Strip trailing `; echo "..."` or `; echo $?` status checks
-  normalized = normalized.replace(/[ \t]*;[ \t]*echo[ \t]+.*$/, "");
-
-  // Strip pnpm workspace filter flags: --filter <pkg>, -F <pkg>, --filter=<pkg>
-  normalized = normalized.replace(/^(pnpm)\s+(?:--filter(?:=|\s+)\S+|-F\s+\S+)\s+/, "$1 ");
-
-  return normalized.trim();
 }
 
 /**
@@ -315,4 +222,99 @@ export function matchesDenylist(
   }
 
   return null;
+}
+
+/**
+ * Load rules from an external JSON file.
+ */
+function loadRulesFromFile(filePath: string, context: LogContext): ExternalRule[] | null {
+  try {
+    if (!fs.existsSync(filePath)) {
+      return null;
+    }
+
+    const content = fs.readFileSync(filePath, "utf-8");
+    const parsed = JSON.parse(content) as RuleFile;
+
+    if (!parsed.rules || !Array.isArray(parsed.rules)) {
+      logWarn(`Invalid rule file format: ${filePath}`, context);
+      return null;
+    }
+
+    // Validate rules
+    const validRules = parsed.rules.filter((rule) => {
+      if (!rule.id || !rule.type || !rule.pattern || !rule.reason) {
+        logWarn(`Invalid rule missing required fields: ${JSON.stringify(rule)}`, context);
+        return false;
+      }
+      if (!["contains", "prefix", "regex"].includes(rule.type)) {
+        logWarn(`Invalid rule type "${rule.type}" for rule ${rule.id}`, context);
+        return false;
+      }
+      return true;
+    });
+
+    logDebug(`Loaded ${validRules.length} rules from ${filePath}`, context);
+    return validRules;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logWarn(`Failed to load rules from ${filePath}: ${message}`, context);
+    return null;
+  }
+}
+
+/**
+ * Check if a command matches a single rule.
+ */
+function matchesRule(command: string, rule: ExternalRule): boolean {
+  const trimmed = command.trim();
+
+  switch (rule.type) {
+    case "contains":
+      return trimmed.includes(rule.pattern);
+
+    case "prefix":
+      return trimmed.startsWith(rule.pattern);
+
+    case "regex":
+      try {
+        const regex = new RegExp(rule.pattern);
+        return regex.test(trimmed);
+      } catch {
+        // Invalid regex, treat as no match
+        return false;
+      }
+
+    default:
+      return false;
+  }
+}
+
+/**
+ * Normalize a compound command for allowlist matching.
+ * Strips safe shell constructs to expose the primary command.
+ */
+function normalizeCommand(command: string): string {
+  let normalized = command.trim();
+
+  // Strip leading `cd /path &&` or `cd /path;`
+  normalized = normalized.replace(/^cd\s+\S+\s*(?:&&|;)\s*/, "");
+
+  // Strip leading VAR=value env assignments (e.g., LOG=1 FOO=bar grep ...)
+  normalized = normalized.replace(/^(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s+)+/, "");
+  // Also strip VAR=value && (with explicit &&)
+  normalized = normalized.replace(/^(?:[A-Za-z_][A-Za-z0-9_]*=\S*\s*&&\s*)+/, "");
+
+  // Strip trailing shell redirections (2>/dev/null, >/dev/null 2>&1, etc.)
+  // Use [ \t] instead of \s to avoid ReDoS from \s matching \r\n overlapping with .*
+  normalized = normalized.replace(/[ \t]+\d*>[ \t]*\/dev\/null(?:[ \t]+2>&1)?$/, "");
+  normalized = normalized.replace(/[ \t]+2>&1[ \t]*$/, "");
+
+  // Strip trailing `; echo "..."` or `; echo $?` status checks
+  normalized = normalized.replace(/[ \t]*;[ \t]*echo[ \t]+.*$/, "");
+
+  // Strip pnpm workspace filter flags: --filter <pkg>, -F <pkg>, --filter=<pkg>
+  normalized = normalized.replace(/^(pnpm)\s+(?:--filter(?:=|\s+)\S+|-F\s+\S+)\s+/, "$1 ");
+
+  return normalized.trim();
 }

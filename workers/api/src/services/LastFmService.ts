@@ -176,7 +176,7 @@ export interface LastFmSignals {
 }
 
 interface LastFmImage {
-  '#text': string | null
+  '#text': null | string
   size: string
 }
 

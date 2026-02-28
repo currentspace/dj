@@ -13,11 +13,10 @@
 import {memo, useCallback, useState} from 'react'
 
 import {usePWAUpdate} from '../../hooks/usePWAUpdate'
-
 import '../../styles/update-banner.css'
 
 export const UpdateBanner = memo(function UpdateBanner() {
-  const {updateAvailable, waitingForPlaybackStop, isPlaybackActive, applyUpdate, dismissUpdate} = usePWAUpdate()
+  const {applyUpdate, dismissUpdate, isPlaybackActive, updateAvailable, waitingForPlaybackStop} = usePWAUpdate()
   const [showForceOption, setShowForceOption] = useState(false)
 
   const handleUpdateClick = useCallback(() => {

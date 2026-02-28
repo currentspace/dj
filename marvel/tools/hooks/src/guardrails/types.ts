@@ -8,36 +8,49 @@
  */
 
 /**
- * Module boundary definition
- */
-export interface ModuleBoundary {
-  from: string;
-  cannotImportFrom: string[];
-}
-
-/**
  * Guardrail configuration
  */
 export interface Guardrails {
   allowedTools?: string[];
+  boundaries?: ModuleBoundary[];
   forbiddenPaths?: RegExp[];
   sensitivePaths?: RegExp[];
-  boundaries?: ModuleBoundary[];
+}
+
+/**
+ * Module boundary definition
+ */
+export interface ModuleBoundary {
+  cannotImportFrom: string[];
+  from: string;
+}
+
+/**
+ * Tool call parameters (simplified)
+ */
+export interface ToolCallParams {
+  [key: string]: unknown;
+  command?: string; // For Bash tool
+  file_path?: string;
+  new_string?: string;
+  old_string?: string;
+  path?: string; // For Glob/Grep tools
+  pattern?: string; // For Grep tool
 }
 
 /**
  * Guardrail violation severity
  */
-export type ViolationSeverity = 'warning' | 'error' | 'critical';
+export type ViolationSeverity = 'critical' | 'error' | 'warning';
 
 /**
  * Guardrail violation type
  */
 export type ViolationType =
-  | 'tool_not_allowed'
   | 'forbidden_path'
+  | 'module_boundary'
   | 'sensitive_path'
-  | 'module_boundary';
+  | 'tool_not_allowed';
 
 /**
  * Guardrail violation error
@@ -48,31 +61,18 @@ export class GuardrailViolation extends Error {
     public readonly type: ViolationType,
     public readonly severity: ViolationSeverity = 'error',
     public readonly context?: {
-      tool?: string;
-      path?: string;
-      from?: string;
-      to?: string;
-      command?: string;
       allowedTools?: string[];
-      forbiddenPatterns?: RegExp[];
       boundaries?: ModuleBoundary[];
+      command?: string;
+      forbiddenPatterns?: RegExp[];
+      from?: string;
+      path?: string;
       reference?: string;
+      to?: string;
+      tool?: string;
     },
   ) {
     super(message);
     this.name = 'GuardrailViolation';
   }
-}
-
-/**
- * Tool call parameters (simplified)
- */
-export interface ToolCallParams {
-  file_path?: string;
-  old_string?: string;
-  new_string?: string;
-  command?: string; // For Bash tool
-  path?: string; // For Glob/Grep tools
-  pattern?: string; // For Grep tool
-  [key: string]: unknown;
 }

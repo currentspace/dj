@@ -43,7 +43,7 @@ export function AutoFillToggle({autoFill, onToggle}: AutoFillToggleProps) {
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({error: 'Request failed'}))
-        throw new Error(error.error || 'Failed to update preferences')
+        throw new Error(error.error ?? 'Failed to update preferences')
       }
 
       onToggle?.(newValue)

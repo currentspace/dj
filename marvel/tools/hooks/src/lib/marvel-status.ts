@@ -10,78 +10,18 @@
 
 import * as fs from "fs";
 import * as path from "path";
+
 import type { SyncHookJSONOutput, UserPromptSubmitHookSpecificOutput } from "../sdk-types.js";
 import type { RunState } from "../types.js";
 import type { LogContext } from "./logger.js";
-import { findRunDir, getTempDir } from "./paths.js";
-import { safeReadJson } from "./file-ops.js";
+
 import { VALID_HOOK_EVENTS } from "../schema/settings-types.js";
+import { safeReadJson } from "./file-ops.js";
+import { findRunDir, getTempDir } from "./paths.js";
 
 interface SettingsJson {
   hooks?: Record<string, unknown>;
   permissions?: Record<string, unknown>;
-}
-
-function formatDuration(startedAt: string): string {
-  const startMs = new Date(startedAt).getTime();
-  const nowMs = Date.now();
-  const diffSec = Math.floor((nowMs - startMs) / 1000);
-
-  if (diffSec < 0) return "0s";
-
-  const hours = Math.floor(diffSec / 3600);
-  const minutes = Math.floor((diffSec % 3600) / 60);
-  const seconds = diffSec % 60;
-
-  const parts: string[] = [];
-  if (hours > 0) parts.push(`${hours}h`);
-  if (minutes > 0) parts.push(`${minutes}m`);
-  parts.push(`${seconds}s`);
-
-  return parts.join(" ");
-}
-
-function checkDaemonHealth(daemonId: string | undefined): string {
-  if (!daemonId) return "unknown (no daemon ID)";
-
-  const tempDir = getTempDir();
-  const pidPath = `${tempDir}/p-${daemonId}.pid`;
-  const socketPath = `${tempDir}/p-${daemonId}.sock`;
-
-  const pidExists = fs.existsSync(pidPath);
-  const socketExists = fs.existsSync(socketPath);
-
-  if (pidExists && socketExists) {
-    try {
-      const pid = parseInt(fs.readFileSync(pidPath, "utf-8").trim(), 10);
-      process.kill(pid, 0);
-      return `running (pid: ${pid})`;
-    } catch {
-      return "stale (process not found)";
-    }
-  }
-
-  if (pidExists) return "degraded (socket missing)";
-  if (socketExists) return "degraded (pid file missing)";
-  return "not running";
-}
-
-function getConfiguredHooks(): { configured: string[]; missing: string[] } {
-  const projectDir = process.env.CLAUDE_PROJECT_DIR;
-  if (!projectDir) {
-    return { configured: [], missing: [...VALID_HOOK_EVENTS] };
-  }
-
-  const settingsPath = path.join(projectDir, ".claude", "settings.json");
-  const settings = safeReadJson<SettingsJson>(settingsPath, { hookType: "marvel-status" });
-
-  if (!settings?.hooks) {
-    return { configured: [], missing: [...VALID_HOOK_EVENTS] };
-  }
-
-  const configured = Object.keys(settings.hooks);
-  const missing = VALID_HOOK_EVENTS.filter((e) => !configured.includes(e));
-  return { configured, missing };
 }
 
 export function compileMarvelStatus(context: LogContext): SyncHookJSONOutput {
@@ -119,7 +59,7 @@ export function compileMarvelStatus(context: LogContext): SyncHookJSONOutput {
         // Hot packs (most injected this session)
         if (runState.packInjectionCounts) {
           const packCounts = Object.entries(runState.packInjectionCounts)
-            .sort(([, a], [, b]) => (b as number) - (a as number))
+            .sort(([, a], [, b]) => (b) - (a))
             .slice(0, 5);
           if (packCounts.length > 0) {
             lines.push("");
@@ -156,11 +96,73 @@ export function compileMarvelStatus(context: LogContext): SyncHookJSONOutput {
 
     const statusText = `<marvel-status>\n${lines.join("\n")}\n</marvel-status>`;
     const hookSpecificOutput: UserPromptSubmitHookSpecificOutput = {
-      hookEventName: "UserPromptSubmit",
       additionalContext: statusText,
+      hookEventName: "UserPromptSubmit",
     };
     return { hookSpecificOutput };
   } catch {
     return {};
   }
+}
+
+function checkDaemonHealth(daemonId: string | undefined): string {
+  if (!daemonId) return "unknown (no daemon ID)";
+
+  const tempDir = getTempDir();
+  const pidPath = `${tempDir}/p-${daemonId}.pid`;
+  const socketPath = `${tempDir}/p-${daemonId}.sock`;
+
+  const pidExists = fs.existsSync(pidPath);
+  const socketExists = fs.existsSync(socketPath);
+
+  if (pidExists && socketExists) {
+    try {
+      const pid = parseInt(fs.readFileSync(pidPath, "utf-8").trim(), 10);
+      process.kill(pid, 0);
+      return `running (pid: ${pid})`;
+    } catch {
+      return "stale (process not found)";
+    }
+  }
+
+  if (pidExists) return "degraded (socket missing)";
+  if (socketExists) return "degraded (pid file missing)";
+  return "not running";
+}
+
+function formatDuration(startedAt: string): string {
+  const startMs = new Date(startedAt).getTime();
+  const nowMs = Date.now();
+  const diffSec = Math.floor((nowMs - startMs) / 1000);
+
+  if (diffSec < 0) return "0s";
+
+  const hours = Math.floor(diffSec / 3600);
+  const minutes = Math.floor((diffSec % 3600) / 60);
+  const seconds = diffSec % 60;
+
+  const parts: string[] = [];
+  if (hours > 0) parts.push(`${hours}h`);
+  if (minutes > 0) parts.push(`${minutes}m`);
+  parts.push(`${seconds}s`);
+
+  return parts.join(" ");
+}
+
+function getConfiguredHooks(): { configured: string[]; missing: string[] } {
+  const projectDir = process.env.CLAUDE_PROJECT_DIR;
+  if (!projectDir) {
+    return { configured: [], missing: [...VALID_HOOK_EVENTS] };
+  }
+
+  const settingsPath = path.join(projectDir, ".claude", "settings.json");
+  const settings = safeReadJson<SettingsJson>(settingsPath, { hookType: "marvel-status" });
+
+  if (!settings?.hooks) {
+    return { configured: [], missing: [...VALID_HOOK_EVENTS] };
+  }
+
+  const configured = Object.keys(settings.hooks);
+  const missing = VALID_HOOK_EVENTS.filter((e) => !configured.includes(e));
+  return { configured, missing };
 }

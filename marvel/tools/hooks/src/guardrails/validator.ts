@@ -44,22 +44,9 @@ const DEFAULT_SENSITIVE_PATHS = [
  * Default module boundaries
  */
 const DEFAULT_BOUNDARIES: ModuleBoundary[] = [
-  { from: 'src/lib/', cannotImportFrom: ['src/components/', 'src/app/'] },
-  { from: 'src/components/', cannotImportFrom: ['src/app/'] },
+  { cannotImportFrom: ['src/components/', 'src/app/'], from: 'src/lib/' },
+  { cannotImportFrom: ['src/app/'], from: 'src/components/' },
 ];
-
-/**
- * Check if tool is allowed by guardrails
- */
-export function isToolAllowed(tool: string, guardrails: Guardrails): boolean {
-  // If no allowlist specified, all tools allowed
-  if (!guardrails.allowedTools || guardrails.allowedTools.length === 0) {
-    return true;
-  }
-
-  // Check if tool is in allowlist
-  return guardrails.allowedTools.includes(tool);
-}
 
 /**
  * Check if path is forbidden
@@ -80,64 +67,150 @@ export function isSensitivePath(path: string, guardrails: Guardrails): boolean {
 }
 
 /**
- * Check if Bash command writes to forbidden path
+ * Check if tool is allowed by guardrails
  */
-function checkBashOutputRedirection(command: string, guardrails: Guardrails): string | null {
-  // Match output redirection patterns: >, >>, tee, etc.
-  const redirectPatterns = [
-    />\s*([^\s&|;]+)/g,  // > file
-    />>\s*([^\s&|;]+)/g, // >> file
-    /\btee\s+(?:-a\s+)?([^\s&|;]+)/g, // tee file or tee -a file
-  ];
+export function isToolAllowed(tool: string, guardrails: Guardrails): boolean {
+  // If no allowlist specified, all tools allowed
+  if (!guardrails.allowedTools || guardrails.allowedTools.length === 0) {
+    return true;
+  }
 
-  for (const pattern of redirectPatterns) {
-    let match: RegExpExecArray | null;
-    while ((match = pattern.exec(command)) !== null) {
-      // Get the last capture group (the file path)
-      const targetPath = match[1];
-      if (targetPath && isForbiddenPath(targetPath, guardrails)) {
-        return targetPath;
+  // Check if tool is in allowlist
+  return guardrails.allowedTools.includes(tool);
+}
+
+/**
+ * Suggest alternatives for guardrail violations
+ */
+export function suggestAlternatives(violation: GuardrailViolation): string[] {
+  const alternatives: string[] = [];
+
+  switch (violation.type) {
+    case 'forbidden_path':
+      if (violation.context?.path?.endsWith('pnpm-lock.yaml')) {
+        alternatives.push('Use: pnpm install <package>, then commit the resulting lock file');
       }
+      break;
+
+    case 'module_boundary':
+      alternatives.push('Move shared code to src/lib/');
+      alternatives.push('Import from src/lib/ instead');
+      alternatives.push('Refactor to respect boundaries');
+      break;
+
+    case 'sensitive_path':
+      alternatives.push('Ensure verification plan covers this change');
+      alternatives.push('Request additional review');
+      break;
+
+    case 'tool_not_allowed':
+      alternatives.push('Check pack guardrails for allowed tools');
+      alternatives.push('Use an alternative tool');
+      alternatives.push('Request pack update to allow tool');
+      break;
+  }
+
+  return alternatives;
+}
+
+/**
+ * Validate tool call against guardrails
+ *
+ * @throws {GuardrailViolation} if validation fails
+ */
+export function validateToolCall(
+  tool: string,
+  params: ToolCallParams,
+  guardrails: Guardrails,
+): void {
+  // 1. Check if tool is allowed
+  if (!isToolAllowed(tool, guardrails)) {
+    throw new GuardrailViolation(
+      `Tool ${tool} not allowed by guardrails`,
+      'tool_not_allowed',
+      'error',
+      {
+        allowedTools: guardrails.allowedTools,
+        reference: 'packs/tech-tools/guardrails.md#allowed-tools',
+        tool,
+      },
+    );
+  }
+
+  // 2. Check if path is forbidden (for file operations)
+  if ((tool === 'Edit' || tool === 'Write') && params.file_path) {
+    const path = params.file_path;
+
+    if (isForbiddenPath(path, guardrails)) {
+      throw new GuardrailViolation(
+        `Cannot modify ${path} - forbidden path`,
+        'forbidden_path',
+        'error',
+        {
+          forbiddenPatterns: [...DEFAULT_FORBIDDEN_PATHS, ...(guardrails.forbiddenPaths || [])],
+          path,
+          reference: 'packs/repo-architecture/guardrails.md#forbidden-edits',
+          tool,
+        },
+      );
     }
   }
 
-  return null;
-}
-
-/**
- * Check if search path is forbidden
- */
-function checkSearchPath(path: string, guardrails: Guardrails): boolean {
-  // Normalize path and check against forbidden patterns
-  const normalizedPath = path.replace(/^\.\//, '');
-  return isForbiddenPath(normalizedPath, guardrails);
-}
-
-/**
- * Parse import statement from edit parameters
- */
-function parseImport(params: ToolCallParams): {
-  fromPath: string;
-  importPath: string;
-} | null {
-  const { new_string } = params;
-
-  if (!new_string) {
-    return null;
+  // 3. Check Bash output redirection
+  if (tool === 'Bash' && params.command) {
+    const forbiddenTarget = checkBashOutputRedirection(params.command, guardrails);
+    if (forbiddenTarget) {
+      throw new GuardrailViolation(
+        `Cannot redirect output to ${forbiddenTarget} - forbidden path`,
+        'forbidden_path',
+        'error',
+        {
+          command: params.command,
+          path: forbiddenTarget,
+          reference: 'packs/repo-architecture/guardrails.md#forbidden-edits',
+          tool,
+        },
+      );
+    }
   }
 
-  // Simple regex to detect import statements
-  const importRegex = /(?:import|from)\s+['"]([^'"]+)['"]/;
-  const match = new_string.match(importRegex);
-
-  if (!match) {
-    return null;
+  // 4. Check Glob/Grep search paths
+  if ((tool === 'Glob' || tool === 'Grep') && params.path) {
+    if (checkSearchPath(params.path, guardrails)) {
+      throw new GuardrailViolation(
+        `Cannot search in ${params.path} - forbidden path`,
+        'forbidden_path',
+        'warning', // Warning, not error - searches are read-only
+        {
+          path: params.path,
+          reference: 'packs/repo-architecture/guardrails.md#forbidden-paths',
+          tool,
+        },
+      );
+    }
   }
 
-  return {
-    fromPath: params.file_path || '',
-    importPath: match[1],
-  };
+  // 5. Check module boundaries (for imports)
+  if (tool === 'Edit') {
+    const importInfo = parseImport(params);
+    if (importInfo) {
+      const { fromPath, importPath } = importInfo;
+      if (violatesBoundaries(fromPath, importPath, guardrails)) {
+        throw new GuardrailViolation(
+          `Import from ${fromPath} to ${importPath} crosses module boundary`,
+          'module_boundary',
+          'error',
+          {
+            boundaries: [...DEFAULT_BOUNDARIES, ...(guardrails.boundaries || [])],
+            from: fromPath,
+            reference: 'packs/repo-architecture/guardrails.md#module-boundaries',
+            to: importPath,
+            tool,
+          },
+        );
+      }
+    }
+  }
 }
 
 /**
@@ -164,135 +237,62 @@ export function violatesBoundaries(
 }
 
 /**
- * Validate tool call against guardrails
- *
- * @throws {GuardrailViolation} if validation fails
+ * Check if Bash command writes to forbidden path
  */
-export function validateToolCall(
-  tool: string,
-  params: ToolCallParams,
-  guardrails: Guardrails,
-): void {
-  // 1. Check if tool is allowed
-  if (!isToolAllowed(tool, guardrails)) {
-    throw new GuardrailViolation(
-      `Tool ${tool} not allowed by guardrails`,
-      'tool_not_allowed',
-      'error',
-      {
-        tool,
-        allowedTools: guardrails.allowedTools,
-        reference: 'packs/tech-tools/guardrails.md#allowed-tools',
-      },
-    );
-  }
+function checkBashOutputRedirection(command: string, guardrails: Guardrails): null | string {
+  // Match output redirection patterns: >, >>, tee, etc.
+  const redirectPatterns = [
+    />\s*([^\s&|;]+)/g,  // > file
+    />>\s*([^\s&|;]+)/g, // >> file
+    /\btee\s+(?:-a\s+)?([^\s&|;]+)/g, // tee file or tee -a file
+  ];
 
-  // 2. Check if path is forbidden (for file operations)
-  if ((tool === 'Edit' || tool === 'Write') && params.file_path) {
-    const path = params.file_path;
-
-    if (isForbiddenPath(path, guardrails)) {
-      throw new GuardrailViolation(
-        `Cannot modify ${path} - forbidden path`,
-        'forbidden_path',
-        'error',
-        {
-          tool,
-          path,
-          forbiddenPatterns: [...DEFAULT_FORBIDDEN_PATHS, ...(guardrails.forbiddenPaths || [])],
-          reference: 'packs/repo-architecture/guardrails.md#forbidden-edits',
-        },
-      );
-    }
-  }
-
-  // 3. Check Bash output redirection
-  if (tool === 'Bash' && params.command) {
-    const forbiddenTarget = checkBashOutputRedirection(params.command, guardrails);
-    if (forbiddenTarget) {
-      throw new GuardrailViolation(
-        `Cannot redirect output to ${forbiddenTarget} - forbidden path`,
-        'forbidden_path',
-        'error',
-        {
-          tool,
-          path: forbiddenTarget,
-          command: params.command,
-          reference: 'packs/repo-architecture/guardrails.md#forbidden-edits',
-        },
-      );
-    }
-  }
-
-  // 4. Check Glob/Grep search paths
-  if ((tool === 'Glob' || tool === 'Grep') && params.path) {
-    if (checkSearchPath(params.path, guardrails)) {
-      throw new GuardrailViolation(
-        `Cannot search in ${params.path} - forbidden path`,
-        'forbidden_path',
-        'warning', // Warning, not error - searches are read-only
-        {
-          tool,
-          path: params.path,
-          reference: 'packs/repo-architecture/guardrails.md#forbidden-paths',
-        },
-      );
-    }
-  }
-
-  // 5. Check module boundaries (for imports)
-  if (tool === 'Edit') {
-    const importInfo = parseImport(params);
-    if (importInfo) {
-      const { fromPath, importPath } = importInfo;
-      if (violatesBoundaries(fromPath, importPath, guardrails)) {
-        throw new GuardrailViolation(
-          `Import from ${fromPath} to ${importPath} crosses module boundary`,
-          'module_boundary',
-          'error',
-          {
-            tool,
-            from: fromPath,
-            to: importPath,
-            boundaries: [...DEFAULT_BOUNDARIES, ...(guardrails.boundaries || [])],
-            reference: 'packs/repo-architecture/guardrails.md#module-boundaries',
-          },
-        );
+  for (const pattern of redirectPatterns) {
+    let match: null | RegExpExecArray;
+    while ((match = pattern.exec(command)) !== null) {
+      // Get the last capture group (the file path)
+      const targetPath = match[1];
+      if (targetPath && isForbiddenPath(targetPath, guardrails)) {
+        return targetPath;
       }
     }
   }
+
+  return null;
 }
 
 /**
- * Suggest alternatives for guardrail violations
+ * Check if search path is forbidden
  */
-export function suggestAlternatives(violation: GuardrailViolation): string[] {
-  const alternatives: string[] = [];
+function checkSearchPath(path: string, guardrails: Guardrails): boolean {
+  // Normalize path and check against forbidden patterns
+  const normalizedPath = path.replace(/^\.\//, '');
+  return isForbiddenPath(normalizedPath, guardrails);
+}
 
-  switch (violation.type) {
-    case 'forbidden_path':
-      if (violation.context?.path?.endsWith('pnpm-lock.yaml')) {
-        alternatives.push('Use: pnpm install <package>, then commit the resulting lock file');
-      }
-      break;
+/**
+ * Parse import statement from edit parameters
+ */
+function parseImport(params: ToolCallParams): null | {
+  fromPath: string;
+  importPath: string;
+} {
+  const { new_string } = params;
 
-    case 'module_boundary':
-      alternatives.push('Move shared code to src/lib/');
-      alternatives.push('Import from src/lib/ instead');
-      alternatives.push('Refactor to respect boundaries');
-      break;
-
-    case 'tool_not_allowed':
-      alternatives.push('Check pack guardrails for allowed tools');
-      alternatives.push('Use an alternative tool');
-      alternatives.push('Request pack update to allow tool');
-      break;
-
-    case 'sensitive_path':
-      alternatives.push('Ensure verification plan covers this change');
-      alternatives.push('Request additional review');
-      break;
+  if (!new_string) {
+    return null;
   }
 
-  return alternatives;
+  // Simple regex to detect import statements
+  const importRegex = /(?:import|from)\s+['"]([^'"]+)['"]/;
+  const match = importRegex.exec(new_string);
+
+  if (!match) {
+    return null;
+  }
+
+  return {
+    fromPath: params.file_path || '',
+    importPath: match[1],
+  };
 }
