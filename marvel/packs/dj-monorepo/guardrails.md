@@ -1,84 +1,111 @@
-# DJ Monorepo
+# DJ Monorepo (February 2026)
 
-pnpm monorepo conventions, build order, workspace dependencies, deployment pipeline, and shared package patterns.
+pnpm workspace with catalogs, hoisted dependencies, Tailwind 4, and modern build targets.
 
 ## Package Manager (Critical)
 
 - ALWAYS use pnpm; NEVER use npm, yarn, or npx
-- Use `uv run python` for Python scripts; never call `python`, `python3`, `pip`, or `pip3` directly
+- Use `uv run python` for Python scripts; never call python/python3/pip directly
 - Use `uvx <tool>` for Python CLI tools
-- Run all commands from the monorepo root unless filtering to a specific package
-- Use `pnpm --filter @dj/package-name` to target specific workspace packages
+- Run all commands from monorepo root unless filtering to a specific package
+
+## pnpm Catalogs (Critical)
+
+- **ALL shared dependencies MUST be defined in `pnpm-workspace.yaml` catalogs**
+- **Package.json files reference via `catalog:` protocol**, not version ranges
+- Set `catalogMode: strict` to prevent drift
+- When adding a dependency used by multiple packages: add to catalog FIRST, then reference
+
+```yaml
+# pnpm-workspace.yaml
+packages:
+  - 'apps/*'
+  - 'packages/*'
+  - 'workers/*'
+
+catalog:
+  react: ^19.2.4
+  react-dom: ^19.2.4
+  zod: ^4.3.6
+  hono: ^4.12.3
+  typescript: ^5.9.3
+  vitest: ^4.0.18
+  tsup: ^8.5.1
+  '@anthropic-ai/sdk': ^0.78.0
+  '@hono/zod-openapi': ^1.2.2
+  tailwindcss: ^4.1.0
+  '@tailwindcss/vite': ^4.1.0
+
+catalogs:
+  cloudflare:
+    wrangler: ^4.69.0
+    '@cloudflare/workers-types': ^4.20260226.1
+```
+
+```json
+// package.json — reference catalogs
+{
+  "dependencies": {
+    "react": "catalog:",
+    "zod": "catalog:",
+    "hono": "catalog:"
+  },
+  "devDependencies": {
+    "wrangler": "catalog:cloudflare"
+  }
+}
+```
+
+- To upgrade a dependency: edit `pnpm-workspace.yaml` → `pnpm install` → all packages update
+
+## Dependency Hoisting
+
+- **Hoist ALL shared devDependencies to the workspace root**: typescript, vitest, eslint, prettier, tsup
+- Individual packages should NOT duplicate devDependencies that exist at root
+- Only package-specific dependencies stay in individual package.json files
+- Use `workspace:*` protocol for internal packages
+
+## Build Targets (February 2026)
+
+- TypeScript target: `ES2024` — enables `using`, `Promise.withResolvers()`, `Array.groupBy()`
+- Module: `ESNext` with bundler module resolution
+- Node.js runtime: 24+ (LTS)
+- Browser target: `esnext` (Vite build)
+- Cloudflare Workers: `es2024` platform `browser` (V8 isolate)
 
 ## Workspace Dependencies
 
-- Use `workspace:*` protocol for ALL internal package references
-- Dependency graph: `@dj/shared-types` → `@dj/api-client` → `@dj/web` / `@dj/api-worker`
-- `@dj/api-contracts` depends on `@dj/shared-types`; both `@dj/web` and `@dj/api-worker` depend on it
-- Shared types and Zod schemas go in `@dj/shared-types`
-- API route contracts (OpenAPI) go in `@dj/api-contracts`
-- Never create circular dependencies between workspace packages
+- Dependency graph: `@dj/shared-types` → `@dj/api-contracts` → `@dj/api-client` → `@dj/web` / `@dj/api-worker`
+- Never create circular dependencies
+- Shared Zod schemas in `@dj/shared-types`
+- API route contracts in `@dj/api-contracts`
 
-## Build Order (Critical)
-
-The build must follow the dependency graph:
+## Build Order
 
 1. `@dj/shared-types` (no dependencies)
 2. `@dj/api-contracts` (depends on shared-types)
 3. `@dj/api-client` (depends on shared-types + api-contracts)
-4. `@dj/web` (depends on shared-types + api-client + api-contracts)
+4. `@dj/web` (depends on all packages)
 5. `@dj/api-worker` (depends on shared-types + api-contracts)
 
-- The `pnpm build:worker` script handles this automatically
-- `scripts/build-info.js` runs first to generate git commit hash, timestamp, and version info
-- Build info is injected into both `apps/web/src/build-info.json` and `workers/api/src/build-info.json`
+## Tailwind 4 Integration
 
-## Deployment (Critical)
+- Install `tailwindcss` and `@tailwindcss/vite` via catalog
+- Root CSS file: `apps/web/src/styles/theme.css` with `@import "tailwindcss"` and `@theme` block
+- Vite plugin: `@tailwindcss/vite` in `vite.config.ts`
+- NO `tailwind.config.js` — configuration is CSS-first via `@theme`
+- NO CSS Modules — all styling via Tailwind utility classes
+
+## Deployment
 
 - NEVER run `pnpm run deploy` or manual deployment commands
-- Deployment is automatic via git push to the `main` branch (GitHub Actions)
-- Workflow: commit → push → GitHub Actions builds and deploys to Cloudflare Workers
-- Production URL: `https://dj.current.space`
-- For secrets not in GitHub Actions (like optional keys): use `wrangler secret put KEY_NAME`
-
-## TypeScript Configuration
-
-- Target: ES2022 across all packages
-- Strict mode enabled everywhere; no `any` types
-- Frontend: `jsx: react-jsx`, `moduleResolution: bundler`
-- Worker: `moduleResolution: node`, types include `@cloudflare/workers-types`
-- Shared types: `allowImportingTsExtensions: true` for workspace imports
-- Path aliases: `@/*` maps to `./src/*` in frontend; workspace packages resolve via Vite aliases
-
-## tsup Build Configuration
-
-- Shared types and API client: ESM + CJS output with `.d.ts` declarations, tree-shake enabled
-- Worker: platform `browser` (V8 isolate), minified, Node stdlib modules externalized
-- Mark workspace packages as external in library builds (shared-types, api-client)
-- Always generate source maps
-
-## Testing
-
-- Vitest 4.x with workspace projects configuration
-- Coverage threshold: 80% (lines, functions, branches, statements)
-- Test environments: `jsdom` for web, `node` for API/shared packages
-- Naming: `*.test.ts` / `*.spec.ts` alongside source files
-- Run all tests: `pnpm test`; run specific: `pnpm test:web`, `pnpm test:api`
-- Contract tests validate external API response schemas: `pnpm test:contracts`
+- Deployment is automatic via git push to main (Cloudflare watches the repo)
+- Build command: `pnpm run build:worker`
+- For secrets: `wrangler secret put KEY_NAME`
 
 ## Code Quality
 
-- ESLint 9 flat config with per-environment rules (browser, workers, tests)
+- ESLint 9 flat config (ESLint 10 upgrade deferred)
 - Prettier: 120 char width, single quotes, no semicolons, trailing commas
-- Security plugin enabled for all TypeScript; stricter rules for Workers code
 - Import sorting via perfectionist plugin
-- Run `pnpm typecheck` before committing; `pnpm lint` for style issues
-
-## File Organization
-
-- `apps/web/` — React 19.2 frontend with feature-based organization
-- `packages/` — shared libraries (types, client, contracts)
-- `workers/` — Cloudflare Workers (api, webhooks)
-- `scripts/` — build utilities
-- `.claude/` — Claude Code guidelines and Marvel configuration
-- Never create duplicate directory structures; prefer editing existing files
+- Run `pnpm typecheck` before committing; `pnpm lint` for style

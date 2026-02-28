@@ -1,67 +1,73 @@
-# DJ Cloudflare Workers
+# DJ Cloudflare Workers (February 2026)
 
-Cloudflare Workers patterns, Hono routing, SSE streaming, KV storage, and rate limiting for the DJ API worker.
+Hono routes, SSE streaming, KV storage, rate limiting, and strict promise tracking.
+
+## Promise Tracking in Workers (Critical)
+
+- **EVERY async operation must be tracked** — no floating promises, even in `waitUntil()`
+- Use a `PromiseTracker` instance per request for all background work
+- `ctx.waitUntil()` AND `tracker.track()` — both required for every background promise
+- Log tracker status on request completion for debugging
+
+```typescript
+const tracker = new PromiseTracker()
+
+// WRONG — fire-and-forget
+ctx.waitUntil(doBackgroundWork())
+
+// CORRECT — tracked AND registered with runtime
+ctx.waitUntil(tracker.track(doBackgroundWork()))
+
+// At end of request handler
+ctx.waitUntil(tracker.flush())  // ensure all background work completes
+```
+
+- Spotify queue add: `tracker.track(queueToSpotify(token, uri))` — not bare `fetch()`
+- KV writes in background: `tracker.track(kv.put(...))` — not fire-and-forget
 
 ## SSE Streaming (Critical)
 
-- Always use `TransformStream` with `highWaterMark: 10` to prevent memory bloat during slow client consumption
-- Set required headers: `Content-Type: text/event-stream`, `Cache-Control: no-cache, no-transform`, `X-Accel-Buffering: no`
-- Return `new Response(readable, { headers })` immediately; process asynchronously via the writable side
-- Send heartbeats every 15 seconds (`: heartbeat\n\n`) to keep connections alive through proxies
-- Serialize SSE writes through a queue to prevent concurrent writes to the writable stream
-- Handle client disconnect by checking the abort signal; clean up resources on disconnect
-
-```typescript
-// CORRECT - Immediate response with async processing
-const { readable, writable } = new TransformStream(undefined, { highWaterMark: 10 })
-const response = new Response(readable, { headers: sseHeaders })
-ctx.executionCtx.waitUntil(processAsync(writable, request))
-return response
-```
+- Use `TransformStream` with `highWaterMark: 10` to prevent memory bloat
+- Headers: `Content-Type: text/event-stream`, `Cache-Control: no-cache, no-transform`, `X-Accel-Buffering: no`
+- Return `new Response(readable, { headers })` immediately; process via writable side
+- Heartbeats every 15 seconds (`: heartbeat\n\n`)
+- Serialize SSE writes through a queue — prevent concurrent writes to writable stream
+- Handle client disconnect via abort signal; clean up resources
 
 ## Hono Route Patterns
 
-- Use `@hono/zod-openapi` for route definitions; Zod schemas are the single source of truth
-- Register routes with `app.route('/api/prefix', router)` in the main index
-- Validate request bodies with Zod schemas; max message length 2000 chars
-- Extract Bearer tokens from `Authorization` header; return 401 for missing/invalid tokens
-- Use `c.executionCtx.waitUntil()` for background work that should survive the response
+- Use `@hono/zod-openapi` for all route definitions — Zod schemas are the single source of truth
+- Validate ALL request bodies with Zod schemas — never trust raw input
+- Extract Bearer tokens from `Authorization` header; return 401 for missing/invalid
+- Use `c.executionCtx.waitUntil()` for background work — always with `PromiseTracker`
+- All API responses validated against response schemas before sending
 
 ## KV Storage
 
 - Three KV namespaces: `SESSIONS` (4h TTL), `AUDIO_FEATURES_CACHE` (90d/5min TTL), `MIX_SESSIONS` (8h TTL)
-- Always set `expirationTtl` on KV puts; never store data without expiration
-- Cache even null/miss results with short TTL (5 minutes) to avoid hammering external APIs
-- Key format conventions: `bpm:{track_id}`, `lastfm:{hash}`, `artist_{hash}`, `mix:{userId}`
-- KV reads are eventually consistent; design for stale reads gracefully
+- ALWAYS set `expirationTtl` on KV puts; never store without expiration
+- Cache null/miss results with 5-minute TTL to avoid hammering external APIs
+- Validate KV reads with Zod `.safeParse()` — never trust stored data shape
+- KV reads are eventually consistent; design for stale reads
 
 ## Rate Limiting
 
-- Global limit: 40 requests per second across all external API calls
-- Use `RateLimitedQueue` with token bucket algorithm (40 tokens/sec, burst 40)
-- Per-lane concurrency limits: Anthropic 2, Spotify 5, Last.fm 10, Deezer 10
+- Global limit: 40 RPS across all external APIs
+- Per-lane concurrency: Anthropic 2, Spotify 5, Last.fm 10, Deezer 10
 - Use `RequestOrchestrator` for coordinating global rate + per-lane concurrency
-- Track subrequest budget per request (950 limit for paid tier, reserve 10 for overhead)
-
-## Subrequest Budget
-
-- Cloudflare paid tier allows 1000 subrequests per worker invocation
-- Use `SubrequestTracker` to monitor budget; allocate 50% to Deezer, remainder to Last.fm
-- Each Last.fm track enrichment costs 4 API calls (correction, info, tags, similar)
-- Each Deezer enrichment costs 1 API call (ISRC lookup); mostly cached after first run
-- Always check remaining budget before starting enrichment batches
+- Track subrequest budget (950 limit, reserve 10 for overhead)
 
 ## Error Handling
 
-- All enrichment (Deezer, Last.fm) is best-effort and non-blocking; failures should not break the main response
-- Log errors with `ServiceLogger` using structured JSON format with per-request IDs
-- Use `AsyncLocalStorage` via `nodejs_compat` flag for per-request context (logger, subrequest tracker)
-- Return SSE error events to the client for recoverable errors; close stream for fatal errors
+- All enrichment is best-effort and non-blocking
+- Log with structured JSON via `ServiceLogger` with per-request IDs
+- Return SSE error events for recoverable errors; close stream for fatal
+- Never expose internal error details to clients
 
 ## Worker Configuration
 
 - Entry point: `workers/api/dist/index.js` built by tsup
-- Platform: `browser` (V8 isolate, not Node.js); external Node stdlib modules
-- Static assets served from `apps/web/dist` with SPA fallback
-- `run_worker_first: ["/api/*"]` is critical — API routes must take precedence over static assets
-- Never import Node-only modules (fs, child_process, net) in worker code
+- Platform: `browser` (V8 isolate); external Node stdlib modules
+- Target: `es2024`
+- Static assets from `apps/web/dist` with SPA fallback
+- `run_worker_first: ["/api/*"]` — API routes take precedence

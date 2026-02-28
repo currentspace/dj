@@ -1,65 +1,151 @@
-# DJ React Patterns
+# DJ React Patterns (February 2026)
 
-React 19.2 conventions, Zustand state management, and frontend patterns specific to the DJ app.
+React 19.2 with strict patterns, Tailwind 4, Atomic Design, and zero useEffect.
 
-## State Synchronization (Critical)
+## No useEffect — Ever (Critical)
 
-- NEVER use `useEffect` for state synchronization; perform direct state checks in the component body
-- React 19.2 compiler handles memoization; do not manually wrap in `useMemo`/`useCallback` unless profiling shows a need
-- Use refs (`useRef`) to track previous values when comparing across renders instead of `useEffect` deps
+- **NEVER use `useEffect`** for any purpose — state sync, data fetching, subscriptions, or side effects
+- Use `useSyncExternalStore` for subscribing to external state (stores, localStorage, SSE streams)
+- Use `useRef` to track previous values and trigger actions on change in the component body
+- Use React 19 `use()` hook for consuming promises and context
+- Use `useTransition` for non-blocking state updates during async work
+- React Query (`useMutation`, `useQuery`) owns all async data fetching and mutation lifecycle
 
 ```typescript
-// CORRECT - Direct state sync in component body
-const playlistId = selectedPlaylist?.id || null
-if (playlistId !== currentPlaylistId) {
-  setCurrentPlaylistId(playlistId)
-}
-
-// WRONG - Never use useEffect for derived state
+// WRONG — useEffect for external subscription
 useEffect(() => {
-  setCurrentPlaylistId(selectedPlaylist?.id)
+  const unsub = store.subscribe(handler)
+  return () => unsub()
+}, [])
+
+// CORRECT — useSyncExternalStore
+const value = useSyncExternalStore(
+  store.subscribe,
+  store.getSnapshot,
+  store.getServerSnapshot  // optional SSR
+)
+
+// WRONG — useEffect for derived state
+useEffect(() => {
+  setPlaylistId(selectedPlaylist?.id)
 }, [selectedPlaylist?.id])
+
+// CORRECT — direct computation in component body
+const playlistId = selectedPlaylist?.id ?? null
+
+// WRONG — useEffect for data fetching
+useEffect(() => { fetchData() }, [])
+
+// CORRECT — React Query
+const { data } = useQuery({ queryKey: ['playlists'], queryFn: fetchPlaylists })
+```
+
+## useRef for Value Tracking
+
+- Use `useRef` to track "previous" values across renders
+- Compare in the component body, not in useEffect
+
+```typescript
+const prevTokenRef = useRef(token)
+if (token && token !== prevTokenRef.current) {
+  prevTokenRef.current = token
+  startTransition(() => { connect(token) })
+}
 ```
 
 ## Zustand Store Patterns
 
-- Use `subscribeWithSelector` middleware on all stores for atomic subscriptions
-- Select individual fields, not entire store objects: `useStore(s => s.field)` not `useStore()`
-- Keep stores focused: one store per domain (auth, playback, playlist, mix, navigation)
-- Use `subscribeWithSelector` for cross-store reactions (e.g., vibe change triggers suggestion refresh)
-- Store actions should be defined inside the store, not as external functions
+- Use `subscribeWithSelector` middleware on all stores
+- Select individual fields: `useStore(s => s.field)` — never `useStore()`
+- Integrate with `useSyncExternalStore` where needed for fine-grained subscriptions
+- Store actions defined inside the store creator, not as external functions
+- No async actions that aren't tracked — use React Query mutations for API calls
+
+## Tailwind 4 Styling (Critical)
+
+- **NEVER write raw CSS files** — use Tailwind 4 utility classes exclusively
+- **NEVER use CSS Modules** (`.module.css`) — migrate to Tailwind classes
+- **NEVER use inline `style` props** on HTML elements
+- Use `@theme` directive in the root CSS file for design tokens
+- Use `@apply` sparingly and only in component-level styles for complex compositions
+- Class names via `clsx()` or `cn()` utility for conditional styling
+
+```css
+/* apps/web/src/styles/theme.css */
+@import "tailwindcss";
+
+@theme {
+  --color-spotify-green: #1db954;
+  --color-spotify-light: #1ed760;
+  --color-surface-0: #121212;
+  --color-surface-1: #1a1a1a;
+  --color-surface-2: #222222;
+  --color-surface-3: #2a2a2a;
+  --color-accent-purple: #667eea;
+  --color-accent-pink: #764ba2;
+  --color-text-primary: #e0e0e0;
+  --color-text-secondary: #999999;
+  --color-text-muted: #666666;
+}
+```
+
+```tsx
+// WRONG — CSS Module import
+import styles from './Component.module.css'
+<div className={styles.container}>
+
+// WRONG — inline style
+<div style={{ padding: '1rem', color: '#e0e0e0' }}>
+
+// CORRECT — Tailwind 4 utility classes
+<div className="p-4 text-text-primary bg-surface-1 rounded-lg">
+```
+
+## Atomic Design System
+
+Organize components in five tiers (Brad Frost's Atomic Design):
+
+```
+components/
+├── atoms/           # Single HTML elements with styling
+│   ├── Button.tsx
+│   ├── Badge.tsx
+│   ├── Slider.tsx
+│   ├── Input.tsx
+│   └── Icon.tsx
+├── molecules/       # Composed atoms working together
+│   ├── SearchBar.tsx     # Input + Button
+│   ├── TrackCard.tsx     # Image + Text + Badge
+│   ├── ProgressBar.tsx   # Slider + Time labels
+│   └── VolumeControl.tsx # Icon + Slider + Label
+├── organisms/       # Complex UI sections
+│   ├── NowPlaying.tsx       # TrackCard + ProgressBar + Controls
+│   ├── QueuePanel.tsx       # List of TrackCards + actions
+│   ├── DJMessages.tsx       # Message list + scroll behavior
+│   └── PlaylistStrip.tsx    # Horizontal scroll of cards
+├── templates/       # Page layouts with slot positions
+│   └── DJLayout.tsx         # NowPlaying + Messages + Input arrangement
+└── pages/           # Hydrated templates with data
+    └── DJPage.tsx           # DJLayout + store connections
+```
+
+- Atoms: zero business logic, only presentation + Tailwind classes
+- Molecules: compose atoms, minimal logic (click handlers, local state)
+- Organisms: full sections, may connect to stores
+- Templates: layout-only, no data fetching
+- Pages: connect templates to stores and data
 
 ## SSE Client Handling
 
-- Use `ReadableStream` with `getReader()` for SSE parsing; never use `EventSource` for POST requests
-- Buffer incoming chunks and split on `\n\n` boundaries for SSE event parsing
-- Cap internal buffers at 2MB to prevent memory bloat from long-running streams
-- Handle `auth_expired` SSE events by refreshing the token and reconnecting
-- Always clean up stream readers on component unmount or navigation
+- Use `ReadableStream` with `getReader()` for SSE parsing (not `EventSource` for POST)
+- Buffer chunks, split on `\n\n` boundaries
+- Cap buffers at 2MB to prevent memory bloat
+- Handle `auth_expired` events by refreshing token and reconnecting
+- Clean up readers on unmount via `useRef` + component body cleanup pattern
 
-## Component Organization
+## Promise Tracking in React
 
-- Organize by feature (`features/chat/`, `features/mix/`), not by file type
-- Keep components focused; extract sub-components when a component exceeds ~200 lines
-- Use CSS Modules for component-scoped styles; global styles go in `styles/`
-- Export components as named exports, not default exports
-
-## Error Handling in UI
-
-- Convert technical errors to user-friendly messages before displaying
-- Use the `useError` hook pattern for consistent error state management
-- Show errors inline near the relevant UI element, not as global alerts
-- Clear errors when the user takes a corrective action
-
-## Loading States
-
-- Track loading per-operation, not globally (e.g., `suggestionsLoading` separate from `sessionLoading`)
-- Use `flushSync` for immediate UI updates before async operations (e.g., showing user message before streaming)
-- Show skeleton/placeholder UI during loading rather than spinners where possible
-
-## localStorage Persistence
-
-- Use `useSyncExternalStore` for localStorage reads (cross-tab sync)
-- Always handle `JSON.parse` failures gracefully with fallback defaults
-- Store minimal data; derive complex state from stored primitives
-- Set TTLs on stored data (e.g., tokens expire, cached playlists go stale)
+- **NEVER fire async calls without tracking**: no `onClick={() => { fetch(...) }}`
+- Use `useMutation()` for all state-changing API calls
+- Use `useTransition()` + `startTransition()` for non-blocking UI updates
+- Use `useQuery()` for all data fetching with cache management
