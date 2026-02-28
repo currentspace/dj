@@ -1,1 +1,36 @@
-{"name":"dj-llm-tools","version":"1.0.0","owner":"team","description":"Claude Sonnet integration, tool definitions, agentic loop, prompt engineering, and vibe-driven discovery","categories":["llm","claude","anthropic","tools","agentic","prompts"],"applies_to":{"extensions":[".ts"]},"sensitive_paths":["**/chat-stream/**","**/tools/**","**/prompts**","**/agentic**","**/discovery**","**/ai-prompts**"],"excludes_paths":["node_modules/","dist/","apps/web/","marvel/"],"depends_on":["dj-cloudflare-workers"],"references":{"code_paths":["workers/api/src/routes/chat-stream/","workers/api/src/routes/chat-stream/tools/","workers/api/src/lib/ai-prompts.ts","workers/api/src/lib/progress-narrator.ts"],"doc_links":[]}}
+{
+  "name": "dj-llm-tools",
+  "version": "1.0.0",
+  "owner": "team",
+  "description": "Claude three-tier model hierarchy (Opus/Sonnet/Haiku), tool definitions, agentic loop, prompt engineering, and vibe-driven discovery",
+  "categories": ["llm", "claude", "anthropic", "tools", "agentic", "prompts"],
+  "applies_to": { "extensions": [".ts"] },
+  "sensitive_paths": [
+    "**/chat-stream/**",
+    "**/tools/**",
+    "**/prompts**",
+    "**/agentic**",
+    "**/discovery**",
+    "**/ai-prompts**",
+    "**/set-planner**",
+    "**/skip-analyzer**",
+    "**/dj-narrator**",
+    "**/ai-service**"
+  ],
+  "excludes_paths": ["node_modules/", "dist/", "apps/web/", "marvel/"],
+  "depends_on": ["dj-cloudflare-workers"],
+  "references": {
+    "code_paths": [
+      "workers/api/src/routes/chat-stream/",
+      "workers/api/src/routes/chat-stream/tools/",
+      "workers/api/src/lib/ai-prompts.ts",
+      "workers/api/src/lib/ai-service.ts",
+      "workers/api/src/lib/set-planner.ts",
+      "workers/api/src/lib/skip-analyzer.ts",
+      "workers/api/src/lib/dj-narrator.ts",
+      "workers/api/src/lib/progress-narrator.ts",
+      "workers/api/src/constants.ts"
+    ],
+    "doc_links": []
+  }
+}

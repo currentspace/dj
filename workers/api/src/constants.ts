@@ -93,7 +93,7 @@ export const PAGINATION = {
 // LLM CONFIGURATION
 // =============================================================================
 
-/** LLM (Claude) configuration */
+/** LLM (Claude) configuration — three-tier model hierarchy */
 export const LLM = {
   /** Max tokens for main conversation */
   MAX_TOKENS_CONVERSATION: 10000,
@@ -103,10 +103,12 @@ export const LLM = {
   MAX_TOKENS_VIBE: 2000,
   /** Maximum agentic turns to prevent infinite loops */
   MAX_TURNS: 5,
-  /** Claude Sonnet model for tool calls and main conversation */
+  /** Claude Sonnet model for tool calls and main conversation (execution tier) */
   MODEL: 'claude-sonnet-4-6-20260219',
-  /** Claude Haiku model for quick tasks (progress narrator, vibe steering) */
+  /** Claude Haiku model for quick tasks: progress narrator, vibe steering (reactive tier) */
   MODEL_HAIKU: 'claude-haiku-4-5-20251001',
+  /** Claude Opus model for strategic decisions: set planning, skip reasoning, narration (strategic tier) */
+  MODEL_OPUS: 'claude-opus-4-6-20260219',
   /** Extended thinking budget tokens */
   THINKING_BUDGET_TOKENS: 5000,
 } as const

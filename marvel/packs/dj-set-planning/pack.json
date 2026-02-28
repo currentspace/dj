@@ -1,0 +1,31 @@
+{
+  "name": "dj-set-planning",
+  "version": "1.0.0",
+  "owner": "team",
+  "description": "DJ set planning domain knowledge: energy arcs, transition theory, five-phase structure, contrast principles, and professional mixing patterns",
+  "categories": ["dj", "music", "set-planning", "transitions", "energy-arc"],
+  "applies_to": { "extensions": [".ts", ".tsx"] },
+  "sensitive_paths": [
+    "**/set-planner**",
+    "**/TransitionScorer**",
+    "**/SuggestionEngine**",
+    "**/skip-analyzer**",
+    "**/ai-prompts**"
+  ],
+  "excludes_paths": ["node_modules/", "dist/", "marvel/"],
+  "depends_on": ["dj-llm-tools", "dj-spotify-integration"],
+  "references": {
+    "code_paths": [
+      "workers/api/src/lib/set-planner.ts",
+      "workers/api/src/lib/skip-analyzer.ts",
+      "workers/api/src/services/TransitionScorer.ts",
+      "workers/api/src/services/SuggestionEngine.ts",
+      "workers/api/src/lib/ai-prompts.ts"
+    ],
+    "doc_links": [
+      "https://dj.studio/blog/anatomy-great-dj-mix-structure-energy-flow-transition-logic",
+      "https://mixedinkey.com/book/control-the-energy-level-of-your-dj-sets/",
+      "https://djtechtools.com/2022/11/25/controlling-the-dancefloor-a-guide-on-organizing-playlists-by-energy/"
+    ]
+  }
+}
