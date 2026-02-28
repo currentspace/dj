@@ -14,22 +14,22 @@
     "test:integration:watch": "vitest --config vitest.integration.config.ts --watch"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.78.0",
+    "@anthropic-ai/sdk": "catalog:",
     "@dj/api-contracts": "workspace:*",
     "@dj/shared-types": "workspace:*",
     "@hono/swagger-ui": "^0.5.3",
-    "@hono/zod-openapi": "^1.2.2",
-    "hono": "^4.12.3",
+    "@hono/zod-openapi": "catalog:",
+    "hono": "catalog:",
     "nanoid": "^5.1.6",
-    "zod": "^4.3.6"
+    "zod": "catalog:"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260226.1",
-    "@types/node": "^24.10.1",
+    "@cloudflare/workers-types": "catalog:",
+    "@types/node": "catalog:",
     "dotenv": "^17.3.1",
-    "tsup": "^8.5.1",
-    "vitest": "^4.0.18",
-    "wrangler": "^4.69.0",
+    "tsup": "catalog:",
+    "vitest": "catalog:",
+    "wrangler": "catalog:",
     "zod-to-json-schema": "^3.25.1"
   }
 }

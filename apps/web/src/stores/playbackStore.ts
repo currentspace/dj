@@ -13,10 +13,19 @@ import type {
   PlaybackContext,
   PlaybackDevice,
   PlaybackModes,
-  PlaybackStateInit,
-  PlaybackTickEvent,
   PlaybackTrack,
   PlayingType,
+} from '@dj/shared-types'
+import {
+  PlaybackContextEventSchema,
+  PlaybackDeviceEventSchema,
+  PlaybackIdleEventSchema,
+  PlaybackModesEventSchema,
+  PlaybackStateEventSchema,
+  PlaybackStateInitSchema,
+  PlaybackTickEventSchema,
+  PlaybackTrackEventSchema,
+  PlaybackVolumeEventSchema,
 } from '@dj/shared-types'
 import { create } from 'zustand'
 import { subscribeWithSelector } from 'zustand/middleware'
@@ -149,16 +158,20 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
 
     function handleEvent(event: string, data: string, token: string): void {
       try {
-        const parsed = JSON.parse(data)
+        const parsed: unknown = JSON.parse(data)
 
         switch (event) {
           case 'connected':
-            console.log('[playbackStore] Connected:', parsed.message)
+            console.log('[playbackStore] Connected:', parsed)
             break
 
           case 'init': {
-            // Full state initialization
-            const init = parsed as PlaybackStateInit
+            const initResult = PlaybackStateInitSchema.safeParse(parsed)
+            if (!initResult.success) {
+              console.error('[playbackStore] Invalid init event:', initResult.error)
+              break
+            }
+            const init = initResult.data
             lastServerUpdate = Date.now()
             lastServerProgress = init.progress
 
@@ -188,8 +201,9 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
           }
 
           case 'tick': {
-            // Minimal progress update
-            const tick = parsed as PlaybackTickEvent
+            const tickResult = PlaybackTickEventSchema.safeParse(parsed)
+            if (!tickResult.success) break
+            const tick = tickResult.data
             lastServerUpdate = tick.ts
             lastServerProgress = tick.p
             set({ progress: tick.p })
@@ -197,8 +211,9 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
           }
 
           case 'track': {
-            // Track changed
-            const track = parsed as PlaybackTrack & { seq: number }
+            const trackResult = PlaybackTrackEventSchema.safeParse(parsed)
+            if (!trackResult.success) break
+            const track = trackResult.data
             notifyTrackChange(track.id, track.uri)
 
             const { playbackCore } = get()
@@ -212,8 +227,9 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
           }
 
           case 'state': {
-            // Play/pause changed
-            const state = parsed as { isPlaying: boolean; seq: number }
+            const stateResult = PlaybackStateEventSchema.safeParse(parsed)
+            if (!stateResult.success) break
+            const state = stateResult.data
             const { playbackCore } = get()
             if (playbackCore) {
               set({
@@ -230,8 +246,9 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
           }
 
           case 'device': {
-            // Device changed
-            const device = parsed as PlaybackDevice & { seq: number }
+            const deviceResult = PlaybackDeviceEventSchema.safeParse(parsed)
+            if (!deviceResult.success) break
+            const device = deviceResult.data
             const { playbackCore } = get()
             if (playbackCore) {
               set({
@@ -242,8 +259,9 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
           }
 
           case 'modes': {
-            // Shuffle/repeat changed
-            const modes = parsed as PlaybackModes & { seq: number }
+            const modesResult = PlaybackModesEventSchema.safeParse(parsed)
+            if (!modesResult.success) break
+            const modes = modesResult.data
             const { playbackCore } = get()
             if (playbackCore) {
               set({
@@ -254,8 +272,9 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
           }
 
           case 'volume': {
-            // Volume changed
-            const volume = parsed as { percent: number; seq: number }
+            const volumeResult = PlaybackVolumeEventSchema.safeParse(parsed)
+            if (!volumeResult.success) break
+            const volume = volumeResult.data
             const { playbackCore } = get()
             if (playbackCore) {
               set({
@@ -270,8 +289,9 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
           }
 
           case 'context': {
-            // Context (playlist/album) changed
-            const ctx = parsed as { context: PlaybackContext | null; seq: number }
+            const ctxResult = PlaybackContextEventSchema.safeParse(parsed)
+            if (!ctxResult.success) break
+            const ctx = ctxResult.data
             const { playbackCore } = get()
             if (playbackCore) {
               set({
@@ -282,7 +302,8 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
           }
 
           case 'idle': {
-            // No active playback
+            const idleResult = PlaybackIdleEventSchema.safeParse(parsed)
+            if (!idleResult.success) break
             stopInterpolation()
             previousTrackId = null
             previousTrackUri = null
@@ -293,7 +314,7 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
                   ...playbackCore,
                   track: null,
                   isPlaying: false,
-                  seq: (parsed as { seq: number }).seq,
+                  seq: idleResult.data.seq,
                 },
                 progress: 0,
               })
@@ -301,18 +322,22 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
             break
           }
 
-          case 'error':
-            console.warn('[playbackStore] Server error:', parsed.message)
-            if (parsed.retriesRemaining !== undefined) {
-              set({ error: `Error: ${parsed.message} (${parsed.retriesRemaining} retries left)` })
+          case 'error': {
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+              const errorData = parsed as Record<string, unknown>
+              console.warn('[playbackStore] Server error:', errorData.message)
+              if (typeof errorData.retriesRemaining === 'number') {
+                set({ error: `Error: ${String(errorData.message)} (${errorData.retriesRemaining} retries left)` })
+              }
             }
             break
+          }
 
           case 'auth_expired':
             console.log('[playbackStore] Auth expired, triggering token refresh')
             set({ status: 'disconnected', error: 'Token expired, refreshing...' })
             stopInterpolation()
-            // Trigger token refresh via authStore
+            // Trigger token refresh via authStore (catch to prevent unhandled rejection)
             import('../stores/authStore').then(({ useAuthStore }) => {
               useAuthStore.getState().refreshToken().then((success) => {
                 if (success) {
@@ -325,7 +350,12 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
                   console.error('[playbackStore] Token refresh failed')
                   set({ error: 'Session expired. Please log in again.' })
                 }
+              }).catch((err: unknown) => {
+                console.error('[playbackStore] Token refresh error:', err)
+                set({ error: 'Session expired. Please log in again.' })
               })
+            }).catch((err: unknown) => {
+              console.error('[playbackStore] Failed to load authStore:', err)
             })
             break
 

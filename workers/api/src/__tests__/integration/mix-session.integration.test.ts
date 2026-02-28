@@ -3,25 +3,10 @@
  * Tests the full flow: start session → add tracks → steer vibe → save as playlist
  */
 
-import {beforeEach, describe, expect, it, vi} from 'vitest'
+import {beforeEach, describe, expect, it} from 'vitest'
 import type {SessionPreferences, VibeProfile} from '@dj/shared-types'
 import {MixSessionService} from '../../services/MixSessionService'
-
-// Mock KV namespace
-const createMockKV = () => {
-  const store = new Map<string, string>()
-  return {
-    delete: vi.fn(async (key: string) => {
-      store.delete(key)
-    }),
-    get: vi.fn(async (key: string) => {
-      return store.get(key) ?? null
-    }),
-    put: vi.fn(async (key: string, value: string) => {
-      store.set(key, value)
-    }),
-  } as unknown as KVNamespace
-}
+import {buildMockKV} from '../fixtures/cloudflare-mocks'
 
 describe('Mix Session Integration Tests', () => {
   let kvNamespace: KVNamespace
@@ -30,7 +15,7 @@ describe('Mix Session Integration Tests', () => {
   const mockUserId = 'user123'
 
   beforeEach(() => {
-    kvNamespace = createMockKV()
+    kvNamespace = buildMockKV()
     sessionService = new MixSessionService(kvNamespace)
   })
 

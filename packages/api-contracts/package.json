@@ -18,12 +18,12 @@
   },
   "dependencies": {
     "@dj/shared-types": "workspace:*",
-    "@hono/zod-openapi": "^1.2.2",
-    "hono": "^4.12.3",
-    "zod": "^4.3.6"
+    "@hono/zod-openapi": "catalog:",
+    "hono": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
-    "tsup": "^8.5.1",
-    "typescript": "^5.9.3"
+    "tsup": "catalog:",
+    "typescript": "catalog:"
   }
 }

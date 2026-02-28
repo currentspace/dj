@@ -12,13 +12,13 @@
   },
   "dependencies": {
     "@dj/shared-types": "workspace:*",
-    "hono": "^4.12.3",
-    "zod": "^4.3.6"
+    "hono": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260226.1",
-    "tsup": "^8.5.1",
-    "vitest": "^4.0.18",
-    "wrangler": "^4.69.0"
+    "@cloudflare/workers-types": "catalog:",
+    "tsup": "catalog:",
+    "vitest": "catalog:",
+    "wrangler": "catalog:"
   }
 }

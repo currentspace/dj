@@ -2,7 +2,7 @@
  * SteerProgress - Shows real-time feedback during vibe steering
  */
 
-import { useEffect, useRef } from 'react'
+import { useRef } from 'react'
 
 import styles from './steer-progress.module.css'
 
@@ -30,11 +30,16 @@ interface SteerProgressProps {
 
 export function SteerProgress({ direction, events, isComplete, onClose }: SteerProgressProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const prevEventsLengthRef = useRef(0)
 
-  // Auto-scroll to bottom when new events arrive
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [events])
+  // Auto-scroll to bottom when new events arrive (component body, no useEffect)
+  if (events.length !== prevEventsLengthRef.current) {
+    prevEventsLengthRef.current = events.length
+    // Schedule scroll after render via microtask
+    Promise.resolve().then(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    })
+  }
 
   // Get the latest progress messages for display
   const progressMessages = events

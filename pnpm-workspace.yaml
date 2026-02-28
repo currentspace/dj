@@ -2,3 +2,15 @@ packages:
   - 'apps/*'
   - 'packages/*'
   - 'workers/*'
+
+catalog:
+  zod: ^4.3.6
+  hono: ^4.12.3
+  typescript: ^5.9.3
+  vitest: ^4.0.18
+  tsup: ^8.5.1
+  '@anthropic-ai/sdk': ^0.78.0
+  '@hono/zod-openapi': ^1.2.2
+  '@types/node': ^24.10.1
+  wrangler: ^4.69.0
+  '@cloudflare/workers-types': ^4.20260226.1

@@ -336,19 +336,26 @@ async function generateSteeringSuggestions(
     recentTracksCount: recentTracks.length,
   })
 
-  const response = await aiService.promptForJSON<{
-    tracks: Array<{ artist: string; name: string; reason: string }>
-  }>(prompt, {
+  const AITrackSuggestionsSchema = z.object({
+    tracks: z.array(z.object({
+      artist: z.string(),
+      name: z.string(),
+      reason: z.string(),
+    })),
+  })
+
+  const response = await aiService.promptForJSON(prompt, {
     temperature: 0.8,
     system: SYSTEM_PROMPTS.DJ,
   })
 
-  if (response.error || !response.data?.tracks) {
+  const parsed = AITrackSuggestionsSchema.safeParse(response.data)
+  if (response.error || !parsed.success) {
     logger?.error('[steer-stream] AI steering request failed:', response.error)
     return []
   }
 
-  const aiSuggestions = response.data
+  const aiSuggestions = parsed.data
 
   if (aiSuggestions.tracks.length === 0) {
     logger?.info('[steer-stream] AI returned no steering suggestions')
@@ -402,8 +409,21 @@ async function searchSpotifyTrack(
       return null
     }
 
-    const data = await response.json() as { tracks?: { items?: Array<{ id: string; uri: string; name: string; artists: { name: string }[]; album: { images: { url: string }[] } }> } }
-    return data.tracks?.items?.[0] || null
+    const SpotifySearchHitSchema = z.object({
+      tracks: z.object({
+        items: z.array(z.object({
+          id: z.string(),
+          uri: z.string(),
+          name: z.string(),
+          artists: z.array(z.object({ name: z.string() })),
+          album: z.object({ images: z.array(z.object({ url: z.string() })) }),
+        })),
+      }).optional(),
+    })
+    const json: unknown = await response.json()
+    const parsed = SpotifySearchHitSchema.safeParse(json)
+    if (!parsed.success) return null
+    return parsed.data.tracks?.items?.[0] || null
   } catch {
     return null
   }
@@ -574,8 +594,12 @@ steerStreamRouter.post('/steer-stream', async c => {
   if (!userResponse.ok) {
     return c.json({ error: 'Invalid authorization token' }, 401)
   }
-  const userData = await userResponse.json() as { id: string }
-  const userId = userData.id
+  const userJson: unknown = await userResponse.json()
+  const userParsed = z.object({ id: z.string() }).safeParse(userJson)
+  if (!userParsed.success) {
+    return c.json({ error: 'Failed to parse user data' }, 500)
+  }
+  const userId = userParsed.data.id
 
   // Check requirements
   if (!c.env.MIX_SESSIONS) {

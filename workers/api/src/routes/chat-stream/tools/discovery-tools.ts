@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
 import {z} from 'zod'
+import {VibeAnalysisSchema, DiscoveryStrategySchema, CurationResponseSchema} from '@dj/shared-types'
 
 import type {Env} from '../../../index'
 import {LLM} from '../../../constants'
@@ -24,7 +25,7 @@ export function createDiscoveryTools(
         if (abortSignal?.aborted) throw new Error('Request aborted')
 
         // Debug logging to understand what's being passed
-        const analysisData = args.analysis_data as Record<string, unknown> | undefined
+        const analysisData: unknown = args.analysis_data
         getLogger()?.info('[extract_playlist_vibe] Received args:', {
           has_analysis_data: !!analysisData,
           is_object: isObject(analysisData),
@@ -36,12 +37,11 @@ export function createDiscoveryTools(
         })
 
         if (isObject(analysisData)) {
-          const data = analysisData as Record<string, unknown>
-          getLogger()?.info('[extract_playlist_vibe] Metadata analysis:', data.metadata_analysis as Record<string, unknown> | undefined)
-          getLogger()?.info('[extract_playlist_vibe] Deezer analysis:', data.deezer_analysis as Record<string, unknown> | undefined)
-          getLogger()?.info('[extract_playlist_vibe] Last.fm analysis:', data.lastfm_analysis as Record<string, unknown> | undefined)
+          getLogger()?.info('[extract_playlist_vibe] Metadata analysis:', {data: analysisData.metadata_analysis})
+          getLogger()?.info('[extract_playlist_vibe] Deezer analysis:', {data: analysisData.deezer_analysis})
+          getLogger()?.info('[extract_playlist_vibe] Last.fm analysis:', {data: analysisData.lastfm_analysis})
         } else {
-          getLogger()?.warn('[extract_playlist_vibe] analysis_data is not an object:', analysisData)
+          getLogger()?.warn('[extract_playlist_vibe] analysis_data is not an object:', {data: analysisData})
         }
 
         await sseWriter.write({
@@ -82,9 +82,9 @@ export function createDiscoveryTools(
             throw new Error('No JSON found in vibe analysis response')
           }
 
-          let vibeAnalysis
+          let rawParsed: unknown
           try {
-            vibeAnalysis = JSON.parse(jsonMatch[0])
+            rawParsed = JSON.parse(jsonMatch[0])
           } catch (parseError) {
             getLogger()?.error('[extract_playlist_vibe] Failed to parse vibe analysis JSON', {
               error: parseError instanceof Error ? parseError.message : String(parseError),
@@ -93,14 +93,17 @@ export function createDiscoveryTools(
             throw new Error('Failed to parse vibe analysis response as JSON')
           }
 
+          const vibeResult = VibeAnalysisSchema.safeParse(rawParsed)
+          const vibeAnalysis = vibeResult.success ? vibeResult.data : rawParsed
+
           await sseWriter.write({
-            data: `Vibe extracted: ${vibeAnalysis.vibe_profile?.substring(0, 80)}...`,
+            data: `Vibe extracted: ${vibeResult.success ? vibeResult.data.vibe_profile?.substring(0, 80) : 'unknown'}...`,
             type: 'thinking',
           })
 
           await sseWriter.write({
             data: {
-              result: `Analyzed vibe: ${vibeAnalysis.emotional_characteristics?.slice(0, 3).join(', ')}`,
+              result: `Analyzed vibe: ${vibeResult.success ? vibeResult.data.emotional_characteristics?.slice(0, 3).join(', ') : 'analysis complete'}`,
               tool: 'extract_playlist_vibe',
             },
             type: 'tool_end',
@@ -281,9 +284,9 @@ export function createDiscoveryTools(
             throw new Error('No JSON found in strategy response')
           }
 
-          let strategy
+          let rawStrategy: unknown
           try {
-            strategy = JSON.parse(jsonMatch[0])
+            rawStrategy = JSON.parse(jsonMatch[0])
           } catch (parseError) {
             getLogger()?.error('[plan_discovery_strategy] Failed to parse strategy JSON', {
               error: parseError instanceof Error ? parseError.message : String(parseError),
@@ -292,15 +295,18 @@ export function createDiscoveryTools(
             throw new Error('Failed to parse discovery strategy response as JSON')
           }
 
+          const strategyResult = DiscoveryStrategySchema.safeParse(rawStrategy)
+          const strategy = strategyResult.success ? strategyResult.data : rawStrategy
+
           await sseWriter.write({
-            data: `Strategy: ${strategy.strategy_summary?.substring(0, 80)}...`,
+            data: `Strategy: ${strategyResult.success ? strategyResult.data.reasoning?.substring(0, 80) : 'planned'}...`,
             type: 'thinking',
           })
 
           await sseWriter.write({
             data: {
-              result: `Created ${strategy.tag_searches?.length ?? 0} tag searches, ${
-                strategy.spotify_searches?.length ?? 0
+              result: `Created ${strategyResult.success ? (strategyResult.data.tag_searches?.length ?? 0) : 0} tag searches, ${
+                strategyResult.success ? (strategyResult.data.spotify_queries?.length ?? 0) : 0
               } custom queries`,
               tool: 'plan_discovery_strategy',
             },
@@ -412,15 +418,9 @@ export function createDiscoveryTools(
             throw new Error('No JSON found in response')
           }
 
-          let curation: {
-            reasoning?: string
-            selected_track_ids?: string[]
-          }
+          let rawCuration: unknown
           try {
-            curation = JSON.parse(jsonMatch[0]) as {
-              reasoning?: string
-              selected_track_ids?: string[]
-            }
+            rawCuration = JSON.parse(jsonMatch[0])
           } catch (parseError) {
             getLogger()?.error('[curate_recommendations] Failed to parse curation JSON', {
               error: parseError instanceof Error ? parseError.message : String(parseError),
@@ -428,8 +428,9 @@ export function createDiscoveryTools(
             })
             throw new Error('Failed to parse curation response as JSON')
           }
-          const selectedIds = curation.selected_track_ids ?? []
-          const reasoning = curation.reasoning ?? 'AI curation complete'
+          const curationResult = CurationResponseSchema.safeParse(rawCuration)
+          const selectedIds = curationResult.success ? (curationResult.data.selected_track_ids ?? []) : []
+          const reasoning = curationResult.success ? (curationResult.data.reasoning ?? 'AI curation complete') : 'AI curation complete'
 
           // Filter candidate tracks to only selected ones
           const curatedTracks = args.candidate_tracks.filter((t: {id: string}) => selectedIds.includes(t.id))

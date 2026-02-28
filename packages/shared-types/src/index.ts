@@ -282,9 +282,15 @@ export type PlaybackStreamEventType =
 // Export all Zod schemas for runtime validation
 
 export * from './schemas/api-schemas'
+export * from './schemas/auth-schemas'
 export * from './schemas/external-api-schemas'
+export * from './schemas/llm-response-schemas'
 export * from './schemas/mix-session-schemas'
+export * from './schemas/playback-event-schemas'
 export * from './schemas/spotify-schemas'
 export * from './schemas/sse-schemas'
-// Note: validation.ts contains runtime code, so it's not exported
-// Use guards.ts in workers/api for runtime validation utilities
+
+// ===== Utilities =====
+export {PromiseTracker} from './promise-tracker'
+export {createTypeGuard, formatZodError, parse, parseJsonResponse, safeParse, safeParseJsonResponse} from './validation'
+export type {SafeParseResult} from './validation'

@@ -56,8 +56,8 @@ export interface AIRequestOptions {
   thinkingBudget?: number
 }
 
-export interface AIResponse<T> {
-  data: T | null
+export interface AIResponse {
+  data: unknown
   error: string | null
   rawText: string
   /** Extended thinking content (if enabled) */
@@ -89,7 +89,7 @@ export class AIService {
    * Send a prompt to Claude and get a JSON response
    * Supports extended thinking when thinkingBudget is provided
    */
-  async promptForJSON<T>(prompt: string, options: AIRequestOptions = {}): Promise<AIResponse<T>> {
+  async promptForJSON(prompt: string, options: AIRequestOptions = {}): Promise<AIResponse> {
     try {
       // Build request parameters
       const useThinking = options.thinkingBudget && options.thinkingBudget > 0
@@ -138,7 +138,7 @@ export class AIService {
       }
 
       // Parse JSON from response
-      const data = this.extractJSON<T>(rawText)
+      const data = this.extractJSON(rawText)
 
       // Build usage stats
       const usage = {
@@ -200,21 +200,17 @@ export class AIService {
   /**
    * Extract JSON from a text response (handles markdown code blocks, etc.)
    *
-   * NOTE: The returned type T is NOT validated. Callers MUST validate
-   * the returned data with Zod schemas before use.
+   * Returns `unknown` — callers MUST validate with Zod schemas before use.
    */
-  extractJSON<T>(text: string): T | null {
+  extractJSON(text: string): unknown {
     try {
-      // Try to find JSON object or array
       const jsonMatch = /\{[\s\S]*\}|\[[\s\S]*\]/.exec(text)
       if (!jsonMatch) {
         getLogger()?.warn('[AIService] No JSON found in response')
         return null
       }
 
-      // Parse JSON - caller is responsible for validating the shape
-      const parsed: unknown = JSON.parse(jsonMatch[0])
-      return parsed as T
+      return JSON.parse(jsonMatch[0]) as unknown
     } catch (error) {
       getLogger()?.error('[AIService] JSON parse error:', error)
       return null

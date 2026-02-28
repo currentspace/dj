@@ -6,7 +6,7 @@
  * even when not on the Mix page.
  */
 
-import {memo, useCallback, useEffect, useRef, useState} from 'react'
+import {memo, useCallback, useRef, useState} from 'react'
 
 import {mixApiClient} from '../../lib/mix-api-client'
 import {useMixStore, usePlaybackStore} from '../../stores'
@@ -40,9 +40,7 @@ export const NowPlaying = memo(function NowPlaying({token}: NowPlayingProps) {
   const disconnect = usePlaybackStore((s) => s.disconnect)
   const subscribeToTrackChange = usePlaybackStore((s) => s.subscribeToTrackChange)
 
-  // Mix session from store (to check if we should notify on track changes)
-  const mixSession = useMixStore((s) => s.session)
-  const setMixSession = useMixStore((s) => s.setSession)
+  // Mix store accessed via getState() in track change callback to avoid stale closures
 
   // Local state for queue panel
   const [queue, setQueue] = useState<SpotifyQueue | null>(null)
@@ -53,30 +51,25 @@ export const NowPlaying = memo(function NowPlaying({token}: NowPlayingProps) {
   const lastQueueFetchRef = useRef<number>(0)
   const showQueueRef = useRef(false)
   const hasConnectedRef = useRef(false)
+  const trackChangeUnsubRef = useRef<(() => void) | null>(null)
+  const queueIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const prevShowQueueRef = useRef(false)
 
-  // Connect to SSE stream when token available
-  useEffect(() => {
-    if (token && !hasConnectedRef.current && status === 'disconnected') {
-      hasConnectedRef.current = true
-      connect(token)
-    }
-
-    if (!token && hasConnectedRef.current) {
-      hasConnectedRef.current = false
-      disconnect()
-    }
-
-    return () => {
-      // Cleanup on unmount is handled by store
-    }
-  }, [token, status, connect, disconnect])
+  // Connect to SSE stream when token available (component body, no useEffect)
+  if (token && !hasConnectedRef.current && status === 'disconnected') {
+    hasConnectedRef.current = true
+    connect(token)
+  }
+  if (!token && hasConnectedRef.current) {
+    hasConnectedRef.current = false
+    disconnect()
+  }
 
   // Subscribe to track changes and notify mix API if session exists
-  // This enables queue auto-fill even when on the chat page
-  useEffect(() => {
-    const unsubscribe = subscribeToTrackChange(async (previousTrackId, previousTrackUri, _newTrackId) => {
-      // Only notify if we have a mix session and valid previous track
-      if (!mixSession || !previousTrackId || !previousTrackUri) {
+  // Re-subscribe only when subscribeToTrackChange identity changes
+  if (!trackChangeUnsubRef.current) {
+    trackChangeUnsubRef.current = subscribeToTrackChange(async (previousTrackId, previousTrackUri, _newTrackId) => {
+      if (!useMixStore.getState().session || !previousTrackId || !previousTrackUri) {
         return
       }
 
@@ -86,17 +79,13 @@ export const NowPlaying = memo(function NowPlaying({token}: NowPlayingProps) {
         const response = await mixApiClient.notifyTrackPlayed(previousTrackId, previousTrackUri)
         if (response.movedToHistory) {
           console.log('[NowPlaying] Track moved to history, session updated')
-          // Update session to reflect queue changes from auto-fill
-          setMixSession(response.session)
+          useMixStore.getState().setSession(response.session)
         }
       } catch (err) {
-        // Non-fatal - just log
         console.warn('[NowPlaying] Failed to notify track played:', err)
       }
     })
-
-    return unsubscribe
-  }, [subscribeToTrackChange, mixSession, setMixSession])
+  }
 
   const fetchQueue = useCallback(async () => {
     if (!token) return
@@ -156,21 +145,24 @@ export const NowPlaying = memo(function NowPlaying({token}: NowPlayingProps) {
     }
   }, [token])
 
-  // Periodically refresh queue when panel is open
-  useEffect(() => {
-    if (!showQueue || !token) return
-
-    // Fetch immediately when opening
+  // Periodically refresh queue when panel is open (component body, no useEffect)
+  if (showQueue && token && !prevShowQueueRef.current) {
+    prevShowQueueRef.current = true
     fetchQueue()
-
-    const interval = setInterval(() => {
+    if (queueIntervalRef.current) clearInterval(queueIntervalRef.current)
+    queueIntervalRef.current = setInterval(() => {
       if (showQueueRef.current) {
         fetchQueue()
       }
-    }, 10000) // Refresh every 10 seconds when open
-
-    return () => clearInterval(interval)
-  }, [showQueue, token, fetchQueue])
+    }, 10000)
+  }
+  if (!showQueue && prevShowQueueRef.current) {
+    prevShowQueueRef.current = false
+    if (queueIntervalRef.current) {
+      clearInterval(queueIntervalRef.current)
+      queueIntervalRef.current = null
+    }
+  }
 
   const handlePlayPause = useCallback(async () => {
     if (!token || !playbackCore) return

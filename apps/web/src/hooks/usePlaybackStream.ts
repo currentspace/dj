@@ -11,7 +11,7 @@
  * - Returns simplified PlaybackState for UI components
  */
 
-import {useCallback, useEffect, useRef} from 'react'
+import {useCallback, useRef} from 'react'
 
 import {usePlaybackStore, type ConnectionStatus, type PlaybackState} from '../stores'
 
@@ -40,9 +40,11 @@ export function usePlaybackStream(
   const tokenRef = useRef(token)
   const hasConnectedRef = useRef(false)
   const onTrackChangeRef = useRef(onTrackChange)
+  const trackChangeUnsubRef = useRef<(() => void) | null>(null)
 
   // Keep callback ref updated
   onTrackChangeRef.current = onTrackChange
+  tokenRef.current = token
 
   // Atomic selectors for state
   const status = usePlaybackStore((s) => s.status)
@@ -53,33 +55,28 @@ export function usePlaybackStream(
   const storeDisconnect = usePlaybackStore((s) => s.disconnect)
   const subscribeToTrackChange = usePlaybackStore((s) => s.subscribeToTrackChange)
 
-  // Update token ref
-  tokenRef.current = token
-
-  // Subscribe to track changes
-  useEffect(() => {
-    if (!onTrackChange) return
-
-    return subscribeToTrackChange((prevId, prevUri, newId) => {
+  // Subscribe to track changes (component body, no useEffect)
+  if (onTrackChange && !trackChangeUnsubRef.current) {
+    trackChangeUnsubRef.current = subscribeToTrackChange((prevId, prevUri, newId) => {
       onTrackChangeRef.current?.(prevId, prevUri, newId)
     })
-  }, [subscribeToTrackChange, onTrackChange])
+  }
+  if (!onTrackChange && trackChangeUnsubRef.current) {
+    trackChangeUnsubRef.current()
+    trackChangeUnsubRef.current = null
+  }
 
-  // Auto-connect when token becomes available
-  useEffect(() => {
-    if (autoConnect && token && !hasConnectedRef.current && status === 'disconnected') {
-      hasConnectedRef.current = true
-      storeConnect(token)
-    }
-  }, [autoConnect, token, status, storeConnect])
+  // Auto-connect when token becomes available (component body)
+  if (autoConnect && token && !hasConnectedRef.current && status === 'disconnected') {
+    hasConnectedRef.current = true
+    storeConnect(token)
+  }
 
-  // Disconnect when token is removed
-  useEffect(() => {
-    if (!token && hasConnectedRef.current) {
-      hasConnectedRef.current = false
-      storeDisconnect()
-    }
-  }, [token, storeDisconnect])
+  // Disconnect when token is removed (component body)
+  if (!token && hasConnectedRef.current) {
+    hasConnectedRef.current = false
+    storeDisconnect()
+  }
 
   // Manual connect
   const connect = useCallback(() => {

@@ -5,7 +5,7 @@
 
 import {beforeEach, describe, expect, it, vi} from 'vitest'
 import type {Env} from '../../index'
-import {createMockEnv, MockKVNamespace} from '../fixtures/cloudflare-mocks'
+import {buildMockKV, createMockEnv} from '../fixtures/cloudflare-mocks'
 import {MixSessionService} from '../../services/MixSessionService'
 import {SuggestionEngine} from '../../services/SuggestionEngine'
 import type {MixSession, QueuedTrack} from '@dj/shared-types'
@@ -92,7 +92,7 @@ function createAuthRequest(method: string, path: string, body?: unknown) {
 describe('Mix API Routes - Authentication', () => {
   beforeEach(() => {
     const env = createMockEnv() as Env & {MIX_SESSIONS: KVNamespace}
-    env.MIX_SESSIONS = new MockKVNamespace() as unknown as KVNamespace
+    env.MIX_SESSIONS = buildMockKV()
   })
 
   it('should reject requests without authorization header', async () => {
@@ -128,7 +128,7 @@ describe('Mix API Routes - Session Management', () => {
 
   beforeEach(() => {
     env = createMockEnv() as Env & {MIX_SESSIONS: KVNamespace}
-    env.MIX_SESSIONS = new MockKVNamespace() as unknown as KVNamespace
+    env.MIX_SESSIONS = buildMockKV()
     mockSessionService = new MixSessionService(env.MIX_SESSIONS)
   })
 
@@ -227,7 +227,7 @@ describe('Mix API Routes - Queue Management', () => {
 
   beforeEach(() => {
     env = createMockEnv() as Env & {MIX_SESSIONS: KVNamespace}
-    env.MIX_SESSIONS = new MockKVNamespace() as unknown as KVNamespace
+    env.MIX_SESSIONS = buildMockKV()
     mockSessionService = new MixSessionService(env.MIX_SESSIONS)
     mockSession = createMockSession()
   })

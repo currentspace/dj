@@ -186,11 +186,11 @@ export class ChatStreamClient {
         // Try to get error details if server sent JSON
         const errorText = await response.text().catch(() => '')
         try {
-          const json = JSON.parse(errorText) as {
-            error?: string
-            message?: string
-          }
-          const errorMessage = json.error ?? json.message ?? JSON.stringify(json)
+          const json: unknown = JSON.parse(errorText)
+          const jsonObj = (json && typeof json === 'object' && !Array.isArray(json)) ? json as Record<string, unknown> : {}
+          const errorMessage = (typeof jsonObj.error === 'string' ? jsonObj.error : null)
+            ?? (typeof jsonObj.message === 'string' ? jsonObj.message : null)
+            ?? JSON.stringify(json)
           throw new Error(errorMessage)
         } catch {
           throw new Error(
@@ -253,7 +253,7 @@ export class ChatStreamClient {
             }
 
             try {
-              const parsed = JSON.parse(dataStr) as unknown
+              const parsed: unknown = JSON.parse(dataStr)
 
               // Handle our event format: {type: string, data: any}
               if (typeof parsed === 'object' && parsed && 'type' in parsed) {

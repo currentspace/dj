@@ -12,11 +12,11 @@
     "test:watch": "vitest"
   },
   "devDependencies": {
-    "tsup": "^8.5.1",
-    "typescript": "^5.9.3",
-    "vitest": "^4.0.18"
+    "tsup": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   },
   "dependencies": {
-    "zod": "^4.3.6"
+    "zod": "catalog:"
   }
 }

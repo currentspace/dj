@@ -275,9 +275,10 @@ async function handleTrackTransition(
       headers: { Authorization: `Bearer ${token}` },
     })
     if (!userResponse.ok) return
-    const userData = await userResponse.json() as { id?: string }
-    const userId = userData.id
-    if (!userId) return
+    const userJson: unknown = await userResponse.json()
+    const userParsed = z.object({ id: z.string() }).safeParse(userJson)
+    if (!userParsed.success) return
+    const userId = userParsed.data.id
 
     const sessionService = new MixSessionService(env.MIX_SESSIONS)
     const session = await sessionService.getSession(userId)
@@ -584,10 +585,11 @@ export function registerPlayerStreamRoute(app: OpenAPIHono<{ Bindings: Env }>) {
                 headers: { Authorization: `Bearer ${token}` },
               })
               if (!userResp.ok) return
-              const user = await userResp.json() as { id?: string }
-              if (!user.id) return
+              const userJson2: unknown = await userResp.json()
+              const userParsed2 = z.object({ id: z.string() }).safeParse(userJson2)
+              if (!userParsed2.success) return
 
-              const session = await sessionService.getSession(user.id)
+              const session = await sessionService.getSession(userParsed2.data.id)
               if (!session) return
 
               if (session.queue.length < QUEUE_LOW_THRESHOLD && session.preferences.autoFill) {

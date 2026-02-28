@@ -41,6 +41,17 @@ const SpotifySearchResponseSchema = z.object({
   }).optional(),
 })
 
+/** Zod schema for AI track suggestion response */
+const AITrackSuggestionsSchema = z.object({
+  tracks: z.array(z.object({
+    artist: z.string(),
+    name: z.string(),
+    reason: z.string(),
+  })),
+})
+
+type AITrackSuggestions = z.infer<typeof AITrackSuggestionsSchema>
+
 // =============================================================================
 // TYPES
 // =============================================================================
@@ -145,9 +156,7 @@ export class SuggestionEngine {
 
       // Use AI service for the request
       // When thinking is enabled, we get deeper reasoning about track selection
-      const response = await this.aiService.promptForJSON<{
-        tracks: Array<{ artist: string; name: string; reason: string }>
-      }>(prompt, {
+      const response = await this.aiService.promptForJSON(prompt, {
         temperature: this.enableThinking ? undefined : 0.8, // No temp with thinking
         system: SYSTEM_PROMPTS.DJ,
         thinkingBudget: this.enableThinking ? 2000 : undefined,
@@ -162,13 +171,14 @@ export class SuggestionEngine {
         })
       }
 
-      if (response.error || !response.data?.tracks) {
+      const parsed = AITrackSuggestionsSchema.safeParse(response.data)
+      if (response.error || !parsed.success) {
         getLogger()?.error('[SuggestionEngine] AI request failed:', response.error)
         // Fallback to Last.fm-based suggestions
         return this.generateLastFmFallbackSuggestions(session, count)
       }
 
-      const aiSuggestions = response.data
+      const aiSuggestions: AITrackSuggestions = parsed.data
 
       if (aiSuggestions.tracks.length === 0) {
         getLogger()?.info('[SuggestionEngine] AI returned no track suggestions')
@@ -554,9 +564,7 @@ export class SuggestionEngine {
 
       // Use common AI service for the request
       // When thinking is enabled, we get deeper reasoning about vibe interpretation
-      const response = await this.aiService.promptForJSON<{
-        tracks: Array<{ artist: string; name: string; reason: string }>
-      }>(prompt, {
+      const response = await this.aiService.promptForJSON(prompt, {
         temperature: this.enableThinking ? undefined : 0.8, // No temp with thinking
         system: SYSTEM_PROMPTS.DJ,
         thinkingBudget: this.enableThinking ? 2000 : undefined,
@@ -571,12 +579,13 @@ export class SuggestionEngine {
         })
       }
 
-      if (response.error || !response.data?.tracks) {
+      const parsed = AITrackSuggestionsSchema.safeParse(response.data)
+      if (response.error || !parsed.success) {
         getLogger()?.error('[SuggestionEngine] AI request failed:', response.error)
         return []
       }
 
-      const aiSuggestions = response.data
+      const aiSuggestions: AITrackSuggestions = parsed.data
 
       if (aiSuggestions.tracks.length === 0) {
         getLogger()?.info('[SuggestionEngine] AI returned no track suggestions')

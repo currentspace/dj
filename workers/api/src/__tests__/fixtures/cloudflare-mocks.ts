@@ -129,6 +129,14 @@ export class MockKVNamespace {
 }
 
 /**
+ * Build a mock KVNamespace with proper typing.
+ * Uses `as KVNamespace` internally so test consumers don't need to.
+ */
+export function buildMockKV(): KVNamespace {
+  return new MockKVNamespace() as unknown as KVNamespace
+}
+
+/**
  * Create a mock Cloudflare environment
  */
 export function createMockEnv(overrides?: {

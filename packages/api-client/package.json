@@ -12,11 +12,11 @@
   "dependencies": {
     "@dj/api-contracts": "workspace:*",
     "@dj/shared-types": "workspace:*",
-    "hono": "^4.12.3",
-    "zod": "^4.3.6"
+    "hono": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
-    "tsup": "^8.5.1",
-    "typescript": "^5.9.3"
+    "tsup": "catalog:",
+    "typescript": "catalog:"
   }
 }

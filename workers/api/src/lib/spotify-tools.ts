@@ -541,8 +541,9 @@ async function analyzePlaylist(args: Record<string, unknown>, token: string) {
         tracks.flatMap((t) =>
           t.artists?.flatMap((a) => {
             // Artists may have genres property depending on the endpoint
-            const artist = a as {genres?: string[]}
-            return artist.genres ?? []
+            const artistObj = a as Record<string, unknown>
+            const genres = Array.isArray(artistObj.genres) ? artistObj.genres.filter((g): g is string => typeof g === 'string') : []
+            return genres
           }) ?? []
         )
       )

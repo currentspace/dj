@@ -2,8 +2,6 @@ import {useCallback, useState} from 'react'
 
 import {storage, STORAGE_KEYS} from '../../hooks/useLocalStorage'
 
-import styles from './auto-fill-toggle.module.css'
-
 interface AutoFillToggleProps {
   autoFill: boolean
   onToggle?: (enabled: boolean) => void
@@ -51,7 +49,6 @@ export function AutoFillToggle({autoFill, onToggle}: AutoFillToggleProps) {
       onToggle?.(newValue)
     } catch (error) {
       console.error('[AutoFillToggle] Error:', error)
-      // Revert on error
       setLocalAutoFill(!newValue)
     } finally {
       setIsLoading(false)
@@ -59,21 +56,25 @@ export function AutoFillToggle({autoFill, onToggle}: AutoFillToggleProps) {
   }, [localAutoFill, onToggle])
 
   return (
-    <div className={styles.container}>
-      <span className={styles.label}>Queue Auto-Fill</span>
+    <div className="flex items-center gap-3">
+      <span className="text-[13px] text-white/70">Queue Auto-Fill</span>
       <button
         aria-label={localAutoFill ? 'Disable auto-fill' : 'Enable auto-fill'}
         aria-pressed={localAutoFill}
-        className={`${styles.toggle} ${localAutoFill ? styles.active : ''}`}
+        className={`flex items-center gap-2 px-2.5 py-1.5 border rounded-[20px] cursor-pointer transition-all duration-200 text-white disabled:opacity-50 disabled:cursor-not-allowed ${
+          localAutoFill
+            ? 'border-spotify-green bg-spotify-green/15'
+            : 'border-white/20 bg-black/30 hover:border-white/40 hover:bg-black/40'
+        }`}
         disabled={isLoading}
         onClick={handleToggle}
         title={localAutoFill ? 'Auto (AI fills queue)' : 'Manual (you control queue)'}
         type="button"
       >
-        <span className={styles.toggleTrack}>
-          <span className={styles.toggleThumb} />
+        <span className={`relative w-8 h-[18px] rounded-[9px] transition-colors duration-200 ${localAutoFill ? 'bg-spotify-green' : 'bg-white/30'}`}>
+          <span className={`absolute top-0.5 left-0.5 size-3.5 rounded-full bg-white transition-transform duration-200 ${localAutoFill ? 'translate-x-3.5' : ''}`} />
         </span>
-        <span className={styles.toggleLabel}>
+        <span className="text-xs font-medium min-w-12">
           {localAutoFill ? 'Auto' : 'Manual'}
         </span>
       </button>

@@ -3,6 +3,8 @@
  * Manages Spotify authentication state with localStorage persistence
  */
 
+import {TokenDataSchema, SpotifyAuthUrlResponseSchema, TokenRefreshResponseSchema} from '@dj/shared-types'
+import type {TokenData} from '@dj/shared-types'
 import {create} from 'zustand'
 import {subscribeWithSelector} from 'zustand/middleware'
 
@@ -11,12 +13,6 @@ import {storage, STORAGE_KEYS} from '../hooks/useLocalStorage'
 // =============================================================================
 // TYPES
 // =============================================================================
-
-interface TokenData {
-  createdAt: number
-  expiresAt: number | null
-  token: string
-}
 
 interface AuthState {
   // State
@@ -90,12 +86,13 @@ async function performLogin(signal: AbortSignal): Promise<void> {
     throw new Error(`Failed to get auth URL: ${response.status} ${errorText}`)
   }
 
-  const data = (await response.json()) as {url?: string}
-  if (!data.url) {
+  const json: unknown = await response.json()
+  const parsed = SpotifyAuthUrlResponseSchema.safeParse(json)
+  if (!parsed.success) {
     throw new Error('No auth URL received from server')
   }
 
-  window.location.href = data.url
+  window.location.href = parsed.data.url
 }
 
 // Token validation helper
@@ -128,7 +125,13 @@ async function refreshTokenWithAPI(signal: AbortSignal): Promise<{access_token: 
       return null
     }
 
-    return await response.json() as {access_token: string; expires_in: number}
+    const json: unknown = await response.json()
+    const parsed = TokenRefreshResponseSchema.safeParse(json)
+    if (!parsed.success) {
+      console.log('[authStore] Invalid refresh response')
+      return null
+    }
+    return parsed.data
   } catch (err) {
     if (err instanceof Error && err.name === 'AbortError') throw err
     console.warn('[authStore] Refresh error:', err)
@@ -160,7 +163,9 @@ function scheduleProactiveRefresh(expiresAt: number, refreshFn: () => Promise<bo
     console.log(`[authStore] Scheduling proactive refresh in ${Math.round(refreshTime / 1000 / 60)} minutes`)
     refreshTimer = setTimeout(() => {
       console.log('[authStore] Proactive refresh triggered')
-      refreshFn()
+      refreshFn().catch((err: unknown) => {
+        console.warn('[authStore] Proactive refresh failed:', err)
+      })
     }, refreshTime)
   }
 }
@@ -395,12 +400,18 @@ if (typeof window !== 'undefined') {
     }
 
     try {
-      const tokenData = JSON.parse(event.newValue) as TokenData
-      if (isTokenExpired(tokenData)) {
+      const raw: unknown = JSON.parse(event.newValue)
+      const result = TokenDataSchema.safeParse(raw)
+      if (!result.success) {
+        clearTokenData()
+        useAuthStore.setState({isAuthenticated: false, token: null})
+        return
+      }
+      if (isTokenExpired(result.data)) {
         clearTokenData()
         useAuthStore.setState({isAuthenticated: false, token: null})
       } else {
-        useAuthStore.setState({isAuthenticated: true, token: tokenData.token})
+        useAuthStore.setState({isAuthenticated: true, token: result.data.token})
       }
     } catch {
       clearTokenData()

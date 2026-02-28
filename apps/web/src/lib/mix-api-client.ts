@@ -247,8 +247,11 @@ export const mixApiClient = {
     })
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Request failed' }))
-      throw new Error((error as { error?: string }).error || 'Failed to start steer stream')
+      const error: unknown = await response.json().catch(() => ({ error: 'Request failed' }))
+      const errorMsg = (error && typeof error === 'object' && !Array.isArray(error) && 'error' in error && typeof (error as Record<string, unknown>).error === 'string')
+        ? (error as Record<string, unknown>).error as string
+        : 'Failed to start steer stream'
+      throw new Error(errorMsg)
     }
 
     if (!response.body) {
@@ -273,8 +276,10 @@ export const mixApiClient = {
         for (const line of lines) {
           if (line.startsWith('data: ')) {
             try {
-              const data = JSON.parse(line.slice(6))
-              onEvent(data as SteerStreamEvent)
+              const data: unknown = JSON.parse(line.slice(6))
+              if (data && typeof data === 'object' && 'type' in data) {
+                onEvent(data as SteerStreamEvent)
+              }
             } catch {
               // Ignore parse errors for malformed events
             }
