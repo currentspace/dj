@@ -1,52 +1,38 @@
 import {Suspense} from 'react'
 
 import {BuildInfo} from './components/atoms/BuildInfo'
-import {ErrorBoundary, PlaylistErrorBoundary} from './components/atoms/ErrorBoundary'
-import {ScopeDebugger} from './components/molecules/ScopeDebugger'
+import {ErrorBoundary} from './components/atoms/ErrorBoundary'
 import {UpdateBanner} from './components/molecules/UpdateBanner'
-import {ChatInterface} from './components/organisms/ChatInterface'
-import {NowPlaying} from './components/organisms/NowPlaying'
+import {DebugPanel} from './components/organisms/DebugPanel'
 import {SpotifyAuth} from './components/organisms/SpotifyAuth'
-import {UserPlaylists} from './components/organisms/UserPlaylists'
-import {MixPage} from './components/pages/MixPage'
+import {DJPage} from './features/dj/DJPage'
 import {useSpotifyAuth} from './hooks/useSpotifyAuth'
-import {useNavigationStore, usePlaylistStore} from './stores'
+import {useDebugStore} from './stores'
 import './styles/app-layout.css'
 import './styles/build-info.css'
 
 function App() {
   const {clearError, error, isAuthenticated, isLoading, login, logout, token} = useSpotifyAuth()
-  const route = useNavigationStore((s) => s.route)
-  const navigate = useNavigationStore((s) => s.navigate)
-
-  // Playlist state from Zustand store (eliminates prop drilling)
-  const selectedPlaylist = usePlaylistStore((s) => s.selectedPlaylist)
-  const selectPlaylist = usePlaylistStore((s) => s.selectPlaylist)
+  const debugIsOpen = useDebugStore((s) => s.isOpen)
+  const toggleDebug = useDebugStore((s) => s.toggle)
 
   return (
     <ErrorBoundary>
       <UpdateBanner />
       <div className="app">
         <header className="app-header">
-          <h1>🎵 DJ</h1>
-          <p className="app-subtitle">AI-Powered Playlist Generator</p>
+          <h1>DJ</h1>
           <div className="header-buttons">
             {isAuthenticated && (
               <>
                 <button
-                  className={`test-button ${route === 'mix' ? 'active' : ''}`}
-                  onClick={() => navigate(route === 'mix' ? 'chat' : 'mix')}
+                  className={`test-button ${debugIsOpen ? 'active' : ''}`}
+                  onClick={toggleDebug}
                 >
-                  {route === 'mix' ? '💬 Back to Chat' : '🎧 Live DJ Mode'}
-                </button>
-                <button
-                  className={`test-button ${route === 'debug' ? 'active' : ''}`}
-                  onClick={() => navigate(route === 'debug' ? 'chat' : 'debug')}
-                >
-                  {route === 'debug' ? '🎵 Back to Chat' : '🔍 Scope Debug'}
+                  {debugIsOpen ? 'Hide Debug' : 'Debug'}
                 </button>
                 <button className="logout-button" onClick={logout}>
-                  Logout from Spotify
+                  Logout
                 </button>
               </>
             )}
@@ -54,42 +40,14 @@ function App() {
         </header>
 
         <main className="app-main">
-          {route === 'mix' && isAuthenticated ? (
-            <Suspense fallback={<div className="loading">Loading Live DJ Mode...</div>}>
-              <MixPage
-                onBackToChat={() => navigate('chat')}
-                seedPlaylistId={selectedPlaylist?.id}
-                token={token}
-              />
-            </Suspense>
-          ) : route === 'debug' && isAuthenticated ? (
-            <Suspense fallback={<div className="loading">Loading scope debugger...</div>}>
-              <ScopeDebugger />
-            </Suspense>
-          ) : !isAuthenticated ? (
+          {!isAuthenticated ? (
             <Suspense fallback={<div className="loading">Loading...</div>}>
               <SpotifyAuth error={error} isLoading={isLoading} onClearError={clearError} onLogin={login} />
             </Suspense>
           ) : (
-            <PlaylistErrorBoundary>
-              <div className="main-content">
-                <div className="playlists-section">
-                  <Suspense fallback={<div className="loading">Loading playlists...</div>}>
-                    <UserPlaylists onPlaylistSelect={selectPlaylist} />
-                  </Suspense>
-                </div>
-
-                <div className="chat-section">
-                  <Suspense fallback={<div className="loading">Loading chat interface...</div>}>
-                    <ChatInterface />
-                  </Suspense>
-                </div>
-              </div>
-            </PlaylistErrorBoundary>
+            <DJPage token={token} />
           )}
         </main>
-
-        {isAuthenticated && route !== 'mix' && <NowPlaying token={token} />}
 
         <footer className="app-footer">
           <p>
@@ -105,6 +63,8 @@ function App() {
         </footer>
 
         <BuildInfo />
+
+        {debugIsOpen && <DebugPanel />}
       </div>
     </ErrorBoundary>
   )

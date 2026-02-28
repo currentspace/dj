@@ -60,6 +60,7 @@ import {
 } from '@dj/api-contracts'
 
 import {storage, STORAGE_KEYS} from '../hooks/useLocalStorage'
+import {emitDebug} from '../stores/debugStore'
 
 /**
  * Get Spotify token from centralized storage
@@ -261,6 +262,9 @@ export const mixApiClient = {
       throw new Error('No Spotify token')
     }
 
+    const t0 = Date.now()
+    emitDebug('api', 'POST', `POST /api/mix/vibe/steer-stream`, {direction}, {url: '/api/mix/vibe/steer-stream'})
+
     const response = await fetch('/api/mix/vibe/steer-stream', {
       body: JSON.stringify({ direction }),
       headers: {
@@ -312,6 +316,7 @@ export const mixApiClient = {
       }
     } finally {
       reader.releaseLock()
+      emitDebug('api', 'POST', `POST /api/mix/vibe/steer-stream complete`, undefined, {durationMs: Date.now() - t0, url: '/api/mix/vibe/steer-stream'})
     }
   },
 

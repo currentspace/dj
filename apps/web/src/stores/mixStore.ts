@@ -9,6 +9,7 @@ import {create} from 'zustand'
 import {subscribeWithSelector} from 'zustand/middleware'
 
 import {mixApiClient, type SteerStreamEvent} from '../lib/mix-api-client'
+import {emitDebug} from './debugStore'
 
 // =============================================================================
 // TYPES
@@ -104,6 +105,7 @@ export const useMixStore = create<MixStoreState>()(
             : [...session.queue, optimisticTrack]
 
         set({error: null, session: {...session, queue: newQueue}})
+        emitDebug('api', 'addToQueue', `Adding track to queue: ${trackUri}`)
 
         try {
           const updatedQueue = await mixApiClient.addToQueue(trackUri, position)
@@ -137,9 +139,11 @@ export const useMixStore = create<MixStoreState>()(
       clearVibeError: () => set({vibeError: null}),
       endSession: async () => {
         set({error: null, isLoading: true})
+        emitDebug('api', 'endSession', 'Ending session')
 
         try {
           await mixApiClient.endSession()
+          emitDebug('api', 'endSession', 'Session ended')
           set({isLoading: false, session: null, suggestions: []})
         } catch (err) {
           set({
@@ -347,9 +351,12 @@ export const useMixStore = create<MixStoreState>()(
 
       startSession: async (preferences, seedPlaylistId) => {
         set({error: null, isLoading: true})
+        emitDebug('api', 'startSession', `Starting session${seedPlaylistId ? ` (seed: ${seedPlaylistId})` : ''}`)
+        const t0 = Date.now()
 
         try {
           const newSession = await mixApiClient.startSession(preferences, seedPlaylistId)
+          emitDebug('api', 'startSession', `Session started: ${newSession.queue.length} tracks in queue`, undefined, {durationMs: Date.now() - t0})
           set({isLoading: false, session: newSession})
 
           // Fetch initial suggestions
@@ -420,6 +427,9 @@ export const useMixStore = create<MixStoreState>()(
 
         try {
           await mixApiClient.steerVibeStream(direction, (event) => {
+            // Emit steer events to debug
+            emitDebug('steer', event.type, `Steer ${event.type}: ${event.data.message ?? event.data.stage ?? direction}`, event.data)
+
             // Accumulate events
             set((state) => ({
               steerEvents: [...state.steerEvents, event],

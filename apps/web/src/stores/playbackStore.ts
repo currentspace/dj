@@ -32,6 +32,7 @@ import { create } from 'zustand'
 import { subscribeWithSelector } from 'zustand/middleware'
 
 import { HTTP_STATUS } from '../constants'
+import { emitDebug } from './debugStore'
 
 // =============================================================================
 // TYPES
@@ -79,6 +80,8 @@ interface PlaybackStoreState {
   disconnect: () => void
   // State (separated for selective subscriptions)
   error: null | string
+  /** Timestamp of last track change (for DJLog subscriptions) */
+  lastTrackChangeAt: number
   playbackCore: null | PlaybackCore
 
   progress: number
@@ -145,6 +148,7 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
     function notifyTrackChange(newTrackId: string, newTrackUri: string): void {
       if (previousTrackId && previousTrackId !== newTrackId) {
         console.log('[playbackStore] Track changed:', previousTrackId, '->', newTrackId)
+        set({lastTrackChangeAt: Date.now()})
         trackChangeCallbacks.forEach((cb) => {
           try {
             cb(previousTrackId!, previousTrackUri ?? '', newTrackId)
@@ -160,6 +164,14 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
     function handleEvent(event: string, data: string, token: string): void {
       try {
         const parsed: unknown = JSON.parse(data)
+
+        // Emit debug event for every SSE message
+        emitDebug(
+          event === 'error' ? 'error' : 'sse',
+          event,
+          `SSE ${event}${event === 'tick' ? '' : `: ${JSON.stringify(parsed).slice(0, 80)}`}`,
+          parsed,
+        )
 
         switch (event) {
           case 'auth_expired':
@@ -399,6 +411,7 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
             if (!response.body) throw new Error('No response body')
 
             set({ status: 'connected' })
+            emitDebug('sse', 'connected', 'SSE stream connected')
             startInterpolation()
 
             const reader = response.body.getReader()
@@ -468,6 +481,7 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
       },
       // Initial state
       error: null,
+      lastTrackChangeAt: 0,
       playbackCore: null,
 
       progress: 0,

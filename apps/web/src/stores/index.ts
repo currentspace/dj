@@ -21,6 +21,7 @@
  */
 
 export {processOAuthCallback, useAuthStore} from './authStore'
+export {type DebugCategory, type DebugEvent, emitDebug, useDebugStore} from './debugStore'
 export {initializeMixStore, useMixStore} from './mixStore'
 export {type Route, useNavigationStore} from './navigationStore'
 export {type ConnectionStatus, getPlaybackState, type PlaybackCore, type PlaybackState, useDevice, usePlaybackStore} from './playbackStore'
