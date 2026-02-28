@@ -90,7 +90,16 @@ export async function processAgenticLoop({
           args: JSON.stringify(toolCall.args).substring(0, 200),
         })
         try {
-          const result = await tool.func(toolCall.args)
+          // Validate input through the tool's Zod schema
+          const parseResult = tool.schema.safeParse(toolCall.args)
+          const validatedArgs = parseResult.success ? parseResult.data : toolCall.args
+          if (!parseResult.success) {
+            getLogger()?.warn(`[Stream:${requestId}] Tool ${toolCall.name} input validation failed, using raw args`, {
+              errors: parseResult.error.issues.map((i) => `${String(i.path.join('.'))}: ${i.message}`),
+            })
+          }
+
+          const result = await tool.func(validatedArgs)
           getLogger()?.info(`[Stream:${requestId}] Tool ${toolCall.name} completed successfully`)
 
           const toolContent = JSON.stringify(result)
