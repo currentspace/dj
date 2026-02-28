@@ -22,6 +22,12 @@ export interface ChatResponse {
   playlistModified?: boolean
 }
 
+/** Playback context type */
+export type ContextType = 'album' | 'artist' | 'collection' | 'playlist' | 'show'
+
+/** Device type from Spotify */
+export type DeviceType = 'audio_dongle' | 'automobile' | 'avr' | 'cast_audio' | 'cast_video' | 'computer' | 'game_console' | 'smartphone' | 'speaker' | 'stb' | 'tv' | 'unknown'
+
 export interface GeneratePlaylistRequest {
   prompt: string
 }
@@ -29,6 +35,125 @@ export interface GeneratePlaylistRequest {
 export interface GeneratePlaylistResponse {
   playlist: Playlist
 }
+
+/** Playback context (what's being played from) */
+export interface PlaybackContext {
+  href: null | string
+  name: null | string
+  type: ContextType
+  uri: string
+}
+
+/** Context change event */
+export interface PlaybackContextEvent {
+  context: null | PlaybackContext
+  seq: number
+}
+
+/** Device info in playback stream */
+export interface PlaybackDevice {
+  id: null | string
+  isPrivateSession: boolean
+  isRestricted: boolean
+  name: string
+  supportsVolume: boolean
+  type: DeviceType
+  volumePercent: null | number
+}
+
+/** Device change event */
+export interface PlaybackDeviceEvent extends PlaybackDevice {
+  seq: number
+}
+
+/** Idle event (no active playback) */
+export interface PlaybackIdleEvent {
+  seq: number
+}
+
+/** Playback modes (shuffle/repeat) */
+export interface PlaybackModes {
+  repeat: RepeatState
+  shuffle: boolean
+}
+
+/** Modes change event (shuffle/repeat) */
+export interface PlaybackModesEvent extends PlaybackModes {
+  seq: number
+}
+
+/** State change event (play/pause) */
+export interface PlaybackStateEvent {
+  isPlaying: boolean
+  seq: number
+}
+
+/** Full playback state (sent on init) */
+export interface PlaybackStateInit {
+  context: null | PlaybackContext
+  device: PlaybackDevice
+  isPlaying: boolean
+  modes: PlaybackModes
+  playingType: PlayingType
+  progress: number
+  seq: number
+  timestamp: number
+  track: null | PlaybackTrack
+}
+
+/** All possible playback stream event types */
+export type PlaybackStreamEventType =
+  | 'connected'
+  | 'context'
+  | 'device'
+  | 'error'
+  | 'idle'
+  | 'init'
+  | 'modes'
+  | 'reconnect'
+  | 'state'
+  | 'tick'
+  | 'track'
+  | 'volume'
+
+/** Tick event - minimal progress update */
+export interface PlaybackTickEvent {
+  /** Progress in milliseconds */
+  p: number
+  /** Server timestamp */
+  ts: number
+}
+
+/** Track info in playback stream */
+export interface PlaybackTrack {
+  albumArt: null | string
+  albumName: string
+  artist: string
+  duration: number
+  explicit: boolean
+  id: string
+  isLocal: boolean
+  name: string
+  popularity: number
+  previewUrl: null | string
+  uri: string
+}
+
+/** Track change event */
+export interface PlaybackTrackEvent extends PlaybackTrack {
+  seq: number
+}
+
+/** Volume change event */
+export interface PlaybackVolumeEvent {
+  percent: number
+  seq: number
+}
+
+// ===== Playback Stream Protocol (Delta-based SSE) =====
+
+/** Currently playing item type */
+export type PlayingType = 'ad' | 'episode' | 'track' | 'unknown'
 
 export interface Playlist {
   description: string
@@ -38,6 +163,9 @@ export interface Playlist {
   spotifyId?: string
   tracks: Track[]
 }
+
+/** Repeat mode states */
+export type RepeatState = 'context' | 'off' | 'track'
 
 export interface SavePlaylistRequest {
   playlist: Playlist
@@ -150,137 +278,11 @@ export interface WebhookEvent {
   type: string
 }
 
-// ===== Playback Stream Protocol (Delta-based SSE) =====
-
-/** Repeat mode states */
-export type RepeatState = 'off' | 'track' | 'context'
-
-/** Device type from Spotify */
-export type DeviceType = 'computer' | 'smartphone' | 'speaker' | 'tv' | 'avr' | 'stb' | 'audio_dongle' | 'game_console' | 'cast_video' | 'cast_audio' | 'automobile' | 'unknown'
-
-/** Playback context type */
-export type ContextType = 'album' | 'artist' | 'playlist' | 'show' | 'collection'
-
-/** Currently playing item type */
-export type PlayingType = 'track' | 'episode' | 'ad' | 'unknown'
-
-/** Track info in playback stream */
-export interface PlaybackTrack {
-  id: string
-  uri: string
-  name: string
-  artist: string
-  albumArt: string | null
-  albumName: string
-  duration: number
-  explicit: boolean
-  popularity: number
-  isLocal: boolean
-  previewUrl: string | null
-}
-
-/** Device info in playback stream */
-export interface PlaybackDevice {
-  id: string | null
-  name: string
-  type: DeviceType
-  volumePercent: number | null
-  supportsVolume: boolean
-  isPrivateSession: boolean
-  isRestricted: boolean
-}
-
-/** Playback context (what's being played from) */
-export interface PlaybackContext {
-  type: ContextType
-  uri: string
-  name: string | null
-  href: string | null
-}
-
-/** Playback modes (shuffle/repeat) */
-export interface PlaybackModes {
-  shuffle: boolean
-  repeat: RepeatState
-}
-
-/** Full playback state (sent on init) */
-export interface PlaybackStateInit {
-  track: PlaybackTrack | null
-  device: PlaybackDevice
-  context: PlaybackContext | null
-  modes: PlaybackModes
-  playingType: PlayingType
-  isPlaying: boolean
-  progress: number
-  timestamp: number
-  seq: number
-}
-
-/** Tick event - minimal progress update */
-export interface PlaybackTickEvent {
-  /** Progress in milliseconds */
-  p: number
-  /** Server timestamp */
-  ts: number
-}
-
-/** State change event (play/pause) */
-export interface PlaybackStateEvent {
-  isPlaying: boolean
-  seq: number
-}
-
-/** Track change event */
-export interface PlaybackTrackEvent extends PlaybackTrack {
-  seq: number
-}
-
-/** Device change event */
-export interface PlaybackDeviceEvent extends PlaybackDevice {
-  seq: number
-}
-
-/** Modes change event (shuffle/repeat) */
-export interface PlaybackModesEvent extends PlaybackModes {
-  seq: number
-}
-
-/** Volume change event */
-export interface PlaybackVolumeEvent {
-  percent: number
-  seq: number
-}
-
-/** Context change event */
-export interface PlaybackContextEvent {
-  context: PlaybackContext | null
-  seq: number
-}
-
-/** Idle event (no active playback) */
-export interface PlaybackIdleEvent {
-  seq: number
-}
-
-/** All possible playback stream event types */
-export type PlaybackStreamEventType =
-  | 'init'
-  | 'tick'
-  | 'state'
-  | 'track'
-  | 'device'
-  | 'modes'
-  | 'volume'
-  | 'context'
-  | 'idle'
-  | 'error'
-  | 'reconnect'
-  | 'connected'
-
 // ===== Zod Schemas and Validation =====
 // Export all Zod schemas for runtime validation
 
+// ===== Utilities =====
+export {PromiseTracker} from './promise-tracker'
 export * from './schemas/api-schemas'
 export * from './schemas/auth-schemas'
 export * from './schemas/external-api-schemas'
@@ -288,9 +290,7 @@ export * from './schemas/llm-response-schemas'
 export * from './schemas/mix-session-schemas'
 export * from './schemas/playback-event-schemas'
 export * from './schemas/spotify-schemas'
-export * from './schemas/sse-schemas'
 
-// ===== Utilities =====
-export {PromiseTracker} from './promise-tracker'
+export * from './schemas/sse-schemas'
 export {createTypeGuard, formatZodError, parse, parseJsonResponse, safeParse, safeParseJsonResponse} from './validation'
 export type {SafeParseResult} from './validation'

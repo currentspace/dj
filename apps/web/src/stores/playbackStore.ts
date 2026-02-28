@@ -16,6 +16,7 @@ import type {
   PlaybackTrack,
   PlayingType,
 } from '@dj/shared-types'
+
 import {
   PlaybackContextEventSchema,
   PlaybackDeviceEventSchema,
@@ -40,64 +41,64 @@ export type ConnectionStatus = 'connected' | 'connecting' | 'disconnected' | 'er
 
 /** Rich playback state with all Spotify data */
 export interface PlaybackCore {
-  // Track info
-  track: PlaybackTrack | null
+  // Context (what's being played from)
+  context: null | PlaybackContext
   // Device info
   device: PlaybackDevice
-  // Context (what's being played from)
-  context: PlaybackContext | null
+  isPlaying: boolean
   // Playback modes
   modes: PlaybackModes
   // Playback state
   playingType: PlayingType
-  isPlaying: boolean
-  // Timing
-  timestamp: number
   // Sequence for ordering
   seq: number
+  // Timing
+  timestamp: number
+  // Track info
+  track: null | PlaybackTrack
 }
 
 /** Simplified playback state for UI components */
 export interface PlaybackState {
-  albumArt: string | null
+  albumArt: null | string
   artistName: string
-  deviceId: string | null
+  deviceId: null | string
   deviceName: string
   duration: number
   isPlaying: boolean
   progress: number
   timestamp: number
-  trackId: string | null
+  trackId: null | string
   trackName: string
-  trackUri: string | null
+  trackUri: null | string
 }
 
-type TrackChangeCallback = (previousTrackId: string, previousTrackUri: string, newTrackId: string) => void
-
 interface PlaybackStoreState {
-  // State (separated for selective subscriptions)
-  error: string | null
-  playbackCore: PlaybackCore | null
-  progress: number
-  status: ConnectionStatus
-
   // Actions
   connect: (token: string) => void
   disconnect: () => void
+  // State (separated for selective subscriptions)
+  error: null | string
+  playbackCore: null | PlaybackCore
+
+  progress: number
+  status: ConnectionStatus
   subscribeToTrackChange: (callback: TrackChangeCallback) => () => void
 }
+
+type TrackChangeCallback = (previousTrackId: string, previousTrackUri: string, newTrackId: string) => void
 
 // =============================================================================
 // STORE
 // =============================================================================
 
 // Private state (not in Zustand, for SSE management)
-let reconnectTimeout: ReturnType<typeof setTimeout> | null = null
-let interpolationInterval: ReturnType<typeof setInterval> | null = null
+let reconnectTimeout: null | ReturnType<typeof setTimeout> = null
+let interpolationInterval: null | ReturnType<typeof setInterval> = null
 let lastServerUpdate = 0
 let lastServerProgress = 0
-let previousTrackId: string | null = null
-let previousTrackUri: string | null = null
+let previousTrackId: null | string = null
+let previousTrackUri: null | string = null
 const trackChangeCallbacks = new Set<TrackChangeCallback>()
 
 export const usePlaybackStore = create<PlaybackStoreState>()(
@@ -161,181 +162,9 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
         const parsed: unknown = JSON.parse(data)
 
         switch (event) {
-          case 'connected':
-            console.log('[playbackStore] Connected:', parsed)
-            break
-
-          case 'init': {
-            const initResult = PlaybackStateInitSchema.safeParse(parsed)
-            if (!initResult.success) {
-              console.error('[playbackStore] Invalid init event:', initResult.error)
-              break
-            }
-            const init = initResult.data
-            lastServerUpdate = Date.now()
-            lastServerProgress = init.progress
-
-            if (init.track) {
-              notifyTrackChange(init.track.id, init.track.uri)
-            }
-
-            const playbackCore: PlaybackCore = {
-              track: init.track,
-              device: init.device,
-              context: init.context,
-              modes: init.modes,
-              playingType: init.playingType,
-              isPlaying: init.isPlaying,
-              timestamp: init.timestamp,
-              seq: init.seq,
-            }
-
-            set({ playbackCore, progress: init.progress, error: null })
-
-            if (init.isPlaying) {
-              startInterpolation()
-            } else {
-              stopInterpolation()
-            }
-            break
-          }
-
-          case 'tick': {
-            const tickResult = PlaybackTickEventSchema.safeParse(parsed)
-            if (!tickResult.success) break
-            const tick = tickResult.data
-            lastServerUpdate = tick.ts
-            lastServerProgress = tick.p
-            set({ progress: tick.p })
-            break
-          }
-
-          case 'track': {
-            const trackResult = PlaybackTrackEventSchema.safeParse(parsed)
-            if (!trackResult.success) break
-            const track = trackResult.data
-            notifyTrackChange(track.id, track.uri)
-
-            const { playbackCore } = get()
-            if (playbackCore) {
-              set({
-                playbackCore: { ...playbackCore, track, seq: track.seq },
-                error: null,
-              })
-            }
-            break
-          }
-
-          case 'state': {
-            const stateResult = PlaybackStateEventSchema.safeParse(parsed)
-            if (!stateResult.success) break
-            const state = stateResult.data
-            const { playbackCore } = get()
-            if (playbackCore) {
-              set({
-                playbackCore: { ...playbackCore, isPlaying: state.isPlaying, seq: state.seq },
-              })
-
-              if (state.isPlaying) {
-                startInterpolation()
-              } else {
-                stopInterpolation()
-              }
-            }
-            break
-          }
-
-          case 'device': {
-            const deviceResult = PlaybackDeviceEventSchema.safeParse(parsed)
-            if (!deviceResult.success) break
-            const device = deviceResult.data
-            const { playbackCore } = get()
-            if (playbackCore) {
-              set({
-                playbackCore: { ...playbackCore, device, seq: device.seq },
-              })
-            }
-            break
-          }
-
-          case 'modes': {
-            const modesResult = PlaybackModesEventSchema.safeParse(parsed)
-            if (!modesResult.success) break
-            const modes = modesResult.data
-            const { playbackCore } = get()
-            if (playbackCore) {
-              set({
-                playbackCore: { ...playbackCore, modes, seq: modes.seq },
-              })
-            }
-            break
-          }
-
-          case 'volume': {
-            const volumeResult = PlaybackVolumeEventSchema.safeParse(parsed)
-            if (!volumeResult.success) break
-            const volume = volumeResult.data
-            const { playbackCore } = get()
-            if (playbackCore) {
-              set({
-                playbackCore: {
-                  ...playbackCore,
-                  device: { ...playbackCore.device, volumePercent: volume.percent },
-                  seq: volume.seq,
-                },
-              })
-            }
-            break
-          }
-
-          case 'context': {
-            const ctxResult = PlaybackContextEventSchema.safeParse(parsed)
-            if (!ctxResult.success) break
-            const ctx = ctxResult.data
-            const { playbackCore } = get()
-            if (playbackCore) {
-              set({
-                playbackCore: { ...playbackCore, context: ctx.context, seq: ctx.seq },
-              })
-            }
-            break
-          }
-
-          case 'idle': {
-            const idleResult = PlaybackIdleEventSchema.safeParse(parsed)
-            if (!idleResult.success) break
-            stopInterpolation()
-            previousTrackId = null
-            previousTrackUri = null
-            const { playbackCore } = get()
-            if (playbackCore) {
-              set({
-                playbackCore: {
-                  ...playbackCore,
-                  track: null,
-                  isPlaying: false,
-                  seq: idleResult.data.seq,
-                },
-                progress: 0,
-              })
-            }
-            break
-          }
-
-          case 'error': {
-            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-              const errorData = parsed as Record<string, unknown>
-              console.warn('[playbackStore] Server error:', errorData.message)
-              if (typeof errorData.retriesRemaining === 'number') {
-                set({ error: `Error: ${String(errorData.message)} (${errorData.retriesRemaining} retries left)` })
-              }
-            }
-            break
-          }
-
           case 'auth_expired':
             console.log('[playbackStore] Auth expired, triggering token refresh')
-            set({ status: 'disconnected', error: 'Token expired, refreshing...' })
+            set({ error: 'Token expired, refreshing...', status: 'disconnected' })
             stopInterpolation()
             // Trigger token refresh via authStore (catch to prevent unhandled rejection)
             import('../stores/authStore').then(({ useAuthStore }) => {
@@ -359,10 +188,182 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
             })
             break
 
+          case 'connected':
+            console.log('[playbackStore] Connected:', parsed)
+            break
+
+          case 'context': {
+            const ctxResult = PlaybackContextEventSchema.safeParse(parsed)
+            if (!ctxResult.success) break
+            const ctx = ctxResult.data
+            const { playbackCore } = get()
+            if (playbackCore) {
+              set({
+                playbackCore: { ...playbackCore, context: ctx.context, seq: ctx.seq },
+              })
+            }
+            break
+          }
+
+          case 'device': {
+            const deviceResult = PlaybackDeviceEventSchema.safeParse(parsed)
+            if (!deviceResult.success) break
+            const device = deviceResult.data
+            const { playbackCore } = get()
+            if (playbackCore) {
+              set({
+                playbackCore: { ...playbackCore, device, seq: device.seq },
+              })
+            }
+            break
+          }
+
+          case 'error': {
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+              const errorData = parsed as Record<string, unknown>
+              console.warn('[playbackStore] Server error:', errorData.message)
+              if (typeof errorData.retriesRemaining === 'number') {
+                set({ error: `Error: ${String(errorData.message)} (${errorData.retriesRemaining} retries left)` })
+              }
+            }
+            break
+          }
+
+          case 'idle': {
+            const idleResult = PlaybackIdleEventSchema.safeParse(parsed)
+            if (!idleResult.success) break
+            stopInterpolation()
+            previousTrackId = null
+            previousTrackUri = null
+            const { playbackCore } = get()
+            if (playbackCore) {
+              set({
+                playbackCore: {
+                  ...playbackCore,
+                  isPlaying: false,
+                  seq: idleResult.data.seq,
+                  track: null,
+                },
+                progress: 0,
+              })
+            }
+            break
+          }
+
+          case 'init': {
+            const initResult = PlaybackStateInitSchema.safeParse(parsed)
+            if (!initResult.success) {
+              console.error('[playbackStore] Invalid init event:', initResult.error)
+              break
+            }
+            const init = initResult.data
+            lastServerUpdate = Date.now()
+            lastServerProgress = init.progress
+
+            if (init.track) {
+              notifyTrackChange(init.track.id, init.track.uri)
+            }
+
+            const playbackCore: PlaybackCore = {
+              context: init.context,
+              device: init.device,
+              isPlaying: init.isPlaying,
+              modes: init.modes,
+              playingType: init.playingType,
+              seq: init.seq,
+              timestamp: init.timestamp,
+              track: init.track,
+            }
+
+            set({ error: null, playbackCore, progress: init.progress })
+
+            if (init.isPlaying) {
+              startInterpolation()
+            } else {
+              stopInterpolation()
+            }
+            break
+          }
+
+          case 'modes': {
+            const modesResult = PlaybackModesEventSchema.safeParse(parsed)
+            if (!modesResult.success) break
+            const modes = modesResult.data
+            const { playbackCore } = get()
+            if (playbackCore) {
+              set({
+                playbackCore: { ...playbackCore, modes, seq: modes.seq },
+              })
+            }
+            break
+          }
+
           case 'reconnect':
             console.log('[playbackStore] Server requested reconnect')
             scheduleReconnect(token)
             break
+
+          case 'state': {
+            const stateResult = PlaybackStateEventSchema.safeParse(parsed)
+            if (!stateResult.success) break
+            const state = stateResult.data
+            const { playbackCore } = get()
+            if (playbackCore) {
+              set({
+                playbackCore: { ...playbackCore, isPlaying: state.isPlaying, seq: state.seq },
+              })
+
+              if (state.isPlaying) {
+                startInterpolation()
+              } else {
+                stopInterpolation()
+              }
+            }
+            break
+          }
+
+          case 'tick': {
+            const tickResult = PlaybackTickEventSchema.safeParse(parsed)
+            if (!tickResult.success) break
+            const tick = tickResult.data
+            lastServerUpdate = tick.ts
+            lastServerProgress = tick.p
+            set({ progress: tick.p })
+            break
+          }
+
+          case 'track': {
+            const trackResult = PlaybackTrackEventSchema.safeParse(parsed)
+            if (!trackResult.success) break
+            const track = trackResult.data
+            notifyTrackChange(track.id, track.uri)
+
+            const { playbackCore } = get()
+            if (playbackCore) {
+              set({
+                error: null,
+                playbackCore: { ...playbackCore, seq: track.seq, track },
+              })
+            }
+            break
+          }
+
+          case 'volume': {
+            const volumeResult = PlaybackVolumeEventSchema.safeParse(parsed)
+            if (!volumeResult.success) break
+            const volume = volumeResult.data
+            const { playbackCore } = get()
+            if (playbackCore) {
+              set({
+                playbackCore: {
+                  ...playbackCore,
+                  device: { ...playbackCore.device, volumePercent: volume.percent },
+                  seq: volume.seq,
+                },
+              })
+            }
+            break
+          }
         }
       } catch (err) {
         console.error('[playbackStore] Parse error:', err, data)
@@ -374,17 +375,11 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
     // ==========================================================================
 
     return {
-      // Initial state
-      error: null,
-      playbackCore: null,
-      progress: 0,
-      status: 'disconnected',
-
       connect: (token) => {
         const { status } = get()
         if (status === 'connected' || status === 'connecting') return
 
-        set({ status: 'connecting', error: null })
+        set({ error: null, status: 'connecting' })
 
         fetch('/api/player/stream', {
           headers: {
@@ -395,7 +390,7 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
           .then((response) => {
             if (!response.ok) {
               if (response.status === HTTP_STATUS.UNAUTHORIZED) {
-                set({ status: 'error', error: 'Session expired' })
+                set({ error: 'Session expired', status: 'error' })
                 return
               }
               throw new Error(`HTTP ${response.status}`)
@@ -450,13 +445,12 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
           .catch((err) => {
             console.error('[playbackStore] Connection error:', err)
             set({
-              status: 'error',
               error: err instanceof Error ? err.message : 'Connection failed',
+              status: 'error',
             })
             scheduleReconnect(token)
           })
       },
-
       disconnect: () => {
         if (reconnectTimeout) {
           clearTimeout(reconnectTimeout)
@@ -472,6 +466,13 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
           status: 'disconnected',
         })
       },
+      // Initial state
+      error: null,
+      playbackCore: null,
+
+      progress: 0,
+
+      status: 'disconnected',
 
       subscribeToTrackChange: (callback) => {
         trackChangeCallbacks.add(callback)
@@ -490,7 +491,7 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
 /**
  * Get simplified PlaybackState for UI components
  */
-export function getPlaybackState(): PlaybackState | null {
+export function getPlaybackState(): null | PlaybackState {
   const { playbackCore, progress } = usePlaybackStore.getState()
   if (!playbackCore) return null
 
@@ -510,6 +511,13 @@ export function getPlaybackState(): PlaybackState | null {
 }
 
 /**
+ * Selector for playback context (playlist/album)
+ */
+export function useContext() {
+  return usePlaybackStore((s) => s.playbackCore?.context)
+}
+
+/**
  * Selector for rich device info
  */
 export function useDevice() {
@@ -521,13 +529,6 @@ export function useDevice() {
  */
 export function useModes() {
   return usePlaybackStore((s) => s.playbackCore?.modes)
-}
-
-/**
- * Selector for playback context (playlist/album)
- */
-export function useContext() {
-  return usePlaybackStore((s) => s.playbackCore?.context)
 }
 
 /**

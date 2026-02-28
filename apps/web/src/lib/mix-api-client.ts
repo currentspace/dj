@@ -28,19 +28,19 @@ import {createApiClient} from '@dj/api-client'
  * Event types from the streaming steer endpoint
  */
 export interface SteerStreamEvent {
-  type: 'ack' | 'thinking' | 'progress' | 'vibe_update' | 'suggestions' | 'queue_update' | 'error' | 'done'
   data: {
-    message?: string
-    direction?: string
-    stage?: string
-    preview?: string
-    vibe?: VibeProfile
     changes?: string[]
-    track?: { name: string; artist: string; trackId: string; trackUri: string }
-    queueSize?: number
     count?: number
+    direction?: string
+    message?: string
+    preview?: string
     queue?: QueuedTrack[]
+    queueSize?: number
+    stage?: string
+    track?: { artist: string; name: string; trackId: string; trackUri: string }
+    vibe?: VibeProfile
   }
+  type: 'ack' | 'done' | 'error' | 'progress' | 'queue_update' | 'suggestions' | 'thinking' | 'vibe_update'
 }
 import {
   addToQueue,
@@ -153,6 +153,28 @@ export const mixApiClient = {
   },
 
   /**
+   * Notify that a track was played (track changed)
+   * Route: POST /api/mix/playback/track-played (from trackPlayed contract)
+   */
+  async notifyTrackPlayed(trackId: string, trackUri: string): Promise<TrackPlayedResponse> {
+    return api(trackPlayed)({
+      body: {trackId, trackUri},
+    })
+  },
+
+  // ===== Vibe Management =====
+
+  /**
+   * Add a track to Spotify's playback queue
+   * Route: POST /api/mix/queue/spotify (from queueToSpotify contract)
+   */
+  async queueToSpotify(trackUri: string): Promise<QueueToSpotifyResponse> {
+    return api(queueToSpotify)({
+      body: {trackUri},
+    })
+  },
+
+  /**
    * Remove a track from the queue
    * Route: DELETE /api/mix/queue/{position} (from removeFromQueue contract)
    */
@@ -162,8 +184,6 @@ export const mixApiClient = {
     })
     return response.queue
   },
-
-  // ===== Vibe Management =====
 
   /**
    * Reorder queue (move track from one position to another)
@@ -175,6 +195,8 @@ export const mixApiClient = {
     })
     return response.queue
   },
+
+  // ===== Suggestions =====
 
   /**
    * Save the current mix as a Spotify playlist
@@ -209,7 +231,7 @@ export const mixApiClient = {
     return response.session
   },
 
-  // ===== Suggestions =====
+  // ===== Save =====
 
   /**
    * Steer vibe using natural language
@@ -220,6 +242,8 @@ export const mixApiClient = {
       body: {direction, intensity: intensity ?? 5},
     })
   },
+
+  // ===== Playback Integration =====
 
   /**
    * Steer vibe with streaming progress updates (SSE)
@@ -238,12 +262,12 @@ export const mixApiClient = {
     }
 
     const response = await fetch('/api/mix/vibe/steer-stream', {
-      method: 'POST',
+      body: JSON.stringify({ direction }),
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ direction }),
+      method: 'POST',
     })
 
     if (!response.ok) {
@@ -291,8 +315,6 @@ export const mixApiClient = {
     }
   },
 
-  // ===== Save =====
-
   /**
    * Update vibe profile with specific values
    * Route: PUT /api/mix/vibe (from updateVibe contract)
@@ -301,28 +323,6 @@ export const mixApiClient = {
   async updateVibe(updates: Partial<VibeProfile>): Promise<UpdateVibeResponse> {
     return api(updateVibe)({
       body: updates,
-    })
-  },
-
-  // ===== Playback Integration =====
-
-  /**
-   * Notify that a track was played (track changed)
-   * Route: POST /api/mix/playback/track-played (from trackPlayed contract)
-   */
-  async notifyTrackPlayed(trackId: string, trackUri: string): Promise<TrackPlayedResponse> {
-    return api(trackPlayed)({
-      body: {trackId, trackUri},
-    })
-  },
-
-  /**
-   * Add a track to Spotify's playback queue
-   * Route: POST /api/mix/queue/spotify (from queueToSpotify contract)
-   */
-  async queueToSpotify(trackUri: string): Promise<QueueToSpotifyResponse> {
-    return api(queueToSpotify)({
-      body: {trackUri},
     })
   },
 }

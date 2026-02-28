@@ -3,12 +3,15 @@
  * Tests for Live DJ Mode mix session endpoints
  */
 
+import type {MixSession, QueuedTrack} from '@dj/shared-types'
+
 import {beforeEach, describe, expect, it, vi} from 'vitest'
+
 import type {Env} from '../../index'
-import {buildMockKV, createMockEnv} from '../fixtures/cloudflare-mocks'
+
 import {MixSessionService} from '../../services/MixSessionService'
 import {SuggestionEngine} from '../../services/SuggestionEngine'
-import type {MixSession, QueuedTrack} from '@dj/shared-types'
+import {buildMockKV, createMockEnv} from '../fixtures/cloudflare-mocks'
 
 // ===== Mock Setup =====
 
@@ -19,72 +22,72 @@ vi.mock('../../services/AudioEnrichmentService')
 vi.mock('../../services/LastFmService')
 vi.mock('../../utils/LoggerContext', () => ({
   getLogger: () => ({
-    info: vi.fn(),
-    error: vi.fn(),
-    warn: vi.fn(),
     debug: vi.fn(),
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
   }),
 }))
-
-// Helper to create mock session
-function createMockSession(userId: string = 'test-user'): MixSession {
-  return {
-    id: 'session-123',
-    userId,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    vibe: {
-      mood: ['energetic'],
-      genres: ['electronic'],
-      era: {start: 2015, end: 2025},
-      bpmRange: {min: 120, max: 140},
-      energyLevel: 7,
-      energyDirection: 'building',
-    },
-    history: [],
-    queue: [],
-    preferences: {
-      avoidGenres: [],
-      favoriteArtists: [],
-      bpmLock: null,
-      autoFill: true,
-    },
-    conversation: [],
-    signals: [],
-    plan: null,
-    tasteModel: null,
-    fallbackPool: [],
-  }
-}
-
-// Helper to create mock queued track
-function createMockQueuedTrack(position: number = 0): QueuedTrack {
-  return {
-    trackId: `track-${position}`,
-    trackUri: `spotify:track:${position}`,
-    name: `Track ${position}`,
-    artist: `Artist ${position}`,
-    albumArt: 'https://example.com/art.jpg',
-    addedBy: 'ai',
-    vibeScore: 85,
-    reason: 'Great fit for vibe',
-    position,
-  }
-}
 
 // Helper to create authenticated request
 function createAuthRequest(method: string, path: string, body?: unknown) {
   const init: RequestInit = {
-    method,
     headers: {
-      'Content-Type': 'application/json',
       'Authorization': 'Bearer mock-spotify-token',
+      'Content-Type': 'application/json',
     },
+    method,
   }
   if (body) {
     init.body = JSON.stringify(body)
   }
   return new Request(`http://localhost:8787${path}`, init)
+}
+
+// Helper to create mock queued track
+function createMockQueuedTrack(position = 0): QueuedTrack {
+  return {
+    addedBy: 'ai',
+    albumArt: 'https://example.com/art.jpg',
+    artist: `Artist ${position}`,
+    name: `Track ${position}`,
+    position,
+    reason: 'Great fit for vibe',
+    trackId: `track-${position}`,
+    trackUri: `spotify:track:${position}`,
+    vibeScore: 85,
+  }
+}
+
+// Helper to create mock session
+function createMockSession(userId = 'test-user'): MixSession {
+  return {
+    conversation: [],
+    createdAt: new Date().toISOString(),
+    fallbackPool: [],
+    history: [],
+    id: 'session-123',
+    plan: null,
+    preferences: {
+      autoFill: true,
+      avoidGenres: [],
+      bpmLock: null,
+      favoriteArtists: [],
+    },
+    queue: [],
+    signals: [],
+    tasteModel: null,
+    updatedAt: new Date().toISOString(),
+    userId,
+    vibe: {
+      bpmRange: {max: 140, min: 120},
+      energyDirection: 'building',
+      energyLevel: 7,
+      era: {end: 2025, start: 2015},
+      genres: ['electronic'],
+      mood: ['energetic'],
+    },
+  }
 }
 
 // ===== Test Suites =====
@@ -107,10 +110,10 @@ describe('Mix API Routes - Authentication', () => {
 
   it('should reject requests with invalid bearer token format', async () => {
     const req = new Request('http://localhost:8787/api/mix/current', {
-      method: 'GET',
       headers: {
         'Authorization': 'InvalidFormat',
       },
+      method: 'GET',
     })
 
     expect(req.headers.get('authorization')).not.toMatch(/^Bearer .+$/)
@@ -146,10 +149,10 @@ describe('Mix API Routes - Session Management', () => {
     it('should create new session with custom preferences', async () => {
       const mockSession = createMockSession()
       const preferences = {
-        avoidGenres: ['country'],
-        favoriteArtists: ['Artist 1'],
-        bpmLock: {min: 100, max: 120},
         autoFill: false,
+        avoidGenres: ['country'],
+        bpmLock: {max: 120, min: 100},
+        favoriteArtists: ['Artist 1'],
       }
 
       vi.spyOn(mockSessionService, 'createSession').mockResolvedValue({
@@ -200,7 +203,7 @@ describe('Mix API Routes - Session Management', () => {
 
   describe('DELETE /api/mix/end', () => {
     it('should end active session and return stats', async () => {
-      const stats = {tracksPlayed: 5, sessionDuration: 1800}
+      const stats = {sessionDuration: 1800, tracksPlayed: 5}
       vi.spyOn(mockSessionService, 'endSession').mockResolvedValue(stats)
 
       const result = await mockSessionService.endSession('test-user')
@@ -210,7 +213,7 @@ describe('Mix API Routes - Session Management', () => {
     })
 
     it('should return zero stats for non-existent session', async () => {
-      const stats = {tracksPlayed: 0, sessionDuration: 0}
+      const stats = {sessionDuration: 0, tracksPlayed: 0}
       vi.spyOn(mockSessionService, 'endSession').mockResolvedValue(stats)
 
       const result = await mockSessionService.endSession('test-user')
@@ -440,7 +443,7 @@ describe('Mix API Routes - Vibe Control', () => {
     })
 
     it('should update BPM range', async () => {
-      const updates = {bpmRange: {min: 100, max: 130}}
+      const updates = {bpmRange: {max: 130, min: 100}}
 
       const blended = {...mockSession.vibe, ...updates}
 
@@ -506,14 +509,14 @@ describe('Mix API Routes - Suggestions', () => {
     it('should generate suggestions based on history', async () => {
       const mockSuggestions = [
         {
+          albumArt: 'https://example.com/art1.jpg',
+          artist: 'Artist 1',
+          bpm: 128,
+          name: 'Suggestion 1',
+          reason: 'Great match',
           trackId: 'track-1',
           trackUri: 'spotify:track:1',
-          name: 'Suggestion 1',
-          artist: 'Artist 1',
-          albumArt: 'https://example.com/art1.jpg',
           vibeScore: 85,
-          reason: 'Great match',
-          bpm: 128,
         },
       ]
 
@@ -527,14 +530,14 @@ describe('Mix API Routes - Suggestions', () => {
 
     it('should respect count parameter', async () => {
       const mockSuggestions = Array(3).fill(null).map((_, i) => ({
+        albumArt: 'https://example.com/art.jpg',
+        artist: `Artist ${i}`,
+        bpm: 128,
+        name: `Suggestion ${i}`,
+        reason: 'Good match',
         trackId: `track-${i}`,
         trackUri: `spotify:track:${i}`,
-        name: `Suggestion ${i}`,
-        artist: `Artist ${i}`,
-        albumArt: 'https://example.com/art.jpg',
         vibeScore: 85,
-        reason: 'Good match',
-        bpm: 128,
       }))
 
       vi.spyOn(mockSuggestionEngine, 'generateSuggestions').mockResolvedValue(mockSuggestions)
@@ -565,14 +568,14 @@ describe('Mix API Routes - Save Mix', () => {
     // Add some history and queue
     mockSession.history = [
       {
-        trackId: 'track-1',
-        trackUri: 'spotify:track:1',
-        name: 'Track 1',
-        artist: 'Artist 1',
         albumArt: 'https://example.com/art1.jpg',
-        playedAt: new Date().toISOString(),
+        artist: 'Artist 1',
         bpm: 128,
         energy: 0.8,
+        name: 'Track 1',
+        playedAt: new Date().toISOString(),
+        trackId: 'track-1',
+        trackUri: 'spotify:track:1',
       },
     ]
     mockSession.queue = [createMockQueuedTrack(0)]
@@ -581,9 +584,9 @@ describe('Mix API Routes - Save Mix', () => {
   describe('POST /api/mix/save', () => {
     it('should validate required name field', async () => {
       const request = {
-        name: '',
         description: 'Test description',
         includeQueue: true,
+        name: '',
       }
 
       expect(request.name).toBe('')
@@ -601,17 +604,17 @@ describe('Mix API Routes - Save Mix', () => {
     it('should validate description length (max 500)', async () => {
       const longDescription = 'a'.repeat(501)
       const request = {
-        name: 'Valid Name',
         description: longDescription,
+        name: 'Valid Name',
       }
 
-      expect(request.description!.length).toBeGreaterThan(500)
+      expect(request.description.length).toBeGreaterThan(500)
     })
 
     it('should default includeQueue to true', async () => {
       const request = {
-        name: 'Test Mix',
         description: 'Test description',
+        name: 'Test Mix',
       }
 
       // In actual implementation, includeQueue defaults to true
@@ -645,10 +648,10 @@ describe('Mix API Routes - Request Validation', () => {
   it('should validate StartMixRequest schema', () => {
     const validRequest = {
       preferences: {
-        avoidGenres: ['country'],
-        favoriteArtists: ['Artist 1'],
-        bpmLock: {min: 100, max: 120},
         autoFill: true,
+        avoidGenres: ['country'],
+        bpmLock: {max: 120, min: 100},
+        favoriteArtists: ['Artist 1'],
       },
     }
 
@@ -658,8 +661,8 @@ describe('Mix API Routes - Request Validation', () => {
 
   it('should validate AddToQueueRequest schema', () => {
     const validRequest = {
-      trackUri: 'spotify:track:123',
       position: 0,
+      trackUri: 'spotify:track:123',
     }
 
     expect(validRequest.trackUri).toMatch(/^spotify:track:/)
@@ -678,9 +681,9 @@ describe('Mix API Routes - Request Validation', () => {
 
   it('should validate UpdateVibeRequest schema', () => {
     const validRequest = {
-      energyLevel: 8,
+      bpmRange: {max: 140, min: 100},
       energyDirection: 'building' as const,
-      bpmRange: {min: 100, max: 140},
+      energyLevel: 8,
     }
 
     expect(validRequest.energyLevel).toBeGreaterThanOrEqual(1)
@@ -702,9 +705,9 @@ describe('Mix API Routes - Request Validation', () => {
 
   it('should validate SaveMixRequest schema', () => {
     const validRequest = {
-      name: 'My Mix',
       description: 'A great mix',
       includeQueue: true,
+      name: 'My Mix',
     }
 
     expect(validRequest.name.length).toBeGreaterThan(0)

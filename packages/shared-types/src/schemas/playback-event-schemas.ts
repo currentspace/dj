@@ -33,53 +33,53 @@ export const PlayingTypeSchema = z.enum(['track', 'episode', 'ad', 'unknown'])
 // ===== Component Schemas =====
 
 export const PlaybackTrackSchema = z.object({
-  id: z.string(),
-  uri: z.string(),
-  name: z.string(),
-  artist: z.string(),
   albumArt: z.string().nullable(),
   albumName: z.string(),
+  artist: z.string(),
   duration: z.number(),
   explicit: z.boolean(),
-  popularity: z.number(),
+  id: z.string(),
   isLocal: z.boolean(),
+  name: z.string(),
+  popularity: z.number(),
   previewUrl: z.string().nullable(),
+  uri: z.string(),
 })
 
 export const PlaybackDeviceSchema = z.object({
   id: z.string().nullable(),
-  name: z.string(),
-  type: DeviceTypeSchema,
-  volumePercent: z.number().nullable(),
-  supportsVolume: z.boolean(),
   isPrivateSession: z.boolean(),
   isRestricted: z.boolean(),
+  name: z.string(),
+  supportsVolume: z.boolean(),
+  type: DeviceTypeSchema,
+  volumePercent: z.number().nullable(),
 })
 
 export const PlaybackContextSchema = z.object({
+  href: z.string().nullable(),
+  name: z.string().nullable(),
   type: ContextTypeSchema,
   uri: z.string(),
-  name: z.string().nullable(),
-  href: z.string().nullable(),
 })
 
 export const PlaybackModesSchema = z.object({
-  shuffle: z.boolean(),
   repeat: RepeatStateSchema,
+  shuffle: z.boolean(),
 })
 
 // ===== Event Schemas =====
 
 export const PlaybackStateInitSchema = z.object({
-  track: PlaybackTrackSchema.nullable(),
-  device: PlaybackDeviceSchema,
   context: PlaybackContextSchema.nullable(),
+  device: PlaybackDeviceSchema,
+  isPlaying: z.boolean(),
   modes: PlaybackModesSchema,
   playingType: PlayingTypeSchema,
-  isPlaying: z.boolean(),
   progress: z.number(),
-  timestamp: z.number(),
   seq: z.number(),
+  timestamp: z.number(),
+  track: PlaybackTrackSchema.nullable(),
 })
 
 export const PlaybackTickEventSchema = z.object({
@@ -129,12 +129,12 @@ export const PlaybackErrorEventSchema = z.object({
 
 // ===== Type Exports =====
 
+export type PlaybackContextEventData = z.infer<typeof PlaybackContextEventSchema>
+export type PlaybackDeviceEventData = z.infer<typeof PlaybackDeviceEventSchema>
+export type PlaybackIdleEventData = z.infer<typeof PlaybackIdleEventSchema>
+export type PlaybackModesEventData = z.infer<typeof PlaybackModesEventSchema>
+export type PlaybackStateEventData = z.infer<typeof PlaybackStateEventSchema>
 export type PlaybackStateInitData = z.infer<typeof PlaybackStateInitSchema>
 export type PlaybackTickEventData = z.infer<typeof PlaybackTickEventSchema>
 export type PlaybackTrackEventData = z.infer<typeof PlaybackTrackEventSchema>
-export type PlaybackStateEventData = z.infer<typeof PlaybackStateEventSchema>
-export type PlaybackDeviceEventData = z.infer<typeof PlaybackDeviceEventSchema>
-export type PlaybackModesEventData = z.infer<typeof PlaybackModesEventSchema>
 export type PlaybackVolumeEventData = z.infer<typeof PlaybackVolumeEventSchema>
-export type PlaybackContextEventData = z.infer<typeof PlaybackContextEventSchema>
-export type PlaybackIdleEventData = z.infer<typeof PlaybackIdleEventSchema>

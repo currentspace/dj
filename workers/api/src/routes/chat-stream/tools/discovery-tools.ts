@@ -1,13 +1,14 @@
 import Anthropic from '@anthropic-ai/sdk'
+import {CurationResponseSchema, DiscoveryStrategySchema, VibeAnalysisSchema} from '@dj/shared-types'
 import {z} from 'zod'
-import {VibeAnalysisSchema, DiscoveryStrategySchema, CurationResponseSchema} from '@dj/shared-types'
 
 import type {Env} from '../../../index'
+import type {SSEWriter} from '../streaming/sse-writer'
+import type {NativeTool} from '../types'
+
 import {LLM} from '../../../constants'
 import {getLogger} from '../../../utils/LoggerContext'
 import {isNumber, isObject, isString, isStringArray} from '../streaming/anthropic-utils'
-import type {SSEWriter} from '../streaming/sse-writer'
-import type {NativeTool} from '../types'
 
 /**
  * Create AI-powered discovery tools (vibe extraction, strategy planning, curation)
@@ -27,13 +28,13 @@ export function createDiscoveryTools(
         // Debug logging to understand what's being passed
         const analysisData: unknown = args.analysis_data
         getLogger()?.info('[extract_playlist_vibe] Received args:', {
+          deezer_exists: isObject(analysisData) && 'deezer_analysis' in analysisData,
           has_analysis_data: !!analysisData,
           is_object: isObject(analysisData),
-          type_of: typeof analysisData,
           keys: isObject(analysisData) ? Object.keys(analysisData) : [],
-          metadata_exists: isObject(analysisData) && 'metadata_analysis' in analysisData,
-          deezer_exists: isObject(analysisData) && 'deezer_analysis' in analysisData,
           lastfm_exists: isObject(analysisData) && 'lastfm_analysis' in analysisData,
+          metadata_exists: isObject(analysisData) && 'metadata_analysis' in analysisData,
+          type_of: typeof analysisData,
         })
 
         if (isObject(analysisData)) {
@@ -519,113 +520,116 @@ export function createDiscoveryTools(
   ]
 }
 
-// Helper function to build vibe extraction prompt
-function buildVibeExtractionPrompt(args: Record<string, unknown>): string {
-  return `<task>
-You are a music critic with expertise in identifying subtle sonic and emotional characteristics. Your task is to analyze the provided playlist data and extract a deep vibe profile that captures signals beyond simple genre labels.
+// Helper function to build curation prompt
+function buildCurationPrompt(args: Record<string, unknown>): string {
+  const candidateTracks = args.candidate_tracks as {
+    artists?: string
+    id: string
+    name: string
+    popularity?: number
+    source?: string
+  }[]
 
-WHY THIS MATTERS: Generic algorithmic recommendations fail because they rely on superficial tags. Your analysis will guide intelligent discovery that matches the playlist's true essence.
+  return `<task>
+You are an expert music curator selecting the best track recommendations from a pool of candidates. Your goal is to pick tracks that best match the user's request while honoring the playlist's established vibe and characteristics.
+
+WHY THIS MATTERS: The discovery strategy has gathered candidates from multiple sources. Your curation ensures quality over quantity - selecting tracks with the right vibe alignment, diversity, and user intent match.
 </task>
 
-<input_data>
-METADATA ANALYSIS:
-${isObject(args.analysis_data) ? JSON.stringify(args.analysis_data.metadata_analysis ?? {}, null, 2) : '{}'}
+<user_intent>
+USER REQUEST: "${args.user_request}"
 
-DEEZER ANALYSIS (BPM, rank, gain):
-${isObject(args.analysis_data) ? JSON.stringify(args.analysis_data.deezer_analysis ?? {}, null, 2) : '{}'}
+Interpret what the user truly wants:
+- Are they seeking expansion (more of the same vibe)?
+- Contextual recommendations (workout, study, party)?
+- Discovery (new artists with similar aesthetic)?
+- Specific characteristics (more upbeat, mellower, specific era)?
 
-LAST.FM ANALYSIS (crowd tags, similar tracks):
-${isObject(args.analysis_data) ? JSON.stringify(args.analysis_data.lastfm_analysis ?? {}, null, 2) : '{}'}
+This interpretation should guide your selection priorities.
+</user_intent>
 
+<playlist_context>
+PLAYLIST CHARACTERISTICS (baseline for vibe matching):
 ${
-  Array.isArray(args.sample_tracks) && args.sample_tracks.length
-    ? `SAMPLE TRACKS (representative examples):\n${args.sample_tracks
-        .map((t: {artists: string; name: string}) => `- "${t.name}" by ${t.artists}`)
-        .join('\n')}`
+  isObject(args.playlist_context) && isObject(args.playlist_context.bpm_range)
+    ? `BPM Range: ${args.playlist_context.bpm_range.min}-${args.playlist_context.bpm_range.max} (tempo profile)`
     : ''
 }
-</input_data>
+${isObject(args.playlist_context) && Array.isArray(args.playlist_context.dominant_tags) && args.playlist_context.dominant_tags.length ? `Dominant Tags: ${args.playlist_context.dominant_tags.join(', ')} (genre/mood signals)` : ''}
+${isObject(args.playlist_context) && isNumber(args.playlist_context.avg_popularity) ? `Average Popularity: ${args.playlist_context.avg_popularity}/100 (mainstream vs underground)` : ''}
+${isObject(args.playlist_context) && isString(args.playlist_context.era) ? `Era: ${args.playlist_context.era} (temporal context)` : ''}
 
-<analysis_instructions>
-STEP 1: Synthesize the data above to identify patterns across these dimensions:
+Use these characteristics as baseline expectations. Candidates should generally align with these patterns unless user intent explicitly requests deviation.
+</playlist_context>
 
-<emotional_arc>
-How does the emotional energy flow? Does it build progressively, cycle between states, or maintain consistency? Consider valence (positive/negative) and arousal (calm/energetic).
-</emotional_arc>
+<candidate_pool>
+CANDIDATE TRACKS (${candidateTracks.length} total from multiple discovery strategies):
+${candidateTracks
+  .slice(0, 50)
+  .map(
+    (t, i) =>
+      `${i + 1}. "${t.name}" by ${t.artists} (popularity: ${
+        t.popularity ?? 'unknown'
+      }, source: ${t.source ?? 'unknown'})`,
+  )
+  .join('\n')}
+${candidateTracks.length > 50 ? `\n... and ${candidateTracks.length - 50} more candidates available` : ''}
 
-<production_aesthetic>
-What's the sonic signature? Lo-fi warmth vs polished clarity? Analog character vs digital precision? Spacious reverb vs dry intimacy? Dense layering vs minimal arrangements?
-</production_aesthetic>
+Each track comes from a specific discovery source (Last.fm similar, Spotify search, tag-based, algorithm). Consider source diversity in your selection - don't pick all tracks from one source.
+</candidate_pool>
 
-<vocal_characteristics>
-What's the vocal approach? Breathy and intimate vs powerful and projected? Vocals as centerpiece vs instrumental focus? Lyrical language and delivery style?
-</vocal_characteristics>
+<curation_instructions>
+STEP 1: Evaluate each candidate against these criteria:
 
-<instrumentation>
-What instruments define the sound? What's prominent, what's absent? Acoustic vs electronic? Live vs programmed? Signature sounds or production techniques?
-</instrumentation>
+<vibe_alignment>
+Does the track match the playlist's BPM range, dominant tags, and era? Look for tracks that feel like they "belong" in the playlist based on sonic characteristics.
+</vibe_alignment>
 
-<temporal_context>
-What era does this evoke? Vintage production nostalgia? Modern/contemporary? Retro-futuristic? How do production values signal time period?
-</temporal_context>
+<user_intent_match>
+Does this track specifically address what the user requested? If they wanted "upbeat workout tracks", does it deliver on energy and context?
+</user_intent_match>
 
-<mixing_philosophy>
-Bright and crisp vs warm and rounded? Heavily compressed "loudness war" vs dynamic range? Upfront vocals vs balanced mix? Intentional distortion/saturation?
-</mixing_philosophy>
+<popularity_balance>
+Does the track match the playlist's popularity profile? If playlist averages 45/100, avoid both mega-hits (90+) and ultra-obscure tracks (10-) unless user requested discovery.
+</popularity_balance>
 
-<mood_trajectory>
-Introspective and contemplative vs energetic and outward? Dark/moody vs bright/uplifting? Consistent mood or emotional journey?
-</mood_trajectory>
+<diversity>
+Are you selecting from multiple discovery sources? Are you avoiding artist repetition? Is there variety in specific sound within the vibe constraints?
+</diversity>
 
-<structural_patterns>
-Traditional verse-chorus-bridge vs experimental forms? Track length patterns? Build-ups and drops vs steady-state? Intro/outro approaches?
-</structural_patterns>
+<quality_signals>
+Popularity isn't everything, but extremely low popularity might indicate poor quality. Balance "hidden gem" with "unheard for a reason."
+</quality_signals>
 
-<cultural_resonance>
-What musical scene, movement, or cultural moment does this connect to? Underground vs mainstream aesthetic? Geographic associations? Subcultural identity?
-</cultural_resonance>
+STEP 2: Select top ${args.top_n} tracks that best meet the combined criteria.
 
-STEP 2: Based on your analysis, formulate discovery hints that will guide strategic search:
-- Which genre combinations capture the vibe (not just primary genres)
-- What to AVOID (genres/styles that would break the vibe despite seeming related)
-- Time periods to explore based on production and aesthetic
-- Artist archetypes that embody the characteristics you identified
-- Spotify audio feature targets (energy, valence, danceability, acousticness)
+STEP 3: Formulate reasoning that explains:
+- What selection criteria you prioritized (and why based on user request)
+- How you balanced vibe alignment with diversity
+- Any specific considerations that guided your choices
 
-STEP 3: Synthesize everything into a cohesive vibe profile that captures the playlist's essence in natural language.
-</analysis_instructions>
+Your reasoning should be specific and insightful, not generic.
+</curation_instructions>
 
 <output_format>
 Return ONLY valid JSON with this exact structure:
 {
-  "vibe_profile": "2-3 sentence natural language description capturing the playlist's essence and sonic identity",
-  "emotional_characteristics": ["5-7 specific adjectives describing emotional qualities"],
-  "production_style": "1-2 sentences on production aesthetic and sonic signature",
-  "vocal_style": "1-2 sentences on vocal approach and delivery (or 'Instrumental focus' if applicable)",
-  "instrumentation_notes": "1-2 sentences on key instrumentation and sonic palette",
-  "era_feel": "1-2 sentences on temporal context and production era",
-  "discovery_hints": {
-    "genre_combinations": ["3-5 genre blend descriptions that capture vibe nuance"],
-    "avoid_these": ["3-5 things to avoid that would break the vibe"],
-    "era_ranges": ["2-3 time periods to explore"],
-    "artist_archetypes": ["3-5 artist type descriptions to seek"],
-    "spotify_params": {
-      "target_energy": 0.0-1.0,
-      "target_valence": 0.0-1.0,
-      "target_danceability": 0.0-1.0,
-      "target_acousticness": 0.0-1.0
-    }
-  }
+  "selected_track_ids": ["id1", "id2", "id3", ...],
+  "reasoning": "2-3 sentence explanation of your selection criteria and approach, referencing specific considerations from user request and playlist context"
 }
 
-CRITICAL: Ensure all JSON is valid. Do not include markdown code blocks, only the raw JSON object.
+CRITICAL:
+- Return exactly ${args.top_n} track IDs (no more, no less)
+- Ensure all IDs exist in the candidate list
+- Return valid JSON only - no markdown code blocks, no extra text
 </output_format>
 
 <constraints>
-- Base analysis ONLY on provided data - never hallucinate track details you haven't seen
-- If sample tracks are absent, rely more heavily on metadata and enrichment data
-- Be specific and descriptive, avoid generic music criticism cliches
-- Discovery hints should be actionable for search query construction
+- Select ONLY from provided candidate tracks - do not invent track IDs
+- Return exactly ${args.top_n} tracks as requested
+- Base selection on stated criteria - don't introduce personal music preferences
+- Be specific in reasoning - explain the "why" behind your approach
+- If candidate pool is smaller than ${args.top_n}, return all candidates and note limitation in reasoning
 </constraints>`
 }
 
@@ -750,115 +754,112 @@ CRITICAL: Return valid JSON only. No markdown code blocks, no explanatory text o
 </constraints>`
 }
 
-// Helper function to build curation prompt
-function buildCurationPrompt(args: Record<string, unknown>): string {
-  const candidateTracks = args.candidate_tracks as Array<{
-    artists?: string
-    id: string
-    name: string
-    popularity?: number
-    source?: string
-  }>
-
+// Helper function to build vibe extraction prompt
+function buildVibeExtractionPrompt(args: Record<string, unknown>): string {
   return `<task>
-You are an expert music curator selecting the best track recommendations from a pool of candidates. Your goal is to pick tracks that best match the user's request while honoring the playlist's established vibe and characteristics.
+You are a music critic with expertise in identifying subtle sonic and emotional characteristics. Your task is to analyze the provided playlist data and extract a deep vibe profile that captures signals beyond simple genre labels.
 
-WHY THIS MATTERS: The discovery strategy has gathered candidates from multiple sources. Your curation ensures quality over quantity - selecting tracks with the right vibe alignment, diversity, and user intent match.
+WHY THIS MATTERS: Generic algorithmic recommendations fail because they rely on superficial tags. Your analysis will guide intelligent discovery that matches the playlist's true essence.
 </task>
 
-<user_intent>
-USER REQUEST: "${args.user_request}"
+<input_data>
+METADATA ANALYSIS:
+${isObject(args.analysis_data) ? JSON.stringify(args.analysis_data.metadata_analysis ?? {}, null, 2) : '{}'}
 
-Interpret what the user truly wants:
-- Are they seeking expansion (more of the same vibe)?
-- Contextual recommendations (workout, study, party)?
-- Discovery (new artists with similar aesthetic)?
-- Specific characteristics (more upbeat, mellower, specific era)?
+DEEZER ANALYSIS (BPM, rank, gain):
+${isObject(args.analysis_data) ? JSON.stringify(args.analysis_data.deezer_analysis ?? {}, null, 2) : '{}'}
 
-This interpretation should guide your selection priorities.
-</user_intent>
+LAST.FM ANALYSIS (crowd tags, similar tracks):
+${isObject(args.analysis_data) ? JSON.stringify(args.analysis_data.lastfm_analysis ?? {}, null, 2) : '{}'}
 
-<playlist_context>
-PLAYLIST CHARACTERISTICS (baseline for vibe matching):
 ${
-  isObject(args.playlist_context) && isObject(args.playlist_context.bpm_range)
-    ? `BPM Range: ${args.playlist_context.bpm_range.min}-${args.playlist_context.bpm_range.max} (tempo profile)`
+  Array.isArray(args.sample_tracks) && args.sample_tracks.length
+    ? `SAMPLE TRACKS (representative examples):\n${args.sample_tracks
+        .map((t: {artists: string; name: string}) => `- "${t.name}" by ${t.artists}`)
+        .join('\n')}`
     : ''
 }
-${isObject(args.playlist_context) && Array.isArray(args.playlist_context.dominant_tags) && args.playlist_context.dominant_tags.length ? `Dominant Tags: ${args.playlist_context.dominant_tags.join(', ')} (genre/mood signals)` : ''}
-${isObject(args.playlist_context) && isNumber(args.playlist_context.avg_popularity) ? `Average Popularity: ${args.playlist_context.avg_popularity}/100 (mainstream vs underground)` : ''}
-${isObject(args.playlist_context) && isString(args.playlist_context.era) ? `Era: ${args.playlist_context.era} (temporal context)` : ''}
+</input_data>
 
-Use these characteristics as baseline expectations. Candidates should generally align with these patterns unless user intent explicitly requests deviation.
-</playlist_context>
+<analysis_instructions>
+STEP 1: Synthesize the data above to identify patterns across these dimensions:
 
-<candidate_pool>
-CANDIDATE TRACKS (${candidateTracks.length} total from multiple discovery strategies):
-${candidateTracks
-  .slice(0, 50)
-  .map(
-    (t, i) =>
-      `${i + 1}. "${t.name}" by ${t.artists} (popularity: ${
-        t.popularity ?? 'unknown'
-      }, source: ${t.source ?? 'unknown'})`,
-  )
-  .join('\n')}
-${candidateTracks.length > 50 ? `\n... and ${candidateTracks.length - 50} more candidates available` : ''}
+<emotional_arc>
+How does the emotional energy flow? Does it build progressively, cycle between states, or maintain consistency? Consider valence (positive/negative) and arousal (calm/energetic).
+</emotional_arc>
 
-Each track comes from a specific discovery source (Last.fm similar, Spotify search, tag-based, algorithm). Consider source diversity in your selection - don't pick all tracks from one source.
-</candidate_pool>
+<production_aesthetic>
+What's the sonic signature? Lo-fi warmth vs polished clarity? Analog character vs digital precision? Spacious reverb vs dry intimacy? Dense layering vs minimal arrangements?
+</production_aesthetic>
 
-<curation_instructions>
-STEP 1: Evaluate each candidate against these criteria:
+<vocal_characteristics>
+What's the vocal approach? Breathy and intimate vs powerful and projected? Vocals as centerpiece vs instrumental focus? Lyrical language and delivery style?
+</vocal_characteristics>
 
-<vibe_alignment>
-Does the track match the playlist's BPM range, dominant tags, and era? Look for tracks that feel like they "belong" in the playlist based on sonic characteristics.
-</vibe_alignment>
+<instrumentation>
+What instruments define the sound? What's prominent, what's absent? Acoustic vs electronic? Live vs programmed? Signature sounds or production techniques?
+</instrumentation>
 
-<user_intent_match>
-Does this track specifically address what the user requested? If they wanted "upbeat workout tracks", does it deliver on energy and context?
-</user_intent_match>
+<temporal_context>
+What era does this evoke? Vintage production nostalgia? Modern/contemporary? Retro-futuristic? How do production values signal time period?
+</temporal_context>
 
-<popularity_balance>
-Does the track match the playlist's popularity profile? If playlist averages 45/100, avoid both mega-hits (90+) and ultra-obscure tracks (10-) unless user requested discovery.
-</popularity_balance>
+<mixing_philosophy>
+Bright and crisp vs warm and rounded? Heavily compressed "loudness war" vs dynamic range? Upfront vocals vs balanced mix? Intentional distortion/saturation?
+</mixing_philosophy>
 
-<diversity>
-Are you selecting from multiple discovery sources? Are you avoiding artist repetition? Is there variety in specific sound within the vibe constraints?
-</diversity>
+<mood_trajectory>
+Introspective and contemplative vs energetic and outward? Dark/moody vs bright/uplifting? Consistent mood or emotional journey?
+</mood_trajectory>
 
-<quality_signals>
-Popularity isn't everything, but extremely low popularity might indicate poor quality. Balance "hidden gem" with "unheard for a reason."
-</quality_signals>
+<structural_patterns>
+Traditional verse-chorus-bridge vs experimental forms? Track length patterns? Build-ups and drops vs steady-state? Intro/outro approaches?
+</structural_patterns>
 
-STEP 2: Select top ${args.top_n} tracks that best meet the combined criteria.
+<cultural_resonance>
+What musical scene, movement, or cultural moment does this connect to? Underground vs mainstream aesthetic? Geographic associations? Subcultural identity?
+</cultural_resonance>
 
-STEP 3: Formulate reasoning that explains:
-- What selection criteria you prioritized (and why based on user request)
-- How you balanced vibe alignment with diversity
-- Any specific considerations that guided your choices
+STEP 2: Based on your analysis, formulate discovery hints that will guide strategic search:
+- Which genre combinations capture the vibe (not just primary genres)
+- What to AVOID (genres/styles that would break the vibe despite seeming related)
+- Time periods to explore based on production and aesthetic
+- Artist archetypes that embody the characteristics you identified
+- Spotify audio feature targets (energy, valence, danceability, acousticness)
 
-Your reasoning should be specific and insightful, not generic.
-</curation_instructions>
+STEP 3: Synthesize everything into a cohesive vibe profile that captures the playlist's essence in natural language.
+</analysis_instructions>
 
 <output_format>
 Return ONLY valid JSON with this exact structure:
 {
-  "selected_track_ids": ["id1", "id2", "id3", ...],
-  "reasoning": "2-3 sentence explanation of your selection criteria and approach, referencing specific considerations from user request and playlist context"
+  "vibe_profile": "2-3 sentence natural language description capturing the playlist's essence and sonic identity",
+  "emotional_characteristics": ["5-7 specific adjectives describing emotional qualities"],
+  "production_style": "1-2 sentences on production aesthetic and sonic signature",
+  "vocal_style": "1-2 sentences on vocal approach and delivery (or 'Instrumental focus' if applicable)",
+  "instrumentation_notes": "1-2 sentences on key instrumentation and sonic palette",
+  "era_feel": "1-2 sentences on temporal context and production era",
+  "discovery_hints": {
+    "genre_combinations": ["3-5 genre blend descriptions that capture vibe nuance"],
+    "avoid_these": ["3-5 things to avoid that would break the vibe"],
+    "era_ranges": ["2-3 time periods to explore"],
+    "artist_archetypes": ["3-5 artist type descriptions to seek"],
+    "spotify_params": {
+      "target_energy": 0.0-1.0,
+      "target_valence": 0.0-1.0,
+      "target_danceability": 0.0-1.0,
+      "target_acousticness": 0.0-1.0
+    }
+  }
 }
 
-CRITICAL:
-- Return exactly ${args.top_n} track IDs (no more, no less)
-- Ensure all IDs exist in the candidate list
-- Return valid JSON only - no markdown code blocks, no extra text
+CRITICAL: Ensure all JSON is valid. Do not include markdown code blocks, only the raw JSON object.
 </output_format>
 
 <constraints>
-- Select ONLY from provided candidate tracks - do not invent track IDs
-- Return exactly ${args.top_n} tracks as requested
-- Base selection on stated criteria - don't introduce personal music preferences
-- Be specific in reasoning - explain the "why" behind your approach
-- If candidate pool is smaller than ${args.top_n}, return all candidates and note limitation in reasoning
+- Base analysis ONLY on provided data - never hallucinate track details you haven't seen
+- If sample tracks are absent, rely more heavily on metadata and enrichment data
+- Be specific and descriptive, avoid generic music criticism cliches
+- Discovery hints should be actionable for search query construction
 </constraints>`
 }

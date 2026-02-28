@@ -1,5 +1,6 @@
 import {describe, expect, it} from 'vitest'
-import {TokenDataSchema, SpotifyAuthUrlResponseSchema, TokenRefreshResponseSchema} from '../schemas/auth-schemas'
+
+import {SpotifyAuthUrlResponseSchema, TokenDataSchema, TokenRefreshResponseSchema} from '../schemas/auth-schemas'
 
 describe('Auth Schemas', () => {
   describe('TokenDataSchema', () => {

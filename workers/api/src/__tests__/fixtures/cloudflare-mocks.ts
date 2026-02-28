@@ -4,15 +4,22 @@
  */
 
 export class MockKVNamespace {
-  private store: Map<string, { value: string; expiration: number | null }> = new Map()
+  private store = new Map<string, { expiration: null | number; value: string; }>()
 
-  async get(key: string, type?: 'text'): Promise<string | null>
+  // Clear all data (for test cleanup)
+  clear(): void {
+    this.store.clear()
+  }
+  async delete(key: string): Promise<void> {
+    this.store.delete(key)
+  }
+  async get(key: string, type?: 'text'): Promise<null | string>
   async get(key: string, type: 'json'): Promise<unknown>
   async get(key: string, type: 'arrayBuffer'): Promise<ArrayBuffer | null>
-  async get(key: string, type: 'stream'): Promise<ReadableStream | null>
+  async get(key: string, type: 'stream'): Promise<null | ReadableStream>
   async get(
     key: string,
-    type: 'text' | 'json' | 'arrayBuffer' | 'stream' = 'text',
+    type: 'arrayBuffer' | 'json' | 'stream' | 'text' = 'text',
   ): Promise<ArrayBuffer | ReadableStream | string | unknown> {
     const entry = this.store.get(key)
     if (!entry) return null
@@ -47,10 +54,44 @@ export class MockKVNamespace {
     return entry.value
   }
 
+  // Get raw store (for test assertions)
+  getStore(): Map<string, { expiration: null | number; value: string; }> {
+    return this.store
+  }
+
+  async getWithMetadata<Metadata = unknown>(
+    key: string,
+    type?: 'arrayBuffer' | 'json' | 'stream' | 'text',
+  ): Promise<{
+    metadata: Metadata | null
+    value: ArrayBuffer | ReadableStream | string | unknown
+  }> {
+    const value = await this.get(key, type as 'text')
+    return { metadata: null, value }
+  }
+
+  async list(options?: { limit?: number; prefix?: string; }): Promise<{
+    cacheStatus: null | string
+    cursor?: string
+    keys: { expiration?: number; metadata?: unknown; name: string; }[]
+    list_complete: boolean
+  }> {
+    const keys = Array.from(this.store.keys())
+      .filter(k => !options?.prefix || k.startsWith(options.prefix))
+      .slice(0, options?.limit ?? 1000)
+      .map(name => ({ name }))
+
+    return {
+      cacheStatus: null,
+      keys,
+      list_complete: true,
+    }
+  }
+
   async put(
     key: string,
-    value: string | ArrayBuffer | ReadableStream,
-    options?: { expirationTtl?: number; expiration?: number },
+    value: ArrayBuffer | ReadableStream | string,
+    options?: { expiration?: number; expirationTtl?: number; },
   ): Promise<void> {
     let stringValue: string
     if (value instanceof ArrayBuffer) {
@@ -74,57 +115,14 @@ export class MockKVNamespace {
       stringValue = value
     }
 
-    let expiration: number | null = null
+    let expiration: null | number = null
     if (options?.expirationTtl) {
       expiration = Date.now() + options.expirationTtl * 1000
     } else if (options?.expiration) {
       expiration = options.expiration * 1000
     }
 
-    this.store.set(key, { value: stringValue, expiration })
-  }
-
-  async delete(key: string): Promise<void> {
-    this.store.delete(key)
-  }
-
-  async list(options?: { prefix?: string; limit?: number }): Promise<{
-    keys: { name: string; expiration?: number; metadata?: unknown }[]
-    list_complete: boolean
-    cursor?: string
-    cacheStatus: string | null
-  }> {
-    const keys = Array.from(this.store.keys())
-      .filter(k => !options?.prefix || k.startsWith(options.prefix))
-      .slice(0, options?.limit ?? 1000)
-      .map(name => ({ name }))
-
-    return {
-      keys,
-      list_complete: true,
-      cacheStatus: null,
-    }
-  }
-
-  // Clear all data (for test cleanup)
-  clear(): void {
-    this.store.clear()
-  }
-
-  // Get raw store (for test assertions)
-  getStore(): Map<string, { value: string; expiration: number | null }> {
-    return this.store
-  }
-
-  async getWithMetadata<Metadata = unknown>(
-    key: string,
-    type?: 'text' | 'json' | 'arrayBuffer' | 'stream',
-  ): Promise<{
-    value: string | ArrayBuffer | ReadableStream | unknown
-    metadata: Metadata | null
-  }> {
-    const value = await this.get(key, type as 'text')
-    return { value, metadata: null }
+    this.store.set(key, { expiration, value: stringValue })
   }
 }
 
@@ -137,10 +135,71 @@ export function buildMockKV(): KVNamespace {
 }
 
 /**
+ * Create a mock Hono Context (c)
+ * This is a minimal mock - extend as needed for specific tests
+ */
+export function createMockContext(options: {
+  env?: unknown
+  executionCtx?: ExecutionContext
+  request?: Request
+}): {
+  env: unknown
+  executionCtx: ExecutionContext
+  header: (name: string, value: string) => void
+  html: (html: string, status?: number) => Response
+  json: (data: unknown, status?: number) => Response
+  req: {
+    header: (name: string) => string | undefined
+    json: () => Promise<unknown>
+    method: string
+    query: (name: string) => string | undefined
+    raw: Request
+    url: string
+  }
+  status: (status: number) => void
+  text: (text: string, status?: number) => Response
+} {
+  const env = options.env ?? createMockEnv()
+  const req = options.request ?? createMockRequest({url: 'http://localhost:8787/test'})
+  const executionCtx = options.executionCtx ?? createMockExecutionContext()
+
+  return {
+    env,
+    executionCtx,
+    header: () => {},
+    html: (html: string, status = 200) =>
+      new Response(html, {
+        headers: {'Content-Type': 'text/html'},
+        status,
+      }),
+    json: (data: unknown, status = 200) =>
+      new Response(JSON.stringify(data), {
+        headers: {'Content-Type': 'application/json'},
+        status,
+      }),
+    req: {
+      header: (name: string) => req.headers.get(name) ?? undefined,
+      json: async () => JSON.parse(await req.text()),
+      method: req.method,
+      query: () => undefined,
+      raw: req,
+      url: req.url,
+    },
+    status: () => {},
+    text: (text: string, status = 200) =>
+      new Response(text, {
+        headers: {'Content-Type': 'text/plain'},
+        status,
+      }),
+  }
+}
+
+/**
  * Create a mock Cloudflare environment
  */
 export function createMockEnv(overrides?: {
   ANTHROPIC_API_KEY?: string
+  ASSETS?: Fetcher
   AUDIO_FEATURES_CACHE?: KVNamespace
   ENVIRONMENT?: string
   FRONTEND_URL?: string
@@ -148,10 +207,15 @@ export function createMockEnv(overrides?: {
   SESSIONS?: KVNamespace
   SPOTIFY_CLIENT_ID?: string
   SPOTIFY_CLIENT_SECRET?: string
-  ASSETS?: Fetcher
 }) {
   return {
     ANTHROPIC_API_KEY: 'test-anthropic-key',
+    ASSETS: {
+      connect: () => {
+        throw new Error('Socket connect not supported in tests')
+      },
+      fetch: async () => new Response('Not found', {status: 404}),
+    },
     AUDIO_FEATURES_CACHE: new MockKVNamespace(),
     ENVIRONMENT: 'test',
     FRONTEND_URL: 'http://localhost:3000',
@@ -159,12 +223,6 @@ export function createMockEnv(overrides?: {
     SESSIONS: new MockKVNamespace(),
     SPOTIFY_CLIENT_ID: 'test-spotify-id',
     SPOTIFY_CLIENT_SECRET: 'test-spotify-secret',
-    ASSETS: {
-      fetch: async () => new Response('Not found', {status: 404}),
-      connect: () => {
-        throw new Error('Socket connect not supported in tests')
-      },
-    },
     ...overrides,
   }
 }
@@ -176,13 +234,13 @@ export function createMockExecutionContext(): ExecutionContext {
   const promises: Promise<unknown>[] = []
 
   return {
-    waitUntil: (promise: Promise<unknown>) => {
-      promises.push(promise)
-    },
     passThroughOnException: () => {},
     // For tests: await all promises
     async waitForAll(): Promise<void> {
       await Promise.all(promises)
+    },
+    waitUntil: (promise: Promise<unknown>) => {
+      promises.push(promise)
     },
   } as ExecutionContext & { waitForAll: () => Promise<void> }
 }
@@ -191,16 +249,16 @@ export function createMockExecutionContext(): ExecutionContext {
  * Create a mock Hono-compatible Request
  */
 export function createMockRequest(options: {
-  url: string
-  method?: string
-  headers?: Record<string, string>
   body?: unknown
+  headers?: Record<string, string>
+  method?: string
+  url: string
 }): Request {
-  const {url, method = 'GET', headers = {}, body} = options
+  const {body, headers = {}, method = 'GET', url} = options
 
   const requestInit: RequestInit = {
-    method,
     headers: new Headers(headers),
+    method,
   }
 
   if (body) {
@@ -211,64 +269,4 @@ export function createMockRequest(options: {
   }
 
   return new Request(url, requestInit)
-}
-
-/**
- * Create a mock Hono Context (c)
- * This is a minimal mock - extend as needed for specific tests
- */
-export function createMockContext(options: {
-  env?: unknown
-  request?: Request
-  executionCtx?: ExecutionContext
-}): {
-  env: unknown
-  executionCtx: ExecutionContext
-  req: {
-    raw: Request
-    url: string
-    method: string
-    header: (name: string) => string | undefined
-    query: (name: string) => string | undefined
-    json: () => Promise<unknown>
-  }
-  json: (data: unknown, status?: number) => Response
-  text: (text: string, status?: number) => Response
-  html: (html: string, status?: number) => Response
-  status: (status: number) => void
-  header: (name: string, value: string) => void
-} {
-  const env = options.env ?? createMockEnv()
-  const req = options.request ?? createMockRequest({url: 'http://localhost:8787/test'})
-  const executionCtx = options.executionCtx ?? createMockExecutionContext()
-
-  return {
-    env,
-    executionCtx,
-    req: {
-      raw: req,
-      url: req.url,
-      method: req.method,
-      header: (name: string) => req.headers.get(name) ?? undefined,
-      query: () => undefined,
-      json: async () => JSON.parse(await req.text()),
-    },
-    json: (data: unknown, status = 200) =>
-      new Response(JSON.stringify(data), {
-        status,
-        headers: {'Content-Type': 'application/json'},
-      }),
-    text: (text: string, status = 200) =>
-      new Response(text, {
-        status,
-        headers: {'Content-Type': 'text/plain'},
-      }),
-    html: (html: string, status = 200) =>
-      new Response(html, {
-        status,
-        headers: {'Content-Type': 'text/html'},
-      }),
-    status: () => {},
-    header: () => {},
-  }
 }

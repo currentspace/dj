@@ -3,8 +3,10 @@
  * Tests the full flow: start session → add tracks → steer vibe → save as playlist
  */
 
-import {beforeEach, describe, expect, it} from 'vitest'
 import type {SessionPreferences, VibeProfile} from '@dj/shared-types'
+
+import {beforeEach, describe, expect, it} from 'vitest'
+
 import {MixSessionService} from '../../services/MixSessionService'
 import {buildMockKV} from '../fixtures/cloudflare-mocks'
 
@@ -29,7 +31,7 @@ describe('Mix Session Integration Tests', () => {
         favoriteArtists: [],
       }
 
-      let session = await sessionService.createSession(mockUserId, preferences)
+      const session = await sessionService.createSession(mockUserId, preferences)
 
       expect(session).toBeDefined()
       expect(session.userId).toBe(mockUserId)
@@ -111,7 +113,7 @@ describe('Mix Session Integration Tests', () => {
   describe('Queue Management', () => {
     it('should handle queue operations correctly', async () => {
       // Create session
-      let session = await sessionService.createSession(mockUserId)
+      const session = await sessionService.createSession(mockUserId)
       expect(session).toBeDefined()
 
       // Add tracks

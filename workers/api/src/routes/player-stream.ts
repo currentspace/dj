@@ -9,7 +9,6 @@
  * - Rich Spotify data (shuffle, repeat, context, volume, device type)
  */
 
-import type { OpenAPIHono } from '@hono/zod-openapi'
 import type {
   ContextType,
   DeviceType,
@@ -28,9 +27,12 @@ import type {
   PlaybackVolumeEvent,
   PlayingType,
 } from '@dj/shared-types'
+import type { OpenAPIHono } from '@hono/zod-openapi'
+
 import { z } from 'zod'
 
 import type { Env } from '../index'
+
 import { isSuccessResponse, safeParse } from '../lib/guards'
 import { AudioEnrichmentService } from '../services/AudioEnrichmentService'
 import { MixSessionService } from '../services/MixSessionService'
@@ -42,6 +44,16 @@ import { getLogger } from '../utils/LoggerContext'
 
 /** Schema for Spotify playback state response */
 const SpotifyPlaybackResponseSchema = z.object({
+  actions: z.object({
+    disallows: z.record(z.string(), z.boolean()).optional(),
+  }).optional(),
+  context: z.object({
+    external_urls: z.object({ spotify: z.string() }).optional(),
+    href: z.string(),
+    type: z.string(),
+    uri: z.string(),
+  }).nullable().optional(),
+  currently_playing_type: z.enum(['track', 'episode', 'ad', 'unknown']).optional(),
   device: z.object({
     id: z.string().nullable(),
     is_active: z.boolean(),
@@ -52,16 +64,6 @@ const SpotifyPlaybackResponseSchema = z.object({
     type: z.string(),
     volume_percent: z.number().nullable(),
   }).optional(),
-  repeat_state: z.enum(['off', 'track', 'context']).optional(),
-  shuffle_state: z.boolean().optional(),
-  context: z.object({
-    type: z.string(),
-    href: z.string(),
-    external_urls: z.object({ spotify: z.string() }).optional(),
-    uri: z.string(),
-  }).nullable().optional(),
-  timestamp: z.number().optional(),
-  progress_ms: z.number().nullable().optional(),
   is_playing: z.boolean().optional(),
   item: z.object({
     album: z.object({
@@ -78,30 +80,30 @@ const SpotifyPlaybackResponseSchema = z.object({
     preview_url: z.string().nullable().optional(),
     uri: z.string().optional(),
   }).nullable().optional(),
-  currently_playing_type: z.enum(['track', 'episode', 'ad', 'unknown']).optional(),
-  actions: z.object({
-    disallows: z.record(z.string(), z.boolean()).optional(),
-  }).optional(),
+  progress_ms: z.number().nullable().optional(),
+  repeat_state: z.enum(['off', 'track', 'context']).optional(),
+  shuffle_state: z.boolean().optional(),
+  timestamp: z.number().optional(),
 })
 
-/** Inferred type from the Zod schema */
-type SpotifyPlaybackResponseZod = z.infer<typeof SpotifyPlaybackResponseSchema>
+interface InternalState {
+  context: null | PlaybackContext
+  device: PlaybackDevice
+  isPlaying: boolean
+  modes: PlaybackModes
+  playingType: PlayingType
+  progress: number
+  timestamp: number
+  track: null | PlaybackTrack
+}
 
 
 // =============================================================================
 // INTERNAL STATE TRACKING
 // =============================================================================
 
-interface InternalState {
-  track: PlaybackTrack | null
-  device: PlaybackDevice
-  context: PlaybackContext | null
-  modes: PlaybackModes
-  playingType: PlayingType
-  isPlaying: boolean
-  progress: number
-  timestamp: number
-}
+/** Inferred type from the Zod schema */
+type SpotifyPlaybackResponseZod = z.infer<typeof SpotifyPlaybackResponseSchema>
 
 // =============================================================================
 // CONFIGURATION
@@ -116,6 +118,53 @@ const MAX_STREAM_LIFETIME_MS = 5 * 60 * 1000 // 5 minutes
 // HELPERS
 // =============================================================================
 
+function contextChanged(prev: null | PlaybackContext, curr: null | PlaybackContext): boolean {
+  if (!prev && !curr) return false
+  if (!prev || !curr) return true
+  return prev.uri !== curr.uri
+}
+
+function createIdleState(): InternalState {
+  return {
+    context: null,
+    device: {
+      id: null,
+      isPrivateSession: false,
+      isRestricted: false,
+      name: 'No active device',
+      supportsVolume: false,
+      type: 'unknown',
+      volumePercent: null,
+    },
+    isPlaying: false,
+    modes: { repeat: 'off', shuffle: false },
+    playingType: 'unknown',
+    progress: 0,
+    timestamp: Date.now(),
+    track: null,
+  }
+}
+
+function deviceChanged(prev: PlaybackDevice, curr: PlaybackDevice): boolean {
+  return prev.id !== curr.id || prev.name !== curr.name || prev.type !== curr.type
+}
+
+function modesChanged(prev: PlaybackModes, curr: PlaybackModes): boolean {
+  return prev.shuffle !== curr.shuffle || prev.repeat !== curr.repeat
+}
+
+// =============================================================================
+// CHANGE DETECTION
+// =============================================================================
+
+function normalizeContextType(type: string): ContextType {
+  const normalized = type.toLowerCase()
+  const validTypes: ContextType[] = ['album', 'artist', 'playlist', 'show', 'collection']
+  return validTypes.includes(normalized as ContextType)
+    ? (normalized as ContextType)
+    : 'playlist' // Default fallback
+}
+
 function normalizeDeviceType(type: string): DeviceType {
   const normalized = type.toLowerCase()
   const validTypes: DeviceType[] = [
@@ -127,110 +176,63 @@ function normalizeDeviceType(type: string): DeviceType {
     : 'unknown'
 }
 
-function normalizeContextType(type: string): ContextType {
-  const normalized = type.toLowerCase()
-  const validTypes: ContextType[] = ['album', 'artist', 'playlist', 'show', 'collection']
-  return validTypes.includes(normalized as ContextType)
-    ? (normalized as ContextType)
-    : 'playlist' // Default fallback
-}
-
 function parseSpotifyResponse(data: SpotifyPlaybackResponseZod): InternalState {
-  const track: PlaybackTrack | null = data.item ? {
-    id: data.item.id ?? '',
-    uri: data.item.uri ?? '',
-    name: data.item.name ?? 'Unknown',
-    artist: data.item.artists?.map(a => a.name).join(', ') ?? '',
+  const track: null | PlaybackTrack = data.item ? {
     albumArt: data.item.album?.images?.[0]?.url ?? null,
     albumName: data.item.album?.name ?? '',
+    artist: data.item.artists?.map(a => a.name).join(', ') ?? '',
     duration: data.item.duration_ms ?? 0,
     explicit: data.item.explicit ?? false,
-    popularity: data.item.popularity ?? 0,
+    id: data.item.id ?? '',
     isLocal: data.item.is_local ?? false,
+    name: data.item.name ?? 'Unknown',
+    popularity: data.item.popularity ?? 0,
     previewUrl: data.item.preview_url ?? null,
+    uri: data.item.uri ?? '',
   } : null
 
   const device: PlaybackDevice = {
     id: data.device?.id ?? null,
-    name: data.device?.name ?? 'Unknown',
-    type: normalizeDeviceType(data.device?.type ?? 'unknown'),
-    volumePercent: data.device?.volume_percent ?? null,
-    supportsVolume: data.device?.supports_volume ?? false,
     isPrivateSession: data.device?.is_private_session ?? false,
     isRestricted: data.device?.is_restricted ?? false,
+    name: data.device?.name ?? 'Unknown',
+    supportsVolume: data.device?.supports_volume ?? false,
+    type: normalizeDeviceType(data.device?.type ?? 'unknown'),
+    volumePercent: data.device?.volume_percent ?? null,
   }
 
-  const context: PlaybackContext | null = data.context ? {
+  const context: null | PlaybackContext = data.context ? {
+    href: data.context.href,
+    name: null, // Spotify doesn't give context name in player endpoint
     type: normalizeContextType(data.context.type),
     uri: data.context.uri,
-    name: null, // Spotify doesn't give context name in player endpoint
-    href: data.context.href,
   } : null
 
   const modes: PlaybackModes = {
-    shuffle: data.shuffle_state ?? false,
     repeat: data.repeat_state ?? 'off',
+    shuffle: data.shuffle_state ?? false,
   }
 
   return {
-    track,
-    device,
     context,
+    device,
+    isPlaying: data.is_playing ?? false,
     modes,
     playingType: data.currently_playing_type ?? 'unknown',
-    isPlaying: data.is_playing ?? false,
     progress: data.progress_ms ?? 0,
     timestamp: Date.now(),
+    track,
   }
 }
 
-function createIdleState(): InternalState {
-  return {
-    track: null,
-    device: {
-      id: null,
-      name: 'No active device',
-      type: 'unknown',
-      volumePercent: null,
-      supportsVolume: false,
-      isPrivateSession: false,
-      isRestricted: false,
-    },
-    context: null,
-    modes: { shuffle: false, repeat: 'off' },
-    playingType: 'unknown',
-    isPlaying: false,
-    progress: 0,
-    timestamp: Date.now(),
-  }
-}
-
-// =============================================================================
-// CHANGE DETECTION
-// =============================================================================
-
-function trackChanged(prev: PlaybackTrack | null, curr: PlaybackTrack | null): boolean {
+function trackChanged(prev: null | PlaybackTrack, curr: null | PlaybackTrack): boolean {
   if (!prev && !curr) return false
   if (!prev || !curr) return true
   return prev.id !== curr.id
 }
 
-function deviceChanged(prev: PlaybackDevice, curr: PlaybackDevice): boolean {
-  return prev.id !== curr.id || prev.name !== curr.name || prev.type !== curr.type
-}
-
-function modesChanged(prev: PlaybackModes, curr: PlaybackModes): boolean {
-  return prev.shuffle !== curr.shuffle || prev.repeat !== curr.repeat
-}
-
 function volumeChanged(prev: PlaybackDevice, curr: PlaybackDevice): boolean {
   return prev.volumePercent !== curr.volumePercent
-}
-
-function contextChanged(prev: PlaybackContext | null, curr: PlaybackContext | null): boolean {
-  if (!prev && !curr) return false
-  if (!prev || !curr) return true
-  return prev.uri !== curr.uri
 }
 
 // =============================================================================
@@ -240,160 +242,6 @@ function contextChanged(prev: PlaybackContext | null, curr: PlaybackContext | nu
 const QUEUE_LOW_THRESHOLD = 3
 const QUEUE_CHECK_INTERVAL = 10 // Check queue every N polls
 const MAX_SIGNALS = 50
-
-/**
- * Classify a listener signal based on how much of the track was heard.
- */
-function classifySignal(listenDurationMs: number, trackDurationMs: number): 'completed' | 'skipped' | 'partial' {
-  if (trackDurationMs <= 0) return 'partial'
-  const ratio = listenDurationMs / trackDurationMs
-  if (ratio >= 0.8) return 'completed'
-  if (listenDurationMs < 30000) return 'skipped'
-  return 'partial'
-}
-
-/**
- * Handle a track transition server-side. This is the "DJ brain" —
- * it processes track completions, updates the session, and triggers
- * background queue refill without depending on the frontend.
- *
- * Runs inside waitUntil() so it never blocks the SSE poll loop.
- */
-async function handleTrackTransition(
-  env: Env,
-  token: string,
-  prevTrack: PlaybackTrack,
-  trackStartTimestamp: number,
-): Promise<void> {
-  const logger = getLogger()
-
-  if (!env.MIX_SESSIONS) return
-
-  try {
-    // Get user ID from Spotify
-    const userResponse = await fetch('https://api.spotify.com/v1/me', {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-    if (!userResponse.ok) return
-    const userJson: unknown = await userResponse.json()
-    const userParsed = z.object({ id: z.string() }).safeParse(userJson)
-    if (!userParsed.success) return
-    const userId = userParsed.data.id
-
-    const sessionService = new MixSessionService(env.MIX_SESSIONS)
-    const session = await sessionService.getSession(userId)
-    if (!session) return // No mix session, skip
-
-    // Check if track is still in queue (hasn't been processed already by frontend)
-    const queuedTrack = session.queue.find(
-      t => t.trackId === prevTrack.id || t.trackUri === prevTrack.uri
-    )
-
-    // Calculate listen duration and classify signal
-    const listenDurationMs = Date.now() - trackStartTimestamp
-    const signalType = classifySignal(listenDurationMs, prevTrack.duration)
-
-    // Store listener signal
-    const signal: ListenerSignal = {
-      trackId: prevTrack.id,
-      type: signalType,
-      listenDuration: listenDurationMs,
-      trackDuration: prevTrack.duration,
-      timestamp: Date.now(),
-    }
-    session.signals.push(signal)
-    if (session.signals.length > MAX_SIGNALS) {
-      session.signals = session.signals.slice(-MAX_SIGNALS)
-    }
-
-    if (queuedTrack) {
-      // Move from queue to history
-      sessionService.removeFromQueue(session, queuedTrack.position)
-
-      // Enrich with BPM if possible
-      let bpm: number | null = null
-      if (env.AUDIO_FEATURES_CACHE) {
-        try {
-          const audioService = new AudioEnrichmentService(env.AUDIO_FEATURES_CACHE)
-          const enrichment = await audioService.enrichTrack({
-            id: prevTrack.id,
-            name: prevTrack.name,
-            artists: [{ name: prevTrack.artist }],
-            duration_ms: prevTrack.duration,
-          })
-          if (enrichment) bpm = enrichment.bpm ?? null
-        } catch {
-          // Non-fatal
-        }
-      }
-
-      const playedTrack = {
-        trackId: prevTrack.id,
-        trackUri: prevTrack.uri,
-        name: prevTrack.name,
-        artist: prevTrack.artist,
-        albumArt: prevTrack.albumArt ?? undefined,
-        playedAt: new Date().toISOString(),
-        bpm,
-        energy: null as number | null,
-      }
-
-      sessionService.addToHistory(session, playedTrack)
-      sessionService.updateVibeFromTrack(session, playedTrack)
-
-      logger?.info('[PlayerStream] Server-side track transition processed', {
-        trackId: prevTrack.id,
-        signal: signalType,
-        queueRemaining: session.queue.length,
-      })
-    }
-
-    // Update taste model from signal (Phase 4)
-    if (session.tasteModel || signalType !== 'partial') {
-      sessionService.updateTasteFromSignal(session, signal, prevTrack.artist)
-    }
-
-    // Save session
-    await sessionService.updateSession(session)
-
-    // Phase 4c: Check for consecutive skips → clear queue and force refill
-    const recentSignals = session.signals.slice(-5)
-    let consecutiveSkips = 0
-    for (let i = recentSignals.length - 1; i >= 0; i--) {
-      if (recentSignals[i].type === 'skipped') consecutiveSkips++
-      else break
-    }
-
-    if (consecutiveSkips >= 3 && session.queue.length > 0) {
-      logger?.info('[PlayerStream] 3+ consecutive skips detected, clearing queue for replan', {
-        consecutiveSkips,
-        queueLength: session.queue.length,
-      })
-      session.queue = []
-      await sessionService.updateSession(session)
-      // Queue refill will happen via the periodic queue check or frontend request
-    }
-  } catch (error) {
-    logger?.error('[PlayerStream] handleTrackTransition error:', error)
-    // Never throw — this runs in waitUntil
-  }
-}
-
-// =============================================================================
-// SSE WRITER
-// =============================================================================
-
-function writeSSE(writer: WritableStreamDefaultWriter<Uint8Array>, event: string, data: unknown): void {
-  const encoder = new TextEncoder()
-  const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
-  writer.write(encoder.encode(payload)).catch(() => {
-    // Stream closed, ignore
-  })
-}
-
-// =============================================================================
-// MAIN ROUTE
-// =============================================================================
 
 export function registerPlayerStreamRoute(app: OpenAPIHono<{ Bindings: Env }>) {
   app.get('/api/player/stream', async c => {
@@ -460,15 +308,15 @@ export function registerPlayerStreamRoute(app: OpenAPIHono<{ Bindings: Env }>) {
     // Send init event with full state
     function sendInit(state: InternalState): void {
       const initData: PlaybackStateInit = {
-        track: state.track,
-        device: state.device,
         context: state.context,
+        device: state.device,
+        isPlaying: state.isPlaying,
         modes: state.modes,
         playingType: state.playingType,
-        isPlaying: state.isPlaying,
         progress: state.progress,
-        timestamp: state.timestamp,
         seq: seq++,
+        timestamp: state.timestamp,
+        track: state.track,
       }
       writeSSE(writer, 'init', initData)
     }
@@ -689,5 +537,159 @@ export function registerPlayerStreamRoute(app: OpenAPIHono<{ Bindings: Env }>) {
         'X-Accel-Buffering': 'no',
       },
     })
+  })
+}
+
+/**
+ * Classify a listener signal based on how much of the track was heard.
+ */
+function classifySignal(listenDurationMs: number, trackDurationMs: number): 'completed' | 'partial' | 'skipped' {
+  if (trackDurationMs <= 0) return 'partial'
+  const ratio = listenDurationMs / trackDurationMs
+  if (ratio >= 0.8) return 'completed'
+  if (listenDurationMs < 30000) return 'skipped'
+  return 'partial'
+}
+
+// =============================================================================
+// SSE WRITER
+// =============================================================================
+
+/**
+ * Handle a track transition server-side. This is the "DJ brain" —
+ * it processes track completions, updates the session, and triggers
+ * background queue refill without depending on the frontend.
+ *
+ * Runs inside waitUntil() so it never blocks the SSE poll loop.
+ */
+async function handleTrackTransition(
+  env: Env,
+  token: string,
+  prevTrack: PlaybackTrack,
+  trackStartTimestamp: number,
+): Promise<void> {
+  const logger = getLogger()
+
+  if (!env.MIX_SESSIONS) return
+
+  try {
+    // Get user ID from Spotify
+    const userResponse = await fetch('https://api.spotify.com/v1/me', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (!userResponse.ok) return
+    const userJson: unknown = await userResponse.json()
+    const userParsed = z.object({ id: z.string() }).safeParse(userJson)
+    if (!userParsed.success) return
+    const userId = userParsed.data.id
+
+    const sessionService = new MixSessionService(env.MIX_SESSIONS)
+    const session = await sessionService.getSession(userId)
+    if (!session) return // No mix session, skip
+
+    // Check if track is still in queue (hasn't been processed already by frontend)
+    const queuedTrack = session.queue.find(
+      t => t.trackId === prevTrack.id || t.trackUri === prevTrack.uri
+    )
+
+    // Calculate listen duration and classify signal
+    const listenDurationMs = Date.now() - trackStartTimestamp
+    const signalType = classifySignal(listenDurationMs, prevTrack.duration)
+
+    // Store listener signal
+    const signal: ListenerSignal = {
+      listenDuration: listenDurationMs,
+      timestamp: Date.now(),
+      trackDuration: prevTrack.duration,
+      trackId: prevTrack.id,
+      type: signalType,
+    }
+    session.signals.push(signal)
+    if (session.signals.length > MAX_SIGNALS) {
+      session.signals = session.signals.slice(-MAX_SIGNALS)
+    }
+
+    if (queuedTrack) {
+      // Move from queue to history
+      sessionService.removeFromQueue(session, queuedTrack.position)
+
+      // Enrich with BPM if possible
+      let bpm: null | number = null
+      if (env.AUDIO_FEATURES_CACHE) {
+        try {
+          const audioService = new AudioEnrichmentService(env.AUDIO_FEATURES_CACHE)
+          const enrichment = await audioService.enrichTrack({
+            artists: [{ name: prevTrack.artist }],
+            duration_ms: prevTrack.duration,
+            id: prevTrack.id,
+            name: prevTrack.name,
+          })
+          if (enrichment) bpm = enrichment.bpm ?? null
+        } catch {
+          // Non-fatal
+        }
+      }
+
+      const playedTrack = {
+        albumArt: prevTrack.albumArt ?? undefined,
+        artist: prevTrack.artist,
+        bpm,
+        energy: null as null | number,
+        name: prevTrack.name,
+        playedAt: new Date().toISOString(),
+        trackId: prevTrack.id,
+        trackUri: prevTrack.uri,
+      }
+
+      sessionService.addToHistory(session, playedTrack)
+      sessionService.updateVibeFromTrack(session, playedTrack)
+
+      logger?.info('[PlayerStream] Server-side track transition processed', {
+        queueRemaining: session.queue.length,
+        signal: signalType,
+        trackId: prevTrack.id,
+      })
+    }
+
+    // Update taste model from signal (Phase 4)
+    if (session.tasteModel || signalType !== 'partial') {
+      sessionService.updateTasteFromSignal(session, signal, prevTrack.artist)
+    }
+
+    // Save session
+    await sessionService.updateSession(session)
+
+    // Phase 4c: Check for consecutive skips → clear queue and force refill
+    const recentSignals = session.signals.slice(-5)
+    let consecutiveSkips = 0
+    for (let i = recentSignals.length - 1; i >= 0; i--) {
+      if (recentSignals[i].type === 'skipped') consecutiveSkips++
+      else break
+    }
+
+    if (consecutiveSkips >= 3 && session.queue.length > 0) {
+      logger?.info('[PlayerStream] 3+ consecutive skips detected, clearing queue for replan', {
+        consecutiveSkips,
+        queueLength: session.queue.length,
+      })
+      session.queue = []
+      await sessionService.updateSession(session)
+      // Queue refill will happen via the periodic queue check or frontend request
+    }
+  } catch (error) {
+    logger?.error('[PlayerStream] handleTrackTransition error:', error)
+    // Never throw — this runs in waitUntil
+  }
+}
+
+// =============================================================================
+// MAIN ROUTE
+// =============================================================================
+
+function writeSSE(writer: WritableStreamDefaultWriter<Uint8Array>, event: string, data: unknown): void {
+  const encoder = new TextEncoder()
+  const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
+  writer.write(encoder.encode(payload)).catch(() => {
+    // Stream closed, ignore
   })
 }

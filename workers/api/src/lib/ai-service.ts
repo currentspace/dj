@@ -8,6 +8,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk'
+
 import { LLM } from '../constants'
 import { getLogger } from '../utils/LoggerContext'
 
@@ -15,50 +16,26 @@ import { getLogger } from '../utils/LoggerContext'
 // TYPE GUARDS
 // =============================================================================
 
-/** Type guard for thinking blocks in Claude's response */
-function isThinkingBlock(block: Anthropic.ContentBlock): block is Anthropic.ContentBlock & { type: 'thinking'; thinking: string } {
-  return block.type === 'thinking' && 'thinking' in block && typeof (block as unknown as Record<string, unknown>).thinking === 'string'
+export interface AIRequestOptions {
+  /** Maximum tokens in response */
+  maxTokens?: number
+  /** Override the default model */
+  model?: string
+  /** System prompt */
+  system?: string
+  /** Temperature for response creativity (0-1) */
+  temperature?: number
+  /** Enable extended thinking (budget tokens for reasoning) */
+  thinkingBudget?: number
 }
 
 // =============================================================================
 // TYPES
 // =============================================================================
 
-/** Request parameters for Anthropic messages API with optional thinking */
-interface AnthropicRequestParams {
-  model: string
-  max_tokens: number
-  messages: Array<{ role: 'user' | 'assistant'; content: string }>
-  temperature?: number
-  system?: string
-  thinking?: {
-    type: 'enabled'
-    budget_tokens: number
-  }
-}
-
-export interface AIServiceConfig {
-  apiKey: string
-  defaultModel?: string
-  defaultTemperature?: number
-}
-
-export interface AIRequestOptions {
-  /** Override the default model */
-  model?: string
-  /** Temperature for response creativity (0-1) */
-  temperature?: number
-  /** Maximum tokens in response */
-  maxTokens?: number
-  /** System prompt */
-  system?: string
-  /** Enable extended thinking (budget tokens for reasoning) */
-  thinkingBudget?: number
-}
-
 export interface AIResponse {
   data: unknown
-  error: string | null
+  error: null | string
   rawText: string
   /** Extended thinking content (if enabled) */
   thinking?: string
@@ -70,9 +47,24 @@ export interface AIResponse {
   }
 }
 
-// =============================================================================
-// AI SERVICE CLASS
-// =============================================================================
+export interface AIServiceConfig {
+  apiKey: string
+  defaultModel?: string
+  defaultTemperature?: number
+}
+
+/** Request parameters for Anthropic messages API with optional thinking */
+interface AnthropicRequestParams {
+  max_tokens: number
+  messages: { content: string; role: 'assistant' | 'user'; }[]
+  model: string
+  system?: string
+  temperature?: number
+  thinking?: {
+    budget_tokens: number
+    type: 'enabled'
+  }
+}
 
 export class AIService {
   private client: Anthropic
@@ -86,6 +78,26 @@ export class AIService {
   }
 
   /**
+   * Extract JSON from a text response (handles markdown code blocks, etc.)
+   *
+   * Returns `unknown` — callers MUST validate with Zod schemas before use.
+   */
+  extractJSON(text: string): unknown {
+    try {
+      const jsonMatch = /\{[\s\S]*\}|\[[\s\S]*\]/.exec(text)
+      if (!jsonMatch) {
+        getLogger()?.warn('[AIService] No JSON found in response')
+        return null
+      }
+
+      return JSON.parse(jsonMatch[0]) as unknown
+    } catch (error) {
+      getLogger()?.error('[AIService] JSON parse error:', error)
+      return null
+    }
+  }
+
+  /**
    * Send a prompt to Claude and get a JSON response
    * Supports extended thinking when thinkingBudget is provided
    */
@@ -96,25 +108,25 @@ export class AIService {
       const model = options.model || this.defaultModel
 
       // Build request parameters with proper typing
-      const messages: AnthropicRequestParams['messages'] = [{ role: 'user', content: prompt }]
+      const messages: AnthropicRequestParams['messages'] = [{ content: prompt, role: 'user' }]
 
       const requestParams: AnthropicRequestParams = {
-        model,
         max_tokens: options.maxTokens || 2000,
         messages,
+        model,
       }
 
       if (useThinking) {
         // Extended thinking mode - no temperature, uses thinking block
         requestParams.thinking = {
-          type: 'enabled',
           budget_tokens: options.thinkingBudget!,
+          type: 'enabled',
         }
         // System prompt goes in messages for thinking mode
         if (options.system) {
           messages.unshift({
-            role: 'user',
             content: `[System]: ${options.system}`,
+            role: 'user',
           })
         }
       } else {
@@ -180,11 +192,11 @@ export class AIService {
   async promptForText(prompt: string, options: AIRequestOptions = {}): Promise<string> {
     try {
       const response = await this.client.messages.create({
-        model: options.model || this.defaultModel,
         max_tokens: options.maxTokens || 2000,
-        temperature: options.temperature ?? this.defaultTemperature,
+        messages: [{ content: prompt, role: 'user' }],
+        model: options.model || this.defaultModel,
         system: options.system || 'You are an AI assistant.',
-        messages: [{ role: 'user', content: prompt }],
+        temperature: options.temperature ?? this.defaultTemperature,
       })
 
       return response.content
@@ -196,26 +208,15 @@ export class AIService {
       return ''
     }
   }
+}
 
-  /**
-   * Extract JSON from a text response (handles markdown code blocks, etc.)
-   *
-   * Returns `unknown` — callers MUST validate with Zod schemas before use.
-   */
-  extractJSON(text: string): unknown {
-    try {
-      const jsonMatch = /\{[\s\S]*\}|\[[\s\S]*\]/.exec(text)
-      if (!jsonMatch) {
-        getLogger()?.warn('[AIService] No JSON found in response')
-        return null
-      }
+// =============================================================================
+// AI SERVICE CLASS
+// =============================================================================
 
-      return JSON.parse(jsonMatch[0]) as unknown
-    } catch (error) {
-      getLogger()?.error('[AIService] JSON parse error:', error)
-      return null
-    }
-  }
+/** Type guard for thinking blocks in Claude's response */
+function isThinkingBlock(block: Anthropic.ContentBlock): block is Anthropic.ContentBlock & { thinking: string; type: 'thinking'; } {
+  return block.type === 'thinking' && 'thinking' in block && typeof (block as unknown as Record<string, unknown>).thinking === 'string'
 }
 
 // =============================================================================
@@ -223,6 +224,13 @@ export class AIService {
 // =============================================================================
 
 let aiServiceInstance: AIService | null = null
+
+/**
+ * Create a new AI service instance (for when you need fresh config)
+ */
+export function createAIService(config: AIServiceConfig): AIService {
+  return new AIService(config)
+}
 
 /**
  * Get or create the AI service instance
@@ -238,11 +246,4 @@ export function getAIService(apiKey?: string): AIService | null {
 
   aiServiceInstance = new AIService({ apiKey })
   return aiServiceInstance
-}
-
-/**
- * Create a new AI service instance (for when you need fresh config)
- */
-export function createAIService(config: AIServiceConfig): AIService {
-  return new AIService(config)
 }

@@ -10,27 +10,27 @@
 import {memo} from 'react'
 
 interface LoadingSpinnerProps {
-  size?: 'sm' | 'md' | 'lg'
-  text?: string
   className?: string
+  size?: 'lg' | 'md' | 'sm'
+  text?: string
 }
 
 const sizeClasses = {
-  sm: 'size-5 border-2',
-  md: 'size-10 border-3',
   lg: 'size-[60px] border-4',
+  md: 'size-10 border-3',
+  sm: 'size-5 border-2',
 }
 
 const textClasses = {
-  sm: 'text-xs',
-  md: 'text-sm',
   lg: 'text-base',
+  md: 'text-sm',
+  sm: 'text-xs',
 }
 
 export const LoadingSpinner = memo(function LoadingSpinner({
+  className = '',
   size = 'md',
   text,
-  className = '',
 }: LoadingSpinnerProps) {
   return (
     <div className={`flex flex-col items-center justify-center gap-3 ${className}`}>

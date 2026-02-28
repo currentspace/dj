@@ -1,79 +1,80 @@
 import {describe, expect, it} from 'vitest'
+
 import {
+  PlaybackConnectedEventSchema,
+  PlaybackContextEventSchema,
+  PlaybackDeviceEventSchema,
+  PlaybackErrorEventSchema,
+  PlaybackIdleEventSchema,
+  PlaybackModesEventSchema,
+  PlaybackStateEventSchema,
   PlaybackStateInitSchema,
   PlaybackTickEventSchema,
   PlaybackTrackEventSchema,
-  PlaybackStateEventSchema,
-  PlaybackDeviceEventSchema,
-  PlaybackModesEventSchema,
   PlaybackVolumeEventSchema,
-  PlaybackContextEventSchema,
-  PlaybackIdleEventSchema,
-  PlaybackConnectedEventSchema,
-  PlaybackErrorEventSchema,
 } from '../schemas/playback-event-schemas'
 
 describe('Playback Event Schemas', () => {
   describe('PlaybackStateInitSchema', () => {
     it('validates a complete init event', () => {
       const init = {
-        track: {
-          id: '4uLU6hMCjMI75M1A2tKUQC',
-          uri: 'spotify:track:4uLU6hMCjMI75M1A2tKUQC',
-          name: 'Bohemian Rhapsody',
-          artist: 'Queen',
-          albumArt: 'https://i.scdn.co/image/abc123',
-          albumName: 'A Night at the Opera',
-          duration: 354000,
-          explicit: false,
-          popularity: 91,
-          isLocal: false,
-          previewUrl: null,
+        context: {
+          href: null,
+          name: 'My Playlist',
+          type: 'playlist' as const,
+          uri: 'spotify:playlist:abc',
         },
         device: {
           id: 'device123',
-          name: 'My Speaker',
-          type: 'speaker' as const,
-          volumePercent: 75,
-          supportsVolume: true,
           isPrivateSession: false,
           isRestricted: false,
+          name: 'My Speaker',
+          supportsVolume: true,
+          type: 'speaker' as const,
+          volumePercent: 75,
         },
-        context: {
-          type: 'playlist' as const,
-          uri: 'spotify:playlist:abc',
-          name: 'My Playlist',
-          href: null,
-        },
-        modes: {shuffle: false, repeat: 'off' as const},
-        playingType: 'track' as const,
         isPlaying: true,
+        modes: {repeat: 'off' as const, shuffle: false},
+        playingType: 'track' as const,
         progress: 45000,
-        timestamp: Date.now(),
         seq: 1,
+        timestamp: Date.now(),
+        track: {
+          albumArt: 'https://i.scdn.co/image/abc123',
+          albumName: 'A Night at the Opera',
+          artist: 'Queen',
+          duration: 354000,
+          explicit: false,
+          id: '4uLU6hMCjMI75M1A2tKUQC',
+          isLocal: false,
+          name: 'Bohemian Rhapsody',
+          popularity: 91,
+          previewUrl: null,
+          uri: 'spotify:track:4uLU6hMCjMI75M1A2tKUQC',
+        },
       }
       expect(PlaybackStateInitSchema.safeParse(init).success).toBe(true)
     })
 
     it('validates init with null track (nothing playing)', () => {
       const init = {
-        track: null,
+        context: null,
         device: {
           id: null,
-          name: 'Unknown',
-          type: 'unknown' as const,
-          volumePercent: null,
-          supportsVolume: false,
           isPrivateSession: false,
           isRestricted: false,
+          name: 'Unknown',
+          supportsVolume: false,
+          type: 'unknown' as const,
+          volumePercent: null,
         },
-        context: null,
-        modes: {shuffle: false, repeat: 'off' as const},
-        playingType: 'unknown' as const,
         isPlaying: false,
+        modes: {repeat: 'off' as const, shuffle: false},
+        playingType: 'unknown' as const,
         progress: 0,
-        timestamp: Date.now(),
         seq: 0,
+        timestamp: Date.now(),
+        track: null,
       }
       expect(PlaybackStateInitSchema.safeParse(init).success).toBe(true)
     })
@@ -98,18 +99,18 @@ describe('Playback Event Schemas', () => {
   describe('PlaybackTrackEventSchema', () => {
     it('validates a track change event', () => {
       const track = {
-        id: 'track123',
-        uri: 'spotify:track:track123',
-        name: 'Test Song',
-        artist: 'Test Artist',
         albumArt: null,
         albumName: 'Test Album',
+        artist: 'Test Artist',
         duration: 200000,
         explicit: false,
-        popularity: 50,
+        id: 'track123',
         isLocal: false,
+        name: 'Test Song',
+        popularity: 50,
         previewUrl: null,
         seq: 5,
+        uri: 'spotify:track:track123',
       }
       expect(PlaybackTrackEventSchema.safeParse(track).success).toBe(true)
     })
@@ -126,13 +127,13 @@ describe('Playback Event Schemas', () => {
     it('validates a device change event', () => {
       const device = {
         id: 'dev123',
-        name: 'My Phone',
-        type: 'smartphone' as const,
-        volumePercent: 50,
-        supportsVolume: true,
         isPrivateSession: false,
         isRestricted: false,
+        name: 'My Phone',
         seq: 2,
+        supportsVolume: true,
+        type: 'smartphone' as const,
+        volumePercent: 50,
       }
       expect(PlaybackDeviceEventSchema.safeParse(device).success).toBe(true)
     })
@@ -140,11 +141,11 @@ describe('Playback Event Schemas', () => {
 
   describe('PlaybackModesEventSchema', () => {
     it('validates a modes change event', () => {
-      expect(PlaybackModesEventSchema.safeParse({shuffle: true, repeat: 'context', seq: 1}).success).toBe(true)
+      expect(PlaybackModesEventSchema.safeParse({repeat: 'context', seq: 1, shuffle: true}).success).toBe(true)
     })
 
     it('rejects invalid repeat state', () => {
-      expect(PlaybackModesEventSchema.safeParse({shuffle: true, repeat: 'invalid', seq: 1}).success).toBe(false)
+      expect(PlaybackModesEventSchema.safeParse({repeat: 'invalid', seq: 1, shuffle: true}).success).toBe(false)
     })
   })
 
@@ -157,7 +158,7 @@ describe('Playback Event Schemas', () => {
   describe('PlaybackContextEventSchema', () => {
     it('validates a context change event', () => {
       const ctx = {
-        context: {type: 'album' as const, uri: 'spotify:album:abc', name: 'Test Album', href: null},
+        context: {href: null, name: 'Test Album', type: 'album' as const, uri: 'spotify:album:abc'},
         seq: 3,
       }
       expect(PlaybackContextEventSchema.safeParse(ctx).success).toBe(true)

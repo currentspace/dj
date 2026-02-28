@@ -1,4 +1,5 @@
 import {describe, expect, it} from 'vitest'
+
 import {PromiseTracker} from '../promise-tracker'
 
 describe('PromiseTracker', () => {
@@ -24,7 +25,7 @@ describe('PromiseTracker', () => {
 
   it('tracks multiple promises', async () => {
     const tracker = new PromiseTracker()
-    const resolvers: Array<() => void> = []
+    const resolvers: (() => void)[] = []
 
     for (let i = 0; i < 3; i++) {
       const p = new Promise<void>((r) => {

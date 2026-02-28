@@ -10,16 +10,16 @@ import {useCallback, useRef, useState} from 'react'
 import {usePlaybackStore} from '../stores'
 
 interface PWAUpdateState {
-  updateAvailable: boolean
   checking: boolean
-  waitingWorker: ServiceWorker | null
-  error: string | null
+  error: null | string
+  updateAvailable: boolean
   waitingForPlaybackStop: boolean
+  waitingWorker: null | ServiceWorker
 }
 
 interface UsePWAUpdateReturn extends PWAUpdateState {
-  checkForUpdate: () => Promise<void>
   applyUpdate: (force?: boolean) => void
+  checkForUpdate: () => Promise<void>
   dismissUpdate: () => void
   isPlaybackActive: boolean
 }
@@ -28,17 +28,17 @@ const UPDATE_CHECK_INTERVAL = 5 * 60 * 1000 // 5 minutes
 
 export function usePWAUpdate(): UsePWAUpdateReturn {
   const [state, setState] = useState<PWAUpdateState>({
-    updateAvailable: false,
     checking: false,
-    waitingWorker: null,
     error: null,
+    updateAvailable: false,
     waitingForPlaybackStop: false,
+    waitingWorker: null,
   })
 
   const isPlaying = usePlaybackStore((s) => s.playbackCore?.isPlaying ?? false)
 
-  const registrationRef = useRef<ServiceWorkerRegistration | null>(null)
-  const intervalRef = useRef<number | null>(null)
+  const registrationRef = useRef<null | ServiceWorkerRegistration>(null)
+  const intervalRef = useRef<null | number>(null)
   const dismissedRef = useRef(false)
   const pendingUpdateRef = useRef(false)
   const initStartedRef = useRef(false)
@@ -67,9 +67,9 @@ export function usePWAUpdate(): UsePWAUpdateReturn {
         if (!dismissedRef.current) {
           setState(prev => ({
             ...prev,
+            checking: false,
             updateAvailable: true,
             waitingWorker: newWorker,
-            checking: false,
           }))
         }
       }
@@ -200,8 +200,8 @@ export function usePWAUpdate(): UsePWAUpdateReturn {
 
   return {
     ...state,
-    checkForUpdate,
     applyUpdate,
+    checkForUpdate,
     dismissUpdate,
     isPlaybackActive: isPlaying,
   }

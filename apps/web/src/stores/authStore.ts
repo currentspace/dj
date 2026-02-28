@@ -3,8 +3,9 @@
  * Manages Spotify authentication state with localStorage persistence
  */
 
-import {TokenDataSchema, SpotifyAuthUrlResponseSchema, TokenRefreshResponseSchema} from '@dj/shared-types'
 import type {TokenData} from '@dj/shared-types'
+
+import {SpotifyAuthUrlResponseSchema, TokenDataSchema, TokenRefreshResponseSchema} from '@dj/shared-types'
 import {create} from 'zustand'
 import {subscribeWithSelector} from 'zustand/middleware'
 
@@ -15,25 +16,25 @@ import {storage, STORAGE_KEYS} from '../hooks/useLocalStorage'
 // =============================================================================
 
 interface AuthState {
-  // State
-  error: string | null
-  isAuthenticated: boolean
-  isLoading: boolean
-  isRefreshing: boolean
-  isValidating: boolean
-  token: string | null
-
   // Actions
   clearError: () => void
   clearToken: () => void
+  // State
+  error: null | string
+  isAuthenticated: boolean
+  isLoading: boolean
+  isRefreshing: boolean
+
+  isValidating: boolean
   login: () => void
   logout: () => void
   markTokenInvalid: () => void
   refreshToken: () => Promise<boolean>
-  setError: (error: string | null) => void
+  setError: (error: null | string) => void
   setLoading: (loading: boolean) => void
   setToken: (token: string, expiresIn?: number) => void
   setValidating: (validating: boolean) => void
+  token: null | string
   validateToken: () => Promise<boolean>
 }
 
@@ -41,25 +42,12 @@ interface AuthState {
 // HELPERS
 // =============================================================================
 
-function loadTokenData(): TokenData | null {
-  return storage.get<TokenData | null>(STORAGE_KEYS.SPOTIFY_TOKEN_DATA, null)
-}
-
-function saveTokenData(tokenData: TokenData): void {
-  storage.set(STORAGE_KEYS.SPOTIFY_TOKEN_DATA, tokenData)
-}
-
 function clearTokenData(): void {
   storage.remove(STORAGE_KEYS.SPOTIFY_TOKEN_DATA)
   storage.remove(STORAGE_KEYS.SPOTIFY_TOKEN_LEGACY)
 }
 
-function isTokenExpired(tokenData: TokenData): boolean {
-  if (!tokenData.expiresAt) return false
-  return Date.now() >= tokenData.expiresAt
-}
-
-function getInitialState(): {isAuthenticated: boolean; token: string | null} {
+function getInitialState(): {isAuthenticated: boolean; token: null | string} {
   if (typeof window === 'undefined') {
     return {isAuthenticated: false, token: null}
   }
@@ -75,6 +63,22 @@ function getInitialState(): {isAuthenticated: boolean; token: string | null} {
   }
 
   return {isAuthenticated: true, token: tokenData.token}
+}
+
+function isTokenExpired(tokenData: TokenData): boolean {
+  if (!tokenData.expiresAt) return false
+  return Date.now() >= tokenData.expiresAt
+}
+
+// Check if token is near expiration (within 5 minutes)
+function isTokenNearExpiration(tokenData: TokenData): boolean {
+  if (!tokenData.expiresAt) return false
+  const fiveMinutes = 5 * 60 * 1000
+  return Date.now() >= tokenData.expiresAt - fiveMinutes
+}
+
+function loadTokenData(): null | TokenData {
+  return storage.get<null | TokenData>(STORAGE_KEYS.SPOTIFY_TOKEN_DATA, null)
 }
 
 // Async login helper
@@ -95,28 +99,12 @@ async function performLogin(signal: AbortSignal): Promise<void> {
   window.location.href = parsed.data.url
 }
 
-// Token validation helper
-async function validateTokenWithAPI(token: string, signal: AbortSignal): Promise<boolean> {
-  try {
-    const response = await fetch('/api/spotify/me', {
-      headers: {Authorization: `Bearer ${token}`},
-      signal,
-    })
-
-    if (response.status === 401) return false
-    return response.ok || true // Don't clear on non-401 errors
-  } catch (err) {
-    if (err instanceof Error && err.name === 'AbortError') throw err
-    return true // Don't clear on network errors
-  }
-}
-
 // Refresh token helper - calls server endpoint which reads HttpOnly cookie
-async function refreshTokenWithAPI(signal: AbortSignal): Promise<{access_token: string; expires_in: number} | null> {
+async function refreshTokenWithAPI(signal: AbortSignal): Promise<null | {access_token: string; expires_in: number}> {
   try {
     const response = await fetch('/api/spotify/refresh', {
-      method: 'POST',
       credentials: 'include', // Important: include cookies
+      method: 'POST',
       signal,
     })
 
@@ -139,15 +127,28 @@ async function refreshTokenWithAPI(signal: AbortSignal): Promise<{access_token: 
   }
 }
 
-// Check if token is near expiration (within 5 minutes)
-function isTokenNearExpiration(tokenData: TokenData): boolean {
-  if (!tokenData.expiresAt) return false
-  const fiveMinutes = 5 * 60 * 1000
-  return Date.now() >= tokenData.expiresAt - fiveMinutes
+function saveTokenData(tokenData: TokenData): void {
+  storage.set(STORAGE_KEYS.SPOTIFY_TOKEN_DATA, tokenData)
+}
+
+// Token validation helper
+async function validateTokenWithAPI(token: string, signal: AbortSignal): Promise<boolean> {
+  try {
+    const response = await fetch('/api/spotify/me', {
+      headers: {Authorization: `Bearer ${token}`},
+      signal,
+    })
+
+    if (response.status === 401) return false
+    return response.ok || true // Don't clear on non-401 errors
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') throw err
+    return true // Don't clear on network errors
+  }
 }
 
 // Proactive refresh timer
-let refreshTimer: ReturnType<typeof setTimeout> | null = null
+let refreshTimer: null | ReturnType<typeof setTimeout> = null
 
 function scheduleProactiveRefresh(expiresAt: number, refreshFn: () => Promise<boolean>): void {
   if (refreshTimer) {
@@ -181,25 +182,23 @@ let abortController: AbortController | null = null
 
 export const useAuthStore = create<AuthState>()(
   subscribeWithSelector((set, get) => ({
-    // Initial state
-    error: null,
-    isAuthenticated: initial.isAuthenticated,
-    isLoading: false,
-    isRefreshing: false,
-    isValidating: false,
-    token: initial.token,
-
     // Actions
     clearError: () => set({error: null}),
-
     clearToken: () => {
       if (refreshTimer) {
         clearTimeout(refreshTimer)
         refreshTimer = null
       }
       clearTokenData()
-      set({isAuthenticated: false, token: null, error: null})
+      set({error: null, isAuthenticated: false, token: null})
     },
+    // Initial state
+    error: null,
+    isAuthenticated: initial.isAuthenticated,
+    isLoading: false,
+    isRefreshing: false,
+
+    isValidating: false,
 
     login: () => {
       abortController?.abort()
@@ -244,7 +243,7 @@ export const useAuthStore = create<AuthState>()(
     },
 
     refreshToken: async () => {
-      const {isRefreshing, setToken, markTokenInvalid} = get()
+      const {isRefreshing, markTokenInvalid, setToken} = get()
 
       // Prevent concurrent refresh attempts
       if (isRefreshing) {
@@ -255,7 +254,7 @@ export const useAuthStore = create<AuthState>()(
       abortController?.abort()
       abortController = new AbortController()
 
-      set({isRefreshing: true, error: null})
+      set({error: null, isRefreshing: true})
 
       try {
         const result = await refreshTokenWithAPI(abortController.signal)
@@ -290,7 +289,7 @@ export const useAuthStore = create<AuthState>()(
         token,
       }
       saveTokenData(tokenData)
-      set({isAuthenticated: true, token, error: null})
+      set({error: null, isAuthenticated: true, token})
 
       // Schedule proactive refresh if we have expiration info
       if (expiresAt) {
@@ -300,8 +299,10 @@ export const useAuthStore = create<AuthState>()(
 
     setValidating: (isValidating) => set({isValidating}),
 
+    token: initial.token,
+
     validateToken: async () => {
-      const {token, refreshToken, markTokenInvalid, setError} = get()
+      const {markTokenInvalid, refreshToken, setError, token} = get()
       if (!token) return false
 
       const tokenData = loadTokenData()
@@ -321,7 +322,7 @@ export const useAuthStore = create<AuthState>()(
       abortController?.abort()
       abortController = new AbortController()
 
-      set({isValidating: true, error: null})
+      set({error: null, isValidating: true})
 
       try {
         const isValid = await validateTokenWithAPI(token, abortController.signal)

@@ -7,11 +7,20 @@
  *   await tracker.flush() // waits for all tracked promises to settle
  */
 export class PromiseTracker {
-  private pending = new Set<Promise<unknown>>()
-
   /** Number of currently tracked (unsettled) promises */
   get size(): number {
     return this.pending.size
+  }
+
+  private pending = new Set<Promise<unknown>>()
+
+  /**
+   * Wait for all currently tracked promises to settle.
+   * Uses Promise.allSettled so one rejection doesn't block others.
+   */
+  async flush(): Promise<void> {
+    if (this.pending.size === 0) return
+    await Promise.allSettled([...this.pending])
   }
 
   /**
@@ -28,14 +37,5 @@ export class PromiseTracker {
     promise.then(cleanup, cleanup)
 
     return promise
-  }
-
-  /**
-   * Wait for all currently tracked promises to settle.
-   * Uses Promise.allSettled so one rejection doesn't block others.
-   */
-  async flush(): Promise<void> {
-    if (this.pending.size === 0) return
-    await Promise.allSettled([...this.pending])
   }
 }

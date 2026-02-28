@@ -10,11 +10,14 @@ import {memo, useCallback, useRef, useState} from 'react'
 
 import {mixApiClient} from '../../lib/mix-api-client'
 import {useMixStore, usePlaybackStore} from '../../stores'
-
 import '../../styles/now-playing.css'
 
+interface NowPlayingProps {
+  token: null | string
+}
+
 interface QueueTrack {
-  albumArt: string | null
+  albumArt: null | string
   artistName: string
   duration: number
   name: string
@@ -22,12 +25,8 @@ interface QueueTrack {
 }
 
 interface SpotifyQueue {
-  currently_playing: QueueTrack | null
+  currently_playing: null | QueueTrack
   queue: QueueTrack[]
-}
-
-interface NowPlayingProps {
-  token: string | null
 }
 
 export const NowPlaying = memo(function NowPlaying({token}: NowPlayingProps) {
@@ -43,16 +42,16 @@ export const NowPlaying = memo(function NowPlaying({token}: NowPlayingProps) {
   // Mix store accessed via getState() in track change callback to avoid stale closures
 
   // Local state for queue panel
-  const [queue, setQueue] = useState<SpotifyQueue | null>(null)
+  const [queue, setQueue] = useState<null | SpotifyQueue>(null)
   const [showQueue, setShowQueue] = useState(false)
-  const [controlError, setControlError] = useState<string | null>(null)
+  const [controlError, setControlError] = useState<null | string>(null)
 
   // Refs
   const lastQueueFetchRef = useRef<number>(0)
   const showQueueRef = useRef(false)
   const hasConnectedRef = useRef(false)
   const trackChangeUnsubRef = useRef<(() => void) | null>(null)
-  const queueIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const queueIntervalRef = useRef<null | ReturnType<typeof setInterval>>(null)
   const prevShowQueueRef = useRef(false)
 
   // Connect to SSE stream when token available (component body, no useEffect)
@@ -106,20 +105,20 @@ export const NowPlaying = memo(function NowPlaying({token}: NowPlayingProps) {
       }
 
       const data = (await response.json()) as {
-        currently_playing?: {
-          album?: {images?: Array<{url: string}>}
-          artists?: Array<{name: string}>
+        currently_playing?: null | {
+          album?: {images?: {url: string}[]}
+          artists?: {name: string}[]
           duration_ms?: number
           name?: string
           uri?: string
-        } | null
-        queue?: Array<{
-          album?: {images?: Array<{url: string}>}
-          artists?: Array<{name: string}>
+        }
+        queue?: {
+          album?: {images?: {url: string}[]}
+          artists?: {name: string}[]
           duration_ms?: number
           name?: string
           uri?: string
-        }>
+        }[]
       }
 
       setQueue({

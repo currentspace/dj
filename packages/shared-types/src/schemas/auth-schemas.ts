@@ -29,6 +29,6 @@ export const TokenRefreshResponseSchema = z.object({
 
 // ===== Type Exports =====
 
-export type TokenData = z.infer<typeof TokenDataSchema>
 export type SpotifyAuthUrlResponse = z.infer<typeof SpotifyAuthUrlResponseSchema>
+export type TokenData = z.infer<typeof TokenDataSchema>
 export type TokenRefreshResponse = z.infer<typeof TokenRefreshResponseSchema>

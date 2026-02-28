@@ -22,7 +22,7 @@ export function AutoFillToggle({autoFill, onToggle}: AutoFillToggleProps) {
     setLocalAutoFill(newValue)
 
     try {
-      const tokenData = storage.get<{token: string; expiresAt: number | null} | null>(
+      const tokenData = storage.get<null | {expiresAt: null | number; token: string;}>(
         STORAGE_KEYS.SPOTIFY_TOKEN_DATA,
         null,
       )
@@ -33,12 +33,12 @@ export function AutoFillToggle({autoFill, onToggle}: AutoFillToggleProps) {
       }
 
       const response = await fetch('/api/mix/preferences', {
-        method: 'PATCH',
+        body: JSON.stringify({autoFill: newValue}),
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({autoFill: newValue}),
+        method: 'PATCH',
       })
 
       if (!response.ok) {

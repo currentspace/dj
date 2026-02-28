@@ -13,7 +13,7 @@
 
 import {useCallback, useRef} from 'react'
 
-import {usePlaybackStore, type ConnectionStatus, type PlaybackState} from '../stores'
+import {type ConnectionStatus, type PlaybackState, usePlaybackStore} from '../stores'
 
 export type {ConnectionStatus, PlaybackState}
 export type {PlaybackCore} from '../stores'
@@ -26,13 +26,13 @@ interface UsePlaybackStreamOptions {
 interface UsePlaybackStreamReturn {
   connect: () => void
   disconnect: () => void
-  error: string | null
-  playback: PlaybackState | null
+  error: null | string
+  playback: null | PlaybackState
   status: ConnectionStatus
 }
 
 export function usePlaybackStream(
-  token: string | null,
+  token: null | string,
   options: UsePlaybackStreamOptions = {}
 ): UsePlaybackStreamReturn {
   const {autoConnect = true, onTrackChange} = options
@@ -92,7 +92,7 @@ export function usePlaybackStream(
   }, [storeDisconnect])
 
   // Convert PlaybackCore to simplified PlaybackState for UI
-  const playback: PlaybackState | null = playbackCore
+  const playback: null | PlaybackState = playbackCore
     ? {
         albumArt: playbackCore.track?.albumArt ?? null,
         artistName: playbackCore.track?.artist ?? '',
