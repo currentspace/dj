@@ -11,6 +11,7 @@ import { z } from 'zod'
 import { AIService, createAIService } from '../lib/ai-service'
 import { buildVibeDescription, buildInitialSuggestionsPrompt, buildNextTrackPrompt, SYSTEM_PROMPTS } from '../lib/ai-prompts'
 import { safeParse } from '../lib/guards'
+import { scoreBpmCompatibility, scoreEnergyFlow } from './TransitionScorer'
 import { getLogger } from '../utils/LoggerContext'
 
 // =============================================================================
@@ -119,10 +120,24 @@ export class SuggestionEngine {
         return this.generateLastFmFallbackSuggestions(session, count)
       }
 
-      // Build prompt using vibe and recent history
+      // Build prompt using vibe, recent history, and taste model (Phase 4d)
       const vibeDescription = buildVibeDescription(vibe)
       const recentTracks = history.slice(-5).map(t => ({ name: t.name, artist: t.artist }))
-      const prompt = buildNextTrackPrompt(vibeDescription, recentTracks, count * 2)
+
+      // Extract taste context from taste model if available
+      let tasteContext: { likedGenres: string[]; dislikedGenres: string[]; skippedArtists: string[] } | undefined
+      if (session.tasteModel) {
+        const likedGenres = Object.entries(session.tasteModel.genreWeights)
+          .filter(([_, w]) => w > 0.2).map(([g]) => g)
+        const dislikedGenres = Object.entries(session.tasteModel.genreWeights)
+          .filter(([_, w]) => w < -0.2).map(([g]) => g)
+        const skippedArtists = session.tasteModel.skipPatterns.slice(-5)
+        if (likedGenres.length > 0 || dislikedGenres.length > 0 || skippedArtists.length > 0) {
+          tasteContext = { likedGenres, dislikedGenres, skippedArtists }
+        }
+      }
+
+      const prompt = buildNextTrackPrompt(vibeDescription, recentTracks, count * 2, tasteContext)
 
       getLogger()?.info('[SuggestionEngine] Asking AI for context-aware track suggestions...', {
         enableThinking: this.enableThinking,
@@ -380,27 +395,19 @@ export class SuggestionEngine {
 
   /**
    * Score transition quality between two tracks (0-100)
+   * Uses TransitionScorer for BPM + energy-aware scoring.
    */
   scoreTransition(
     fromTrack: PlayedTrack,
-    toTrack: { bpm: number | null; energy: number | null }
+    toTrack: { bpm: number | null; energy: number | null },
+    targetEnergy?: number,
   ): number {
-    // If either track lacks BPM, return neutral score
-    if (!fromTrack.bpm || !toTrack.bpm) {
-      return 50
-    }
+    const bpmScore = scoreBpmCompatibility(fromTrack.bpm, toTrack.bpm)
+    const energyTarget = targetEnergy ?? 0.5
+    const energyScore = scoreEnergyFlow(toTrack.energy ?? 0.5, energyTarget)
 
-    const bpmDiff = Math.abs(fromTrack.bpm - toTrack.bpm)
-
-    if (bpmDiff < 5) {
-      return 100
-    } else if (bpmDiff < 10) {
-      return 80
-    } else if (bpmDiff < 20) {
-      return 60
-    } else {
-      return 30
-    }
+    // Weighted: 60% BPM, 40% energy
+    return Math.round((bpmScore * 0.6 + energyScore * 0.4) * 100)
   }
 
   /**

@@ -5,6 +5,7 @@
 
 import { randomUUID } from 'node:crypto'
 import type {
+  ListenerSignal,
   MixSession,
   PlayedTrack,
   QueuedTrack,
@@ -361,6 +362,42 @@ export class MixSessionService {
     }
 
     return 'steady'
+  }
+
+  /**
+   * Update taste model from a listener signal.
+   * Completed tracks boost genre/artist weights, skips penalize them.
+   */
+  updateTasteFromSignal(session: MixSession, signal: ListenerSignal, trackArtist: string): void {
+    if (!session.tasteModel) {
+      session.tasteModel = {
+        genreWeights: {},
+        energyPreference: 0.5,
+        bpmPreference: [80, 140],
+        artistAffinities: {},
+        skipPatterns: [],
+        updatedAt: Date.now(),
+      }
+    }
+
+    const weight = signal.type === 'completed' ? 0.1 : signal.type === 'skipped' ? -0.2 : 0
+    if (weight === 0) return
+
+    // Update artist affinity
+    const currentAffinity = session.tasteModel.artistAffinities[trackArtist] ?? 0
+    session.tasteModel.artistAffinities[trackArtist] = Math.max(-1, Math.min(1, currentAffinity + weight))
+
+    // Track skip patterns
+    if (signal.type === 'skipped') {
+      if (!session.tasteModel.skipPatterns.includes(trackArtist)) {
+        session.tasteModel.skipPatterns.push(trackArtist)
+        if (session.tasteModel.skipPatterns.length > 20) {
+          session.tasteModel.skipPatterns = session.tasteModel.skipPatterns.slice(-20)
+        }
+      }
+    }
+
+    session.tasteModel.updatedAt = Date.now()
   }
 
   /**

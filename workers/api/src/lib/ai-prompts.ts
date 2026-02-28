@@ -76,11 +76,29 @@ Do NOT include markdown code blocks, only the raw JSON.`
 export function buildNextTrackPrompt(
   vibeDescription: string,
   recentTracks: Array<{ name: string; artist: string }>,
-  count: number
+  count: number,
+  tasteContext?: { likedGenres: string[]; dislikedGenres: string[]; skippedArtists: string[] },
 ): string {
   const recentList = recentTracks
     .map((t, i) => `${i + 1}. "${t.name}" by ${t.artist}`)
     .join('\n')
+
+  let tasteSection = ''
+  if (tasteContext) {
+    const parts: string[] = []
+    if (tasteContext.likedGenres.length > 0) {
+      parts.push(`The listener has been enjoying: ${tasteContext.likedGenres.join(', ')}`)
+    }
+    if (tasteContext.dislikedGenres.length > 0) {
+      parts.push(`Avoid tracks with these vibes: ${tasteContext.dislikedGenres.join(', ')}`)
+    }
+    if (tasteContext.skippedArtists.length > 0) {
+      parts.push(`These artists were recently skipped: ${tasteContext.skippedArtists.join(', ')}`)
+    }
+    if (parts.length > 0) {
+      tasteSection = `\n\nLISTENER FEEDBACK:\n${parts.join('\n')}`
+    }
+  }
 
   return `You are an expert DJ planning the next tracks in a mix. Based on the vibe and recent history, suggest ${count} tracks that would flow well next.
 
@@ -88,7 +106,7 @@ VIBE PROFILE:
 ${vibeDescription}
 
 RECENTLY PLAYED (most recent first):
-${recentList}
+${recentList}${tasteSection}
 
 GUIDELINES:
 - Maintain energy flow based on the energyDirection (${recentTracks.length > 0 ? 'building up, staying steady, or winding down' : 'starting the set'})

@@ -13,6 +13,7 @@ import type { OpenAPIHono } from '@hono/zod-openapi'
 import type {
   ContextType,
   DeviceType,
+  ListenerSignal,
   PlaybackContext,
   PlaybackContextEvent,
   PlaybackDevice,
@@ -31,6 +32,8 @@ import { z } from 'zod'
 
 import type { Env } from '../index'
 import { isSuccessResponse, safeParse } from '../lib/guards'
+import { AudioEnrichmentService } from '../services/AudioEnrichmentService'
+import { MixSessionService } from '../services/MixSessionService'
 import { getLogger } from '../utils/LoggerContext'
 
 // =============================================================================
@@ -231,6 +234,151 @@ function contextChanged(prev: PlaybackContext | null, curr: PlaybackContext | nu
 }
 
 // =============================================================================
+// SERVER-SIDE TRACK TRANSITION HANDLING
+// =============================================================================
+
+const QUEUE_LOW_THRESHOLD = 3
+const QUEUE_CHECK_INTERVAL = 10 // Check queue every N polls
+const MAX_SIGNALS = 50
+
+/**
+ * Classify a listener signal based on how much of the track was heard.
+ */
+function classifySignal(listenDurationMs: number, trackDurationMs: number): 'completed' | 'skipped' | 'partial' {
+  if (trackDurationMs <= 0) return 'partial'
+  const ratio = listenDurationMs / trackDurationMs
+  if (ratio >= 0.8) return 'completed'
+  if (listenDurationMs < 30000) return 'skipped'
+  return 'partial'
+}
+
+/**
+ * Handle a track transition server-side. This is the "DJ brain" —
+ * it processes track completions, updates the session, and triggers
+ * background queue refill without depending on the frontend.
+ *
+ * Runs inside waitUntil() so it never blocks the SSE poll loop.
+ */
+async function handleTrackTransition(
+  env: Env,
+  token: string,
+  prevTrack: PlaybackTrack,
+  trackStartTimestamp: number,
+): Promise<void> {
+  const logger = getLogger()
+
+  if (!env.MIX_SESSIONS) return
+
+  try {
+    // Get user ID from Spotify
+    const userResponse = await fetch('https://api.spotify.com/v1/me', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (!userResponse.ok) return
+    const userData = await userResponse.json() as { id?: string }
+    const userId = userData.id
+    if (!userId) return
+
+    const sessionService = new MixSessionService(env.MIX_SESSIONS)
+    const session = await sessionService.getSession(userId)
+    if (!session) return // No mix session, skip
+
+    // Check if track is still in queue (hasn't been processed already by frontend)
+    const queuedTrack = session.queue.find(
+      t => t.trackId === prevTrack.id || t.trackUri === prevTrack.uri
+    )
+
+    // Calculate listen duration and classify signal
+    const listenDurationMs = Date.now() - trackStartTimestamp
+    const signalType = classifySignal(listenDurationMs, prevTrack.duration)
+
+    // Store listener signal
+    const signal: ListenerSignal = {
+      trackId: prevTrack.id,
+      type: signalType,
+      listenDuration: listenDurationMs,
+      trackDuration: prevTrack.duration,
+      timestamp: Date.now(),
+    }
+    session.signals.push(signal)
+    if (session.signals.length > MAX_SIGNALS) {
+      session.signals = session.signals.slice(-MAX_SIGNALS)
+    }
+
+    if (queuedTrack) {
+      // Move from queue to history
+      sessionService.removeFromQueue(session, queuedTrack.position)
+
+      // Enrich with BPM if possible
+      let bpm: number | null = null
+      if (env.AUDIO_FEATURES_CACHE) {
+        try {
+          const audioService = new AudioEnrichmentService(env.AUDIO_FEATURES_CACHE)
+          const enrichment = await audioService.enrichTrack({
+            id: prevTrack.id,
+            name: prevTrack.name,
+            artists: [{ name: prevTrack.artist }],
+            duration_ms: prevTrack.duration,
+          })
+          if (enrichment) bpm = enrichment.bpm ?? null
+        } catch {
+          // Non-fatal
+        }
+      }
+
+      const playedTrack = {
+        trackId: prevTrack.id,
+        trackUri: prevTrack.uri,
+        name: prevTrack.name,
+        artist: prevTrack.artist,
+        albumArt: prevTrack.albumArt ?? undefined,
+        playedAt: new Date().toISOString(),
+        bpm,
+        energy: null as number | null,
+      }
+
+      sessionService.addToHistory(session, playedTrack)
+      sessionService.updateVibeFromTrack(session, playedTrack)
+
+      logger?.info('[PlayerStream] Server-side track transition processed', {
+        trackId: prevTrack.id,
+        signal: signalType,
+        queueRemaining: session.queue.length,
+      })
+    }
+
+    // Update taste model from signal (Phase 4)
+    if (session.tasteModel || signalType !== 'partial') {
+      sessionService.updateTasteFromSignal(session, signal, prevTrack.artist)
+    }
+
+    // Save session
+    await sessionService.updateSession(session)
+
+    // Phase 4c: Check for consecutive skips → clear queue and force refill
+    const recentSignals = session.signals.slice(-5)
+    let consecutiveSkips = 0
+    for (let i = recentSignals.length - 1; i >= 0; i--) {
+      if (recentSignals[i].type === 'skipped') consecutiveSkips++
+      else break
+    }
+
+    if (consecutiveSkips >= 3 && session.queue.length > 0) {
+      logger?.info('[PlayerStream] 3+ consecutive skips detected, clearing queue for replan', {
+        consecutiveSkips,
+        queueLength: session.queue.length,
+      })
+      session.queue = []
+      await sessionService.updateSession(session)
+      // Queue refill will happen via the periodic queue check or frontend request
+    }
+  } catch (error) {
+    logger?.error('[PlayerStream] handleTrackTransition error:', error)
+    // Never throw — this runs in waitUntil
+  }
+}
+
+// =============================================================================
 // SSE WRITER
 // =============================================================================
 
@@ -267,6 +415,8 @@ export function registerPlayerStreamRoute(app: OpenAPIHono<{ Bindings: Env }>) {
     let consecutiveErrors = 0
     let isStreamClosed = false
     let isIdle = false
+    let trackStartTimestamp = Date.now()
+    let pollCount = 0
 
     // Custom error for auth expiration
     class AuthExpiredError extends Error {
@@ -333,6 +483,16 @@ export function registerPlayerStreamRoute(app: OpenAPIHono<{ Bindings: Env }>) {
           // Entered idle state
           writeSSE(writer, 'idle', { seq: seq++ })
         }
+
+        // Server-side track transition processing (Phase 1a)
+        // Run in background — never block the SSE poll loop
+        if (prev.track) {
+          c.executionCtx.waitUntil(
+            handleTrackTransition(c.env, token!, prev.track, trackStartTimestamp)
+          )
+        }
+        // Reset track start time for the new track
+        trackStartTimestamp = Date.now()
       }
 
       // Play/pause change
@@ -412,6 +572,33 @@ export function registerPlayerStreamRoute(app: OpenAPIHono<{ Bindings: Env }>) {
         }
 
         prevState = curr
+        pollCount++
+
+        // Periodic queue health check (Phase 1c) — every QUEUE_CHECK_INTERVAL polls (~10 seconds)
+        if (pollCount % QUEUE_CHECK_INTERVAL === 0 && c.env.MIX_SESSIONS) {
+          c.executionCtx.waitUntil((async () => {
+            try {
+              const sessionService = new MixSessionService(c.env.MIX_SESSIONS!)
+              // Derive userId from token (lightweight — cached by Spotify)
+              const userResp = await fetch('https://api.spotify.com/v1/me', {
+                headers: { Authorization: `Bearer ${token}` },
+              })
+              if (!userResp.ok) return
+              const user = await userResp.json() as { id?: string }
+              if (!user.id) return
+
+              const session = await sessionService.getSession(user.id)
+              if (!session) return
+
+              if (session.queue.length < QUEUE_LOW_THRESHOLD && session.preferences.autoFill) {
+                writeSSE(writer, 'queue_low', { depth: session.queue.length, seq: seq++ })
+                logger?.info('[PlayerStream] Queue low detected', { depth: session.queue.length })
+              }
+            } catch {
+              // Non-fatal — queue check is best-effort
+            }
+          })())
+        }
       } catch (err) {
         // Handle auth expiration specifically - send auth_expired and close stream
         if (err instanceof AuthExpiredError) {
