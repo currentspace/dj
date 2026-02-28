@@ -26,7 +26,7 @@ export function BuildInfo() {
   if (!hasLoadedRef.current) {
     hasLoadedRef.current = true
     // Try to load actual build info
-    import('../build-info.json')
+    import('../../build-info.json')
       .then(module => setBuildInfo(module.default as BuildInfoData))
       .catch(() => {
         console.log('Using default build info (dev mode)')

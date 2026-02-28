@@ -1,6 +1,6 @@
 import type {Suggestion} from '@dj/shared-types'
 
-import sharedStyles from './mix-shared.module.css'
+import sharedStyles from '../templates/mix-shared.module.css'
 import styles from './suggestions-panel.module.css'
 
 interface SuggestionsPanelProps {

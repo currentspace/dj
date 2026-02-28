@@ -1,6 +1,6 @@
 import {memo} from 'react'
 
-import '../styles/error-display.css'
+import '../../styles/error-display.css'
 
 export interface ErrorDisplayProps {
   error: null | string

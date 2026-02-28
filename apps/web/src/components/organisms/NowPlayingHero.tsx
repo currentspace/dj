@@ -3,8 +3,8 @@ import type {PlayedTrack, QueuedTrack} from '@dj/shared-types'
 import type {PlaybackState} from '../../hooks/usePlaybackStream'
 import {useDevice} from '../../stores'
 
-import {DevicePicker} from './DevicePicker'
-import {PlaybackControls} from './PlaybackControls'
+import {DevicePicker} from '../molecules/DevicePicker'
+import {PlaybackControls} from '../molecules/PlaybackControls'
 import styles from './now-playing-hero.module.css'
 
 interface NowPlayingHeroProps {

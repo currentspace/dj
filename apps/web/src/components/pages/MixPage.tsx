@@ -2,13 +2,13 @@ import type {SessionPreferences} from '@dj/shared-types'
 
 import {useState} from 'react'
 
-import {ErrorDisplay} from '../components/ErrorDisplay'
-import {MixInterface} from '../features/mix'
-import {SteerProgress} from '../features/mix/SteerProgress'
-import {useError} from '../hooks/useError'
-import {useMixSession} from '../hooks/useMixSession'
-import {mixApiClient} from '../lib/mix-api-client'
-import {useMixStore} from '../stores'
+import {ErrorDisplay} from '../atoms/ErrorDisplay'
+import {SteerProgress} from '../molecules/SteerProgress'
+import {MixLayout} from '../templates/MixLayout'
+import {useError} from '../../hooks/useError'
+import {useMixSession} from '../../hooks/useMixSession'
+import {mixApiClient} from '../../lib/mix-api-client'
+import {useMixStore} from '../../stores'
 
 interface MixPageProps {
   onBackToChat: () => void
@@ -175,7 +175,7 @@ export function MixPage({onBackToChat, seedPlaylistId, token}: MixPageProps) {
         </div>
       </div>
 
-      <MixInterface
+      <MixLayout
         onEnergyChange={handleEnergyChange}
         onRemoveFromQueue={removeFromQueue}
         onReorderQueue={reorderQueue}

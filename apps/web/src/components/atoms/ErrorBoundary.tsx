@@ -1,6 +1,6 @@
 import {Component, type ErrorInfo, type ReactNode} from 'react'
 
-import {storage, STORAGE_KEYS} from '../hooks/useLocalStorage'
+import {storage, STORAGE_KEYS} from '../../hooks/useLocalStorage'
 
 interface Props {
   children: ReactNode

@@ -4,14 +4,14 @@ import {useCallback, useTransition} from 'react'
 import {usePlaybackStream} from '../../hooks/usePlaybackStream'
 import {useMixStore} from '../../stores'
 
-import {AutoFillToggle} from './AutoFillToggle'
-import {NowPlayingHero} from './NowPlayingHero'
-import {QueuePanel} from './QueuePanel'
-import {SuggestionsPanel} from './SuggestionsPanel'
-import {VibeControls} from './VibeControls'
+import {AutoFillToggle} from '../atoms/AutoFillToggle'
+import {NowPlayingHero} from '../organisms/NowPlayingHero'
+import {QueuePanel} from '../organisms/QueuePanel'
+import {SuggestionsPanel} from '../organisms/SuggestionsPanel'
+import {VibeControls} from '../organisms/VibeControls'
 import styles from './mix-shared.module.css'
 
-interface MixInterfaceProps {
+interface MixLayoutProps {
   onEnergyChange?: (level: number) => void
   onRemoveFromQueue?: (position: number) => void
   onReorderQueue?: (from: number, to: number) => void
@@ -23,7 +23,7 @@ interface MixInterfaceProps {
   token?: string | null
 }
 
-export function MixInterface({
+export function MixLayout({
   session,
   token,
   onRemoveFromQueue,
@@ -31,7 +31,7 @@ export function MixInterface({
   onEnergyChange,
   onSteerVibe,
   onTrackPlayed,
-}: MixInterfaceProps) {
+}: MixLayoutProps) {
   const [_isPending, startTransition] = useTransition()
 
   // Get suggestions from store (server handles queue auto-fill)
