@@ -5,10 +5,12 @@
 
 import type {SpotifyPlaylist} from '@dj/shared-types'
 
+import {QueryClientProvider} from '@tanstack/react-query'
 import {render, type RenderOptions} from '@testing-library/react'
 import {type ReactElement, type ReactNode} from 'react'
 import {type Mock, vi} from 'vitest'
 
+import {createTestQueryClient} from './query-wrapper'
 import {buildPlaylist, mockUserProfile} from './spotify-mocks'
 import {
   createMockSSEResponse,
@@ -315,9 +317,15 @@ export function renderWithAuth(ui: ReactElement, options?: RenderWithAuthOptions
     mockSpotifyAPI('/me', mockUserProfile())
   }
 
-  // Create wrapper (can be extended with providers)
+  const testQueryClient = createTestQueryClient()
+
+  // Create wrapper with QueryClientProvider
   function Wrapper({children}: TestWrapperProps) {
-    return <>{children}</>
+    return (
+      <QueryClientProvider client={testQueryClient}>
+        {children}
+      </QueryClientProvider>
+    )
   }
 
   return render(ui, {wrapper: Wrapper, ...renderOptions})
@@ -352,8 +360,14 @@ export function renderWithPlaylist(ui: ReactElement, options?: RenderWithPlaylis
  * Custom render function for React components (basic wrapper)
  */
 export function renderWithProviders(ui: ReactElement, options?: Omit<RenderOptions, 'wrapper'>) {
+  const testQueryClient = createTestQueryClient()
+
   function Wrapper({children}: TestWrapperProps) {
-    return <>{children}</>
+    return (
+      <QueryClientProvider client={testQueryClient}>
+        {children}
+      </QueryClientProvider>
+    )
   }
 
   return render(ui, {wrapper: Wrapper, ...options})

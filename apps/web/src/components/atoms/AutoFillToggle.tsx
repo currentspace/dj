@@ -1,6 +1,6 @@
-import {useCallback, useState} from 'react'
+import {useState} from 'react'
 
-import {storage, STORAGE_KEYS} from '../../hooks/useLocalStorage'
+import {useAutoFillMutation} from '../../hooks/queries'
 
 interface AutoFillToggleProps {
   autoFill: boolean
@@ -8,52 +8,23 @@ interface AutoFillToggleProps {
 }
 
 export function AutoFillToggle({autoFill, onToggle}: AutoFillToggleProps) {
-  const [isLoading, setIsLoading] = useState(false)
+  const mutation = useAutoFillMutation(onToggle)
   const [localAutoFill, setLocalAutoFill] = useState(autoFill)
 
   // Sync local state with prop
-  if (autoFill !== localAutoFill && !isLoading) {
+  if (autoFill !== localAutoFill && !mutation.isPending) {
     setLocalAutoFill(autoFill)
   }
 
-  const handleToggle = useCallback(async () => {
+  const handleToggle = () => {
     const newValue = !localAutoFill
-    setIsLoading(true)
     setLocalAutoFill(newValue)
-
-    try {
-      const tokenData = storage.get<null | {expiresAt: null | number; token: string;}>(
-        STORAGE_KEYS.SPOTIFY_TOKEN_DATA,
-        null,
-      )
-      const token = tokenData?.token
-
-      if (!token) {
-        throw new Error('No auth token')
-      }
-
-      const response = await fetch('/api/mix/preferences', {
-        body: JSON.stringify({autoFill: newValue}),
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        method: 'PATCH',
-      })
-
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({error: 'Request failed'}))
-        throw new Error(error.error ?? 'Failed to update preferences')
-      }
-
-      onToggle?.(newValue)
-    } catch (error) {
-      console.error('[AutoFillToggle] Error:', error)
-      setLocalAutoFill(!newValue)
-    } finally {
-      setIsLoading(false)
-    }
-  }, [localAutoFill, onToggle])
+    mutation.mutate(newValue, {
+      onError: () => {
+        setLocalAutoFill(!newValue)
+      },
+    })
+  }
 
   return (
     <div className="flex items-center gap-3">
@@ -66,7 +37,7 @@ export function AutoFillToggle({autoFill, onToggle}: AutoFillToggleProps) {
             ? 'border-spotify-green bg-spotify-green/15'
             : 'border-white/20 bg-black/30 hover:border-white/40 hover:bg-black/40'
         }`}
-        disabled={isLoading}
+        disabled={mutation.isPending}
         onClick={handleToggle}
         title={localAutoFill ? 'Auto (AI fills queue)' : 'Manual (you control queue)'}
         type="button"

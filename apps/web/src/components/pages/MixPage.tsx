@@ -2,10 +2,11 @@ import type {SessionPreferences} from '@dj/shared-types'
 
 import {useState} from 'react'
 
+import {useMixSuggestionsQuery, useSetEnergyLevelMutation} from '../../hooks/queries'
 import {useError} from '../../hooks/useError'
 import {useMixSession} from '../../hooks/useMixSession'
 import {mixApiClient} from '../../lib/mix-api-client'
-import {useMixStore} from '../../stores'
+import {useMixSteerStore} from '../../stores'
 import {ErrorDisplay} from '../atoms/ErrorDisplay'
 import {SteerProgress} from '../molecules/SteerProgress'
 import {MixLayout} from '../templates/MixLayout'
@@ -23,7 +24,7 @@ export function MixPage({onBackToChat, seedPlaylistId, token}: MixPageProps) {
   // Local error state for action-specific errors
   const {clearError: clearLocalError, error: localError, handleError} = useError()
 
-  // Mix session from store
+  // Mix session from react-query facade
   const {
     clearError: clearSessionError,
     endSession,
@@ -36,23 +37,21 @@ export function MixPage({onBackToChat, seedPlaylistId, token}: MixPageProps) {
     startSession,
   } = useMixSession()
 
-  // Suggestions from store (atomic selectors)
-  const suggestionsError = useMixStore((s) => s.suggestionsError)
-  const suggestionsLoading = useMixStore((s) => s.suggestionsLoading)
-  const refreshSuggestions = useMixStore((s) => s.refreshSuggestions)
-  const clearSuggestionsError = useMixStore((s) => s.clearSuggestionsError)
+  // Suggestions from react-query
+  const {data: _suggestions, error: suggestionsQueryError, isLoading: suggestionsLoading, refetch: refetchSuggestions} = useMixSuggestionsQuery(!!session)
+  const suggestionsError = suggestionsQueryError?.message ?? null
 
-  // Vibe controls from store (atomic selectors)
-  const vibeError = useMixStore((s) => s.vibeError)
-  const setEnergyLevel = useMixStore((s) => s.setEnergyLevel)
-  const steerVibeStream = useMixStore((s) => s.steerVibeStream)
-  const clearVibeError = useMixStore((s) => s.clearVibeError)
+  // Vibe/steer from Zustand store (SSE streaming state)
+  const vibeError = useMixSteerStore((s) => s.vibeError)
+  const steerVibeStream = useMixSteerStore((s) => s.steerVibeStream)
 
-  // Steer progress state (atomic selectors)
-  const steerInProgress = useMixStore((s) => s.steerInProgress)
-  const steerDirection = useMixStore((s) => s.steerDirection)
-  const steerEvents = useMixStore((s) => s.steerEvents)
-  const clearSteerProgress = useMixStore((s) => s.clearSteerProgress)
+  const energyLevelMutation = useSetEnergyLevelMutation()
+
+  // Steer progress state
+  const steerInProgress = useMixSteerStore((s) => s.steerInProgress)
+  const steerDirection = useMixSteerStore((s) => s.steerDirection)
+  const steerEvents = useMixSteerStore((s) => s.steerEvents)
+  const clearSteerProgress = useMixSteerStore((s) => s.clearSteerProgress)
 
   // Direct state sync: hide start dialog when existing session is detected
   if (session && showStartDialog) {
@@ -94,7 +93,7 @@ export function MixPage({onBackToChat, seedPlaylistId, token}: MixPageProps) {
         // Update session directly from the API response (no polling needed)
         setSession(response.session)
         // Refresh suggestions for the new track
-        await refreshSuggestions()
+        await refetchSuggestions()
       }
     } catch (err) {
       // Non-fatal error - just log
@@ -107,7 +106,7 @@ export function MixPage({onBackToChat, seedPlaylistId, token}: MixPageProps) {
       // Use streaming steer for better UX with progress feedback
       await steerVibeStream(direction)
       // Refresh suggestions after vibe change (streaming already updates queue)
-      await refreshSuggestions()
+      await refetchSuggestions()
     } catch (err) {
       handleError(err, 'Failed to adjust vibe')
     }
@@ -117,16 +116,13 @@ export function MixPage({onBackToChat, seedPlaylistId, token}: MixPageProps) {
   const steerIsComplete = steerEvents.some((e) => e.type === 'done' || e.type === 'error')
 
   const handleEnergyChange = (level: number) => {
-    // setEnergyLevel is already debounced and handles async internally
-    setEnergyLevel(level)
-    // Suggestions will auto-refresh via useSuggestions hook
+    energyLevelMutation.mutate(level)
   }
 
   // Clear all errors
   const clearAllErrors = () => {
     clearSessionError()
-    clearSuggestionsError()
-    clearVibeError()
+    useMixSteerStore.setState({vibeError: null})
     clearLocalError()
   }
 

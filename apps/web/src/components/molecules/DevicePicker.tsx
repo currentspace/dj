@@ -4,6 +4,7 @@
 
 import {useCallback, useState} from 'react'
 
+import {useDevicesQuery, useTransferPlaybackMutation} from '../../hooks/queries'
 import styles from './device-picker.module.css'
 
 interface DevicePickerProps {
@@ -17,88 +18,32 @@ interface DevicePickerProps {
   token: null | string
 }
 
-interface SpotifyDevice {
-  id: string
-  is_active: boolean
-  is_private_session: boolean
-  is_restricted: boolean
-  name: string
-  type: string
-  volume_percent: null | number
-}
-
 export function DevicePicker({
   currentDeviceId,
   currentDeviceName,
   onDeviceSelect,
   token,
 }: DevicePickerProps) {
-  const [devices, setDevices] = useState<SpotifyDevice[]>([])
   const [isOpen, setIsOpen] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<null | string>(null)
 
-  const fetchDevices = useCallback(async () => {
-    if (!token) return
-
-    setIsLoading(true)
-    setError(null)
-
-    try {
-      const response = await fetch('/api/player/devices', {
-        headers: {Authorization: `Bearer ${token}`},
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch devices')
-      }
-
-      const data = (await response.json()) as {devices: SpotifyDevice[]}
-      setDevices(data.devices || [])
-    } catch (err) {
-      console.error('[DevicePicker] Fetch error:', err)
-      setError('Could not load devices')
-    } finally {
-      setIsLoading(false)
-    }
-  }, [token])
+  const {data: devices = [], error, isLoading} = useDevicesQuery(token, isOpen)
+  const transferMutation = useTransferPlaybackMutation(token)
 
   const handleToggle = useCallback(() => {
-    if (!isOpen) {
-      fetchDevices()
-    }
     setIsOpen(!isOpen)
-  }, [isOpen, fetchDevices])
+  }, [isOpen])
 
   const handleDeviceSelect = useCallback(
     async (deviceId: string) => {
-      if (!token) return
-
-      setIsLoading(true)
       try {
-        const response = await fetch('/api/player/device', {
-          body: JSON.stringify({device_id: deviceId, play: true}),
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          method: 'PUT',
-        })
-
-        if (!response.ok) {
-          throw new Error('Failed to transfer playback')
-        }
-
+        await transferMutation.mutateAsync(deviceId)
         onDeviceSelect?.(deviceId)
         setIsOpen(false)
       } catch (err) {
         console.error('[DevicePicker] Transfer error:', err)
-        setError('Could not switch device')
-      } finally {
-        setIsLoading(false)
       }
     },
-    [token, onDeviceSelect]
+    [transferMutation, onDeviceSelect]
   )
 
   const getDeviceIcon = (type: string): string => {
@@ -129,6 +74,9 @@ export function DevicePicker({
     }
   }
 
+  const combinedLoading = isLoading || transferMutation.isPending
+  const combinedError = error?.message ?? (transferMutation.error?.message ? 'Could not switch device' : null)
+
   return (
     <div className={styles.devicePicker}>
       <button
@@ -147,10 +95,10 @@ export function DevicePicker({
 
       {isOpen && (
         <div className={styles.deviceDropdown}>
-          {isLoading ? (
+          {combinedLoading ? (
             <div className={styles.deviceLoading}>Loading devices...</div>
-          ) : error ? (
-            <div className={styles.deviceError}>{error}</div>
+          ) : combinedError ? (
+            <div className={styles.deviceError}>{combinedError}</div>
           ) : devices.length === 0 ? (
             <div className={styles.deviceEmpty}>
               <p>No devices found</p>

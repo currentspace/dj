@@ -5,8 +5,9 @@
 
 import type {SpotifyPlaylist} from '@dj/shared-types'
 
-import {useCallback, useRef, useState} from 'react'
+import {useCallback} from 'react'
 
+import {usePlaylistsQuery} from '../../hooks/queries'
 import {useSpotifyAuth} from '../../hooks/useSpotifyAuth'
 import styles from './DJPage.module.css'
 
@@ -17,30 +18,7 @@ interface PlaylistPickerProps {
 
 export function PlaylistPicker({onSelect, selected}: PlaylistPickerProps) {
   const {token} = useSpotifyAuth()
-  const [playlists, setPlaylists] = useState<SpotifyPlaylist[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<null | string>(null)
-  const hasLoadedRef = useRef<boolean | null>(null)
-
-  // Load playlists once (component body, no useEffect)
-  /* eslint-disable react-hooks/refs -- intentional: one-time fetch initialization in hook body per React 19 project guidelines (no useEffect) */
-  if (token && hasLoadedRef.current === null) {
-    hasLoadedRef.current = true
-    fetch('/api/spotify/playlists', {
-      headers: {Authorization: `Bearer ${token}`},
-    })
-      .then(async (res) => {
-        if (!res.ok) throw new Error('Failed to load playlists')
-        const data = (await res.json()) as {items?: SpotifyPlaylist[]}
-        setPlaylists(data.items ?? [])
-        setLoading(false)
-      })
-      .catch((err) => {
-        setError(err instanceof Error ? err.message : 'Failed to load')
-        setLoading(false)
-      })
-  }
-  /* eslint-enable react-hooks/refs */
+  const {data: playlists = [], error, isLoading} = usePlaylistsQuery(token)
 
   const handleSelect = useCallback(
     (playlist: SpotifyPlaylist) => {
@@ -49,7 +27,7 @@ export function PlaylistPicker({onSelect, selected}: PlaylistPickerProps) {
     [onSelect],
   )
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className={styles.pickerLoading}>Loading your playlists...</div>
     )
@@ -57,7 +35,7 @@ export function PlaylistPicker({onSelect, selected}: PlaylistPickerProps) {
 
   if (error) {
     return (
-      <div className={styles.pickerError}>{error}</div>
+      <div className={styles.pickerError}>{error.message}</div>
     )
   }
 

@@ -1,69 +1,10 @@
-import {useCallback, useRef, useState} from 'react'
-
-import {storage, STORAGE_KEYS} from '../../hooks/useLocalStorage'
+import {useScopeDebugQuery} from '../../hooks/queries'
 import '../../styles/scope-debugger.css'
 
-interface ScopeDebugData {
-  required_scopes: string[]
-  scope_tests: {
-    'playlist-read-private': boolean
-    'user-read-private': boolean
-  }
-  token_info: {
-    country: string
-    display_name: string
-    email: string
-    product: string
-    user_id: string
-  }
-}
-
 export function ScopeDebugger() {
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<null | string>(null)
-  const [data, setData] = useState<null | ScopeDebugData>(null)
-  const hasInitialFetchRef = useRef(false)
+  const {data, error, isLoading, refetch} = useScopeDebugQuery()
 
-  const fetchScopeDebugInfo = useCallback(async () => {
-    try {
-      setLoading(true)
-      setError(null)
-
-      const tokenData = storage.get<null | {expiresAt: null | number; token: string}>(
-        STORAGE_KEYS.SPOTIFY_TOKEN_DATA,
-        null,
-      )
-      if (!tokenData?.token) {
-        throw new Error('No Spotify token found')
-      }
-      const token = tokenData.token
-
-      const response = await fetch('/api/spotify/debug/scopes', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch scope debug info: ${response.status} ${response.statusText}`)
-      }
-
-      const result = (await response.json()) as ScopeDebugData
-      setData(result)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error')
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  // Direct state sync: fetch on first render
-  if (!hasInitialFetchRef.current) {
-    hasInitialFetchRef.current = true
-    fetchScopeDebugInfo()
-  }
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="scope-debugger">
         <h2>Scope Debugger</h2>
@@ -77,8 +18,8 @@ export function ScopeDebugger() {
       <div className="scope-debugger">
         <h2>Scope Debugger</h2>
         <div className="error">
-          <p>Error: {error}</p>
-          <button className="retry-button" onClick={fetchScopeDebugInfo}>
+          <p>Error: {error.message}</p>
+          <button className="retry-button" onClick={() => refetch()}>
             Retry
           </button>
         </div>
@@ -148,7 +89,7 @@ export function ScopeDebugger() {
         </div>
       </section>
 
-      <button className="refresh-button" onClick={fetchScopeDebugInfo}>
+      <button className="refresh-button" onClick={() => refetch()}>
         Refresh
       </button>
     </div>

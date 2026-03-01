@@ -2,8 +2,8 @@ import type {MixSession, PlayedTrack, QueuedTrack, VibeProfile} from '@dj/shared
 
 import {useCallback, useTransition} from 'react'
 
+import {useMixSuggestionsQuery} from '../../hooks/queries'
 import {usePlaybackStream} from '../../hooks/usePlaybackStream'
-import {useMixStore} from '../../stores'
 import {AutoFillToggle} from '../atoms/AutoFillToggle'
 import {NowPlayingHero} from '../organisms/NowPlayingHero'
 import {QueuePanel} from '../organisms/QueuePanel'
@@ -34,10 +34,8 @@ export function MixLayout({
 }: MixLayoutProps) {
   const [_isPending, startTransition] = useTransition()
 
-  // Get suggestions from store (server handles queue auto-fill)
-  const suggestions = useMixStore((s) => s.suggestions)
-  const isLoadingSuggestions = useMixStore((s) => s.suggestionsLoading)
-  const refreshSuggestions = useMixStore((s) => s.refreshSuggestions)
+  // Get suggestions from react-query
+  const {data: suggestions = [], isLoading: isLoadingSuggestions, refetch: refetchSuggestions} = useMixSuggestionsQuery(!!session)
 
   // Handle track change - notify parent when the track being played changes
   const handleTrackChange = useCallback(
@@ -99,11 +97,9 @@ export function MixLayout({
 
   const handleRefreshSuggestions = useCallback(() => {
     startTransition(() => {
-      // Use store's refreshSuggestions only - onRefreshSuggestions prop is redundant
-      // since it also calls the same store action via useSuggestions hook
-      refreshSuggestions()
+      refetchSuggestions()
     })
-  }, [refreshSuggestions])
+  }, [refetchSuggestions])
 
   if (!session) {
     return (

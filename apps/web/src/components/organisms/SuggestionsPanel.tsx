@@ -1,8 +1,8 @@
 import type {Suggestion} from '@dj/shared-types'
 
-import {useCallback, useRef} from 'react'
+import {useCallback, useRef, useState} from 'react'
 
-import {useMixStore} from '../../stores'
+import {useAddToQueueMutation} from '../../hooks/queries'
 import sharedStyles from '../templates/mix-shared.module.css'
 import styles from './suggestions-panel.module.css'
 
@@ -13,29 +13,25 @@ interface SuggestionsPanelProps {
 }
 
 export function SuggestionsPanel({isLoading, onRefresh, suggestions}: SuggestionsPanelProps) {
-  const addToQueue = useMixStore((s) => s.addToQueue)
+  const addToQueueMutation = useAddToQueueMutation()
   const addingRef = useRef<Set<string>>(new Set())
   const removedRef = useRef<Set<string>>(new Set())
-  // Track render key to force updates on optimistic removal
-  const renderCountRef = useRef(0)
+  const [, forceUpdate] = useState(0)
 
   const handleAdd = useCallback(async (suggestion: Suggestion) => {
     if (addingRef.current.has(suggestion.trackId)) return
     addingRef.current.add(suggestion.trackId)
-    // Force re-render to show loading state
-    renderCountRef.current++
-    useMixStore.setState({})
+    forceUpdate(n => n + 1)
 
     try {
-      await addToQueue(suggestion.trackUri)
+      await addToQueueMutation.mutateAsync({trackUri: suggestion.trackUri})
       // Optimistic: remove suggestion from visible list
       removedRef.current.add(suggestion.trackId)
     } finally {
       addingRef.current.delete(suggestion.trackId)
-      renderCountRef.current++
-      useMixStore.setState({})
+      forceUpdate(n => n + 1)
     }
-  }, [addToQueue])
+  }, [addToQueueMutation])
 
   const visibleSuggestions = suggestions.filter((s) => !removedRef.current.has(s.trackId))
 

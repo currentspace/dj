@@ -1,14 +1,25 @@
 /**
  * useMixSession Hook
  *
- * Manages mix session state with automatic initialization.
+ * Facade over react-query hooks. Preserves the same interface
+ * that consumers (DJPage, MixPage) already use.
  */
 
 import type {MixSession, SessionPreferences} from '@dj/shared-types'
 
-import {useRef} from 'react'
+import {useQueryClient} from '@tanstack/react-query'
+import {useCallback} from 'react'
 
-import {initializeMixStore, useMixStore} from '../stores'
+import {mixApiClient} from '../lib/mix-api-client'
+import {
+  queryKeys,
+  useAddToQueueMutation,
+  useEndSessionMutation,
+  useMixSessionQuery,
+  useRemoveFromQueueMutation,
+  useReorderQueueMutation,
+  useStartSessionMutation,
+} from './queries'
 
 interface UseMixSessionReturn {
   // Queue actions
@@ -32,48 +43,98 @@ interface UseMixSessionReturn {
 }
 
 export function useMixSession(): UseMixSessionReturn {
-  const hasInitialized = useRef(false)
+  const queryClient = useQueryClient()
+  const {data: session = null} = useMixSessionQuery()
 
-  // Atomic selectors
-  const session = useMixStore((s) => s.session)
-  const isLoading = useMixStore((s) => s.isLoading)
-  const error = useMixStore((s) => s.error)
+  const startMutation = useStartSessionMutation()
+  const endMutation = useEndSessionMutation()
+  const addMutation = useAddToQueueMutation()
+  const removeMutation = useRemoveFromQueueMutation()
+  const reorderMutation = useReorderQueueMutation()
 
-  // Actions (stable references)
-  const startSession = useMixStore((s) => s.startSession)
-  const endSession = useMixStore((s) => s.endSession)
-  const setSession = useMixStore((s) => s.setSession)
-  const addToQueue = useMixStore((s) => s.addToQueue)
-  const removeFromQueue = useMixStore((s) => s.removeFromQueue)
-  const reorderQueue = useMixStore((s) => s.reorderQueue)
-  const clearError = useMixStore((s) => s.clearError)
-  const refreshSession = useMixStore((s) => s.refreshSession)
+  const startSession = useCallback(
+    async (preferences?: SessionPreferences, seedPlaylistId?: string) => {
+      await startMutation.mutateAsync({preferences, seedPlaylistId})
+    },
+    [startMutation],
+  )
 
-  // Direct state sync: Initialize store on first render (React 19 pattern)
-  /* eslint-disable react-hooks/refs -- intentional: one-time store initialization in hook body per React 19 project guidelines (no useEffect) */
-  if (!hasInitialized.current) {
-    hasInitialized.current = true
-    initializeMixStore()
-  }
-  /* eslint-enable react-hooks/refs */
+  const endSession = useCallback(async () => {
+    await endMutation.mutateAsync()
+  }, [endMutation])
+
+  const addToQueue = useCallback(
+    async (trackUri: string, position?: number) => {
+      await addMutation.mutateAsync({position, trackUri})
+    },
+    [addMutation],
+  )
+
+  const removeFromQueue = useCallback(
+    async (position: number) => {
+      await removeMutation.mutateAsync(position)
+    },
+    [removeMutation],
+  )
+
+  const reorderQueue = useCallback(
+    async (from: number, to: number) => {
+      await reorderMutation.mutateAsync({from, to})
+    },
+    [reorderMutation],
+  )
+
+  const refreshSession = useCallback(async () => {
+    const result = await queryClient.fetchQuery({
+      queryFn: async () => {
+        try {
+          return await mixApiClient.getCurrentSession()
+        } catch {
+          return null
+        }
+      },
+      queryKey: queryKeys.mix.session(),
+    })
+    return result
+  }, [queryClient])
+
+  const setSession = useCallback(
+    (newSession: MixSession | null) => {
+      queryClient.setQueryData(queryKeys.mix.session(), newSession)
+    },
+    [queryClient],
+  )
+
+  const clearError = useCallback(() => {
+    startMutation.reset()
+    endMutation.reset()
+    addMutation.reset()
+    removeMutation.reset()
+    reorderMutation.reset()
+  }, [startMutation, endMutation, addMutation, removeMutation, reorderMutation])
+
+  // Aggregate loading from session query and start/end mutations
+  const isLoading = startMutation.isPending || endMutation.isPending
+
+  // Aggregate error from all mutations
+  const error =
+    startMutation.error?.message ??
+    endMutation.error?.message ??
+    addMutation.error?.message ??
+    removeMutation.error?.message ??
+    reorderMutation.error?.message ??
+    null
 
   return {
-    // Queue actions
     addToQueue,
-    // Utility
     clearError,
-    // Session actions
     endSession,
-
-    // State
     error,
     isLoading,
     refreshSession,
-
     removeFromQueue,
     reorderQueue,
     session,
-
     setSession,
     startSession,
   }

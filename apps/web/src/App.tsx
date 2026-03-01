@@ -1,15 +1,15 @@
+import {QueryClientProvider} from '@tanstack/react-query'
 import {Suspense} from 'react'
 
-import {BuildInfo} from './components/atoms/BuildInfo'
 import {ErrorBoundary} from './components/atoms/ErrorBoundary'
 import {UpdateBanner} from './components/molecules/UpdateBanner'
 import {DebugPanel} from './components/organisms/DebugPanel'
 import {SpotifyAuth} from './components/organisms/SpotifyAuth'
 import {DJPage} from './features/dj/DJPage'
 import {useSpotifyAuth} from './hooks/useSpotifyAuth'
+import {queryClient} from './lib/query-client'
 import {useDebugStore} from './stores'
 import './styles/app-layout.css'
-import './styles/build-info.css'
 
 function App() {
   const {clearError, error, isAuthenticated, isLoading, login, logout, token} = useSpotifyAuth()
@@ -17,6 +17,7 @@ function App() {
   const toggleDebug = useDebugStore((s) => s.toggle)
 
   return (
+    <QueryClientProvider client={queryClient}>
     <ErrorBoundary>
       <UpdateBanner />
       <div className="app">
@@ -62,11 +63,10 @@ function App() {
           </p>
         </footer>
 
-        <BuildInfo />
-
         {debugIsOpen && <DebugPanel />}
       </div>
     </ErrorBoundary>
+    </QueryClientProvider>
   )
 }
 

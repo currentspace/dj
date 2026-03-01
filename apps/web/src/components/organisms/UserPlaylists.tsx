@@ -1,7 +1,6 @@
 import type {SpotifyPlaylist} from '@dj/shared-types'
 
-import {useCallback, useRef, useState} from 'react'
-
+import {usePlaylistsQuery} from '../../hooks/queries'
 import {useSpotifyAuth} from '../../hooks/useSpotifyAuth'
 import {usePlaylistStore} from '../../stores'
 import {LoadingSpinner} from '../atoms/LoadingSpinner'
@@ -15,51 +14,15 @@ function UserPlaylists({onPlaylistSelect}: UserPlaylistsProps) {
   // Get selected playlist from store (for highlighting)
   const selectedPlaylist = usePlaylistStore((s) => s.selectedPlaylist)
   const {logout, token} = useSpotifyAuth()
-  const [playlists, setPlaylists] = useState<SpotifyPlaylist[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<null | string>(null)
-  const hasLoadedRef = useRef(false)
-  const lastTokenRef = useRef<null | string>(null)
+  const {data: playlists = [], error, isLoading, refetch} = usePlaylistsQuery(token)
 
-  const loadPlaylists = useCallback(async () => {
-    try {
-      setLoading(true)
-      setError(null)
-
-      const response = await fetch('/api/spotify/playlists', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      })
-
-      // Handle 401 Unauthorized - token expired
-      if (response.status === 401) {
-        console.log('[UserPlaylists] Token expired (401), logging out...')
-        logout() // Clear expired token and trigger re-auth
-        throw new Error('Session expired. Please log in again.')
-      }
-
-      if (!response.ok) {
-        throw new Error('Failed to load playlists')
-      }
-
-      const data = (await response.json()) as {items?: SpotifyPlaylist[]}
-      setPlaylists(data.items ?? [])
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load playlists')
-    } finally {
-      setLoading(false)
-    }
-  }, [logout, token])
-
-  // Direct state sync: load playlists when token changes or on initial mount
-  if (token && (!hasLoadedRef.current || lastTokenRef.current !== token)) {
-    hasLoadedRef.current = true
-    lastTokenRef.current = token
-    loadPlaylists()
+  // Handle 401 auth errors
+  if (error && 'isAuthError' in error && (error as Error & {isAuthError: boolean}).isAuthError) {
+    console.log('[UserPlaylists] Token expired (401), logging out...')
+    logout()
   }
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="user-playlists">
         <div className="playlists-header">
@@ -79,8 +42,8 @@ function UserPlaylists({onPlaylistSelect}: UserPlaylistsProps) {
           <h2>🎵 Your Playlists</h2>
         </div>
         <div className="error-state">
-          <p>❌ {error}</p>
-          <button className="retry-button" onClick={loadPlaylists}>
+          <p>❌ {error.message}</p>
+          <button className="retry-button" onClick={() => refetch()}>
             Try Again
           </button>
         </div>

@@ -4,17 +4,19 @@
  */
 
 import type {SpotifyPlaylist} from '@dj/shared-types'
-import type {SessionPreferences} from '@dj/shared-types'
+import type {MixSession, SessionPreferences} from '@dj/shared-types'
 
+import {useQueryClient} from '@tanstack/react-query'
 import {useCallback, useRef, useState} from 'react'
 
 import {ErrorDisplay} from '../../components/atoms/ErrorDisplay'
 import {QueuePanel} from '../../components/organisms/QueuePanel'
 import {SuggestionsPanel} from '../../components/organisms/SuggestionsPanel'
+import {queryKeys, useMixSuggestionsQuery, useSetEnergyLevelMutation} from '../../hooks/queries'
 import {useMixSession} from '../../hooks/useMixSession'
 import {usePlaybackStream} from '../../hooks/usePlaybackStream'
 import {mixApiClient} from '../../lib/mix-api-client'
-import {useMixStore, usePlaybackStore} from '../../stores'
+import {useMixSteerStore, usePlaybackStore} from '../../stores'
 import {emitDebug} from '../../stores/debugStore'
 import {CompactNowPlaying} from './CompactNowPlaying'
 import {DJLog, type DJLogEntry} from './DJLog'
@@ -30,6 +32,8 @@ interface DJPageProps {
 const MAX_LOG_ENTRIES = 50
 
 export function DJPage({token}: DJPageProps) {
+  const queryClient = useQueryClient()
+
   // Session state
   const {
     clearError,
@@ -43,19 +47,22 @@ export function DJPage({token}: DJPageProps) {
     startSession,
   } = useMixSession()
 
-  // Suggestions from store
-  const suggestions = useMixStore((s) => s.suggestions)
-  const suggestionsLoading = useMixStore((s) => s.suggestionsLoading)
-  const refreshSuggestions = useMixStore((s) => s.refreshSuggestions)
-  const suggestionsError = useMixStore((s) => s.suggestionsError)
-  const clearSuggestionsError = useMixStore((s) => s.clearSuggestionsError)
+  // Suggestions from react-query
+  const {data: suggestions = [], error: suggestionsQueryError, isLoading: suggestionsLoading, refetch: refetchSuggestions} = useMixSuggestionsQuery(!!session)
+  const suggestionsError = suggestionsQueryError?.message ?? null
 
-  // Vibe from store
-  const vibeError = useMixStore((s) => s.vibeError)
-  const clearVibeError = useMixStore((s) => s.clearVibeError)
-  const setEnergyLevel = useMixStore((s) => s.setEnergyLevel)
-  const steerVibeStream = useMixStore((s) => s.steerVibeStream)
-  const steerInProgress = useMixStore((s) => s.steerInProgress)
+  const refreshSuggestions = useCallback(() => {
+    refetchSuggestions()
+  }, [refetchSuggestions])
+
+  // Vibe mutations
+  const energyLevelMutation = useSetEnergyLevelMutation()
+  const energyDebounceRef = useRef<null | ReturnType<typeof setTimeout>>(null)
+
+  // Steer from store (SSE streaming state)
+  const vibeError = useMixSteerStore((s) => s.vibeError)
+  const steerVibeStream = useMixSteerStore((s) => s.steerVibeStream)
+  const steerInProgress = useMixSteerStore((s) => s.steerInProgress)
 
   // Local state
   const [selectedPlaylist, setSelectedPlaylist] = useState<null | SpotifyPlaylist>(null)
@@ -92,7 +99,8 @@ export function DJPage({token}: DJPageProps) {
       emitDebug('state', 'track_change', `Track changed: ${newTrackName} — ${newArtist}`)
 
       // Notify mix API if session exists
-      if (!useMixStore.getState().session) return
+      const currentSession = queryClient.getQueryData<MixSession>(queryKeys.mix.session())
+      if (!currentSession) return
 
       mixApiClient.notifyTrackPlayed(previousTrackId, previousTrackUri)
         .then((response) => {
@@ -105,7 +113,7 @@ export function DJPage({token}: DJPageProps) {
           console.warn('[DJPage] Failed to notify track played:', err)
         })
     },
-    [addLogEntry, setSession, refreshSuggestions],
+    [addLogEntry, setSession, refreshSuggestions, queryClient],
   )
 
   // Playback stream
@@ -149,12 +157,12 @@ export function DJPage({token}: DJPageProps) {
     addLogEntry('steer', `Processing: "${direction}"`)
     try {
       await steerVibeStream(direction)
-      await refreshSuggestions()
+      await refetchSuggestions()
       addLogEntry('dj', 'Vibe updated, queue refreshed')
     } catch {
       addLogEntry('info', 'Steer failed')
     }
-  }, [steerVibeStream, refreshSuggestions, addLogEntry])
+  }, [steerVibeStream, refetchSuggestions, addLogEntry])
 
   const handleRemove = useCallback((position: number) => {
     removeFromQueue(position)
@@ -165,16 +173,18 @@ export function DJPage({token}: DJPageProps) {
   }, [reorderQueue])
 
   const handleEnergyChange = useCallback((level: number) => {
-    setEnergyLevel(level)
-  }, [setEnergyLevel])
+    if (energyDebounceRef.current) clearTimeout(energyDebounceRef.current)
+    energyDebounceRef.current = setTimeout(() => {
+      energyLevelMutation.mutate(level)
+    }, 300)
+  }, [energyLevelMutation])
 
   // Combined errors
   const combinedError = sessionError ?? suggestionsError ?? vibeError
   const clearAllErrors = useCallback(() => {
     clearError()
-    clearSuggestionsError()
-    clearVibeError()
-  }, [clearError, clearSuggestionsError, clearVibeError])
+    useMixSteerStore.setState({vibeError: null})
+  }, [clearError])
 
   // No session: show playlist picker + start button
   if (!session) {
@@ -265,4 +275,3 @@ export function DJPage({token}: DJPageProps) {
     </div>
   )
 }
-

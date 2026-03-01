@@ -6,27 +6,19 @@
  * even when not on the Mix page.
  */
 
+import type {MixSession} from '@dj/shared-types'
+
 import {memo, useCallback, useRef, useState} from 'react'
 
+import {useNextMutation, usePlayerQueue, usePlayPauseMutation, usePreviousMutation, useSeekMutation} from '../../hooks/queries'
+import {queryKeys} from '../../hooks/queries/queryKeys'
 import {mixApiClient} from '../../lib/mix-api-client'
-import {useMixStore, usePlaybackStore} from '../../stores'
+import {queryClient} from '../../lib/query-client'
+import {usePlaybackStore} from '../../stores'
 import '../../styles/now-playing.css'
 
 interface NowPlayingProps {
   token: null | string
-}
-
-interface QueueTrack {
-  albumArt: null | string
-  artistName: string
-  duration: number
-  name: string
-  uri: string
-}
-
-interface SpotifyQueue {
-  currently_playing: null | QueueTrack
-  queue: QueueTrack[]
 }
 
 export const NowPlaying = memo(function NowPlaying({token}: NowPlayingProps) {
@@ -39,20 +31,20 @@ export const NowPlaying = memo(function NowPlaying({token}: NowPlayingProps) {
   const disconnect = usePlaybackStore((s) => s.disconnect)
   const subscribeToTrackChange = usePlaybackStore((s) => s.subscribeToTrackChange)
 
-  // Mix store accessed via getState() in track change callback to avoid stale closures
-
   // Local state for queue panel
-  const [queue, setQueue] = useState<null | SpotifyQueue>(null)
   const [showQueue, setShowQueue] = useState(false)
   const [controlError, setControlError] = useState<null | string>(null)
 
   // Refs
-  const lastQueueFetchRef = useRef<number>(0)
-  const showQueueRef = useRef(false)
   const hasConnectedRef = useRef(false)
   const trackChangeUnsubRef = useRef<(() => void) | null>(null)
-  const queueIntervalRef = useRef<null | ReturnType<typeof setInterval>>(null)
-  const prevShowQueueRef = useRef(false)
+
+  // React-query hooks for queue polling and player controls
+  const {data: queue} = usePlayerQueue(token, showQueue)
+  const playPauseMutation = usePlayPauseMutation()
+  const nextMutation = useNextMutation()
+  const previousMutation = usePreviousMutation()
+  const seekMutation = useSeekMutation()
 
   // Connect to SSE stream when token available (component body, no useEffect)
   if (token && !hasConnectedRef.current && status === 'disconnected') {
@@ -65,9 +57,9 @@ export const NowPlaying = memo(function NowPlaying({token}: NowPlayingProps) {
   }
 
   // Subscribe to track changes and notify mix API if session exists
-  // Re-subscribe only when subscribeToTrackChange identity changes
   trackChangeUnsubRef.current ??= subscribeToTrackChange(async (previousTrackId, previousTrackUri, _newTrackId) => {
-      if (!useMixStore.getState().session || !previousTrackId || !previousTrackUri) {
+      const session = queryClient.getQueryData<MixSession | null>(queryKeys.mix.session())
+      if (!session || !previousTrackId || !previousTrackUri) {
         return
       }
 
@@ -77,136 +69,42 @@ export const NowPlaying = memo(function NowPlaying({token}: NowPlayingProps) {
         const response = await mixApiClient.notifyTrackPlayed(previousTrackId, previousTrackUri)
         if (response.movedToHistory) {
           console.log('[NowPlaying] Track moved to history, session updated')
-          useMixStore.getState().setSession(response.session)
+          queryClient.setQueryData(queryKeys.mix.session(), response.session)
         }
       } catch (err) {
         console.warn('[NowPlaying] Failed to notify track played:', err)
       }
     })
 
-  const fetchQueue = useCallback(async () => {
-    if (!token) return
-
-    const now = Date.now()
-    // Debounce queue fetches (every 5 seconds max)
-    if (now - lastQueueFetchRef.current < 5000) return
-    lastQueueFetchRef.current = now
-
-    try {
-      const response = await fetch('/api/player/queue', {
-        headers: {Authorization: `Bearer ${token}`},
-      })
-
-      if (!response.ok) {
-        console.error('[NowPlaying] Queue fetch failed:', response.status)
-        return
-      }
-
-      const data = (await response.json()) as {
-        currently_playing?: null | {
-          album?: {images?: {url: string}[]}
-          artists?: {name: string}[]
-          duration_ms?: number
-          name?: string
-          uri?: string
-        }
-        queue?: {
-          album?: {images?: {url: string}[]}
-          artists?: {name: string}[]
-          duration_ms?: number
-          name?: string
-          uri?: string
-        }[]
-      }
-
-      setQueue({
-        currently_playing: data.currently_playing
-          ? {
-              albumArt: data.currently_playing.album?.images?.[0]?.url ?? null,
-              artistName: data.currently_playing.artists?.map(a => a.name).join(', ') ?? '',
-              duration: data.currently_playing.duration_ms ?? 0,
-              name: data.currently_playing.name ?? 'Unknown',
-              uri: data.currently_playing.uri ?? '',
-            }
-          : null,
-        queue: (data.queue ?? []).slice(0, 10).map(track => ({
-          albumArt: track.album?.images?.[0]?.url ?? null,
-          artistName: track.artists?.map(a => a.name).join(', ') ?? '',
-          duration: track.duration_ms ?? 0,
-          name: track.name ?? 'Unknown',
-          uri: track.uri ?? '',
-        })),
-      })
-    } catch (err) {
-      console.error('[NowPlaying] Queue fetch error:', err)
-    }
-  }, [token])
-
-  // Periodically refresh queue when panel is open (component body, no useEffect)
-  if (showQueue && token && !prevShowQueueRef.current) {
-    prevShowQueueRef.current = true
-    fetchQueue()
-    if (queueIntervalRef.current) clearInterval(queueIntervalRef.current)
-    queueIntervalRef.current = setInterval(() => {
-      if (showQueueRef.current) {
-        fetchQueue()
-      }
-    }, 10000)
-  }
-  if (!showQueue && prevShowQueueRef.current) {
-    prevShowQueueRef.current = false
-    if (queueIntervalRef.current) {
-      clearInterval(queueIntervalRef.current)
-      queueIntervalRef.current = null
-    }
-  }
-
   const handlePlayPause = useCallback(async () => {
     if (!token || !playbackCore) return
-
-    const endpoint = playbackCore.isPlaying ? '/api/player/pause' : '/api/player/play'
-
     try {
-      await fetch(endpoint, {
-        headers: {Authorization: `Bearer ${token}`},
-        method: 'POST',
-      })
-      // SSE will update state automatically
+      await playPauseMutation.mutateAsync(playbackCore.isPlaying)
     } catch (err) {
       console.error('[NowPlaying] Play/pause error:', err)
       setControlError('Failed to toggle playback')
     }
-  }, [token, playbackCore])
+  }, [token, playbackCore, playPauseMutation])
 
   const handleNext = useCallback(async () => {
     if (!token) return
-
     try {
-      await fetch('/api/player/next', {
-        headers: {Authorization: `Bearer ${token}`},
-        method: 'POST',
-      })
-      // SSE will update state automatically
+      await nextMutation.mutateAsync()
     } catch (err) {
       console.error('[NowPlaying] Next error:', err)
       setControlError('Failed to skip track')
     }
-  }, [token])
+  }, [token, nextMutation])
 
   const handlePrevious = useCallback(async () => {
     if (!token) return
-
     try {
-      await fetch('/api/player/previous', {
-        headers: {Authorization: `Bearer ${token}`},
-        method: 'POST',
-      })
-      // SSE will update state automatically
+      await previousMutation.mutateAsync()
     } catch (err) {
       console.error('[NowPlaying] Previous error:', err)
       setControlError('Failed to go to previous track')
     }
-  }, [token])
+  }, [token, previousMutation])
 
   const handleSeek = useCallback(
     async (e: React.MouseEvent<HTMLDivElement>) => {
@@ -218,33 +116,18 @@ export const NowPlaying = memo(function NowPlaying({token}: NowPlayingProps) {
       const positionMs = Math.floor(percent * playbackCore.track.duration)
 
       try {
-        await fetch('/api/player/seek', {
-          body: JSON.stringify({position_ms: positionMs}),
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          method: 'POST',
-        })
-        // SSE will update progress automatically
+        await seekMutation.mutateAsync(positionMs)
       } catch (err) {
         console.error('[NowPlaying] Seek error:', err)
         setControlError('Failed to seek')
       }
     },
-    [token, playbackCore]
+    [token, playbackCore, seekMutation]
   )
 
   const handleToggleQueue = useCallback(() => {
-    const newShowQueue = !showQueue
-    setShowQueue(newShowQueue)
-    showQueueRef.current = newShowQueue
-    if (newShowQueue) {
-      // Force refresh queue when opening
-      lastQueueFetchRef.current = 0
-      fetchQueue()
-    }
-  }, [showQueue, fetchQueue])
+    setShowQueue((prev) => !prev)
+  }, [])
 
   // Format time as m:ss
   const formatTime = (ms: number): string => {
@@ -336,14 +219,7 @@ export const NowPlaying = memo(function NowPlaying({token}: NowPlayingProps) {
               else if (e.key === 'ArrowLeft') newPosition = Math.max(progress - seekStep, 0)
               if (newPosition !== null) {
                 e.preventDefault()
-                fetch('/api/player/seek', {
-                  body: JSON.stringify({position_ms: Math.floor(newPosition)}),
-                  headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                  },
-                  method: 'POST',
-                }).catch((err) => console.error('[NowPlaying] Seek error:', err))
+                seekMutation.mutate(Math.floor(newPosition))
               }
             }}
             role="slider"
@@ -376,10 +252,7 @@ export const NowPlaying = memo(function NowPlaying({token}: NowPlayingProps) {
             <span className="now-playing__queue-title">Up Next</span>
             <button
               className="now-playing__queue-close"
-              onClick={() => {
-                setShowQueue(false)
-                showQueueRef.current = false
-              }}
+              onClick={() => setShowQueue(false)}
               type="button"
             >
               Close
