@@ -32,6 +32,7 @@ import { create } from 'zustand'
 import { subscribeWithSelector } from 'zustand/middleware'
 
 import { HTTP_STATUS } from '../constants'
+import { useAuthStore } from './authStore'
 import { emitDebug } from './debugStore'
 
 // =============================================================================
@@ -103,6 +104,10 @@ let lastServerProgress = 0
 let previousTrackId: null | string = null
 let previousTrackUri: null | string = null
 const trackChangeCallbacks = new Set<TrackChangeCallback>()
+
+// SW BroadcastChannel state
+let broadcastChannel: BroadcastChannel | null = null
+let usingSW = false
 
 export const usePlaybackStore = create<PlaybackStoreState>()(
   subscribeWithSelector((set, get) => {
@@ -179,24 +184,28 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
             set({ error: 'Token expired, refreshing...', status: 'disconnected' })
             stopInterpolation()
             // Trigger token refresh via authStore (catch to prevent unhandled rejection)
-            import('../stores/authStore').then(({ useAuthStore }) => {
-              useAuthStore.getState().refreshToken().then((success) => {
-                if (success) {
-                  console.log('[playbackStore] Token refreshed, reconnecting...')
-                  const newToken = useAuthStore.getState().token
-                  if (newToken) {
+            useAuthStore.getState().refreshToken().then((success) => {
+              if (success) {
+                console.log('[playbackStore] Token refreshed, reconnecting...')
+                const newToken = useAuthStore.getState().token
+                if (newToken) {
+                  if (usingSW && navigator.serviceWorker?.controller) {
+                    // Tell SW to reconnect with new token
+                    navigator.serviceWorker.controller.postMessage({
+                      token: newToken,
+                      type: 'PLAYBACK_TOKEN_UPDATE',
+                    })
+                  } else {
                     setTimeout(() => get().connect(newToken), 500)
                   }
-                } else {
-                  console.error('[playbackStore] Token refresh failed')
-                  set({ error: 'Session expired. Please log in again.' })
                 }
-              }).catch((err: unknown) => {
-                console.error('[playbackStore] Token refresh error:', err)
+              } else {
+                console.error('[playbackStore] Token refresh failed')
                 set({ error: 'Session expired. Please log in again.' })
-              })
+              }
             }).catch((err: unknown) => {
-              console.error('[playbackStore] Failed to load authStore:', err)
+              console.error('[playbackStore] Token refresh error:', err)
+              set({ error: 'Session expired. Please log in again.' })
             })
             break
 
@@ -386,6 +395,80 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
     // PUBLIC ACTIONS
     // ==========================================================================
 
+    // Direct fetch-based SSE connection (fallback when SW unavailable)
+    function directConnect(token: string): void {
+      fetch('/api/player/stream', {
+        headers: {
+          Accept: 'text/event-stream',
+          Authorization: `Bearer ${token}`,
+        },
+      })
+        .then((response) => {
+          if (!response.ok) {
+            if (response.status === HTTP_STATUS.UNAUTHORIZED) {
+              set({ error: 'Session expired', status: 'error' })
+              return
+            }
+            throw new Error(`HTTP ${response.status}`)
+          }
+
+          if (!response.body) throw new Error('No response body')
+
+          set({ status: 'connected' })
+          emitDebug('sse', 'connected', 'SSE stream connected (direct)')
+          startInterpolation()
+
+          const reader = response.body.getReader()
+          const decoder = new TextDecoder()
+          let buffer = ''
+
+          const read = async (): Promise<void> => {
+            try {
+              const { done, value } = await reader.read()
+
+              if (done) {
+                scheduleReconnect(token)
+                return
+              }
+
+              buffer += decoder.decode(value, { stream: true })
+              const lines = buffer.split('\n')
+              buffer = lines.pop() ?? ''
+
+              let currentEvent = ''
+              let currentData = ''
+
+              for (const line of lines) {
+                if (line.startsWith('event: ')) {
+                  currentEvent = line.slice(7)
+                } else if (line.startsWith('data: ')) {
+                  currentData = line.slice(6)
+                } else if (line === '' && currentEvent && currentData) {
+                  handleEvent(currentEvent, currentData, token)
+                  currentEvent = ''
+                  currentData = ''
+                }
+              }
+
+              read()
+            } catch (err) {
+              console.error('[playbackStore] Read error:', err)
+              scheduleReconnect(token)
+            }
+          }
+
+          read()
+        })
+        .catch((err) => {
+          console.error('[playbackStore] Connection error:', err)
+          set({
+            error: err instanceof Error ? err.message : 'Connection failed',
+            status: 'error',
+          })
+          scheduleReconnect(token)
+        })
+    }
+
     return {
       connect: (token) => {
         const { status } = get()
@@ -393,82 +476,72 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
 
         set({ error: null, status: 'connecting' })
 
-        fetch('/api/player/stream', {
-          headers: {
-            Accept: 'text/event-stream',
-            Authorization: `Bearer ${token}`,
-          },
-        })
-          .then((response) => {
-            if (!response.ok) {
-              if (response.status === HTTP_STATUS.UNAUTHORIZED) {
-                set({ error: 'Session expired', status: 'error' })
-                return
-              }
-              throw new Error(`HTTP ${response.status}`)
+        // Try SW + BroadcastChannel path first
+        if (navigator.serviceWorker?.controller && typeof BroadcastChannel !== 'undefined') {
+          console.log('[playbackStore] Using SW-proxied SSE')
+          usingSW = true
+
+          broadcastChannel = new BroadcastChannel('dj-playback')
+          broadcastChannel.onmessage = (msg) => {
+            const { data, error: swError, event, status: swStatus, type } = msg.data as {
+              data?: string
+              error?: string
+              event?: string
+              status?: string
+              type: string
             }
 
-            if (!response.body) throw new Error('No response body')
-
-            set({ status: 'connected' })
-            emitDebug('sse', 'connected', 'SSE stream connected')
-            startInterpolation()
-
-            const reader = response.body.getReader()
-            const decoder = new TextDecoder()
-            let buffer = ''
-
-            const read = async (): Promise<void> => {
-              try {
-                const { done, value } = await reader.read()
-
-                if (done) {
-                  scheduleReconnect(token)
-                  return
-                }
-
-                buffer += decoder.decode(value, { stream: true })
-                const lines = buffer.split('\n')
-                buffer = lines.pop() ?? ''
-
-                let currentEvent = ''
-                let currentData = ''
-
-                for (const line of lines) {
-                  if (line.startsWith('event: ')) {
-                    currentEvent = line.slice(7)
-                  } else if (line.startsWith('data: ')) {
-                    currentData = line.slice(6)
-                  } else if (line === '' && currentEvent && currentData) {
-                    handleEvent(currentEvent, currentData, token)
-                    currentEvent = ''
-                    currentData = ''
-                  }
-                }
-
-                read()
-              } catch (err) {
-                console.error('[playbackStore] Read error:', err)
-                scheduleReconnect(token)
+            if (type === 'SSE_EVENT' && event && data) {
+              handleEvent(event, data, token)
+            } else if (type === 'SW_STATUS' && swStatus) {
+              switch (swStatus) {
+                case 'connected':
+                  set({ error: null, status: 'connected' })
+                  emitDebug('sse', 'connected', 'SSE stream connected (via SW)')
+                  startInterpolation()
+                  break
+                case 'connecting':
+                  set({ status: 'connecting' })
+                  break
+                case 'disconnected':
+                  stopInterpolation()
+                  set({ status: 'disconnected' })
+                  break
+                case 'error':
+                  set({ error: swError ?? 'Connection error', status: 'error' })
+                  break
               }
             }
+          }
 
-            read()
+          navigator.serviceWorker.controller.postMessage({
+            token,
+            type: 'PLAYBACK_SUBSCRIBE',
           })
-          .catch((err) => {
-            console.error('[playbackStore] Connection error:', err)
-            set({
-              error: err instanceof Error ? err.message : 'Connection failed',
-              status: 'error',
-            })
-            scheduleReconnect(token)
-          })
+          return
+        }
+
+        // Fallback: direct fetch
+        console.log('[playbackStore] Using direct SSE (no SW)')
+        usingSW = false
+        directConnect(token)
       },
       disconnect: () => {
         if (reconnectTimeout) {
           clearTimeout(reconnectTimeout)
           reconnectTimeout = null
         }
+
+        // Clean up SW subscription
+        if (usingSW) {
+          navigator.serviceWorker?.controller?.postMessage({ type: 'PLAYBACK_UNSUBSCRIBE' })
+          if (broadcastChannel) {
+            broadcastChannel.close()
+            broadcastChannel = null
+          }
+          usingSW = false
+        }
+
         stopInterpolation()
         previousTrackId = null
         previousTrackUri = null
@@ -550,4 +623,37 @@ export function useModes() {
  */
 export function useVolume() {
   return usePlaybackStore((s) => s.playbackCore?.device.volumePercent)
+}
+
+// =============================================================================
+// SW LIFECYCLE LISTENERS
+// =============================================================================
+
+if (typeof window !== 'undefined') {
+  // Ensure clean unsubscribe when tab closes
+  window.addEventListener('beforeunload', () => {
+    if (usingSW) {
+      navigator.serviceWorker?.controller?.postMessage({ type: 'PLAYBACK_UNSUBSCRIBE' })
+    }
+  })
+
+  // Re-subscribe after SW update (SKIP_WAITING → controllerchange)
+  navigator.serviceWorker?.addEventListener('controllerchange', () => {
+    const { status } = usePlaybackStore.getState()
+    const token = useAuthStore.getState().token
+    if ((status === 'connected' || status === 'connecting') && token && usingSW) {
+      console.log('[playbackStore] SW controller changed, re-subscribing...')
+      // Close old channel
+      if (broadcastChannel) {
+        broadcastChannel.close()
+        broadcastChannel = null
+      }
+      usingSW = false
+      // Short delay for new SW to initialize, then reconnect
+      setTimeout(() => {
+        usePlaybackStore.getState().disconnect()
+        usePlaybackStore.getState().connect(token)
+      }, 500)
+    }
+  })
 }

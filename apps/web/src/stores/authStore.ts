@@ -413,6 +413,13 @@ if (typeof window !== 'undefined') {
         useAuthStore.setState({isAuthenticated: false, token: null})
       } else {
         useAuthStore.setState({isAuthenticated: true, token: result.data.token})
+        // Notify SW of token change so it can reconnect with new token
+        if (navigator.serviceWorker?.controller && result.data.token) {
+          navigator.serviceWorker.controller.postMessage({
+            token: result.data.token,
+            type: 'PLAYBACK_TOKEN_UPDATE',
+          })
+        }
       }
     } catch {
       clearTokenData()
