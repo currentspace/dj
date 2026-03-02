@@ -1,37 +1,10 @@
-import {useRef, useState} from 'react'
+import {useState} from 'react'
 
-// Default build info for development
-const defaultBuildInfo = {
-  branch: 'local',
-  buildTime: new Date().toISOString(),
-  commitHash: 'dev',
-  commitMessage: 'Development build',
-  version: 'dev-local',
-}
-
-interface BuildInfoData {
-  branch: string
-  buildTime: string
-  commitHash: string
-  commitMessage: string
-  version: string
-}
+import buildInfo from '../../build-info.json'
+import '../../styles/build-info.css'
 
 export function BuildInfo() {
   const [isOpen, setIsOpen] = useState(false)
-  const [buildInfo, setBuildInfo] = useState<BuildInfoData>(defaultBuildInfo)
-  const hasLoadedRef = useRef(false)
-
-  // Direct state sync: load build info on first render
-  if (!hasLoadedRef.current) {
-    hasLoadedRef.current = true
-    // Try to load actual build info
-    import('../../build-info.json')
-      .then(module => setBuildInfo(module.default as BuildInfoData))
-      .catch(() => {
-        console.log('Using default build info (dev mode)')
-      })
-  }
 
   return (
     <>

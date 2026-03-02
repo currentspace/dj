@@ -30,7 +30,7 @@ export function QueuePanel({isSearching, onRemove, onReorder, queue}: QueuePanel
           </div>
         ) : (
           queue.map((track, index) => (
-            <div className={styles.queueItem} key={`${track.trackId}-${track.position}`}>
+            <div className={styles.queueItem} key={track.trackId}>
               <div className={styles.queuePosition}>{index + 1}</div>
 
               <div className={styles.queueItemContent}>

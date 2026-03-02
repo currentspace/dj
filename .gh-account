@@ -1,0 +1,4 @@
+# GitHub account for this repo
+# Run: gh auth switch --user brianathere
+account: brianathere
+remote: git@github.com:currentspace/dj.git

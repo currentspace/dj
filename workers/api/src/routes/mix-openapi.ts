@@ -3,7 +3,7 @@
  * Live DJ Mode mix session management
  */
 
-import type {PlayedTrack, QueuedTrack, SpotifyTrackFull} from '@dj/shared-types'
+import type {MixSession, PlayedTrack, QueuedTrack, SpotifyTrackFull, Suggestion} from '@dj/shared-types'
 import type {OpenAPIHono} from '@hono/zod-openapi'
 
 import {
@@ -30,6 +30,7 @@ import type {Env} from '../index'
 
 import {HTTP_STATUS, PAGINATION, VIBE_DEFAULTS} from '../constants'
 import {isSuccessResponse} from '../lib/guards'
+import * as vibeSteeringModule from '../lib/vibe-steering'
 import {AudioEnrichmentService} from '../services/AudioEnrichmentService'
 import {LastFmService} from '../services/LastFmService'
 import {MixSessionService} from '../services/MixSessionService'
@@ -919,8 +920,7 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
         return c.json({error: 'No active session'}, 404)
       }
 
-      // Import vibe steering function
-      const {steerVibe: steerVibeFunc} = await import('../lib/vibe-steering')
+      const {steerVibe: steerVibeFunc} = vibeSteeringModule
 
       // Steer the vibe using AI
       const updatedVibe = await steerVibeFunc(session.vibe, direction, c.env.ANTHROPIC_API_KEY)
@@ -1419,7 +1419,7 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
 async function autoFillQueue(
   env: Env,
   token: string,
-  session: import('@dj/shared-types').MixSession,
+  session: MixSession,
   sessionService: MixSessionService
 ): Promise<number> {
   // Check if autoFill is enabled in session preferences (default to true if not set)
@@ -1447,15 +1447,17 @@ async function autoFillQueue(
 
     // Generate suggestions with 8-second timeout (Phase 3c)
     // If Claude is slow, fall through to fallback pool below
+    let timeoutId: ReturnType<typeof setTimeout> | undefined
     const suggestions = await Promise.race([
       suggestionEngine.generateSuggestions(session, tracksNeeded + 3),
-      new Promise<import('@dj/shared-types').Suggestion[]>(resolve =>
-        setTimeout(() => {
+      new Promise<Suggestion[]>(resolve => {
+        timeoutId = setTimeout(() => {
           getLogger()?.warn('[autoFillQueue] Suggestion generation timed out after 8s, using fallbacks')
           resolve([])
         }, 8000)
-      ),
+      }),
     ])
+    clearTimeout(timeoutId)
 
     // Log thinking patterns if available (for prompt optimization)
     if (suggestionEngine.lastThinking) {

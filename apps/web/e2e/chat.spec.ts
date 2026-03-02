@@ -1,3 +1,5 @@
+import type {Page} from '@playwright/test'
+
 import {expect, test} from '@playwright/test'
 
 import {
@@ -13,7 +15,7 @@ import {AuthPage, ChatPage, PlaylistPage} from './pages'
 /**
  * Helper to set up authenticated state with mocked APIs
  */
-async function setupAuthenticated(page: import('@playwright/test').Page) {
+async function setupAuthenticated(page: Page) {
   const authPage = new AuthPage(page)
   const playlistPage = new PlaylistPage(page)
 

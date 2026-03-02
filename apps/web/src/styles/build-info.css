@@ -1,8 +1,6 @@
 .build-info-toggle {
-  position: fixed;
-  /* Account for iOS safe area */
-  bottom: calc(1rem + var(--safe-area-inset-bottom, 0px));
-  right: calc(1rem + var(--safe-area-inset-right, 0px));
+  position: static;
+  display: inline-flex;
   background: rgba(102, 126, 234, 0.9);
   color: white;
   border: none;
@@ -11,8 +9,6 @@
   font-size: 0.85rem;
   cursor: pointer;
   transition: all 0.2s;
-  z-index: 100;
-  backdrop-filter: blur(10px);
 }
 
 .build-info-toggle:hover {

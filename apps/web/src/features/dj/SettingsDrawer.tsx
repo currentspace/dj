@@ -8,6 +8,7 @@ import type {VibeProfile} from '@dj/shared-types'
 import {useCallback, useState} from 'react'
 
 import {AutoFillToggle} from '../../components/atoms/AutoFillToggle'
+import {BuildInfo} from '../../components/atoms/BuildInfo'
 import {DevicePicker} from '../../components/molecules/DevicePicker'
 import styles from './DJPage.module.css'
 
@@ -110,6 +111,10 @@ export function SettingsDrawer({
               currentDeviceName={deviceName ?? undefined}
               token={token}
             />
+          </div>
+
+          <div className={styles.settingsSection}>
+            <BuildInfo />
           </div>
         </div>
       </div>
