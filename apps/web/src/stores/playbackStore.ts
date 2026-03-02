@@ -105,9 +105,8 @@ let previousTrackId: null | string = null
 let previousTrackUri: null | string = null
 const trackChangeCallbacks = new Set<TrackChangeCallback>()
 
-// SW BroadcastChannel state
-let broadcastChannel: BroadcastChannel | null = null
-let usingSW = false
+// SharedWorker state
+let sharedWorkerPort: MessagePort | null = null
 
 export const usePlaybackStore = create<PlaybackStoreState>()(
   subscribeWithSelector((set, get) => {
@@ -189,9 +188,9 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
                 console.log('[playbackStore] Token refreshed, reconnecting...')
                 const newToken = useAuthStore.getState().token
                 if (newToken) {
-                  if (usingSW && navigator.serviceWorker?.controller) {
-                    // Tell SW to reconnect with new token
-                    navigator.serviceWorker.controller.postMessage({
+                  if (sharedWorkerPort) {
+                    // Tell SharedWorker to reconnect with new token
+                    sharedWorkerPort.postMessage({
                       token: newToken,
                       type: 'PLAYBACK_TOKEN_UPDATE',
                     })
@@ -476,54 +475,59 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
 
         set({ error: null, status: 'connecting' })
 
-        // Try SW + BroadcastChannel path first
-        if (navigator.serviceWorker?.controller && typeof BroadcastChannel !== 'undefined') {
-          console.log('[playbackStore] Using SW-proxied SSE')
-          usingSW = true
+        // Try SharedWorker path first
+        if (typeof SharedWorker !== 'undefined') {
+          try {
+            console.log('[playbackStore] Using SharedWorker SSE')
+            const worker = new SharedWorker('/shared-playback-worker.js')
+            sharedWorkerPort = worker.port
 
-          broadcastChannel = new BroadcastChannel('dj-playback')
-          broadcastChannel.onmessage = (msg) => {
-            const { data, error: swError, event, status: swStatus, type } = msg.data as {
+            worker.port.onmessage = (msg: MessageEvent<{
               data?: string
               error?: string
               event?: string
               status?: string
               type: string
-            }
+            }>) => {
+              const { data, error: wError, event, status: wStatus, type } = msg.data
 
-            if (type === 'SSE_EVENT' && event && data) {
-              handleEvent(event, data, token)
-            } else if (type === 'SW_STATUS' && swStatus) {
-              switch (swStatus) {
-                case 'connected':
-                  set({ error: null, status: 'connected' })
-                  emitDebug('sse', 'connected', 'SSE stream connected (via SW)')
-                  startInterpolation()
-                  break
-                case 'connecting':
-                  set({ status: 'connecting' })
-                  break
-                case 'disconnected':
-                  stopInterpolation()
-                  set({ status: 'disconnected' })
-                  break
-                case 'error':
-                  set({ error: swError ?? 'Connection error', status: 'error' })
-                  break
+              if (type === 'SSE_EVENT' && event && data) {
+                handleEvent(event, data, token)
+              } else if (type === 'SW_STATUS' && wStatus) {
+                switch (wStatus) {
+                  case 'connected':
+                    set({ error: null, status: 'connected' })
+                    emitDebug('sse', 'connected', 'SSE stream connected (via SharedWorker)')
+                    startInterpolation()
+                    break
+                  case 'connecting':
+                    set({ status: 'connecting' })
+                    break
+                  case 'disconnected':
+                    stopInterpolation()
+                    set({ status: 'disconnected' })
+                    break
+                  case 'error':
+                    set({ error: wError ?? 'Connection error', status: 'error' })
+                    break
+                }
               }
             }
-          }
 
-          navigator.serviceWorker.controller.postMessage({
-            token,
-            type: 'PLAYBACK_SUBSCRIBE',
-          })
-          return
+            worker.port.start()
+            worker.port.postMessage({
+              token,
+              type: 'PLAYBACK_SUBSCRIBE',
+            })
+            return
+          } catch (err) {
+            console.warn('[playbackStore] SharedWorker failed, falling back to direct:', err)
+            sharedWorkerPort = null
+          }
         }
 
         // Fallback: direct fetch
-        console.log('[playbackStore] Using direct SSE (no SW)')
-        usingSW = false
+        console.log('[playbackStore] Using direct SSE (no SharedWorker)')
         directConnect(token)
       },
       disconnect: () => {
@@ -532,14 +536,11 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
           reconnectTimeout = null
         }
 
-        // Clean up SW subscription
-        if (usingSW) {
-          navigator.serviceWorker?.controller?.postMessage({ type: 'PLAYBACK_UNSUBSCRIBE' })
-          if (broadcastChannel) {
-            broadcastChannel.close()
-            broadcastChannel = null
-          }
-          usingSW = false
+        // Clean up SharedWorker subscription
+        if (sharedWorkerPort) {
+          sharedWorkerPort.postMessage({ type: 'PLAYBACK_UNSUBSCRIBE' })
+          sharedWorkerPort.close()
+          sharedWorkerPort = null
         }
 
         stopInterpolation()
@@ -626,34 +627,24 @@ export function useVolume() {
 }
 
 // =============================================================================
-// SW LIFECYCLE LISTENERS
+// TAB LIFECYCLE & CROSS-TAB TOKEN SYNC
 // =============================================================================
 
 if (typeof window !== 'undefined') {
   // Ensure clean unsubscribe when tab closes
   window.addEventListener('beforeunload', () => {
-    if (usingSW) {
-      navigator.serviceWorker?.controller?.postMessage({ type: 'PLAYBACK_UNSUBSCRIBE' })
+    if (sharedWorkerPort) {
+      sharedWorkerPort.postMessage({ type: 'PLAYBACK_UNSUBSCRIBE' })
     }
   })
 
-  // Re-subscribe after SW update (SKIP_WAITING → controllerchange)
-  navigator.serviceWorker?.addEventListener('controllerchange', () => {
-    const { status } = usePlaybackStore.getState()
-    const token = useAuthStore.getState().token
-    if ((status === 'connected' || status === 'connecting') && token && usingSW) {
-      console.log('[playbackStore] SW controller changed, re-subscribing...')
-      // Close old channel
-      if (broadcastChannel) {
-        broadcastChannel.close()
-        broadcastChannel = null
+  // Forward cross-tab token changes to the SharedWorker
+  useAuthStore.subscribe(
+    (s) => s.token,
+    (token) => {
+      if (sharedWorkerPort && token) {
+        sharedWorkerPort.postMessage({ token, type: 'PLAYBACK_TOKEN_UPDATE' })
       }
-      usingSW = false
-      // Short delay for new SW to initialize, then reconnect
-      setTimeout(() => {
-        usePlaybackStore.getState().disconnect()
-        usePlaybackStore.getState().connect(token)
-      }, 500)
-    }
-  })
+    },
+  )
 }
