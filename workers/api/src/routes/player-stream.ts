@@ -9,6 +9,7 @@
  * - Rich Spotify data (shuffle, repeat, context, volume, device type)
  */
 
+import type { Env } from '../index'
 import type {
   ContextType,
   DeviceType,
@@ -30,8 +31,6 @@ import type {
 import type { OpenAPIHono } from '@hono/zod-openapi'
 
 import { z } from 'zod'
-
-import type { Env } from '../index'
 
 import { isSuccessResponse, safeParse } from '../lib/guards'
 import { AudioEnrichmentService } from '../services/AudioEnrichmentService'

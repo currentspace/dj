@@ -213,7 +213,7 @@ export class MockEventSource implements EventSource {
       this.readyState = 1
       const openEvent = new Event('open')
       if (this.onopen) {
-        this.onopen.call(this as unknown as EventSource, openEvent)
+        this.onopen.call(this, openEvent)
       }
       this.startEmitting()
     }, 10)
@@ -285,7 +285,7 @@ export class MockEventSource implements EventSource {
     this.readyState = 2
     const errorEvent = new Event('error')
     if (this.onerror) {
-      this.onerror.call(this as unknown as EventSource, errorEvent)
+      this.onerror.call(this, errorEvent)
     }
     this.dispatchEvent(errorEvent)
   }
@@ -303,7 +303,7 @@ export class MockEventSource implements EventSource {
       })
 
       if (this.onmessage) {
-        this.onmessage.call(this as unknown as EventSource, messageEvent)
+        this.onmessage.call(this, messageEvent)
       }
       this.dispatchEvent(messageEvent)
 

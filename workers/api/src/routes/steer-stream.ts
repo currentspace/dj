@@ -3,13 +3,12 @@
  * Provides real-time progress feedback during vibe steering
  */
 
+import type { Env } from '../index'
 import type { MixSession, QueuedTrack, Suggestion, VibeProfile } from '@dj/shared-types'
 
 import Anthropic from '@anthropic-ai/sdk'
 import { Hono } from 'hono'
 import { z } from 'zod'
-
-import type { Env } from '../index'
 
 import { LLM } from '../constants'
 import { buildSteeringSuggestionsPrompt, buildVibeDescription, SYSTEM_PROMPTS } from '../lib/ai-prompts'

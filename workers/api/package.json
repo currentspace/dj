@@ -17,19 +17,19 @@
     "@anthropic-ai/sdk": "catalog:",
     "@dj/api-contracts": "workspace:*",
     "@dj/shared-types": "workspace:*",
-    "@hono/swagger-ui": "^0.5.3",
+    "@hono/swagger-ui": "^0.6.1",
     "@hono/zod-openapi": "catalog:",
     "hono": "catalog:",
-    "nanoid": "^5.1.6",
+    "nanoid": "^5.1.11",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "catalog:",
     "@types/node": "catalog:",
-    "dotenv": "^17.3.1",
+    "dotenv": "^17.4.2",
     "tsup": "catalog:",
     "vitest": "catalog:",
     "wrangler": "catalog:",
-    "zod-to-json-schema": "^3.25.1"
+    "zod-to-json-schema": "^3.25.2"
   }
 }

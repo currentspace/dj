@@ -3,6 +3,7 @@
  * Migrated to use @hono/zod-openapi
  */
 
+import type {Env} from '../index'
 import type {OpenAPIHono} from '@hono/zod-openapi'
 
 import {createPlaylist, getPlaylistTracks, getUserPlaylists, modifyPlaylist} from '@dj/api-contracts'
@@ -13,8 +14,6 @@ import {
   SpotifyUserPlaylistsResponseSchema,
   SpotifyUserSchema,
 } from '@dj/shared-types'
-
-import type {Env} from '../index'
 
 import {isSuccessResponse} from '../lib/guards'
 import {getLogger} from '../utils/LoggerContext'

@@ -61,18 +61,18 @@ describe('LastFmService', () => {
         .mockResolvedValueOnce({
           json: () => Promise.resolve(buildLastFmCorrection(null)),
           ok: true,
-        } as Response)
+        })
         // Track info
         .mockResolvedValueOnce({
           json: () =>
             Promise.resolve(buildLastFmTrackInfo({ listeners: 10000, playcount: 50000 })),
           ok: true,
-        } as Response)
+        })
         // Top tags
         .mockResolvedValueOnce({
           json: () => Promise.resolve(buildLastFmTopTags(['rock', 'classic rock', '70s'])),
           ok: true,
-        } as Response)
+        })
         // Similar tracks
         .mockResolvedValueOnce({
           json: () =>
@@ -83,7 +83,7 @@ describe('LastFmService', () => {
               ]),
             ),
           ok: true,
-        } as Response)
+        })
 
       const signals = await service.getTrackSignals(track, true)
 
@@ -102,7 +102,7 @@ describe('LastFmService', () => {
       fetchMock.mockResolvedValue({
         json: () => Promise.resolve(buildLastFmCorrection(null)),
         ok: true,
-      } as Response)
+      })
 
       await service.getTrackSignals(track, true)
 
@@ -126,22 +126,22 @@ describe('LastFmService', () => {
           json: () =>
             Promise.resolve(buildLastFmCorrection({ artist: 'Correct Artist', track: 'Correct Track' })),
           ok: true,
-        } as Response)
+        })
         // Track info should use corrected names
         .mockResolvedValueOnce({
           json: () => Promise.resolve(buildLastFmTrackInfo()),
           ok: true,
-        } as Response)
+        })
         // Top tags
         .mockResolvedValueOnce({
           json: () => Promise.resolve(buildLastFmTopTags([])),
           ok: true,
-        } as Response)
+        })
         // Similar
         .mockResolvedValueOnce({
           json: () => Promise.resolve(buildLastFmSimilarTracks([])),
           ok: true,
-        } as Response)
+        })
 
       const signals = await service.getTrackSignals(track, true)
 
@@ -156,11 +156,11 @@ describe('LastFmService', () => {
         .mockResolvedValueOnce({
           json: () => Promise.resolve(buildLastFmCorrection(null)),
           ok: true,
-        } as Response)
+        })
         .mockResolvedValueOnce({
           json: () => Promise.resolve(buildLastFmTrackInfo()),
           ok: true,
-        } as Response)
+        })
         .mockResolvedValueOnce({
           json: () =>
             Promise.resolve(
@@ -178,11 +178,11 @@ describe('LastFmService', () => {
               ]),
             ),
           ok: true,
-        } as Response)
+        })
         .mockResolvedValueOnce({
           json: () => Promise.resolve(buildLastFmSimilarTracks([])),
           ok: true,
-        } as Response)
+        })
 
       const signals = await service.getTrackSignals(track, true)
 
@@ -198,15 +198,15 @@ describe('LastFmService', () => {
         .mockResolvedValueOnce({
           json: () => Promise.resolve(buildLastFmCorrection(null)),
           ok: true,
-        } as Response)
+        })
         .mockResolvedValueOnce({
           json: () => Promise.resolve(buildLastFmTrackInfo()),
           ok: true,
-        } as Response)
+        })
         .mockResolvedValueOnce({
           json: () => Promise.resolve(buildLastFmTopTags([])),
           ok: true,
-        } as Response)
+        })
         .mockResolvedValueOnce({
           json: () =>
             Promise.resolve(
@@ -216,7 +216,7 @@ describe('LastFmService', () => {
               ]),
             ),
           ok: true,
-        } as Response)
+        })
 
       const signals = await service.getTrackSignals(track, true)
 
@@ -235,20 +235,20 @@ describe('LastFmService', () => {
         .mockResolvedValueOnce({
           json: () => Promise.resolve(buildLastFmCorrection(null)),
           ok: true,
-        } as Response)
+        })
         .mockResolvedValueOnce({
           json: () =>
             Promise.resolve(buildLastFmTrackInfo({ listeners: 25000, playcount: 100000 })),
           ok: true,
-        } as Response)
+        })
         .mockResolvedValueOnce({
           json: () => Promise.resolve(buildLastFmTopTags([])),
           ok: true,
-        } as Response)
+        })
         .mockResolvedValueOnce({
           json: () => Promise.resolve(buildLastFmSimilarTracks([])),
           ok: true,
-        } as Response)
+        })
 
       const signals = await service.getTrackSignals(track, true)
 
@@ -263,19 +263,19 @@ describe('LastFmService', () => {
         .mockResolvedValueOnce({
           json: () => Promise.resolve(buildLastFmCorrection(null)),
           ok: true,
-        } as Response)
+        })
         .mockResolvedValueOnce({
           json: () => Promise.resolve(buildLastFmTrackInfo()),
           ok: true,
-        } as Response)
+        })
         .mockResolvedValueOnce({
           json: () => Promise.resolve(buildLastFmTopTags([])),
           ok: true,
-        } as Response)
+        })
         .mockResolvedValueOnce({
           json: () => Promise.resolve(buildLastFmSimilarTracks([])),
           ok: true,
-        } as Response)
+        })
 
       const signals = await service.getTrackSignals(track, true)
 
@@ -299,19 +299,19 @@ describe('LastFmService', () => {
         .mockResolvedValueOnce({
           json: () => Promise.resolve(buildLastFmCorrection(null)),
           ok: true,
-        } as Response)
+        })
         .mockResolvedValueOnce({
           json: () => Promise.resolve(buildLastFmTrackInfo({ wiki: wikiData })),
           ok: true,
-        } as Response)
+        })
         .mockResolvedValueOnce({
           json: () => Promise.resolve(buildLastFmTopTags([])),
           ok: true,
-        } as Response)
+        })
         .mockResolvedValueOnce({
           json: () => Promise.resolve(buildLastFmSimilarTracks([])),
           ok: true,
-        } as Response)
+        })
 
       const signals = await service.getTrackSignals(track, true)
 
@@ -327,19 +327,19 @@ describe('LastFmService', () => {
         .mockResolvedValueOnce({
           json: () => Promise.resolve(buildLastFmCorrection(null)),
           ok: true,
-        } as Response)
+        })
         .mockResolvedValueOnce({
           json: () => Promise.resolve(buildLastFmTrackInfo()),
           ok: true,
-        } as Response)
+        })
         .mockResolvedValueOnce({
           json: () => Promise.resolve(buildLastFmTopTags([])),
           ok: true,
-        } as Response)
+        })
         .mockResolvedValueOnce({
           json: () => Promise.resolve(buildLastFmSimilarTracks([])),
           ok: true,
-        } as Response)
+        })
 
       const signals = await service.getTrackSignals(track, true)
 
@@ -404,20 +404,20 @@ describe('LastFmService', () => {
         .mockResolvedValueOnce({
           json: () => Promise.resolve(buildLastFmCorrection(null)),
           ok: true,
-        } as Response)
+        })
         .mockResolvedValueOnce({
           json: () =>
             Promise.resolve(buildLastFmTrackInfo({ listeners: 10000, playcount: 50000 })),
           ok: true,
-        } as Response)
+        })
         .mockResolvedValueOnce({
           json: () => Promise.resolve(buildLastFmTopTags(['rock'])),
           ok: true,
-        } as Response)
+        })
         .mockResolvedValueOnce({
           json: () => Promise.resolve(buildLastFmSimilarTracks([])),
           ok: true,
-        } as Response)
+        })
 
       await service.getTrackSignals(track, true)
 
@@ -983,7 +983,7 @@ describe('LastFmService', () => {
       fetchMock.mockResolvedValue({
         json: () => Promise.resolve(buildLastFmArtistInfo()),
         ok: true,
-      } as Response)
+      })
 
       await service.batchGetArtistInfo(artists)
 
@@ -997,7 +997,7 @@ describe('LastFmService', () => {
       fetchMock.mockResolvedValue({
         json: () => Promise.resolve(buildLastFmArtistInfo()),
         ok: true,
-      } as Response)
+      })
 
       const results = await service.batchGetArtistInfo(artists)
 
@@ -1076,7 +1076,7 @@ describe('LastFmService', () => {
       fetchMock.mockResolvedValue({
         json: () => Promise.resolve(buildLastFmArtistInfo()),
         ok: true,
-      } as Response)
+      })
 
       const progressCalls: { current: number; total: number }[] = []
       await service.batchGetArtistInfo(artists, (current, total) => {
@@ -1132,19 +1132,19 @@ describe('LastFmService', () => {
         .mockResolvedValueOnce({
           json: () => Promise.resolve(buildLastFmCorrection(null)),
           ok: true,
-        } as Response)
+        })
         .mockResolvedValueOnce({
           json: () => Promise.resolve(buildLastFmTrackInfo()),
           ok: true,
-        } as Response)
+        })
         .mockResolvedValueOnce({
           json: () => Promise.resolve(buildLastFmTopTags(['rock'])),
           ok: true,
-        } as Response)
+        })
         .mockResolvedValueOnce({
           json: () => Promise.resolve(buildLastFmSimilarTracks([])),
           ok: true,
-        } as Response)
+        })
 
       await service.getTrackSignals(track, true)
 
@@ -1225,19 +1225,19 @@ describe('LastFmService', () => {
         .mockResolvedValueOnce({
           json: () => Promise.resolve(buildLastFmCorrection(null)),
           ok: true,
-        } as Response)
+        })
         .mockResolvedValueOnce({
           json: () => Promise.resolve(buildLastFmTrackInfo({ listeners: 1000 })),
           ok: true,
-        } as Response)
+        })
         .mockResolvedValueOnce({
           json: () => Promise.resolve(buildLastFmTopTags(['rock'])),
           ok: true,
-        } as Response)
+        })
         .mockResolvedValueOnce({
           json: () => Promise.resolve(buildLastFmSimilarTracks([])),
           ok: true,
-        } as Response)
+        })
 
       const signals = await service.getTrackSignals(track, true)
 

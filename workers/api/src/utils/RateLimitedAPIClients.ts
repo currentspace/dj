@@ -22,9 +22,9 @@
  * ```
  */
 
-import {z} from 'zod'
-
 import type {ServiceLogger} from './ServiceLogger'
+
+import {z} from 'zod'
 
 import {globalOrchestrator} from './RequestOrchestrator'
 

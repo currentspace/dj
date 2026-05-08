@@ -4,12 +4,11 @@
  * Uses AI/Claude for intelligent recommendations when no history exists
  */
 
+import type { AudioEnrichmentService } from './AudioEnrichmentService'
+import type { LastFmService } from './LastFmService'
 import type { MixSession, PlayedTrack, Suggestion } from '@dj/shared-types'
 
 import { z } from 'zod'
-
-import type { AudioEnrichmentService } from './AudioEnrichmentService'
-import type { LastFmService } from './LastFmService'
 
 import { buildInitialSuggestionsPrompt, buildNextTrackPrompt, buildVibeDescription, SYSTEM_PROMPTS } from '../lib/ai-prompts'
 import { AIService, createAIService } from '../lib/ai-service'

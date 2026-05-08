@@ -707,7 +707,7 @@ git push
 1. Check tool result sizes in logs
 2. Strip unnecessary fields from API responses
 3. Send summaries instead of raw data
-4. See `SPOTIFY_TRACK_ANALYSIS.md`
+4. See `docs/archive/SPOTIFY_TRACK_ANALYSIS.md`
 
 ### Build Failures
 
@@ -733,7 +733,7 @@ git push
 - **DEPLOYMENT.md** - GitHub Actions and manual deployment
 - **MCP_SETUP.md** - Model Context Protocol implementation
 - **SSE_DEBUGGING_GUIDE.md** - Comprehensive SSE troubleshooting
-- **SPOTIFY_TRACK_ANALYSIS.md** - Spotify API data optimization
+- **docs/archive/SPOTIFY_TRACK_ANALYSIS.md** - Spotify API data optimization (archived)
 
 ## MARVEL
 

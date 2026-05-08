@@ -1,9 +1,8 @@
-import type {SpotifyTrackFull} from '@dj/shared-types'
-
 import type {Env} from '../../../index'
 import type {ProgressNarrator} from '../../../lib/progress-narrator'
 import type {SSEWriter} from '../streaming/sse-writer'
 import type {DeezerAnalysisData} from '../types'
+import type {SpotifyTrackFull} from '@dj/shared-types'
 
 import {AudioEnrichmentService} from '../../../services/AudioEnrichmentService'
 import {getChildLogger, getLogger} from '../../../utils/LoggerContext'

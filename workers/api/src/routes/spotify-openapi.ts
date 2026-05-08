@@ -3,6 +3,7 @@
  * Migrated from spotify.ts to use @hono/zod-openapi
  */
 
+import type {Env} from '../index'
 import type {OpenAPIHono} from '@hono/zod-openapi'
 
 import {
@@ -16,8 +17,6 @@ import {
 } from '@dj/api-contracts'
 import {SpotifySearchResponseSchema, SpotifyTokenResponseSchema} from '@dj/shared-types'
 import {z} from 'zod'
-
-import type {Env} from '../index'
 
 import {isSuccessResponse, parse, safeParse} from '../lib/guards'
 import {getLogger} from '../utils/LoggerContext'

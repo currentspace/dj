@@ -28,7 +28,7 @@ beforeEach(() => {
 })
 
 // Global fetch mock setup
-global.fetch = vi.fn(() =>
+globalThis.fetch = vi.fn(() =>
   Promise.resolve({
     arrayBuffer: async () => new ArrayBuffer(0),
     blob: async () => new Blob(),

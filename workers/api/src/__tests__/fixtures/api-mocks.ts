@@ -302,7 +302,7 @@ export function mockDeezerAPI(responses: Record<string, DeezerTrack | null>): ()
     }
 
     // Fallback to original fetch
-    return originalFetch(input as RequestInfo)
+    return originalFetch(input)
   }
 
   // Return cleanup function
@@ -388,7 +388,7 @@ export function mockLastFmAPI(responses: {
     }
 
     // Fallback to original fetch
-    return originalFetch(input as RequestInfo)
+    return originalFetch(input)
   }
 
   // Return cleanup function
@@ -448,7 +448,7 @@ export function mockMusicBrainzAPI(
     }
 
     // Fallback to original fetch
-    return originalFetch(input as RequestInfo)
+    return originalFetch(input)
   }
 
   // Return cleanup function
@@ -558,7 +558,7 @@ export function mockSpotifyAPI(responses: {
     }
 
     // Fallback to original fetch
-    return originalFetch(input as RequestInfo, init)
+    return originalFetch(input, init)
   }
 
   // Return cleanup function

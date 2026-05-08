@@ -3,11 +3,10 @@
  * Tests for Live DJ Mode mix session endpoints
  */
 
+import type {Env} from '../../index'
 import type {MixSession, QueuedTrack} from '@dj/shared-types'
 
 import {beforeEach, describe, expect, it, vi} from 'vitest'
-
-import type {Env} from '../../index'
 
 import {MixSessionService} from '../../services/MixSessionService'
 import {SuggestionEngine} from '../../services/SuggestionEngine'

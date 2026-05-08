@@ -12,9 +12,14 @@ export default defineConfig({
     outDir: 'dist',
     rollupOptions: {
       output: {
-        manualChunks: {
-          api: ['@dj/api-client', '@dj/shared-types'],
-          vendor: ['react', 'react-dom'],
+        manualChunks(id) {
+          if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/')) {
+            return 'vendor'
+          }
+          if (id.includes('packages/api-client') || id.includes('packages/shared-types')) {
+            return 'api'
+          }
+          return undefined
         },
       },
     },
@@ -26,14 +31,7 @@ export default defineConfig({
   },
   plugins: [
     tailwindcss(),
-    react({
-      babel: {
-        plugins: [
-          // Enable React Compiler if available
-          // ['babel-plugin-react-compiler', {}]
-        ],
-      },
-    }),
+    react(),
   ],
   resolve: {
     alias: {

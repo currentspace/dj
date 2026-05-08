@@ -58,7 +58,7 @@ describe('AudioEnrichmentService', () => {
       fetchMock.mockResolvedValue({
         json: () => Promise.resolve(deezerTrack),
         ok: true,
-      } as Response)
+      })
 
       const result = await service.enrichTrack(track)
 
@@ -77,7 +77,7 @@ describe('AudioEnrichmentService', () => {
       fetchMock.mockResolvedValue({
         json: () => Promise.resolve(buildDeezerTrack({ bpm: 140 })),
         ok: true,
-      } as Response)
+      })
 
       const result = await service.enrichTrack(track)
 
@@ -92,7 +92,7 @@ describe('AudioEnrichmentService', () => {
       fetchMock.mockResolvedValue({
         json: () => Promise.resolve(buildDeezerTrack({ bpm: null })),
         ok: true,
-      } as Response)
+      })
 
       const result = await service.enrichTrack(track)
 
@@ -110,7 +110,7 @@ describe('AudioEnrichmentService', () => {
       fetchMock.mockResolvedValue({
         json: () => Promise.resolve(buildDeezerTrack({ bpm: 0 })),
         ok: true,
-      } as Response)
+      })
 
       const result = await service.enrichTrack(track)
 
@@ -144,7 +144,7 @@ describe('AudioEnrichmentService', () => {
       fetchMock.mockResolvedValue({
         ok: false,
         status: 404,
-      } as Response)
+      })
 
       const result = await service.enrichTrack(track)
 
@@ -165,7 +165,7 @@ describe('AudioEnrichmentService', () => {
       fetchMock.mockResolvedValue({
         json: () => Promise.resolve(buildDeezerTrack({ bpm: 120 })),
         ok: true,
-      } as Response)
+      })
 
       const result = await service.enrichTrack(track)
 
@@ -188,7 +188,7 @@ describe('AudioEnrichmentService', () => {
             }),
           ),
         ok: true,
-      } as Response)
+      })
 
       const result = await service.enrichTrack(track)
 
@@ -219,12 +219,12 @@ describe('AudioEnrichmentService', () => {
         .mockResolvedValueOnce({
           json: () => Promise.resolve(mbResponse),
           ok: true,
-        } as Response)
+        })
         // Deezer call with found ISRC
         .mockResolvedValueOnce({
           json: () => Promise.resolve(buildDeezerTrack({ bpm: 72 })),
           ok: true,
-        } as Response)
+        })
 
       await service.enrichTrack(track)
 
@@ -253,11 +253,11 @@ describe('AudioEnrichmentService', () => {
         .mockResolvedValueOnce({
           json: () => Promise.resolve(mbResponse),
           ok: true,
-        } as Response)
+        })
         .mockResolvedValueOnce({
           json: () => Promise.resolve(buildDeezerTrack({ bpm: 72 })),
           ok: true,
-        } as Response)
+        })
 
       const result = await service.enrichTrack(track)
 
@@ -282,11 +282,11 @@ describe('AudioEnrichmentService', () => {
         .mockResolvedValueOnce({
           json: () => Promise.resolve(mbResponse),
           ok: true,
-        } as Response)
+        })
         .mockResolvedValueOnce({
           json: () => Promise.resolve(buildDeezerTrack({ bpm: 72 })),
           ok: true,
-        } as Response)
+        })
 
       const result = await service.enrichTrack(track)
 
@@ -302,7 +302,7 @@ describe('AudioEnrichmentService', () => {
       fetchMock.mockResolvedValue({
         json: () => Promise.resolve(buildMusicBrainzSearchResponse([])),
         ok: true,
-      } as Response)
+      })
 
       const result = await service.enrichTrack(track)
 
@@ -324,7 +324,7 @@ describe('AudioEnrichmentService', () => {
       fetchMock.mockResolvedValue({
         ok: false,
         status: 500,
-      } as Response)
+      })
 
       const result = await service.enrichTrack(track)
 
@@ -351,11 +351,11 @@ describe('AudioEnrichmentService', () => {
         .mockResolvedValueOnce({
           json: () => Promise.resolve(mbResponse),
           ok: true,
-        } as Response)
+        })
         .mockResolvedValueOnce({
           json: () => Promise.resolve(buildDeezerTrack({ bpm: 120 })),
           ok: true,
-        } as Response)
+        })
 
       await service.enrichTrack(track)
 
@@ -424,7 +424,7 @@ describe('AudioEnrichmentService', () => {
       fetchMock.mockResolvedValue({
         json: () => Promise.resolve(buildDeezerTrack({ bpm: 128 })),
         ok: true,
-      } as Response)
+      })
 
       const result = await service.enrichTrack(track)
 
@@ -441,7 +441,7 @@ describe('AudioEnrichmentService', () => {
       fetchMock.mockResolvedValue({
         json: () => Promise.resolve(buildDeezerTrack({ bpm: 130 })),
         ok: true,
-      } as Response)
+      })
 
       const result = await service.enrichTrack(track)
 
@@ -458,7 +458,7 @@ describe('AudioEnrichmentService', () => {
       fetchMock.mockResolvedValue({
         json: () => Promise.resolve(buildDeezerTrack({ bpm: 140 })),
         ok: true,
-      } as Response)
+      })
 
       await service.enrichTrack(track)
 
@@ -477,7 +477,7 @@ describe('AudioEnrichmentService', () => {
       fetchMock.mockResolvedValue({
         ok: false,
         status: 404,
-      } as Response)
+      })
 
       await service.enrichTrack(track)
 
@@ -497,7 +497,7 @@ describe('AudioEnrichmentService', () => {
       fetchMock.mockResolvedValue({
         json: () => Promise.resolve(buildDeezerTrack({ bpm: 120 })),
         ok: true,
-      } as Response)
+      })
 
       await service.enrichTrack(track)
 
@@ -514,7 +514,7 @@ describe('AudioEnrichmentService', () => {
       fetchMock.mockResolvedValue({
         json: () => Promise.resolve(buildDeezerTrack({ bpm: 120 })),
         ok: true,
-      } as Response)
+      })
 
       // First call populates cache
       await service.enrichTrack(track)
@@ -538,7 +538,7 @@ describe('AudioEnrichmentService', () => {
       fetchMock.mockResolvedValue({
         json: () => Promise.resolve(buildDeezerTrack({ bpm: 120 })),
         ok: true,
-      } as Response)
+      })
 
       const results = await service.batchEnrichTracks(tracks)
 
@@ -557,7 +557,7 @@ describe('AudioEnrichmentService', () => {
       fetchMock.mockResolvedValue({
         json: () => Promise.resolve(buildDeezerTrack({ bpm: 125 })),
         ok: true,
-      } as Response)
+      })
 
       const results = await service.batchEnrichTracks(tracks)
 
@@ -638,7 +638,7 @@ describe('AudioEnrichmentService', () => {
       fetchMock.mockResolvedValueOnce({
         json: () => Promise.resolve(buildDeezerTrack({ bpm: 120 })),
         ok: true,
-      } as Response)
+      })
 
       const result1 = await service.enrichTrack(track1)
       expect(result1.source).toBe('deezer')
@@ -657,11 +657,11 @@ describe('AudioEnrichmentService', () => {
               buildMusicBrainzRecording({ isrcs: ['ISRC2'] })
             ])),
           ok: true,
-        } as Response)
+        })
         .mockResolvedValueOnce({
           json: () => Promise.resolve(buildDeezerTrack({ bpm: 130 })),
           ok: true,
-        } as Response)
+        })
 
       const result2 = await service.enrichTrack(track2)
       expect(result2.source).toBe('deezer-via-musicbrainz')
@@ -675,7 +675,7 @@ describe('AudioEnrichmentService', () => {
       fetchMock.mockResolvedValue({
         ok: false,
         status: 404,
-      } as Response)
+      })
 
       const result3 = await service.enrichTrack(track3)
       expect(result3.source).toBe(null)

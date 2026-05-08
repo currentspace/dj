@@ -90,6 +90,9 @@ export default [
       '@typescript-eslint/restrict-template-expressions': 'off',
 
       '@typescript-eslint/unbound-method': 'off',
+      // ESLint v10 new rules — opt out for now (separate cleanup effort)
+      'no-useless-assignment': 'off',
+      'preserve-caught-error': 'off',
     },
   },
 
@@ -209,11 +212,8 @@ export default [
           groups: [
             'type',
             ['builtin', 'external'],
-            'internal-type',
             'internal',
-            ['parent-type', 'sibling-type', 'index-type'],
             ['parent', 'sibling', 'index'],
-            'object',
             'unknown',
           ],
           order: 'asc',

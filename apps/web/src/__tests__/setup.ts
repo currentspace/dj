@@ -28,5 +28,5 @@ beforeEach(() => {
     replace: vi.fn(),
     search: '',
     toString: vi.fn(() => 'http://localhost:3000'),
-  } as Location
+  }
 })

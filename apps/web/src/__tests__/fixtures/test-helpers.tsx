@@ -139,7 +139,7 @@ export function flushPromises(): Promise<void> {
  * Log all fetch calls made during test
  */
 export function logFetchCalls(): void {
-  const fetchMock = global.fetch as Mock
+  const fetchMock = globalThis.fetch as Mock
   if (fetchMock?.mock) {
     console.log('[Fetch Calls]', fetchMock.mock.calls)
   } else {
@@ -192,7 +192,7 @@ export function mockChatStream(events: Parameters<typeof createMockSSEResponse>[
     return new Response(null, {status: 404})
   }) as Mock
 
-  global.fetch = fetchMock
+  globalThis.fetch = fetchMock
   return fetchMock
 }
 
@@ -218,7 +218,7 @@ export function mockFetch<T>(data: T, options?: MockFetchOptions): Mock {
     })
   }) as Mock
 
-  global.fetch = fetchMock
+  globalThis.fetch = fetchMock
   return fetchMock
 }
 
@@ -237,7 +237,7 @@ export function mockFetchError(status = 500, message = 'Internal Server Error'):
     })
   }) as Mock
 
-  global.fetch = fetchMock
+  globalThis.fetch = fetchMock
   return fetchMock
 }
 
@@ -249,7 +249,7 @@ export function mockFetchReject(error: Error | string = 'Network error'): Mock {
     throw typeof error === 'string' ? new Error(error) : error
   }) as Mock
 
-  global.fetch = fetchMock
+  globalThis.fetch = fetchMock
   return fetchMock
 }
 
@@ -293,7 +293,7 @@ export function mockSpotifyAPI<T>(endpoint: string, data: T, options?: MockFetch
     return fetch(url)
   }) as Mock
 
-  global.fetch = fetchMock
+  globalThis.fetch = fetchMock
   return fetchMock
 }
 
@@ -425,7 +425,7 @@ export function setupTestEnvironment(): void {
   vi.clearAllMocks()
 
   // Reset fetch mock
-  global.fetch = vi.fn()
+  globalThis.fetch = vi.fn()
 }
 
 /**

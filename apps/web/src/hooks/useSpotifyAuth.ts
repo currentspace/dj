@@ -33,6 +33,7 @@ export function cleanupAuthStore(): void {
   })
 }
 
+/* eslint-disable react-hooks/refs -- intentional: first-render-only OAuth bootstrap in hook body per React 19 project guidelines (no useEffect) */
 export function useSpotifyAuth(): UseSpotifyAuthReturn {
   const hasInitialized = useRef(false)
 

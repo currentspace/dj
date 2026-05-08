@@ -1,8 +1,7 @@
+import type {NativeTool} from '../types'
 import type Anthropic from '@anthropic-ai/sdk'
 
 import {z} from 'zod'
-
-import type {NativeTool} from '../types'
 
 /**
  * Convert NativeTool to Anthropic tool format

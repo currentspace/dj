@@ -322,7 +322,7 @@ describe('Enrichment Pipeline Integration', () => {
           external_ids: {isrc: 'INVALID123'},
           id: 'invalid-track-1',
           name: 'Invalid Track',
-        } as typeof KNOWN_TEST_TRACKS.BOHEMIAN_RHAPSODY,
+        },
       ]
 
       // Deezer: Should get 1 success, 1 null (invalid ISRC)
@@ -378,7 +378,7 @@ describe('Enrichment Pipeline Integration', () => {
           ...KNOWN_TEST_TRACKS.BOHEMIAN_RHAPSODY,
           id: 'another-queen-track',
           name: 'Another One Bites the Dust',
-        } as typeof KNOWN_TEST_TRACKS.BOHEMIAN_RHAPSODY, // Also Queen
+        }, // Also Queen
       ]
 
       if (!lastFmService) return

@@ -158,11 +158,11 @@ describe('SuggestionEngine', () => {
         .mockResolvedValueOnce({
           json: () => Promise.resolve({ tracks: { items: [mockTrack2] } }),
           ok: true,
-        } as Response)
+        })
         .mockResolvedValueOnce({
           json: () => Promise.resolve({ tracks: { items: [mockTrack3] } }),
           ok: true,
-        } as Response)
+        })
 
       // Spy on audio enrichment
       vi.spyOn(audioService, 'enrichTrack')
@@ -209,7 +209,7 @@ describe('SuggestionEngine', () => {
       fetchMock.mockResolvedValue({
         json: () => Promise.resolve({ tracks: { items: [mockTrack3] } }),
         ok: true,
-      } as Response)
+      })
 
       vi.spyOn(audioService, 'enrichTrack').mockResolvedValue({
         bpm: 120,
@@ -254,7 +254,7 @@ describe('SuggestionEngine', () => {
       fetchMock.mockResolvedValue({
         json: () => Promise.resolve({ tracks: { items: [mockTrack3] } }),
         ok: true,
-      } as Response)
+      })
 
       vi.spyOn(audioService, 'enrichTrack').mockResolvedValue({
         bpm: 120,
@@ -432,7 +432,7 @@ describe('SuggestionEngine', () => {
       fetchMock.mockResolvedValue({
         ok: false,
         status: 500,
-      } as Response)
+      })
 
       const suggestions = await engine.generateSuggestions(session, 5)
 
@@ -462,7 +462,7 @@ describe('SuggestionEngine', () => {
       fetchMock.mockResolvedValue({
         json: () => Promise.resolve({ tracks: { items: [trackNoArt] } }),
         ok: true,
-      } as Response)
+      })
 
       vi.spyOn(audioService, 'enrichTrack').mockResolvedValue({
         bpm: 120,

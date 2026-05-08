@@ -2,10 +2,8 @@ import type {
   ApiError,
   ChatRequest,
   ChatResponse,
-  GeneratePlaylistRequest,
   GeneratePlaylistResponse,
   Playlist,
-  SavePlaylistRequest,
   SavePlaylistResponse,
   SpotifyAuthResponse,
 } from '@dj/shared-types'
@@ -30,7 +28,7 @@ export class DJApiClient {
 
   async generatePlaylist(prompt: string): Promise<GeneratePlaylistResponse> {
     return this.request<GeneratePlaylistResponse>('/playlist/generate', {
-      body: JSON.stringify({prompt} as GeneratePlaylistRequest),
+      body: JSON.stringify({prompt}),
       method: 'POST',
     })
   }
@@ -45,7 +43,7 @@ export class DJApiClient {
     }
 
     return this.request<SavePlaylistResponse>('/playlist/save', {
-      body: JSON.stringify({playlist} as SavePlaylistRequest),
+      body: JSON.stringify({playlist}),
       method: 'POST',
     })
   }

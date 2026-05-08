@@ -12,6 +12,7 @@ interface SuggestionsPanelProps {
   suggestions: Suggestion[]
 }
 
+/* eslint-disable react-hooks/refs -- intentional: tracking add/remove state and length-based invalidation in component body per React 19 project guidelines (no useEffect) */
 export function SuggestionsPanel({isLoading, onRefresh, suggestions}: SuggestionsPanelProps) {
   const addToQueueMutation = useAddToQueueMutation()
   const addingRef = useRef<Set<string>>(new Set())
