@@ -212,9 +212,6 @@ This iterative approach allows Claude to fetch only what's needed, avoiding payl
 
 ### Testing & Status
 
-- **GET /api/sse-test/simple** - Basic SSE test (no auth)
-- **POST /api/sse-test/post-stream** - POST SSE test
-- **GET /api/chat-test/\*** - Chat testing endpoints
 - **GET /api/anthropic/status** - Check Anthropic API status
 - **GET /health** - Health check
 
@@ -629,8 +626,7 @@ The `build:worker` script handles this automatically.
 
 1. Check browser console for `[ChatStream]` logs
 2. Check worker logs via `pnpm wrangler tail` in workers/api directory
-3. Use test endpoints: `/api/sse-test/simple`
-4. See `SSE_DEBUGGING_GUIDE.md` for comprehensive guide
+3. See `SSE_DEBUGGING_GUIDE.md` for comprehensive guide
 
 ### Testing Locally
 
@@ -693,8 +689,7 @@ git push
 
 1. Verify headers: `Content-Type: text/event-stream`
 2. Check TransformStream creation
-3. Test with `/api/sse-test/simple`
-4. See `SSE_DEBUGGING_GUIDE.md`
+3. See `SSE_DEBUGGING_GUIDE.md`
 
 ### 401 Unauthorized
 

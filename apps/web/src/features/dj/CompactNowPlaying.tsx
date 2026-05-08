@@ -6,8 +6,8 @@
 
 import type {PlaybackState} from '../../stores'
 
-import {PlaybackControls} from '../../components/molecules/PlaybackControls'
 import {useDevice} from '../../stores'
+import {PlaybackControls} from '../playback/PlaybackControls'
 import styles from './DJPage.module.css'
 
 interface CompactNowPlayingProps {

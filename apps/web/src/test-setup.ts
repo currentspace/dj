@@ -2,6 +2,22 @@ import '@testing-library/jest-dom/vitest'
 import {cleanup} from '@testing-library/react'
 import {afterEach, beforeEach, vi} from 'vitest'
 
+// Node 25's experimental localStorage shadows jsdom's in worker threads
+// and lacks `clear()`. Force jsdom's localStorage to win.
+function makeStorage(): Storage {
+  let store: Record<string, string> = {}
+  return {
+    clear() { store = {} },
+    getItem(key) { return key in store ? store[key] : null },
+    key(i) { return Object.keys(store)[i] ?? null },
+    get length() { return Object.keys(store).length },
+    removeItem(key) { delete store[key] },
+    setItem(key, value) { store[key] = String(value) },
+  }
+}
+Object.defineProperty(globalThis, 'localStorage', {configurable: true, value: makeStorage(), writable: true})
+Object.defineProperty(globalThis, 'sessionStorage', {configurable: true, value: makeStorage(), writable: true})
+
 // Cleanup after each test
 afterEach(() => {
   cleanup()

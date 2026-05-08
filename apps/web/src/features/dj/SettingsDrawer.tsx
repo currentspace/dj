@@ -7,9 +7,9 @@ import type {VibeProfile} from '@dj/shared-types'
 
 import {useCallback, useState} from 'react'
 
-import {AutoFillToggle} from '../../components/atoms/AutoFillToggle'
-import {BuildInfo} from '../../components/atoms/BuildInfo'
-import {DevicePicker} from '../../components/molecules/DevicePicker'
+import {AutoFillToggle} from '../../components/ui/AutoFillToggle'
+import {BuildInfo} from '../../components/ui/BuildInfo'
+import {DevicePicker} from '../playback/DevicePicker'
 import styles from './DJPage.module.css'
 
 interface SettingsDrawerProps {

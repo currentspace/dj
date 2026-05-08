@@ -14,8 +14,10 @@ import {
 } from '../fixtures/storage-mocks'
 import {createAbortError, createMockFetchResponse, flushPromises} from '../fixtures/test-helpers'
 
-// TODO: Fix after Vitest 4.x migration - render/testing behavior changed
-// See: https://vitest.dev/guide/migration.html
+// TODO: 34/45 tests fail with `waitFor` timeouts after the vitest 3→4 migration —
+// renderHook semantics changed (state updates batched differently, listeners cleared
+// before assertions land). The file now loads and 11 tests pass. Each failing test
+// needs a targeted rewrite; tracking as separate work.
 describe.skip('useSpotifyAuth Hook', () => {
   beforeEach(() => {
     // Clear mocks and storage FIRST

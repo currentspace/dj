@@ -1,6 +1,6 @@
 import type {QueuedTrack} from '@dj/shared-types'
 
-import sharedStyles from '../templates/mix-shared.module.css'
+import sharedStyles from './mix-shared.module.css'
 import styles from './queue-panel.module.css'
 
 /** Extended queue track with optional enrichment data */

@@ -1,9 +1,7 @@
 /**
  * SteerInput - Fixed-bottom text input for steering the DJ vibe
- * Submits to steer-stream endpoint with inline feedback
+ * Uses React 19 form actions; no controlled input state.
  */
-
-import {useCallback, useState} from 'react'
 
 import styles from './DJPage.module.css'
 
@@ -21,28 +19,14 @@ const QUICK_PRESETS = [
 ] as const
 
 export function SteerInput({disabled, isLoading, onSteer}: SteerInputProps) {
-  const [input, setInput] = useState('')
-
   const isDisabled = disabled ?? isLoading ?? false
 
-  const handleSubmit = useCallback(
-    (e: React.FormEvent) => {
-      e.preventDefault()
-      const trimmed = input.trim()
-      if (!trimmed || isDisabled) return
-      onSteer(trimmed)
-      setInput('')
-    },
-    [input, isDisabled, onSteer],
-  )
-
-  const handlePreset = useCallback(
-    (direction: string) => {
-      if (isDisabled) return
-      onSteer(direction)
-    },
-    [isDisabled, onSteer],
-  )
+  // React 19 form action: receives the FormData on submit; the form auto-resets.
+  function steerAction(formData: FormData) {
+    const direction = String(formData.get('direction') ?? '').trim()
+    if (!direction || isDisabled) return
+    onSteer(direction)
+  }
 
   return (
     <div className={styles.steerInput}>
@@ -52,7 +36,7 @@ export function SteerInput({disabled, isLoading, onSteer}: SteerInputProps) {
             className={styles.steerPresetBtn}
             disabled={isDisabled}
             key={preset.label}
-            onClick={() => handlePreset(preset.direction)}
+            onClick={() => !isDisabled && onSteer(preset.direction)}
             type="button"
           >
             {preset.label}
@@ -60,20 +44,15 @@ export function SteerInput({disabled, isLoading, onSteer}: SteerInputProps) {
         ))}
       </div>
 
-      <form className={styles.steerForm} onSubmit={handleSubmit}>
+      <form action={steerAction} className={styles.steerForm}>
         <input
           className={styles.steerTextInput}
           disabled={disabled}
-          onChange={(e) => setInput(e.target.value)}
+          name="direction"
           placeholder={isLoading ? 'Steering...' : 'Steer the vibe (e.g., "more acoustic guitar")'}
           type="text"
-          value={input}
         />
-        <button
-          className={styles.steerSubmitBtn}
-          disabled={!input.trim() || isDisabled}
-          type="submit"
-        >
+        <button className={styles.steerSubmitBtn} disabled={isDisabled} type="submit">
           {isLoading ? 'Steering...' : 'Steer'}
         </button>
       </form>
