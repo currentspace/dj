@@ -1,6 +1,10 @@
 /**
  * Frontend Constants
- * Centralized magic numbers and configuration values
+ * Centralized magic numbers and configuration values.
+ *
+ * All maps use `as const satisfies Record<string, number>` so values stay
+ * narrow literal types (consumers see `TIMING.DEBOUNCE_MS: 300`, not `number`)
+ * while still rejecting accidental wrong-shape entries at the declaration site.
  */
 
 // =============================================================================
@@ -23,7 +27,7 @@ export const TIMING = {
   PREVIEW_DURATION_MS: 10000,
   /** Simulated loading delay for suggestions refresh */
   SUGGESTIONS_LOADING_DELAY_MS: 500,
-} as const
+} as const satisfies Record<string, number>
 
 // =============================================================================
 // BUFFER & SIZE LIMITS
@@ -37,7 +41,7 @@ export const LIMITS = {
   ERROR_TEXT_SLICE_LENGTH: 300,
   /** Maximum SSE buffer size (2MB safety cap) */
   MAX_BUFFER_SIZE: 2 * 1024 * 1024,
-} as const
+} as const satisfies Record<string, number>
 
 // =============================================================================
 // UI CONSTANTS
@@ -51,7 +55,7 @@ export const UI = {
   PERCENTAGE_MULTIPLIER: 100,
   /** Number of skeleton items to show in playlist loading state */
   SKELETON_ITEMS_COUNT: 10,
-} as const
+} as const satisfies Record<string, number>
 
 // =============================================================================
 // HTTP STATUS CODES
@@ -66,4 +70,4 @@ export const HTTP_STATUS = {
   NOT_FOUND: 404,
   OK: 200,
   UNAUTHORIZED: 401,
-} as const
+} as const satisfies Record<string, number>

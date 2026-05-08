@@ -78,22 +78,23 @@ export class ServiceLogger {
     }
 
     // Send to client via SSE if available
-    if (this.sseWriter) {
+    const sseWriter = this.sseWriter
+    if (sseWriter) {
       const logData: StreamLogData = {
         level,
         message: formattedMessage,
         ...(data && {data}),
       }
 
-      // Fire and forget - don't await to avoid blocking
-      this.sseWriter
-        .write({
-          data: logData,
-          type: 'log',
-        })
-        .catch(err => {
+      // Fire-and-forget log write — log emit is sync from the caller's POV;
+      // SSE write failures are non-fatal and only logged.
+      void (async () => {
+        try {
+          await sseWriter.write({data: logData, type: 'log'})
+        } catch (err) {
           console.error('[ServiceLogger] Failed to send log via SSE:', err)
-        })
+        }
+      })()
     }
   }
 }

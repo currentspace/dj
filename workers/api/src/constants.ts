@@ -15,7 +15,7 @@ export const RATE_LIMITS = {
   JITTER_MS: 5,
   /** Minimum tick delay in milliseconds */
   MIN_TICK_MS: 2,
-} as const
+} as const satisfies Record<string, number>
 
 /** Per-lane concurrency limits */
 export const CONCURRENCY_LIMITS = {
@@ -29,7 +29,7 @@ export const CONCURRENCY_LIMITS = {
   LASTFM: 10,
   /** Spotify API concurrent requests */
   SPOTIFY: 5,
-} as const
+} as const satisfies Record<string, number>
 
 // =============================================================================
 // CACHE TTL VALUES
@@ -49,7 +49,7 @@ export const CACHE_TTL = {
   MUSICBRAINZ_SECONDS: 30 * 24 * 60 * 60,
   /** Playlist tracks cache (5 minutes) */
   PLAYLIST_TRACKS_SECONDS: 5 * 60,
-} as const
+} as const satisfies Record<string, number>
 
 // =============================================================================
 // ENRICHMENT LIMITS
@@ -69,7 +69,7 @@ export const ENRICHMENT_LIMITS = {
   MAX_SUBREQUESTS: 950,
   /** Reserved subrequests for other operations */
   RESERVED_SUBREQUESTS: 10,
-} as const
+} as const satisfies Record<string, number>
 
 // =============================================================================
 // PAGINATION LIMITS
@@ -87,7 +87,7 @@ export const PAGINATION = {
   MAX_SPOTIFY_TRACKS: 100,
   /** Spotify playlist tracks batch size */
   SPOTIFY_ADD_TRACKS_BATCH: 100,
-} as const
+} as const satisfies Record<string, number>
 
 // =============================================================================
 // LLM CONFIGURATION
@@ -111,7 +111,7 @@ export const LLM = {
   MODEL_OPUS: 'claude-opus-4-6-20260219',
   /** Extended thinking budget tokens */
   THINKING_BUDGET_TOKENS: 5000,
-} as const
+} as const satisfies Record<string, number | string>
 
 // =============================================================================
 // STREAMING CONFIGURATION
@@ -123,7 +123,7 @@ export const STREAMING = {
   HEARTBEAT_INTERVAL_MS: 15000,
   /** Transform stream high water mark */
   HIGH_WATER_MARK: 10,
-} as const
+} as const satisfies Record<string, number>
 
 // =============================================================================
 // CONTENT LIMITS
@@ -149,7 +149,7 @@ export const CONTENT_LIMITS = {
   MAX_TAGS: 5,
   /** Message preview length for logging */
   MESSAGE_PREVIEW_LENGTH: 100,
-} as const
+} as const satisfies Record<string, number>
 
 // =============================================================================
 // BPM VALIDATION
@@ -161,7 +161,7 @@ export const BPM_RANGE = {
   MAX: 220,
   /** Minimum valid BPM */
   MIN: 45,
-} as const
+} as const satisfies Record<string, number>
 
 // =============================================================================
 // DURATION MATCHING
@@ -171,7 +171,7 @@ export const BPM_RANGE = {
 export const DURATION_MATCH = {
   /** Maximum duration difference in milliseconds for MusicBrainz matching */
   TOLERANCE_MS: 10000,
-} as const
+} as const satisfies Record<string, number>
 
 // =============================================================================
 // AGGREGATION LIMITS
@@ -195,7 +195,7 @@ export const AGGREGATION = {
   MAX_SIMILAR_TRACKS: 10,
   /** Maximum top artists in analysis */
   MAX_TOP_ARTISTS: 5,
-} as const
+} as const satisfies Record<string, number>
 
 // =============================================================================
 // VIBE SETTINGS
@@ -211,7 +211,7 @@ export const VIBE_DEFAULTS = {
   USER_TRACK_VIBE_SCORE: 50,
   /** Blend weight for user updates (100%) */
   USER_UPDATE_WEIGHT: 1.0,
-} as const
+} as const satisfies Record<string, number>
 
 // =============================================================================
 // HTTP STATUS CODES
@@ -226,7 +226,7 @@ export const HTTP_STATUS = {
   NOT_FOUND: 404,
   OK: 200,
   UNAUTHORIZED: 401,
-} as const
+} as const satisfies Record<string, number>
 
 // =============================================================================
 // PROGRESS REPORTING

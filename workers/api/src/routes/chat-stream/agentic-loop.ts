@@ -112,7 +112,7 @@ export async function processAgenticLoop({
           })
         } catch (error) {
           if (abortController.signal.aborted) {
-            throw new Error('Request aborted')
+            throw new Error('Request aborted', {cause: error})
           }
           getLogger()?.error(`[Stream:${requestId}] Tool ${toolCall.name} failed:`, error)
           toolResultBlocks.push({

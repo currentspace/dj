@@ -66,10 +66,15 @@ export class RequestOrchestrator {
       })
     }
 
-    // Start continuous processing
-    this.rateLimiter.processContinuously().catch(err => {
-      getLogger()?.error('[RequestOrchestrator] Fatal error:', err)
-    })
+    // Background queue pump — runs for the lifetime of the orchestrator.
+    const limiter = this.rateLimiter
+    void (async () => {
+      try {
+        await limiter.processContinuously()
+      } catch (err) {
+        getLogger()?.error('[RequestOrchestrator] Fatal error:', err)
+      }
+    })()
   }
 
   /**

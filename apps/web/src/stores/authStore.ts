@@ -164,9 +164,14 @@ function scheduleProactiveRefresh(expiresAt: number, refreshFn: () => Promise<bo
     console.log(`[authStore] Scheduling proactive refresh in ${Math.round(refreshTime / 1000 / 60)} minutes`)
     refreshTimer = setTimeout(() => {
       console.log('[authStore] Proactive refresh triggered')
-      refreshFn().catch((err: unknown) => {
-        console.warn('[authStore] Proactive refresh failed:', err)
-      })
+      // Fire-and-forget: scheduled timer can't await; failure is logged.
+      void (async () => {
+        try {
+          await refreshFn()
+        } catch (err) {
+          console.warn('[authStore] Proactive refresh failed:', err)
+        }
+      })()
     }, refreshTime)
   }
 }
@@ -206,13 +211,19 @@ export const useAuthStore = create<AuthState>()(
 
       set({error: null, isLoading: true})
 
-      performLogin(abortController.signal).catch((err: unknown) => {
-        if (abortController?.signal.aborted) return
-        set({
-          error: err instanceof Error ? err.message : 'Failed to start authentication',
-          isLoading: false,
-        })
-      })
+      // Fire-and-forget: login() is invoked from a sync click handler.
+      // Errors get surfaced into store state so the UI can render them.
+      void (async () => {
+        try {
+          await performLogin(abortController.signal)
+        } catch (err: unknown) {
+          if (abortController?.signal.aborted) return
+          set({
+            error: err instanceof Error ? err.message : 'Failed to start authentication',
+            isLoading: false,
+          })
+        }
+      })()
     },
 
     logout: () => {

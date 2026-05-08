@@ -85,12 +85,13 @@ export function DJPage({token}: DJPageProps) {
     })
   }, [])
 
-  // Track change callback
+  // Track change callback. Fire-and-forget by design (called from the SSE
+  // stream's track-change event, which itself is sync). Errors are surfaced to
+  // the console only — failure to record a played track is non-fatal.
   const handleTrackChange = useCallback(
     (previousTrackId: string, previousTrackUri: string, _newTrackId: string) => {
       if (!previousTrackId || !previousTrackUri) return
 
-      // Get the current playback to show new track name
       const playbackCore = usePlaybackStore.getState().playbackCore
       const newTrackName = playbackCore?.track?.name ?? 'Unknown'
       const newArtist = playbackCore?.track?.artist ?? ''
@@ -98,20 +99,20 @@ export function DJPage({token}: DJPageProps) {
       addLogEntry('track', `${newTrackName} — ${newArtist}`)
       emitDebug('state', 'track_change', `Track changed: ${newTrackName} — ${newArtist}`)
 
-      // Notify mix API if session exists
       const currentSession = queryClient.getQueryData<MixSession>(queryKeys.mix.session())
       if (!currentSession) return
 
-      mixApiClient.notifyTrackPlayed(previousTrackId, previousTrackUri)
-        .then((response) => {
+      void (async () => {
+        try {
+          const response = await mixApiClient.notifyTrackPlayed(previousTrackId, previousTrackUri)
           if (response.movedToHistory) {
             setSession(response.session)
             refreshSuggestions()
           }
-        })
-        .catch((err) => {
+        } catch (err) {
           console.warn('[DJPage] Failed to notify track played:', err)
-        })
+        }
+      })()
     },
     [addLogEntry, setSession, refreshSuggestions, queryClient],
   )

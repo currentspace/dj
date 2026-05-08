@@ -182,30 +182,29 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
             console.log('[playbackStore] Auth expired, triggering token refresh')
             set({ error: 'Token expired, refreshing...', status: 'disconnected' })
             stopInterpolation()
-            // Trigger token refresh via authStore (catch to prevent unhandled rejection)
-            useAuthStore.getState().refreshToken().then((success) => {
-              if (success) {
+            // Fire-and-forget: SSE event handler is sync. Token refresh runs in
+            // the background and re-issues the connect on success.
+            void (async () => {
+              try {
+                const success = await useAuthStore.getState().refreshToken()
+                if (!success) {
+                  console.error('[playbackStore] Token refresh failed')
+                  set({ error: 'Session expired. Please log in again.' })
+                  return
+                }
                 console.log('[playbackStore] Token refreshed, reconnecting...')
                 const newToken = useAuthStore.getState().token
-                if (newToken) {
-                  if (sharedWorkerPort) {
-                    // Tell SharedWorker to reconnect with new token
-                    sharedWorkerPort.postMessage({
-                      token: newToken,
-                      type: 'PLAYBACK_TOKEN_UPDATE',
-                    })
-                  } else {
-                    setTimeout(() => get().connect(newToken), 500)
-                  }
+                if (!newToken) return
+                if (sharedWorkerPort) {
+                  sharedWorkerPort.postMessage({token: newToken, type: 'PLAYBACK_TOKEN_UPDATE'})
+                } else {
+                  setTimeout(() => get().connect(newToken), 500)
                 }
-              } else {
-                console.error('[playbackStore] Token refresh failed')
+              } catch (err: unknown) {
+                console.error('[playbackStore] Token refresh error:', err)
                 set({ error: 'Session expired. Please log in again.' })
               }
-            }).catch((err: unknown) => {
-              console.error('[playbackStore] Token refresh error:', err)
-              set({ error: 'Session expired. Please log in again.' })
-            })
+            })()
             break
 
           case 'connected':
@@ -394,15 +393,19 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
     // PUBLIC ACTIONS
     // ==========================================================================
 
-    // Direct fetch-based SSE connection (fallback when SW unavailable)
+    // Direct fetch-based SSE connection (fallback when SW unavailable).
+    // Fire-and-forget: caller is sync. Errors flow into store state and
+    // schedule a reconnect.
     function directConnect(token: string): void {
-      fetch('/api/player/stream', {
-        headers: {
-          Accept: 'text/event-stream',
-          Authorization: `Bearer ${token}`,
-        },
-      })
-        .then((response) => {
+      void (async () => {
+        try {
+          const response = await fetch('/api/player/stream', {
+            headers: {
+              Accept: 'text/event-stream',
+              Authorization: `Bearer ${token}`,
+            },
+          })
+
           if (!response.ok) {
             if (response.status === HTTP_STATUS.UNAUTHORIZED) {
               set({ error: 'Session expired', status: 'error' })
@@ -410,7 +413,6 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
             }
             throw new Error(`HTTP ${response.status}`)
           }
-
           if (!response.body) throw new Error('No response body')
 
           set({ status: 'connected' })
@@ -421,51 +423,43 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
           const decoder = new TextDecoder()
           let buffer = ''
 
-          const read = async (): Promise<void> => {
-            try {
-              const { done, value } = await reader.read()
-
-              if (done) {
-                scheduleReconnect(token)
-                return
-              }
-
-              buffer += decoder.decode(value, { stream: true })
-              const lines = buffer.split('\n')
-              buffer = lines.pop() ?? ''
-
-              let currentEvent = ''
-              let currentData = ''
-
-              for (const line of lines) {
-                if (line.startsWith('event: ')) {
-                  currentEvent = line.slice(7)
-                } else if (line.startsWith('data: ')) {
-                  currentData = line.slice(6)
-                } else if (line === '' && currentEvent && currentData) {
-                  handleEvent(currentEvent, currentData, token)
-                  currentEvent = ''
-                  currentData = ''
-                }
-              }
-
-              read()
-            } catch (err) {
-              console.error('[playbackStore] Read error:', err)
+          // Loop reads instead of recursing — keeps the call stack bounded
+          // for long-lived streams.
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) {
               scheduleReconnect(token)
+              return
+            }
+
+            buffer += decoder.decode(value, { stream: true })
+            const lines = buffer.split('\n')
+            buffer = lines.pop() ?? ''
+
+            let currentEvent = ''
+            let currentData = ''
+
+            for (const line of lines) {
+              if (line.startsWith('event: ')) {
+                currentEvent = line.slice(7)
+              } else if (line.startsWith('data: ')) {
+                currentData = line.slice(6)
+              } else if (line === '' && currentEvent && currentData) {
+                handleEvent(currentEvent, currentData, token)
+                currentEvent = ''
+                currentData = ''
+              }
             }
           }
-
-          read()
-        })
-        .catch((err) => {
+        } catch (err: unknown) {
           console.error('[playbackStore] Connection error:', err)
           set({
             error: err instanceof Error ? err.message : 'Connection failed',
             status: 'error',
           })
           scheduleReconnect(token)
-        })
+        }
+      })()
     }
 
     return {

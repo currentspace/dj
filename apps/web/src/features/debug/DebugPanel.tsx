@@ -33,7 +33,9 @@ export function DebugPanel() {
 
   const filtered = filter ? events.filter((e) => e.category === filter) : events
 
-  // Auto-scroll to bottom on new events
+  // Auto-scroll to bottom on new events.
+  // queueMicrotask defers until after commit so scrollHeight reflects the
+  // newly-rendered rows. (Pre-React-19 this used useEffect.)
   const prevCountRef = useRef(0)
   /* eslint-disable react-hooks/refs -- intentional: scroll tracking for auto-scroll in hook body per React 19 project guidelines (no useEffect) */
   if (filtered.length > prevCountRef.current) {

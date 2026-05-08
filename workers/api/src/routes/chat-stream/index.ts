@@ -405,11 +405,11 @@ chatStreamRouter.post('/message', async c => {
             )
           } catch (apiError) {
             if (abortController.signal.aborted) {
-              throw new Error('Request aborted')
+              throw new Error('Request aborted', {cause: apiError})
             }
             getLogger()?.error(`[Stream:${requestId}] Anthropic API call failed:`, apiError)
             const errorMessage = apiError instanceof Error ? apiError.message : 'Unknown API error'
-            throw new Error(`Claude API failed: ${errorMessage}`)
+            throw new Error(`Claude API failed: ${errorMessage}`, {cause: apiError})
           }
 
           // Process agentic loop with tool calls
@@ -466,11 +466,15 @@ chatStreamRouter.post('/message', async c => {
     }) // End runWithLogger
   }
 
-  // Start processing without blocking the response
-  processStream().catch(error => {
-    // Logger context may not be available here, use direct streamLogger
-    streamLogger.error('Unhandled error in processStream', error)
-  })
+  // Fire-and-forget: SSE response must return immediately while the stream
+  // produces events in the background. Errors flow into the streamLogger.
+  void (async () => {
+    try {
+      await processStream()
+    } catch (error) {
+      streamLogger.error('Unhandled error in processStream', error)
+    }
+  })()
 
   // Return the SSE response immediately
   getLogger()?.info(`[Stream:${requestId}] Returning Response with SSE headers`)
@@ -545,7 +549,15 @@ chatStreamRouter.get('/events', async c => {
     }
   }
 
-  processStream().catch(console.error)
+  // Fire-and-forget heartbeat stream; the Response is returned synchronously
+  // and the stream runs until client disconnect.
+  void (async () => {
+    try {
+      await processStream()
+    } catch (error) {
+      console.error('[SSE GET] processStream error:', error)
+    }
+  })()
 
   return new Response(readable, {headers})
 })

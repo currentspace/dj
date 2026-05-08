@@ -16,7 +16,7 @@ const QUICK_PRESETS = [
   {direction: 'Chill out with mellow vibes', label: 'Chill Out'},
   {direction: 'Go retro with classic sounds', label: 'Go Retro'},
   {direction: 'Something fresh and unexpected', label: 'Surprise Me'},
-] as const
+] as const satisfies readonly {direction: string; label: string}[]
 
 export function SteerInput({disabled, isLoading, onSteer}: SteerInputProps) {
   const isDisabled = disabled ?? isLoading ?? false

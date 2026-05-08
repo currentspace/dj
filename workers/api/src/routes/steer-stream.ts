@@ -490,14 +490,13 @@ async function steerVibeWithThinking(
     }
   })
 
-  // Extract thinking and text
-  let thinking = ''
+  // Extract text response. Thinking blocks are streamed for UI preview only —
+  // they're not used downstream, so they don't need to escape this loop.
   let adjustmentsJson = ''
 
   for (const block of response.content) {
     if (block.type === 'thinking') {
-      thinking = block.thinking
-      // Send thinking preview to client
+      const thinking = block.thinking
       await sseWriter.write({
         data: { preview: thinking.slice(0, 500) + (thinking.length > 500 ? '...' : '') },
         type: 'thinking'

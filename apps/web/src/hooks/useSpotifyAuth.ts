@@ -57,13 +57,13 @@ export function useSpotifyAuth(): UseSpotifyAuthReturn {
     hasInitialized.current = true
     processOAuthCallback()
 
-    // Schedule token validation after render (if we have a token)
+    // Schedule token validation after render (if we have a token).
+    // queueMicrotask defers the async kickoff until React has committed,
+    // so we don't trigger a setState during render. Errors are surfaced
+    // into the store by validateToken itself.
     const {isValidating: currentIsValidating, token: currentToken, validateToken} = useAuthStore.getState()
     if (currentToken && !currentIsValidating) {
-      // Use queueMicrotask to run after render without blocking
-      queueMicrotask(() => {
-        validateToken()
-      })
+      queueMicrotask(() => { void validateToken() })
     }
   }
 

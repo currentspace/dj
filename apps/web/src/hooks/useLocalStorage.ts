@@ -20,7 +20,7 @@ export const STORAGE_KEYS = {
   SPOTIFY_TOKEN_DATA: 'spotify_token_data',
   /** Legacy Spotify token format (deprecated, used only for cleanup) */
   SPOTIFY_TOKEN_LEGACY: 'spotify_token',
-} as const
+} as const satisfies Record<string, string>
 
 export type StorageKey = (typeof STORAGE_KEYS)[keyof typeof STORAGE_KEYS]
 

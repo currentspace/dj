@@ -130,8 +130,29 @@ export function registerSpotifyAuthRoutes(app: OpenAPIHono<{Bindings: Env}>) {
         return c.redirect(`${env.FRONTEND_URL ?? 'https://dj.current.space'}?error=tampered_cookie`)
       }
 
-      // Decode and validate cookie data
-      const cookieData = JSON.parse(base64urlDecode(payload))
+      // Decode and validate cookie data. HMAC already verified the payload
+      // came from us, but a corrupted/truncated cookie could still produce
+      // invalid JSON or an unexpected shape — validate both.
+      const OAuthCookieSchema = z.object({
+        state: z.string(),
+        timestamp: z.number(),
+        verifier: z.string(),
+      })
+
+      let cookieData: z.infer<typeof OAuthCookieSchema>
+      try {
+        const decoded: unknown = JSON.parse(base64urlDecode(payload))
+        const parsed = OAuthCookieSchema.safeParse(decoded)
+        if (!parsed.success) {
+          getLogger()?.error('OAuth cookie has unexpected shape', parsed.error)
+          return c.redirect(`${env.FRONTEND_URL ?? 'https://dj.current.space'}?error=invalid_cookie`)
+        }
+        cookieData = parsed.data
+      } catch (parseError) {
+        getLogger()?.error('Failed to parse OAuth cookie JSON:', parseError)
+        return c.redirect(`${env.FRONTEND_URL ?? 'https://dj.current.space'}?error=invalid_cookie`)
+      }
+
       const {state: cookieState, timestamp, verifier: codeVerifier} = cookieData
 
       // Validate state matches (CSRF protection)

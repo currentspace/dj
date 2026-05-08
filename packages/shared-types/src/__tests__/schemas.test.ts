@@ -55,6 +55,7 @@ function expectSchemaToPass<T>(schema: z.ZodSchema<T>, data: unknown, descriptio
   } catch (error) {
     throw new Error(
       `Schema validation failed${description ? `: ${description}` : ''}\nData: ${JSON.stringify(data)}\nError: ${error}`,
+      {cause: error},
     )
   }
   const result = schema.safeParse(data)

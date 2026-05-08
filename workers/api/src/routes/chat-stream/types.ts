@@ -89,13 +89,14 @@ export interface DeezerAnalysisData {
   tracks_found: number
 }
 
-// Native tool definition (replaces DynamicStructuredTool)
+// Native tool definition (replaces DynamicStructuredTool).
+// `schema` accepts any Zod object — we don't constrain its shape since each
+// tool defines its own, and the executor just calls .parse() on the input.
 export interface NativeTool {
   description: string
   func: (args: Record<string, unknown>) => Promise<unknown>
   name: string
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  schema: z.ZodObject<any>
+  schema: z.ZodObject<z.ZodRawShape>
 }
 
 // SSE message types

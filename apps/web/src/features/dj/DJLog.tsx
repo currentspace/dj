@@ -34,7 +34,9 @@ const TYPE_PREFIX: Record<DJLogEntry['type'], string> = {
 export function DJLog({entries}: DJLogProps) {
   const listRef = useRef<HTMLDivElement>(null)
 
-  // Auto-scroll to bottom when entry count changes
+  // Auto-scroll to bottom when entry count changes.
+  // queueMicrotask defers until after React's commit phase, so listRef points
+  // at the freshly-rendered scrollHeight. (Pre-React-19 this used useEffect.)
   const prevCountRef = useRef(0)
   const currentCount = entries.length
   /* eslint-disable react-hooks/refs -- intentional: scroll tracking for auto-scroll in hook body per React 19 project guidelines (no useEffect) */

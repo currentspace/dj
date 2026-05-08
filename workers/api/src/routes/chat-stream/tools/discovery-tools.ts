@@ -91,7 +91,7 @@ export function createDiscoveryTools(
               error: parseError instanceof Error ? parseError.message : String(parseError),
               jsonPreview: jsonMatch[0].substring(0, 200),
             })
-            throw new Error('Failed to parse vibe analysis response as JSON')
+            throw new Error('Failed to parse vibe analysis response as JSON', {cause: parseError})
           }
 
           const vibeResult = VibeAnalysisSchema.safeParse(rawParsed)
@@ -293,7 +293,7 @@ export function createDiscoveryTools(
               error: parseError instanceof Error ? parseError.message : String(parseError),
               jsonPreview: jsonMatch[0].substring(0, 200),
             })
-            throw new Error('Failed to parse discovery strategy response as JSON')
+            throw new Error('Failed to parse discovery strategy response as JSON', {cause: parseError})
           }
 
           const strategyResult = DiscoveryStrategySchema.safeParse(rawStrategy)
@@ -427,7 +427,7 @@ export function createDiscoveryTools(
               error: parseError instanceof Error ? parseError.message : String(parseError),
               jsonPreview: jsonMatch[0].substring(0, 200),
             })
-            throw new Error('Failed to parse curation response as JSON')
+            throw new Error('Failed to parse curation response as JSON', {cause: parseError})
           }
           const curationResult = CurationResponseSchema.safeParse(rawCuration)
           const selectedIds = curationResult.success ? (curationResult.data.selected_track_ids ?? []) : []

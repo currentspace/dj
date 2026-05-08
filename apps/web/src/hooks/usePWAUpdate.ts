@@ -145,47 +145,49 @@ export function usePWAUpdate(): UsePWAUpdateReturn {
   if (!initStartedRef.current && typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
     initStartedRef.current = true
 
-    navigator.serviceWorker.ready.then((registration) => {
-      registrationRef.current = registration
-      console.log('[PWA] Service worker ready, scope:', registration.scope)
-
-      checkWaitingWorker(registration)
-
-      registration.addEventListener('updatefound', () => {
-        handleUpdateFound(registration)
-      })
-
-      registration.update().catch(() => {
-        // Silent fail for initial check
-      }).then(() => {
-        checkWaitingWorker(registration)
-      })
-
-      // Start periodic update checks
-      intervalRef.current ??= window.setInterval(() => {
-        if (document.visibilityState === 'visible') {
-          console.log('[PWA] Periodic update check')
-          registration.update().catch(() => { /* noop */ }).then(() => {
-            checkWaitingWorker(registration)
-          })
-        }
-      }, UPDATE_CHECK_INTERVAL)
-
-      // Set up visibility change handler
-      if (!visibilityHandlerRef.current) {
-        visibilityHandlerRef.current = () => {
-          if (document.visibilityState === 'visible') {
-            console.log('[PWA] App became visible, checking for updates')
-            registration.update().catch(() => { /* noop */ }).then(() => {
-              checkWaitingWorker(registration)
-            })
-          }
-        }
-        document.addEventListener('visibilitychange', visibilityHandlerRef.current)
+    // Trigger an update check, then re-scan for a waiting worker.
+    // Update failures are non-fatal (offline, transient network).
+    const checkForUpdate = async (reg: ServiceWorkerRegistration): Promise<void> => {
+      try {
+        await reg.update()
+      } catch {
+        // Silent — update failures are non-fatal
       }
-    }).catch((err) => {
-      console.error('[PWA] Failed to get service worker registration:', err)
-    })
+      checkWaitingWorker(reg)
+    }
+
+    void (async () => {
+      try {
+        const registration = await navigator.serviceWorker.ready
+        registrationRef.current = registration
+        console.log('[PWA] Service worker ready, scope:', registration.scope)
+
+        checkWaitingWorker(registration)
+        registration.addEventListener('updatefound', () => {
+          handleUpdateFound(registration)
+        })
+        await checkForUpdate(registration)
+
+        intervalRef.current ??= window.setInterval(() => {
+          if (document.visibilityState === 'visible') {
+            console.log('[PWA] Periodic update check')
+            void checkForUpdate(registration)
+          }
+        }, UPDATE_CHECK_INTERVAL)
+
+        if (!visibilityHandlerRef.current) {
+          visibilityHandlerRef.current = () => {
+            if (document.visibilityState === 'visible') {
+              console.log('[PWA] App became visible, checking for updates')
+              void checkForUpdate(registration)
+            }
+          }
+          document.addEventListener('visibilitychange', visibilityHandlerRef.current)
+        }
+      } catch (err) {
+        console.error('[PWA] Failed to get service worker registration:', err)
+      }
+    })()
   }
 
   // Watch for playback to stop when we have a pending update (component body)
