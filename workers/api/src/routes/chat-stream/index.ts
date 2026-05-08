@@ -17,7 +17,7 @@ import {SSEWriter} from './streaming/sse-writer'
 import {createStreamingSpotifyTools} from './tools'
 
 // Request schema
-const ChatRequestSchema = z.object({
+export const ChatRequestSchema = z.object({
   conversationHistory: z
     .array(
       z.object({

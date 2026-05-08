@@ -60,11 +60,16 @@ export const storage = {
         // Ignore errors during cleanup
       }
     })
+    snapshotCache.clear()
   },
 
   /**
-   * Get a value from localStorage with type safety
-   * Automatically parses JSON for object values
+   * Get a value from localStorage with type safety.
+   *
+   * Returns a referentially stable result for unchanged values — required by
+   * useSyncExternalStore (React would otherwise infinite-loop on object values).
+   * Falls back to the raw string when the stored value isn't valid JSON, so
+   * legacy raw-string keys still migrate correctly.
    */
   get<T>(key: StorageKey, fallback: T): T {
     if (!isBrowser()) {
@@ -77,13 +82,20 @@ export const storage = {
         return fallback
       }
 
-      // Try to parse as JSON, fall back to raw value if not valid JSON
-      try {
-        return JSON.parse(item) as T
-      } catch {
-        // Not JSON, return as-is (for string values)
-        return item as T
+      // Reuse the previously parsed value if the underlying string hasn't changed.
+      const cached = snapshotCache.get(key)
+      if (cached?.raw === item) {
+        return cached.parsed as T
       }
+
+      let parsed: unknown
+      try {
+        parsed = JSON.parse(item)
+      } catch {
+        parsed = item
+      }
+      snapshotCache.set(key, {parsed, raw: item})
+      return parsed as T
     } catch {
       return fallback
     }
@@ -129,14 +141,18 @@ export const storage = {
 
     try {
       localStorage.removeItem(key)
+      snapshotCache.delete(key)
     } catch (error) {
       console.error(`Failed to remove localStorage key "${key}":`, error)
     }
   },
 
   /**
-   * Set a value in localStorage
-   * Objects are automatically serialized to JSON
+   * Set a value in localStorage.
+   *
+   * Always JSON-serializes so set/get is symmetric. Previously, strings were
+   * stored verbatim, which broke round-trips for JSON-shaped strings like
+   * "null" or "123" (set wrote "null", get returned the JSON null).
    */
   set<T>(key: StorageKey, value: T): void {
     if (!isBrowser()) {
@@ -144,13 +160,20 @@ export const storage = {
     }
 
     try {
-      const serialized = typeof value === 'string' ? value : JSON.stringify(value)
-      localStorage.setItem(key, serialized)
+      localStorage.setItem(key, JSON.stringify(value))
+      snapshotCache.delete(key)
     } catch (error) {
       console.error(`Failed to set localStorage key "${key}":`, error)
     }
   },
 }
+
+/**
+ * Per-key snapshot cache for useSyncExternalStore compatibility.
+ * Maps a key to the last raw string seen + its parsed form. Lookups return
+ * the cached parsed value when the raw string hasn't changed.
+ */
+const snapshotCache = new Map<StorageKey, {parsed: unknown; raw: string}>()
 
 // ============================================================================
 // CROSS-TAB SYNC - Event emitter for storage changes
@@ -207,7 +230,7 @@ export function useLocalStorage<T>(
       const newValue = typeof valueOrUpdater === 'function' ? (valueOrUpdater as (prev: T) => T)(value) : valueOrUpdater
 
       storage.set(key, newValue)
-      notifyStorageChange(key, typeof newValue === 'string' ? newValue : JSON.stringify(newValue))
+      notifyStorageChange(key, JSON.stringify(newValue))
     },
     [key, value],
   )
@@ -233,6 +256,7 @@ if (isBrowser()) {
   window.addEventListener('storage', event => {
     if (event.key && Object.values(STORAGE_KEYS).includes(event.key as StorageKey)) {
       const key = event.key as StorageKey
+      snapshotCache.delete(key)
       storageListeners.get(key)?.forEach(listener => listener(key, event.newValue))
     }
   })

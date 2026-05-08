@@ -14,10 +14,14 @@ import {
 } from '../fixtures/storage-mocks'
 import {createAbortError, createMockFetchResponse, flushPromises} from '../fixtures/test-helpers'
 
-// TODO: 34/45 tests fail with `waitFor` timeouts after the vitest 3→4 migration —
-// renderHook semantics changed (state updates batched differently, listeners cleared
-// before assertions land). The file now loads and 11 tests pass. Each failing test
-// needs a targeted rewrite; tracking as separate work.
+// TODO: 34/45 tests fail because the Zustand authStore is a module-level singleton
+// initialized once at import time. Tests that set localStorage in beforeEach then
+// `renderHook(useSpotifyAuth)` expect the store to read from localStorage on each
+// hook instantiation — but the hook's first-render bootstrap calls
+// processOAuthCallback() which only acts on URL search params, not on a freshly
+// populated localStorage. Fixing requires either adding an `initFromStorage`
+// store action invoked in cleanupAuthStore, or refactoring tests to call
+// useAuthStore.setState() directly. Either way, it's a focused design decision.
 describe.skip('useSpotifyAuth Hook', () => {
   beforeEach(() => {
     // Clear mocks and storage FIRST

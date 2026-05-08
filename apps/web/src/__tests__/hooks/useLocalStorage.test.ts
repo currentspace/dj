@@ -19,22 +19,49 @@ describe('storage utilities', () => {
       expect(storage.get(STORAGE_KEYS.CURRENT_PLAYLIST, null)).toEqual(value)
     })
 
-    it('returns the raw string when the value is not valid JSON', () => {
+    it('returns the same reference for unchanged object values across calls', () => {
+      // Required by useSyncExternalStore — repeated getSnapshot calls must
+      // return the same reference or React infinite-loops on object values.
+      localStorage.setItem(STORAGE_KEYS.CURRENT_PLAYLIST, JSON.stringify({tracks: ['a']}))
+      const first = storage.get<{tracks: string[]}>(STORAGE_KEYS.CURRENT_PLAYLIST, {tracks: []})
+      const second = storage.get<{tracks: string[]}>(STORAGE_KEYS.CURRENT_PLAYLIST, {tracks: []})
+      expect(first).toBe(second)
+    })
+
+    it('returns a new reference after the underlying value changes', () => {
+      localStorage.setItem(STORAGE_KEYS.CURRENT_PLAYLIST, JSON.stringify({n: 1}))
+      const first = storage.get(STORAGE_KEYS.CURRENT_PLAYLIST, null)
+      localStorage.setItem(STORAGE_KEYS.CURRENT_PLAYLIST, JSON.stringify({n: 2}))
+      const second = storage.get(STORAGE_KEYS.CURRENT_PLAYLIST, null)
+      expect(first).not.toBe(second)
+      expect(second).toEqual({n: 2})
+    })
+
+    it('returns the raw string when the value is not valid JSON (legacy migration)', () => {
       localStorage.setItem(STORAGE_KEYS.SPOTIFY_TOKEN_LEGACY, 'plain-token-string')
       expect(storage.get<string>(STORAGE_KEYS.SPOTIFY_TOKEN_LEGACY, '')).toBe('plain-token-string')
     })
   })
 
   describe('set', () => {
-    it('stringifies object values', () => {
+    it('JSON-stringifies object values', () => {
       const value = {a: 1}
       storage.set(STORAGE_KEYS.CURRENT_PLAYLIST, value)
       expect(localStorage.getItem(STORAGE_KEYS.CURRENT_PLAYLIST)).toBe(JSON.stringify(value))
     })
 
-    it('stores string values without re-stringifying', () => {
+    it('JSON-stringifies string values for symmetric round-trip', () => {
+      // Previously strings were stored verbatim, which broke round-trips for
+      // JSON-shaped strings like "null" or "123" — set wrote those raw, and
+      // get parsed them back as JSON null / number 123.
+      storage.set(STORAGE_KEYS.SPOTIFY_TOKEN_LEGACY, 'null')
+      expect(localStorage.getItem(STORAGE_KEYS.SPOTIFY_TOKEN_LEGACY)).toBe('"null"')
+      expect(storage.get<string>(STORAGE_KEYS.SPOTIFY_TOKEN_LEGACY, '')).toBe('null')
+    })
+
+    it('round-trips an arbitrary string identically', () => {
       storage.set(STORAGE_KEYS.SPOTIFY_TOKEN_LEGACY, 'token123')
-      expect(localStorage.getItem(STORAGE_KEYS.SPOTIFY_TOKEN_LEGACY)).toBe('token123')
+      expect(storage.get<string>(STORAGE_KEYS.SPOTIFY_TOKEN_LEGACY, '')).toBe('token123')
     })
   })
 
@@ -67,19 +94,32 @@ describe('useLocalStorage', () => {
     expect(result.current[0]).toBe('fallback')
   })
 
-  it('reads existing string values from localStorage', () => {
-    localStorage.setItem(STORAGE_KEYS.CURRENT_PLAYLIST, 'a-stored-value')
-    const {result} = renderHook(() => useLocalStorage<string>(STORAGE_KEYS.CURRENT_PLAYLIST, 'fallback'))
-    expect(result.current[0]).toBe('a-stored-value')
+  it('reads existing object values from localStorage without infinite-looping', () => {
+    // Regression: prior implementation re-parsed JSON on every getSnapshot call,
+    // returning a new object each time and triggering useSyncExternalStore's
+    // "Maximum update depth exceeded" error.
+    const value = {tracks: ['a']}
+    localStorage.setItem(STORAGE_KEYS.CURRENT_PLAYLIST, JSON.stringify(value))
+    const {result} = renderHook(() => useLocalStorage(STORAGE_KEYS.CURRENT_PLAYLIST, null))
+    expect(result.current[0]).toEqual(value)
   })
 
-  it('persists string updates to localStorage as-is', () => {
+  it('persists string updates with symmetric round-trip', () => {
     const {result} = renderHook(() => useLocalStorage<string>(STORAGE_KEYS.CURRENT_PLAYLIST, 'initial'))
     act(() => {
       result.current[1]('updated')
     })
-    // storage.set passes strings through without JSON-stringifying them
-    expect(localStorage.getItem(STORAGE_KEYS.CURRENT_PLAYLIST)).toBe('updated')
+    expect(result.current[0]).toBe('updated')
+  })
+
+  it('persists object updates and round-trips them', () => {
+    const {result} = renderHook(() =>
+      useLocalStorage<null | {n: number}>(STORAGE_KEYS.CURRENT_PLAYLIST, null),
+    )
+    act(() => {
+      result.current[1]({n: 42})
+    })
+    expect(result.current[0]).toEqual({n: 42})
   })
 
   it('removes the key when removeValue is invoked', () => {

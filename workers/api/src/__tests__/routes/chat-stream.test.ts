@@ -5,6 +5,7 @@
 
 import {afterEach, describe, expect, it} from 'vitest'
 
+import {ChatRequestSchema} from '../../routes/chat-stream'
 import {AudioEnrichmentService} from '../../services/AudioEnrichmentService'
 import {LastFmService} from '../../services/LastFmService'
 import {
@@ -188,160 +189,79 @@ async function simulateChatStreamHandler(
 
 // ===== Test Suites =====
 
-describe('chat-stream Route - Request Validation', () => {
-  it('should accept valid request with all fields', async () => {
-    const env = createMockEnv()
-    const request = createMockRequest({
-      body: {
-        conversationHistory: [
-          {content: 'Previous message', role: 'user'},
-          {content: 'Previous response', role: 'assistant'},
-        ],
-        message: 'Test message',
-        mode: 'analyze',
-      },
-      method: 'POST',
-      url: 'http://localhost:8787/api/chat-stream/message',
+// Request validation now exercises the real Zod schema rather than a
+// re-implementation. The simulator-based tests below cover SSE/streaming/tool
+// behavior — those still rely on the simulator and should be migrated to real
+// Hono test requests when KV/Anthropic mocking is more complete.
+describe('chat-stream Route - Request Validation (real ChatRequestSchema)', () => {
+  it('accepts a valid request with all fields', () => {
+    const result = ChatRequestSchema.safeParse({
+      conversationHistory: [
+        {content: 'Previous message', role: 'user'},
+        {content: 'Previous response', role: 'assistant'},
+      ],
+      message: 'Test message',
+      mode: 'analyze',
     })
-    const c = createMockContext({env, request})
-    const anthropic = createMockAnthropicClient()
-
-    const result = await simulateChatStreamHandler(c, anthropic)
-    expect(result.status).toBe(200)
+    expect(result.success).toBe(true)
   })
 
-  it('should accept valid request with minimal fields (no history)', async () => {
-    const env = createMockEnv()
-    const request = createMockRequest({
-      body: {
-        message: 'Test message',
-      },
-      method: 'POST',
-      url: 'http://localhost:8787/api/chat-stream/message',
-    })
-    const c = createMockContext({env, request})
-    const anthropic = createMockAnthropicClient()
-
-    const result = await simulateChatStreamHandler(c, anthropic)
-    expect(result.status).toBe(200)
+  it('accepts a minimal request and applies defaults for missing fields', () => {
+    const result = ChatRequestSchema.safeParse({message: 'Test message'})
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.conversationHistory).toEqual([])
+      expect(result.data.mode).toBe('analyze')
+    }
   })
 
-  it('should reject missing message', async () => {
-    const env = createMockEnv()
-    const request = createMockRequest({
-      body: {
-        conversationHistory: [],
-      },
-      method: 'POST',
-      url: 'http://localhost:8787/api/chat-stream/message',
-    })
-    const c = createMockContext({env, request})
-    const anthropic = createMockAnthropicClient()
-
-    const result = await simulateChatStreamHandler(c, anthropic)
-    expect(result.status).toBe(400)
+  it('rejects a request with no message field', () => {
+    expect(ChatRequestSchema.safeParse({conversationHistory: []}).success).toBe(false)
   })
 
-  it('should reject empty message', async () => {
-    const env = createMockEnv()
-    const request = createMockRequest({
-      body: {
-        message: '',
-      },
-      method: 'POST',
-      url: 'http://localhost:8787/api/chat-stream/message',
-    })
-    const c = createMockContext({env, request})
-    const anthropic = createMockAnthropicClient()
-
-    const result = await simulateChatStreamHandler(c, anthropic)
-    expect(result.status).toBe(400)
+  it('rejects an empty-string message', () => {
+    expect(ChatRequestSchema.safeParse({message: ''}).success).toBe(false)
   })
 
-  it('should reject message too long (> 2000 chars)', async () => {
-    const env = createMockEnv()
-    const request = createMockRequest({
-      body: {
-        message: 'a'.repeat(2001),
-      },
-      method: 'POST',
-      url: 'http://localhost:8787/api/chat-stream/message',
-    })
-    const c = createMockContext({env, request})
-    const anthropic = createMockAnthropicClient()
-
-    const result = await simulateChatStreamHandler(c, anthropic)
-    expect(result.status).toBe(400)
+  it('rejects a message longer than 2000 characters', () => {
+    expect(ChatRequestSchema.safeParse({message: 'a'.repeat(2001)}).success).toBe(false)
   })
 
-  it('should reject invalid conversation_history format', async () => {
-    const env = createMockEnv()
-    const request = createMockRequest({
-      body: {
-        conversationHistory: 'not an array',
-        message: 'Test',
-      },
-      method: 'POST',
-      url: 'http://localhost:8787/api/chat-stream/message',
-    })
-    const c = createMockContext({env, request})
-    const anthropic = createMockAnthropicClient()
-
-    const result = await simulateChatStreamHandler(c, anthropic)
-    expect(result.status).toBe(400)
+  it('rejects a non-array conversationHistory', () => {
+    expect(
+      ChatRequestSchema.safeParse({conversationHistory: 'not an array', message: 'Test'}).success,
+    ).toBe(false)
   })
 
-  it('should reject conversation history too long (> 20 messages)', async () => {
-    const env = createMockEnv()
+  it('rejects a conversation history longer than 20 messages', () => {
     const history = Array.from({length: 21}, (_, i) => ({
       content: `Message ${i}`,
       role: i % 2 === 0 ? 'user' : 'assistant',
     }))
-    const request = createMockRequest({
-      body: {
-        conversationHistory: history,
+    expect(
+      ChatRequestSchema.safeParse({conversationHistory: history, message: 'Test'}).success,
+    ).toBe(false)
+  })
+
+  it('rejects an invalid mode enum value', () => {
+    expect(ChatRequestSchema.safeParse({message: 'Test', mode: 'invalid'}).success).toBe(false)
+  })
+
+  it('accepts the dj mode (added with the always-on UX redesign)', () => {
+    expect(ChatRequestSchema.safeParse({message: 'Test', mode: 'dj'}).success).toBe(true)
+  })
+
+  it('rejects a conversation message with an unknown role', () => {
+    expect(
+      ChatRequestSchema.safeParse({
+        conversationHistory: [{content: 'x', role: 'system'}],
         message: 'Test',
-      },
-      method: 'POST',
-      url: 'http://localhost:8787/api/chat-stream/message',
-    })
-    const c = createMockContext({env, request})
-    const anthropic = createMockAnthropicClient()
-
-    const result = await simulateChatStreamHandler(c, anthropic)
-    expect(result.status).toBe(400)
+      }).success,
+    ).toBe(false)
   })
+})
 
-  it('should reject invalid mode enum', async () => {
-    const env = createMockEnv()
-    const request = createMockRequest({
-      body: {
-        message: 'Test',
-        mode: 'invalid',
-      },
-      method: 'POST',
-      url: 'http://localhost:8787/api/chat-stream/message',
-    })
-    const c = createMockContext({env, request})
-    const anthropic = createMockAnthropicClient()
-
-    const result = await simulateChatStreamHandler(c, anthropic)
-    expect(result.status).toBe(400)
-  })
-
-  it('should reject invalid JSON body', async () => {
-    const env = createMockEnv()
-    const request = new Request('http://localhost:8787/api/chat-stream/message', {
-      body: 'invalid json {',
-      headers: {'Content-Type': 'application/json'},
-      method: 'POST',
-    })
-    const c = createMockContext({env, request})
-    const anthropic = createMockAnthropicClient()
-
-    await expect(simulateChatStreamHandler(c, anthropic)).rejects.toThrow()
-  })
-
+describe('chat-stream Route - Simulated Handler (legacy — to be migrated to real Hono requests)', () => {
   it('should inject playlist_id from context when missing', async () => {
     const env = createMockEnv()
     const request = createMockRequest({

@@ -90,9 +90,10 @@ export default [
       '@typescript-eslint/restrict-template-expressions': 'off',
 
       '@typescript-eslint/unbound-method': 'off',
-      // ESLint v10 new rules — opt out for now (separate cleanup effort)
-      'no-useless-assignment': 'off',
-      'preserve-caught-error': 'off',
+      // ESLint v10 new rules. Re-enabled as warnings; remaining catch-block
+      // rethrows can attach `cause` over time without blocking CI.
+      'no-useless-assignment': 'warn',
+      'preserve-caught-error': 'warn',
     },
   },
 
