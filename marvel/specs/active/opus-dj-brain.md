@@ -5,6 +5,7 @@
 **Created:** 2026-02-28
 
 **Packs Required:**
+
 - pack:dj-llm-tools@1.0.0
 - pack:dj-experience@1.0.0
 - pack:dj-set-planning@1.0.0
@@ -35,18 +36,19 @@ The DJ should autonomously plan energy arcs, reason about why tracks were skippe
 
 Benchmark data (Anthropic, DataCamp, Vellum - Feb 2026):
 
-| Capability | Opus 4.6 | Sonnet 4.6 | Why It Matters |
-|-----------|----------|------------|----------------|
-| Abstract reasoning (ARC-AGI-2) | 68.8% | ~13.6% | Vibe matching is abstract multi-dimensional reasoning |
-| Tool use reliability (tau2-bench) | 91.9% | ~82% (est.) | Multi-step agentic loops need reliable tool calling |
-| 1M context accuracy (MRCR v2, 8-needle) | 76.0% | 18.5% | Full session context (history, taste, signals) must be retained |
-| Long-form reasoning | Extended thinking with adaptive effort | Basic thinking | Set planning requires deep strategic reasoning |
+| Capability                              | Opus 4.6                               | Sonnet 4.6     | Why It Matters                                                  |
+| --------------------------------------- | -------------------------------------- | -------------- | --------------------------------------------------------------- |
+| Abstract reasoning (ARC-AGI-2)          | 68.8%                                  | ~13.6%         | Vibe matching is abstract multi-dimensional reasoning           |
+| Tool use reliability (tau2-bench)       | 91.9%                                  | ~82% (est.)    | Multi-step agentic loops need reliable tool calling             |
+| 1M context accuracy (MRCR v2, 8-needle) | 76.0%                                  | 18.5%          | Full session context (history, taste, signals) must be retained |
+| Long-form reasoning                     | Extended thinking with adaptive effort | Basic thinking | Set planning requires deep strategic reasoning                  |
 
 The 5x abstract reasoning advantage is the differentiator. Music curation requires synthesizing mood, energy, era, production aesthetic, and cultural context simultaneously — exactly the kind of multi-dimensional abstract reasoning where Opus excels.
 
 ### What Real DJs Do (DJ.Studio, Mixed In Key, DJ TechTools)
 
 Professional DJ sets follow a five-phase energy structure:
+
 1. **Warm-up** (15-20%): Low-medium energy, spacious tracks, long blends. Energy 3-5.
 2. **Build** (20-25%): Stronger drums, gradual intensity increase. Energy 5-7.
 3. **Peak** (20-25%): Anthems, shorter switches. Peak hits ~2/3 through the set. Energy 7-9.
@@ -60,6 +62,7 @@ Source: [DJ.Studio Blog](https://dj.studio/blog/anatomy-great-dj-mix-structure-e
 ### What Spotify's DJ Gets Wrong (User Research)
 
 Analysis of 1400+ user comments (SAGE journals, 2025):
+
 - **34% negative sentiment outweighs 26% positive**
 - **#1 complaint: Repetition / echo chamber** — the DJ keeps serving the same saved music
 - **#2 complaint: Failure to learn** — skipping doesn't teach it
@@ -98,16 +101,16 @@ No Opus model is configured. Every AI decision — from initial conversation to 
 
 ### AI Decision Points Today
 
-| Decision | Model | File | Quality Issue |
-|----------|-------|------|--------------|
-| Initial conversation response | Sonnet + thinking (5000 tokens) | `chat-stream/index.ts:322` | Good for simple responses, insufficient for strategic set planning |
-| Follow-up agentic turns | Sonnet, NO thinking, temp 0.7 | `agentic-loop.ts:174-187` | Complex tool-calling turns get no deep reasoning |
-| Vibe extraction (inner tool call) | Sonnet, NO thinking | `discovery-tools.ts:68` | The most judgment-intensive operation gets no extended thinking |
-| Discovery strategy planning | Sonnet, NO thinking | `discovery-tools.ts:270` | Creative strategy needs reasoning; doesn't get it |
-| Curation ranking | Sonnet, NO thinking | `discovery-tools.ts:402` | Subjective quality judgment with no reasoning |
-| Track suggestions (mix mode) | Sonnet, optional thinking (2000 tokens) | `SuggestionEngine.ts:114` | Reasonable but not strategic |
-| Vibe steering interpretation | Haiku OR Sonnet + thinking (4000 tokens) | `steer-stream.ts:468` | Appropriate for quick reactions |
-| Progress narration | Haiku | `progress-narrator.ts` | Fine for flavor text |
+| Decision                          | Model                                    | File                       | Quality Issue                                                      |
+| --------------------------------- | ---------------------------------------- | -------------------------- | ------------------------------------------------------------------ |
+| Initial conversation response     | Sonnet + thinking (5000 tokens)          | `chat-stream/index.ts:322` | Good for simple responses, insufficient for strategic set planning |
+| Follow-up agentic turns           | Sonnet, NO thinking, temp 0.7            | `agentic-loop.ts:174-187`  | Complex tool-calling turns get no deep reasoning                   |
+| Vibe extraction (inner tool call) | Sonnet, NO thinking                      | `discovery-tools.ts:68`    | The most judgment-intensive operation gets no extended thinking    |
+| Discovery strategy planning       | Sonnet, NO thinking                      | `discovery-tools.ts:270`   | Creative strategy needs reasoning; doesn't get it                  |
+| Curation ranking                  | Sonnet, NO thinking                      | `discovery-tools.ts:402`   | Subjective quality judgment with no reasoning                      |
+| Track suggestions (mix mode)      | Sonnet, optional thinking (2000 tokens)  | `SuggestionEngine.ts:114`  | Reasonable but not strategic                                       |
+| Vibe steering interpretation      | Haiku OR Sonnet + thinking (4000 tokens) | `steer-stream.ts:468`      | Appropriate for quick reactions                                    |
+| Progress narration                | Haiku                                    | `progress-narrator.ts`     | Fine for flavor text                                               |
 
 ### What's Missing
 
@@ -127,13 +130,14 @@ No Opus model is configured. Every AI decision — from initial conversation to 
 
 Route AI decisions to the appropriate model based on reasoning depth required:
 
-| Tier | Model | Use Cases | Cost per call |
-|------|-------|-----------|---------------|
-| **Strategic** | Opus 4.6 | Set planning, skip reasoning, narration, vibe strategy | ~$0.03-0.10 |
-| **Execution** | Sonnet 4.6 | Tool calling, search, track filtering, basic decisions | ~$0.005-0.02 |
-| **Reactive** | Haiku 4.5 | Progress messages, simple acknowledgments, preset matching | ~$0.0005 |
+| Tier          | Model      | Use Cases                                                  | Cost per call |
+| ------------- | ---------- | ---------------------------------------------------------- | ------------- |
+| **Strategic** | Opus 4.6   | Set planning, skip reasoning, narration, vibe strategy     | ~$0.03-0.10   |
+| **Execution** | Sonnet 4.6 | Tool calling, search, track filtering, basic decisions     | ~$0.005-0.02  |
+| **Reactive**  | Haiku 4.5  | Progress messages, simple acknowledgments, preset matching | ~$0.0005      |
 
 **Estimated session cost**: A 1-hour DJ session would use:
+
 - 2-3 Opus calls (initial plan + 1-2 replans) = ~$0.15-0.30
 - 10-15 Sonnet calls (track search/curation) = ~$0.10-0.30
 - 20-30 Haiku calls (progress, quick narration) = ~$0.01-0.02
@@ -171,7 +175,7 @@ interface SetPhase {
   /** Target energy level (1-10) */
   targetEnergy: number
   /** Target BPM range */
-  bpmRange: { min: number; max: number }
+  bpmRange: {min: number; max: number}
   /** Genre focus for this phase */
   genres: string[]
   /** Approximate number of tracks in this phase */
@@ -191,6 +195,7 @@ interface GenreCluster {
 ```
 
 **Prompt strategy**: The Opus call receives:
+
 - Seed playlist analysis (if available) or user's top tracks
 - User's taste model (genre weights, skip patterns)
 - Session duration target (default 45 minutes, ~12-15 tracks)
@@ -199,6 +204,7 @@ interface GenreCluster {
 Opus returns a structured set plan with explicit reasoning about WHY each phase has the targets it does.
 
 **When to replan**: A new plan is generated when:
+
 - Session starts (always)
 - 3+ consecutive skips (the current direction is wrong)
 - User sends a major vibe steer ("completely change the mood")
@@ -245,19 +251,20 @@ The DJ narrates its decisions with musical intelligence and personality. This is
 
 **Narration events and examples:**
 
-| Event | Trigger | Example Narration |
-|-------|---------|-------------------|
-| `session_start` | Session created with plan | "Starting with your Chill Vibes playlist — I see a lot of lo-fi and ambient in here. Going to ease in with some warm textures and build from there." |
-| `track_queued` | Track added to queue | "Added Khruangbin — that lazy psychedelic groove bridges perfectly from the shoegaze we just had." |
-| `skip_detected` | 1 skip | "Skipped that one? No worries, adjusting." |
-| `skip_pattern` | 2+ skips analyzed | "Okay, I see what's happening — the energy was climbing too fast. Pulling back to something more grounded." |
-| `vibe_shift` | Energy direction changed | "We've been building for 4 tracks now. Time to let it breathe — dropping into something more spacious." |
-| `surprise_inject` | Deliberate contrast track | "Wild card incoming — this is a left turn but trust me, the groove connects." |
-| `user_steer` | User typed a request | Conversational response explaining what's changing and why |
-| `queue_refill` | Background queue fill | "Digging for more tracks that match where we've landed..." |
-| `plan_change` | Replan triggered | "Okay, resetting the plan. Based on what you've been vibing with, I'm taking us in a [new direction]." |
+| Event             | Trigger                   | Example Narration                                                                                                                                    |
+| ----------------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `session_start`   | Session created with plan | "Starting with your Chill Vibes playlist — I see a lot of lo-fi and ambient in here. Going to ease in with some warm textures and build from there." |
+| `track_queued`    | Track added to queue      | "Added Khruangbin — that lazy psychedelic groove bridges perfectly from the shoegaze we just had."                                                   |
+| `skip_detected`   | 1 skip                    | "Skipped that one? No worries, adjusting."                                                                                                           |
+| `skip_pattern`    | 2+ skips analyzed         | "Okay, I see what's happening — the energy was climbing too fast. Pulling back to something more grounded."                                          |
+| `vibe_shift`      | Energy direction changed  | "We've been building for 4 tracks now. Time to let it breathe — dropping into something more spacious."                                              |
+| `surprise_inject` | Deliberate contrast track | "Wild card incoming — this is a left turn but trust me, the groove connects."                                                                        |
+| `user_steer`      | User typed a request      | Conversational response explaining what's changing and why                                                                                           |
+| `queue_refill`    | Background queue fill     | "Digging for more tracks that match where we've landed..."                                                                                           |
+| `plan_change`     | Replan triggered          | "Okay, resetting the plan. Based on what you've been vibing with, I'm taking us in a [new direction]."                                               |
 
 **Narration prompt structure**: The Opus narrator receives:
+
 - The event type and data
 - The current set plan (phase, target energy, genre cluster)
 - Recent history (last 3-5 tracks with completion/skip status)
@@ -279,11 +286,7 @@ New scoring dimension alongside existing BPM/energy/genre/artist/era:
 
 ```typescript
 /** Score how much this track adds variety to the recent set */
-function scoreContrast(
-  candidate: CandidateTrack,
-  recentTracks: HistoryTrack[],
-  currentPhase: SetPhase,
-): number {
+function scoreContrast(candidate: CandidateTrack, recentTracks: HistoryTrack[], currentPhase: SetPhase): number {
   // 1. Genre novelty: does this introduce a genre not in recent history?
   const recentGenres = new Set(recentTracks.flatMap(t => t.tags))
   const novelGenres = candidate.tags.filter(t => !recentGenres.has(t))
@@ -301,20 +304,20 @@ function scoreContrast(
   // 4. Phase-appropriate contrast: at surprise points, boost novelty weight
   const surpriseBoost = currentPhase.phase === 'release' ? 1.3 : 1.0
 
-  return ((genreNovelty * 0.4 + artistNovelty * 0.3 + eraNovelty * 0.3) * surpriseBoost)
+  return (genreNovelty * 0.4 + artistNovelty * 0.3 + eraNovelty * 0.3) * surpriseBoost
 }
 ```
 
 **Integration**: The contrast score is weighted at 15% in the composite transition score, reducing genre bridge from 20% to 15% and artist diversity from 15% to 10%:
 
-| Dimension | Current Weight | New Weight |
-|-----------|---------------|------------|
-| BPM compatibility | 30% | 30% |
-| Energy flow | 25% | 25% |
-| Genre bridge | 20% | 15% |
-| Artist diversity | 15% | 10% |
-| Era proximity | 10% | 5% |
-| **Contrast/novelty** | — | **15%** |
+| Dimension            | Current Weight | New Weight |
+| -------------------- | -------------- | ---------- |
+| BPM compatibility    | 30%            | 30%        |
+| Energy flow          | 25%            | 25%        |
+| Genre bridge         | 20%            | 15%        |
+| Artist diversity     | 15%            | 10%        |
+| Era proximity        | 10%            | 5%         |
+| **Contrast/novelty** | —              | **15%**    |
 
 ### 5.6 Session Plan in Prompts
 
@@ -323,6 +326,7 @@ Wire the set plan into all AI prompts so every model tier makes decisions in the
 **File:** `workers/api/src/lib/ai-prompts.ts` (modify)
 
 Add to `buildNextTrackPrompt`:
+
 ```
 SET PLAN — CURRENT PHASE:
 Phase: {phase.phase} (track {trackNumber} of ~{phase.trackCount})
@@ -340,27 +344,27 @@ This means even Sonnet (for track selection) and Haiku (for progress narration) 
 
 ### New Files
 
-| File | Purpose |
-|------|---------|
-| `workers/api/src/lib/set-planner.ts` | Opus-powered set plan generation |
-| `workers/api/src/lib/skip-analyzer.ts` | Opus-powered skip reasoning |
-| `workers/api/src/lib/dj-narrator.ts` | Opus-powered narration generation |
+| File                                     | Purpose                                                                          |
+| ---------------------------------------- | -------------------------------------------------------------------------------- |
+| `workers/api/src/lib/set-planner.ts`     | Opus-powered set plan generation                                                 |
+| `workers/api/src/lib/skip-analyzer.ts`   | Opus-powered skip reasoning                                                      |
+| `workers/api/src/lib/dj-narrator.ts`     | Opus-powered narration generation                                                |
 | `workers/api/src/lib/ai-prompts-opus.ts` | Opus-specific prompt templates (separate from existing ai-prompts.ts for Sonnet) |
 
 ### Modified Files
 
-| File | Change | Complexity |
-|------|--------|------------|
-| `workers/api/src/constants.ts` | Add `MODEL_OPUS` constant | Low |
-| `workers/api/src/lib/ai-service.ts` | Add Opus model routing method | Low |
-| `workers/api/src/lib/ai-prompts.ts` | Add set plan context to existing prompts | Medium |
-| `workers/api/src/services/TransitionScorer.ts` | Add contrast scoring dimension | Medium |
-| `workers/api/src/services/SuggestionEngine.ts` | Accept set plan, use phase-aware selection | Medium |
-| `workers/api/src/services/MixSessionService.ts` | Store set plan and conversation in session | Low |
-| `workers/api/src/routes/player-stream.ts` | Trigger narration on track change events | Medium |
-| `workers/api/src/routes/steer-stream.ts` | Trigger replan on major vibe shifts | Low |
-| `workers/api/src/routes/mix-openapi.ts` | Generate set plan on session start, wire skip analyzer | High |
-| `packages/shared-types/src/index.ts` | Add SetPlan, SetPhase, SkipAnalysis types | Low |
+| File                                            | Change                                                 | Complexity |
+| ----------------------------------------------- | ------------------------------------------------------ | ---------- |
+| `workers/api/src/constants.ts`                  | Add `MODEL_OPUS` constant                              | Low        |
+| `workers/api/src/lib/ai-service.ts`             | Add Opus model routing method                          | Low        |
+| `workers/api/src/lib/ai-prompts.ts`             | Add set plan context to existing prompts               | Medium     |
+| `workers/api/src/services/TransitionScorer.ts`  | Add contrast scoring dimension                         | Medium     |
+| `workers/api/src/services/SuggestionEngine.ts`  | Accept set plan, use phase-aware selection             | Medium     |
+| `workers/api/src/services/MixSessionService.ts` | Store set plan and conversation in session             | Low        |
+| `workers/api/src/routes/player-stream.ts`       | Trigger narration on track change events               | Medium     |
+| `workers/api/src/routes/steer-stream.ts`        | Trigger replan on major vibe shifts                    | Low        |
+| `workers/api/src/routes/mix-openapi.ts`         | Generate set plan on session start, wire skip analyzer | High       |
+| `packages/shared-types/src/index.ts`            | Add SetPlan, SetPhase, SkipAnalysis types              | Low        |
 
 ### Files NOT Changed
 
@@ -372,12 +376,14 @@ This means even Sonnet (for track selection) and Haiku (for progress narration) 
 ## 7. Acceptance Criteria
 
 ### Three-Tier Model Architecture
+
 - [ ] `constants.ts` defines `MODEL_OPUS: 'claude-opus-4-6-20260219'`
 - [ ] `ai-service.ts` supports routing to Opus, Sonnet, or Haiku based on task type
 - [ ] No Opus calls in hot paths (tool execution, search, filtering)
 - [ ] Opus calls are in `waitUntil()` where possible to avoid blocking responses
 
 ### Set Plan Generation
+
 - [ ] Session start generates a set plan with 4-5 phases
 - [ ] Set plan includes energy targets, BPM ranges, and genre focus per phase
 - [ ] Set plan is stored in `session.plan` in KV
@@ -386,6 +392,7 @@ This means even Sonnet (for track selection) and Haiku (for progress narration) 
 - [ ] Plan includes at least 1 surprise/contrast point
 
 ### Skip Reasoning
+
 - [ ] 2+ skips within 5 minutes triggers batch skip analysis
 - [ ] Skip analysis identifies the likely issue (energy, genre, era, tempo, etc.)
 - [ ] Taste model updates are targeted (only penalize the identified issue, not all tags)
@@ -393,6 +400,7 @@ This means even Sonnet (for track selection) and Haiku (for progress narration) 
 - [ ] Skip analysis results are used in the next track selection prompt
 
 ### DJ Narration
+
 - [ ] Session start produces a narration describing the vibe and plan
 - [ ] Track queueing produces a brief reason narration
 - [ ] Skip patterns produce an adaptation narration
@@ -402,6 +410,7 @@ This means even Sonnet (for track selection) and Haiku (for progress narration) 
 - [ ] DJ voice is opinionated and music-savvy, never technical ("calling tool X")
 
 ### Contrast Scoring
+
 - [ ] TransitionScorer includes a contrast/novelty dimension
 - [ ] Genre novelty, artist novelty, and era novelty are scored
 - [ ] Contrast is weighted at 15% in composite score
@@ -409,6 +418,7 @@ This means even Sonnet (for track selection) and Haiku (for progress narration) 
 - [ ] No single genre dominates more than 40% of a 15-track sequence
 
 ### Integration
+
 - [ ] Set plan context appears in all track selection prompts (Sonnet and Haiku)
 - [ ] All new code passes `pnpm typecheck` with zero errors
 - [ ] All new code passes `pnpm lint` with zero errors and zero warnings
@@ -426,6 +436,7 @@ pnpm build
 ```
 
 Manual tests:
+
 1. Start session with seed playlist → verify set plan generated with appropriate phases
 2. Verify plan phases match seed playlist energy/genre (not default values)
 3. Let 5 tracks play → verify track selection follows phase energy targets

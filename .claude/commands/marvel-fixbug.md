@@ -57,6 +57,7 @@ Run the full verification sequence:
 3. **Tests**: `pnpm test:run`
 
 If any verification step fails:
+
 - Analyze the failure.
 - Fix the issue.
 - Re-run verification.
@@ -93,6 +94,7 @@ After verification passes, present a summary:
 ### 7. Next Steps
 
 Suggest the user:
+
 - Review the changes with `git diff`.
 - Commit with `/marvel-commit` using the `fix` conventional commit type.
 - Consider if similar bugs exist elsewhere (suggest `/marvel-investigate` if so).

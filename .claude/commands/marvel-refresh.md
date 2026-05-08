@@ -15,6 +15,7 @@ Force a reload of all MARVEL packs and report any changes since the session star
 Read the current state of all packs in `marvel/packs/`:
 
 For each pack directory:
+
 - Read `pack.json` for metadata (name, version, categories).
 - Read `lessons.jsonl` and count lessons.
 - Read `guardrails.md` and note its presence and size.
@@ -22,6 +23,7 @@ For each pack directory:
 ### 2. Compare to Session Start
 
 If the current run's `run.json` contains `packVersions`:
+
 - Compare current versions against the recorded versions.
 - Identify packs that have been added, removed, or updated.
 

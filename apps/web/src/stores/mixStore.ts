@@ -32,7 +32,7 @@ interface MixSteerStoreState {
 // STORE
 // =============================================================================
 
-export const useMixSteerStore = create<MixSteerStoreState>()((set) => ({
+export const useMixSteerStore = create<MixSteerStoreState>()(set => ({
   clearSteerProgress: () => {
     set({
       steerDirection: null,
@@ -45,7 +45,7 @@ export const useMixSteerStore = create<MixSteerStoreState>()((set) => ({
   steerEvents: [],
   steerInProgress: false,
 
-  steerVibeStream: async (direction) => {
+  steerVibeStream: async direction => {
     const session = queryClient.getQueryData<MixSession | null>(queryKeys.mix.session())
     if (!session) {
       set({vibeError: 'No active session'})
@@ -62,12 +62,17 @@ export const useMixSteerStore = create<MixSteerStoreState>()((set) => ({
     })
 
     try {
-      await mixApiClient.steerVibeStream(direction, (event) => {
+      await mixApiClient.steerVibeStream(direction, event => {
         // Emit steer events to debug
-        emitDebug('steer', event.type, `Steer ${event.type}: ${event.data.message ?? event.data.stage ?? direction}`, event.data)
+        emitDebug(
+          'steer',
+          event.type,
+          `Steer ${event.type}: ${event.data.message ?? event.data.stage ?? direction}`,
+          event.data,
+        )
 
         // Accumulate events
-        set((state) => ({
+        set(state => ({
           steerEvents: [...state.steerEvents, event],
         }))
 

@@ -43,16 +43,16 @@ function broadcast(message) {
 function readLoop(reader, decoder) {
   reader
     .read()
-    .then(({ done, value }) => {
+    .then(({done, value}) => {
       if (done) {
         console.log('[SharedWorker] SSE stream ended')
         sseStatus = 'disconnected'
-        broadcast({ status: 'disconnected', type: 'SW_STATUS' })
+        broadcast({status: 'disconnected', type: 'SW_STATUS'})
         scheduleReconnect()
         return
       }
 
-      sseBuffer += decoder.decode(value, { stream: true })
+      sseBuffer += decoder.decode(value, {stream: true})
       const lines = sseBuffer.split('\n')
       sseBuffer = lines.pop() ?? ''
 
@@ -67,20 +67,20 @@ function readLoop(reader, decoder) {
         } else if (line === '' && currentEvent && currentData) {
           // Cache init events for late joiners
           if (currentEvent === 'init') {
-            lastInitEvent = { data: currentData, event: currentEvent }
+            lastInitEvent = {data: currentData, event: currentEvent}
           }
 
           // Handle reconnect internally — don't forward to tabs
           if (currentEvent === 'reconnect') {
             console.log('[SharedWorker] Server requested reconnect')
             sseStatus = 'disconnected'
-            broadcast({ status: 'disconnected', type: 'SW_STATUS' })
+            broadcast({status: 'disconnected', type: 'SW_STATUS'})
             reader.cancel()
             scheduleReconnect()
             return
           }
 
-          broadcast({ data: currentData, event: currentEvent, type: 'SSE_EVENT' })
+          broadcast({data: currentData, event: currentEvent, type: 'SSE_EVENT'})
           currentData = ''
           currentEvent = ''
         }
@@ -88,11 +88,11 @@ function readLoop(reader, decoder) {
 
       readLoop(reader, decoder)
     })
-    .catch((err) => {
+    .catch(err => {
       if (err.name === 'AbortError') return
       console.error('[SharedWorker] SSE read error:', err)
       sseStatus = 'disconnected'
-      broadcast({ status: 'disconnected', type: 'SW_STATUS' })
+      broadcast({status: 'disconnected', type: 'SW_STATUS'})
       scheduleReconnect()
     })
 }
@@ -120,7 +120,7 @@ function sseConnect(token) {
   sseToken = token
   sseStatus = 'connecting'
   sseBuffer = ''
-  broadcast({ status: 'connecting', type: 'SW_STATUS' })
+  broadcast({status: 'connecting', type: 'SW_STATUS'})
   console.log('[SharedWorker] SSE connecting...')
 
   sseAbortController = new AbortController()
@@ -132,13 +132,13 @@ function sseConnect(token) {
     },
     signal: sseAbortController.signal,
   })
-    .then((response) => {
+    .then(response => {
       if (!response.ok) {
         if (response.status === 401) {
           console.log('[SharedWorker] SSE auth expired (401)')
           sseStatus = 'disconnected'
-          broadcast({ data: '{}', event: 'auth_expired', type: 'SSE_EVENT' })
-          broadcast({ status: 'disconnected', type: 'SW_STATUS' })
+          broadcast({data: '{}', event: 'auth_expired', type: 'SSE_EVENT'})
+          broadcast({status: 'disconnected', type: 'SW_STATUS'})
           return
         }
         throw new Error(`HTTP ${response.status}`)
@@ -147,18 +147,18 @@ function sseConnect(token) {
       if (!response.body) throw new Error('No response body')
 
       sseStatus = 'connected'
-      broadcast({ status: 'connected', type: 'SW_STATUS' })
+      broadcast({status: 'connected', type: 'SW_STATUS'})
       console.log('[SharedWorker] SSE connected')
 
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
       readLoop(reader, decoder)
     })
-    .catch((err) => {
+    .catch(err => {
       if (err.name === 'AbortError') return
       console.error('[SharedWorker] SSE connection error:', err)
       sseStatus = 'error'
-      broadcast({ error: err.message, status: 'error', type: 'SW_STATUS' })
+      broadcast({error: err.message, status: 'error', type: 'SW_STATUS'})
       scheduleReconnect()
     })
 }
@@ -181,19 +181,19 @@ function sseDisconnect() {
     sseReconnectTimeout = null
   }
 
-  broadcast({ status: 'disconnected', type: 'SW_STATUS' })
+  broadcast({status: 'disconnected', type: 'SW_STATUS'})
 }
 
 // =============================================================================
 // PORT CONNECTION HANDLER
 // =============================================================================
 
-self.onconnect = (e) => {
+self.onconnect = e => {
   const port = e.ports[0]
   ports.add(port)
 
-  port.onmessage = (event) => {
-    const { type } = event.data
+  port.onmessage = event => {
+    const {type} = event.data
 
     if (type === 'PLAYBACK_SUBSCRIBE') {
       sseSubscriberCount++
@@ -207,7 +207,7 @@ self.onconnect = (e) => {
         sseConnect(sseToken)
       } else if (sseStatus === 'connected' && lastInitEvent) {
         // Replay cached init for late joiner (only to this port)
-        port.postMessage({ data: lastInitEvent.data, event: lastInitEvent.event, type: 'SSE_EVENT' })
+        port.postMessage({data: lastInitEvent.data, event: lastInitEvent.event, type: 'SSE_EVENT'})
       }
     }
 

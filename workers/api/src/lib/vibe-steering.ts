@@ -3,21 +3,21 @@
  * Interprets natural language vibe requests and preset buttons to adjust mix session vibes
  */
 
-import type { VibeProfile } from '@dj/shared-types'
+import type {VibeProfile} from '@dj/shared-types'
 
 import Anthropic from '@anthropic-ai/sdk'
 
-import { LLM } from '../constants'
-import { getLogger } from '../utils/LoggerContext'
+import {LLM} from '../constants'
+import {getLogger} from '../utils/LoggerContext'
 
 /**
  * Vibe adjustments that can be applied to a VibeProfile
  */
 export interface VibePreset {
-  bpmRange?: { max: number; min: number; }
+  bpmRange?: {max: number; min: number}
   energyDirection?: 'building' | 'steady' | 'winding_down'
   energyLevel?: number // Relative adjustment (+2, -3, etc.) or absolute value
-  era?: { end: number; start: number; }
+  era?: {end: number; start: number}
   genres?: string[] // Genres to add
   mood?: string[] // Moods to add
 }
@@ -26,20 +26,20 @@ export interface VibePreset {
  * Preset mappings for common vibe steering requests
  */
 export const PRESET_MAPPINGS: Record<string, VibePreset> = {
-  '80s vibes': { era: { end: 1989, start: 1980 }, genres: ['synthpop', 'new wave'] },
-  '90s throwback': { era: { end: 1999, start: 1990 } },
-  'chill out': { energyDirection: 'winding_down', energyLevel: -2 },
-  'chill vibes': { energyDirection: 'winding_down', energyLevel: -2, mood: ['chill', 'relaxed'] },
-  'go retro': { era: { end: 1995, start: 1970 } },
-  'indie mood': { genres: ['indie', 'indie rock', 'alternative'], mood: ['introspective'] },
-  'late night': { energyDirection: 'winding_down', energyLevel: -1, mood: ['mellow', 'atmospheric'] },
-  'modern hits': { era: { end: 2025, start: 2018 } },
-  'more energy': { energyDirection: 'building', energyLevel: +2 },
-  'party mode': { energyDirection: 'building', energyLevel: +3, mood: ['upbeat', 'energetic'] },
-  'pump it up': { energyDirection: 'building', energyLevel: +3, mood: ['energetic', 'intense'] },
-  'slow it down': { bpmRange: { max: 100, min: 60 }, energyLevel: -2 },
-  'something fresh': { era: { end: 2025, start: 2020 } },
-  'speed it up': { bpmRange: { max: 160, min: 120 }, energyLevel: +2 },
+  '80s vibes': {era: {end: 1989, start: 1980}, genres: ['synthpop', 'new wave']},
+  '90s throwback': {era: {end: 1999, start: 1990}},
+  'chill out': {energyDirection: 'winding_down', energyLevel: -2},
+  'chill vibes': {energyDirection: 'winding_down', energyLevel: -2, mood: ['chill', 'relaxed']},
+  'go retro': {era: {end: 1995, start: 1970}},
+  'indie mood': {genres: ['indie', 'indie rock', 'alternative'], mood: ['introspective']},
+  'late night': {energyDirection: 'winding_down', energyLevel: -1, mood: ['mellow', 'atmospheric']},
+  'modern hits': {era: {end: 2025, start: 2018}},
+  'more energy': {energyDirection: 'building', energyLevel: +2},
+  'party mode': {energyDirection: 'building', energyLevel: +3, mood: ['upbeat', 'energetic']},
+  'pump it up': {energyDirection: 'building', energyLevel: +3, mood: ['energetic', 'intense']},
+  'slow it down': {bpmRange: {max: 100, min: 60}, energyLevel: -2},
+  'something fresh': {era: {end: 2025, start: 2020}},
+  'speed it up': {bpmRange: {max: 160, min: 120}, energyLevel: +2},
 }
 
 /**
@@ -49,7 +49,7 @@ export const PRESET_MAPPINGS: Record<string, VibePreset> = {
  * @returns Updated vibe profile
  */
 export function applyPreset(currentVibe: VibeProfile, preset: VibePreset): VibeProfile {
-  const updated: VibeProfile = { ...currentVibe }
+  const updated: VibeProfile = {...currentVibe}
 
   // Energy level: if preset has energyLevel, add to current (if relative) or replace (if absolute)
   if (preset.energyLevel !== undefined) {
@@ -69,12 +69,12 @@ export function applyPreset(currentVibe: VibeProfile, preset: VibePreset): VibeP
 
   // Era: replace entirely
   if (preset.era !== undefined) {
-    updated.era = { ...preset.era }
+    updated.era = {...preset.era}
   }
 
   // BPM range: replace entirely (or could merge in future)
   if (preset.bpmRange !== undefined) {
-    updated.bpmRange = { ...preset.bpmRange }
+    updated.bpmRange = {...preset.bpmRange}
   }
 
   // Genres: merge and deduplicate
@@ -133,22 +133,22 @@ export function findMatchingPreset(direction: string): null | VibePreset {
 export async function steerVibe(
   currentVibe: VibeProfile,
   direction: string,
-  anthropicKey: string
+  anthropicKey: string,
 ): Promise<VibeProfile> {
   const logger = getLogger()
 
   // Step 1: Check if direction matches a preset (case-insensitive, fuzzy match)
   const preset = findMatchingPreset(direction)
   if (preset) {
-    logger?.info('Matched vibe steering preset', { direction, preset })
+    logger?.info('Matched vibe steering preset', {direction, preset})
     return applyPreset(currentVibe, preset)
   }
 
   // Step 2: Use Claude Haiku to interpret natural language
-  logger?.info('Using Claude Haiku for vibe steering', { direction })
+  logger?.info('Using Claude Haiku for vibe steering', {direction})
 
   try {
-    const anthropic = new Anthropic({ apiKey: anthropicKey })
+    const anthropic = new Anthropic({apiKey: anthropicKey})
     const prompt = buildVibeSteeringPrompt(currentVibe, direction)
 
     const response = await anthropic.messages.create({
@@ -165,7 +165,7 @@ export async function steerVibe(
 
     // Parse response
     const vibeAdjustments = parseVibeResponse(response)
-    logger?.info('Parsed vibe adjustments from Claude', { vibeAdjustments })
+    logger?.info('Parsed vibe adjustments from Claude', {vibeAdjustments})
 
     return applyPreset(currentVibe, vibeAdjustments)
   } catch (error) {
@@ -216,9 +216,7 @@ function parseVibeResponse(response: Anthropic.Message): VibePreset {
 
   try {
     // Extract text from response
-    const textBlocks = response.content.filter(
-      (block): block is Anthropic.TextBlock => block.type === 'text'
-    )
+    const textBlocks = response.content.filter((block): block is Anthropic.TextBlock => block.type === 'text')
 
     if (textBlocks.length === 0) {
       logger?.warn('No text blocks in Claude response')
@@ -230,12 +228,12 @@ function parseVibeResponse(response: Anthropic.Message): VibePreset {
     // Try to extract JSON from response (remove markdown code blocks if present)
     const jsonMatch = /\{[\s\S]*\}/.exec(text)
     if (!jsonMatch) {
-      logger?.warn('No JSON found in Claude response', { text })
+      logger?.warn('No JSON found in Claude response', {text})
       return {}
     }
 
     const parsed = JSON.parse(jsonMatch[0])
-    logger?.debug('Parsed vibe adjustments', { parsed })
+    logger?.debug('Parsed vibe adjustments', {parsed})
 
     // Validate and return
     const preset: VibePreset = {}
@@ -253,15 +251,11 @@ function parseVibeResponse(response: Anthropic.Message): VibePreset {
     }
 
     if (parsed.era && typeof parsed.era.start === 'number' && typeof parsed.era.end === 'number') {
-      preset.era = { end: parsed.era.end, start: parsed.era.start }
+      preset.era = {end: parsed.era.end, start: parsed.era.start}
     }
 
-    if (
-      parsed.bpmRange &&
-      typeof parsed.bpmRange.min === 'number' &&
-      typeof parsed.bpmRange.max === 'number'
-    ) {
-      preset.bpmRange = { max: parsed.bpmRange.max, min: parsed.bpmRange.min }
+    if (parsed.bpmRange && typeof parsed.bpmRange.min === 'number' && typeof parsed.bpmRange.max === 'number') {
+      preset.bpmRange = {max: parsed.bpmRange.max, min: parsed.bpmRange.min}
     }
 
     if (Array.isArray(parsed.genres)) {

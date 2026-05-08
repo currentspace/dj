@@ -9,13 +9,7 @@
  * - idle: No active playback
  */
 
-import type {
-  PlaybackContext,
-  PlaybackDevice,
-  PlaybackModes,
-  PlaybackTrack,
-  PlayingType,
-} from '@dj/shared-types'
+import type {PlaybackContext, PlaybackDevice, PlaybackModes, PlaybackTrack, PlayingType} from '@dj/shared-types'
 
 import {
   PlaybackContextEventSchema,
@@ -28,12 +22,12 @@ import {
   PlaybackTrackEventSchema,
   PlaybackVolumeEventSchema,
 } from '@dj/shared-types'
-import { create } from 'zustand'
-import { subscribeWithSelector } from 'zustand/middleware'
+import {create} from 'zustand'
+import {subscribeWithSelector} from 'zustand/middleware'
 
-import { HTTP_STATUS } from '../constants'
-import { useAuthStore } from './authStore'
-import { emitDebug } from './debugStore'
+import {HTTP_STATUS} from '../constants'
+import {useAuthStore} from './authStore'
+import {emitDebug} from './debugStore'
 
 // =============================================================================
 // TYPES
@@ -118,7 +112,7 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
       if (interpolationInterval) return
 
       interpolationInterval = setInterval(() => {
-        const { playbackCore, progress } = get()
+        const {playbackCore, progress} = get()
         if (!playbackCore?.isPlaying || !playbackCore.track) return
 
         const elapsed = Date.now() - lastServerUpdate
@@ -126,7 +120,7 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
 
         // Only update if changed by >200ms
         if (Math.abs(interpolated - progress) > 200) {
-          set({ progress: interpolated })
+          set({progress: interpolated})
         }
       }, 250)
     }
@@ -140,7 +134,7 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
 
     function scheduleReconnect(token: string): void {
       stopInterpolation()
-      set({ status: 'disconnected' })
+      set({status: 'disconnected'})
 
       if (reconnectTimeout) clearTimeout(reconnectTimeout)
 
@@ -153,7 +147,7 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
       if (previousTrackId && previousTrackId !== newTrackId) {
         console.log('[playbackStore] Track changed:', previousTrackId, '->', newTrackId)
         set({lastTrackChangeAt: Date.now()})
-        trackChangeCallbacks.forEach((cb) => {
+        trackChangeCallbacks.forEach(cb => {
           try {
             cb(previousTrackId!, previousTrackUri ?? '', newTrackId)
           } catch (err) {
@@ -180,7 +174,7 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
         switch (event) {
           case 'auth_expired':
             console.log('[playbackStore] Auth expired, triggering token refresh')
-            set({ error: 'Token expired, refreshing...', status: 'disconnected' })
+            set({error: 'Token expired, refreshing...', status: 'disconnected'})
             stopInterpolation()
             // Fire-and-forget: SSE event handler is sync. Token refresh runs in
             // the background and re-issues the connect on success.
@@ -189,7 +183,7 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
                 const success = await useAuthStore.getState().refreshToken()
                 if (!success) {
                   console.error('[playbackStore] Token refresh failed')
-                  set({ error: 'Session expired. Please log in again.' })
+                  set({error: 'Session expired. Please log in again.'})
                   return
                 }
                 console.log('[playbackStore] Token refreshed, reconnecting...')
@@ -202,7 +196,7 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
                 }
               } catch (err: unknown) {
                 console.error('[playbackStore] Token refresh error:', err)
-                set({ error: 'Session expired. Please log in again.' })
+                set({error: 'Session expired. Please log in again.'})
               }
             })()
             break
@@ -215,10 +209,10 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
             const ctxResult = PlaybackContextEventSchema.safeParse(parsed)
             if (!ctxResult.success) break
             const ctx = ctxResult.data
-            const { playbackCore } = get()
+            const {playbackCore} = get()
             if (playbackCore) {
               set({
-                playbackCore: { ...playbackCore, context: ctx.context, seq: ctx.seq },
+                playbackCore: {...playbackCore, context: ctx.context, seq: ctx.seq},
               })
             }
             break
@@ -228,10 +222,10 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
             const deviceResult = PlaybackDeviceEventSchema.safeParse(parsed)
             if (!deviceResult.success) break
             const device = deviceResult.data
-            const { playbackCore } = get()
+            const {playbackCore} = get()
             if (playbackCore) {
               set({
-                playbackCore: { ...playbackCore, device, seq: device.seq },
+                playbackCore: {...playbackCore, device, seq: device.seq},
               })
             }
             break
@@ -242,7 +236,7 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
               const errorData = parsed as Record<string, unknown>
               console.warn('[playbackStore] Server error:', errorData.message)
               if (typeof errorData.retriesRemaining === 'number') {
-                set({ error: `Error: ${String(errorData.message)} (${errorData.retriesRemaining} retries left)` })
+                set({error: `Error: ${String(errorData.message)} (${errorData.retriesRemaining} retries left)`})
               }
             }
             break
@@ -254,7 +248,7 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
             stopInterpolation()
             previousTrackId = null
             previousTrackUri = null
-            const { playbackCore } = get()
+            const {playbackCore} = get()
             if (playbackCore) {
               set({
                 playbackCore: {
@@ -294,7 +288,7 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
               track: init.track,
             }
 
-            set({ error: null, playbackCore, progress: init.progress })
+            set({error: null, playbackCore, progress: init.progress})
 
             if (init.isPlaying) {
               startInterpolation()
@@ -308,10 +302,10 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
             const modesResult = PlaybackModesEventSchema.safeParse(parsed)
             if (!modesResult.success) break
             const modes = modesResult.data
-            const { playbackCore } = get()
+            const {playbackCore} = get()
             if (playbackCore) {
               set({
-                playbackCore: { ...playbackCore, modes, seq: modes.seq },
+                playbackCore: {...playbackCore, modes, seq: modes.seq},
               })
             }
             break
@@ -326,10 +320,10 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
             const stateResult = PlaybackStateEventSchema.safeParse(parsed)
             if (!stateResult.success) break
             const state = stateResult.data
-            const { playbackCore } = get()
+            const {playbackCore} = get()
             if (playbackCore) {
               set({
-                playbackCore: { ...playbackCore, isPlaying: state.isPlaying, seq: state.seq },
+                playbackCore: {...playbackCore, isPlaying: state.isPlaying, seq: state.seq},
               })
 
               if (state.isPlaying) {
@@ -347,7 +341,7 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
             const tick = tickResult.data
             lastServerUpdate = tick.ts
             lastServerProgress = tick.p
-            set({ progress: tick.p })
+            set({progress: tick.p})
             break
           }
 
@@ -357,11 +351,11 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
             const track = trackResult.data
             notifyTrackChange(track.id, track.uri)
 
-            const { playbackCore } = get()
+            const {playbackCore} = get()
             if (playbackCore) {
               set({
                 error: null,
-                playbackCore: { ...playbackCore, seq: track.seq, track },
+                playbackCore: {...playbackCore, seq: track.seq, track},
               })
             }
             break
@@ -371,12 +365,12 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
             const volumeResult = PlaybackVolumeEventSchema.safeParse(parsed)
             if (!volumeResult.success) break
             const volume = volumeResult.data
-            const { playbackCore } = get()
+            const {playbackCore} = get()
             if (playbackCore) {
               set({
                 playbackCore: {
                   ...playbackCore,
-                  device: { ...playbackCore.device, volumePercent: volume.percent },
+                  device: {...playbackCore.device, volumePercent: volume.percent},
                   seq: volume.seq,
                 },
               })
@@ -408,14 +402,14 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
 
           if (!response.ok) {
             if (response.status === HTTP_STATUS.UNAUTHORIZED) {
-              set({ error: 'Session expired', status: 'error' })
+              set({error: 'Session expired', status: 'error'})
               return
             }
             throw new Error(`HTTP ${response.status}`)
           }
           if (!response.body) throw new Error('No response body')
 
-          set({ status: 'connected' })
+          set({status: 'connected'})
           emitDebug('sse', 'connected', 'SSE stream connected (direct)')
           startInterpolation()
 
@@ -426,13 +420,13 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
           // Loop reads instead of recursing — keeps the call stack bounded
           // for long-lived streams.
           while (true) {
-            const { done, value } = await reader.read()
+            const {done, value} = await reader.read()
             if (done) {
               scheduleReconnect(token)
               return
             }
 
-            buffer += decoder.decode(value, { stream: true })
+            buffer += decoder.decode(value, {stream: true})
             const lines = buffer.split('\n')
             buffer = lines.pop() ?? ''
 
@@ -463,11 +457,11 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
     }
 
     return {
-      connect: (token) => {
-        const { status } = get()
+      connect: token => {
+        const {status} = get()
         if (status === 'connected' || status === 'connecting') return
 
-        set({ error: null, status: 'connecting' })
+        set({error: null, status: 'connecting'})
 
         // Try SharedWorker path first
         if (typeof SharedWorker !== 'undefined') {
@@ -476,33 +470,35 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
             const worker = new SharedWorker('/shared-playback-worker.js')
             sharedWorkerPort = worker.port
 
-            worker.port.onmessage = (msg: MessageEvent<{
-              data?: string
-              error?: string
-              event?: string
-              status?: string
-              type: string
-            }>) => {
-              const { data, error: wError, event, status: wStatus, type } = msg.data
+            worker.port.onmessage = (
+              msg: MessageEvent<{
+                data?: string
+                error?: string
+                event?: string
+                status?: string
+                type: string
+              }>,
+            ) => {
+              const {data, error: wError, event, status: wStatus, type} = msg.data
 
               if (type === 'SSE_EVENT' && event && data) {
                 handleEvent(event, data, token)
               } else if (type === 'SW_STATUS' && wStatus) {
                 switch (wStatus) {
                   case 'connected':
-                    set({ error: null, status: 'connected' })
+                    set({error: null, status: 'connected'})
                     emitDebug('sse', 'connected', 'SSE stream connected (via SharedWorker)')
                     startInterpolation()
                     break
                   case 'connecting':
-                    set({ status: 'connecting' })
+                    set({status: 'connecting'})
                     break
                   case 'disconnected':
                     stopInterpolation()
-                    set({ status: 'disconnected' })
+                    set({status: 'disconnected'})
                     break
                   case 'error':
-                    set({ error: wError ?? 'Connection error', status: 'error' })
+                    set({error: wError ?? 'Connection error', status: 'error'})
                     break
                 }
               }
@@ -532,7 +528,7 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
 
         // Clean up SharedWorker subscription
         if (sharedWorkerPort) {
-          sharedWorkerPort.postMessage({ type: 'PLAYBACK_UNSUBSCRIBE' })
+          sharedWorkerPort.postMessage({type: 'PLAYBACK_UNSUBSCRIBE'})
           sharedWorkerPort.close()
           sharedWorkerPort = null
         }
@@ -556,14 +552,14 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
 
       status: 'disconnected',
 
-      subscribeToTrackChange: (callback) => {
+      subscribeToTrackChange: callback => {
         trackChangeCallbacks.add(callback)
         return () => {
           trackChangeCallbacks.delete(callback)
         }
       },
     }
-  })
+  }),
 )
 
 // =============================================================================
@@ -574,7 +570,7 @@ export const usePlaybackStore = create<PlaybackStoreState>()(
  * Get simplified PlaybackState for UI components
  */
 export function getPlaybackState(): null | PlaybackState {
-  const { playbackCore, progress } = usePlaybackStore.getState()
+  const {playbackCore, progress} = usePlaybackStore.getState()
   if (!playbackCore) return null
 
   return {
@@ -596,28 +592,28 @@ export function getPlaybackState(): null | PlaybackState {
  * Selector for playback context (playlist/album)
  */
 export function useContext() {
-  return usePlaybackStore((s) => s.playbackCore?.context)
+  return usePlaybackStore(s => s.playbackCore?.context)
 }
 
 /**
  * Selector for rich device info
  */
 export function useDevice() {
-  return usePlaybackStore((s) => s.playbackCore?.device)
+  return usePlaybackStore(s => s.playbackCore?.device)
 }
 
 /**
  * Selector for playback modes (shuffle/repeat)
  */
 export function useModes() {
-  return usePlaybackStore((s) => s.playbackCore?.modes)
+  return usePlaybackStore(s => s.playbackCore?.modes)
 }
 
 /**
  * Selector for volume
  */
 export function useVolume() {
-  return usePlaybackStore((s) => s.playbackCore?.device.volumePercent)
+  return usePlaybackStore(s => s.playbackCore?.device.volumePercent)
 }
 
 // =============================================================================
@@ -628,16 +624,16 @@ if (typeof window !== 'undefined') {
   // Ensure clean unsubscribe when tab closes
   window.addEventListener('beforeunload', () => {
     if (sharedWorkerPort) {
-      sharedWorkerPort.postMessage({ type: 'PLAYBACK_UNSUBSCRIBE' })
+      sharedWorkerPort.postMessage({type: 'PLAYBACK_UNSUBSCRIBE'})
     }
   })
 
   // Forward cross-tab token changes to the SharedWorker
   useAuthStore.subscribe(
-    (s) => s.token,
-    (token) => {
+    s => s.token,
+    token => {
       if (sharedWorkerPort && token) {
-        sharedWorkerPort.postMessage({ token, type: 'PLAYBACK_TOKEN_UPDATE' })
+        sharedWorkerPort.postMessage({token, type: 'PLAYBACK_TOKEN_UPDATE'})
       }
     },
   )

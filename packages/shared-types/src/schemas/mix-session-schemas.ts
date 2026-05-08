@@ -8,16 +8,20 @@ import {z} from 'zod'
 // ===== Vibe Profile =====
 
 export const VibeProfileSchema = z.object({
-  bpmRange: z.object({
-    max: z.number().min(20).max(220),
-    min: z.number().min(20).max(220),
-  }).default({max: 140, min: 80}),
+  bpmRange: z
+    .object({
+      max: z.number().min(20).max(220),
+      min: z.number().min(20).max(220),
+    })
+    .default({max: 140, min: 80}),
   energyDirection: z.enum(['building', 'steady', 'winding_down']).default('steady'),
   energyLevel: z.number().min(1).max(10).default(5),
-  era: z.object({
-    end: z.number().int().min(1900).max(2100),
-    start: z.number().int().min(1900).max(2100),
-  }).default({end: 2025, start: 2000}),
+  era: z
+    .object({
+      end: z.number().int().min(1900).max(2100),
+      start: z.number().int().min(1900).max(2100),
+    })
+    .default({end: 2025, start: 2000}),
   genres: z.array(z.string()).default([]),
   mood: z.array(z.string()).default([]),
 })
@@ -142,10 +146,13 @@ export const SessionHealthSchema = z.object({
 export const SessionPreferencesSchema = z.object({
   autoFill: z.boolean().default(true),
   avoidGenres: z.array(z.string()).default([]),
-  bpmLock: z.object({
-    max: z.number().min(20).max(220),
-    min: z.number().min(20).max(220),
-  }).nullable().default(null),
+  bpmLock: z
+    .object({
+      max: z.number().min(20).max(220),
+      min: z.number().min(20).max(220),
+    })
+    .nullable()
+    .default(null),
   favoriteArtists: z.array(z.string()).default([]),
 })
 
@@ -240,10 +247,12 @@ export const ReorderQueueResponseSchema = z.object({
 
 // Update Vibe Request
 export const UpdateVibeRequestSchema = z.object({
-  bpmRange: z.object({
-    max: z.number().min(20).max(220),
-    min: z.number().min(20).max(220),
-  }).optional(),
+  bpmRange: z
+    .object({
+      max: z.number().min(20).max(220),
+      min: z.number().min(20).max(220),
+    })
+    .optional(),
   energyDirection: z.enum(['building', 'steady', 'winding_down']).optional(),
   energyLevel: z.number().min(1).max(10).optional(),
 })

@@ -10,12 +10,12 @@
  * Run strategy: Nightly in CI (not on every commit) to detect API changes
  */
 
-import { DeezerTrackSchema } from '@dj/shared-types'
-import { beforeAll, describe, expect, it } from 'vitest'
+import {DeezerTrackSchema} from '@dj/shared-types'
+import {beforeAll, describe, expect, it} from 'vitest'
 
 // Import setup to restore native fetch for contract tests
 import './setup'
-import { asRecord } from './helpers'
+import {asRecord} from './helpers'
 
 const DEEZER_BASE_URL = 'https://api.deezer.com'
 
@@ -285,9 +285,9 @@ describe('Deezer API Contracts', () => {
   describe('BPM Validation', () => {
     it('should have BPM in valid range when present', async () => {
       const testCases = [
-        { isrc: TEST_ISRCS.bohemianRhapsody, name: 'Bohemian Rhapsody' },
-        { isrc: TEST_ISRCS.billie_jean, name: 'Billie Jean' },
-        { isrc: TEST_ISRCS.stairway, name: 'Stairway to Heaven' },
+        {isrc: TEST_ISRCS.bohemianRhapsody, name: 'Bohemian Rhapsody'},
+        {isrc: TEST_ISRCS.billie_jean, name: 'Billie Jean'},
+        {isrc: TEST_ISRCS.stairway, name: 'Stairway to Heaven'},
       ]
 
       for (const testCase of testCases) {
@@ -405,11 +405,7 @@ describe('Deezer API Contracts', () => {
 
   describe('Schema Consistency', () => {
     it('should have consistent schema across multiple tracks', async () => {
-      const isrcs = [
-        TEST_ISRCS.bohemianRhapsody,
-        TEST_ISRCS.billie_jean,
-        TEST_ISRCS.stairway,
-      ]
+      const isrcs = [TEST_ISRCS.bohemianRhapsody, TEST_ISRCS.billie_jean, TEST_ISRCS.stairway]
 
       const responses = []
 

@@ -13,14 +13,14 @@
  * Key Principle: Test real behavior, not mocks
  */
 
-import { afterAll, beforeAll } from 'vitest'
+import {afterAll, beforeAll} from 'vitest'
 
 // Get native globals that were stored before mocking in test-setup.ts
- 
+
 const nativeFetch = (global as any).__nativeFetch as typeof fetch
- 
+
 const nativeSetTimeout = (global as any).__nativeSetTimeout as typeof setTimeout
- 
+
 const nativeClearTimeout = (global as any).__nativeClearTimeout as typeof clearTimeout
 
 // Restore native globals for integration tests (they need real network access and timers)
@@ -63,7 +63,7 @@ export const RATE_LIMITS = {
  * but we still test real caching logic with a real in-memory store.
  */
 export class MockKVNamespace {
-  private store = new Map<string, { expirationTtl?: number; timestamp: number; value: string; }>()
+  private store = new Map<string, {expirationTtl?: number; timestamp: number; value: string}>()
 
   // Method to clear all data (useful for test cleanup)
   clear(): void {
@@ -102,16 +102,16 @@ export class MockKVNamespace {
     return entry.value
   }
 
-  async list(options?: { limit?: number; prefix?: string; }): Promise<{ keys: { name: string }[] }> {
+  async list(options?: {limit?: number; prefix?: string}): Promise<{keys: {name: string}[]}> {
     const keys = Array.from(this.store.keys())
       .filter(key => !options?.prefix || key.startsWith(options.prefix))
       .slice(0, options?.limit)
-      .map(name => ({ name }))
+      .map(name => ({name}))
 
-    return { keys }
+    return {keys}
   }
 
-  async put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void> {
+  async put(key: string, value: string, options?: {expirationTtl?: number}): Promise<void> {
     this.store.set(key, {
       expirationTtl: options?.expirationTtl,
       timestamp: Date.now(),

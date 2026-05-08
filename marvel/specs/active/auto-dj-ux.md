@@ -5,6 +5,7 @@
 **Created:** 2026-02-28
 
 **Packs Required:**
+
 - pack:dj-react-patterns@1.0.0
 - pack:dj-cloudflare-workers@1.0.0
 - pack:dj-spotify-integration@1.0.0
@@ -27,6 +28,7 @@ Redesign the DJ app into a single-page experience where the user lands, music st
 ## 3. Research Findings
 
 ### What Spotify's Own DJ Does (October 2025)
+
 - Voice-based with a persona ("X") who narrates between songs
 - Takes typed or spoken requests: genre, mood, artist, activity
 - Distinguishes contexts: "focus while studying" vs "energetic for the gym"
@@ -36,6 +38,7 @@ Redesign the DJ app into a single-page experience where the user lands, music st
 Source: [Spotify DJ Takes Requests](https://newsroom.spotify.com/2025-05-13/dj-voice-requests/), [Text-based DJ](https://techcrunch.com/2025/10/15/you-can-now-text-spotifys-ai-dj/)
 
 ### What Algoriddim djay Does (December 2025)
+
 - AI Automix: analyzes tracks, finds best intro/outro transition points
 - Auto tempo alignment: incoming track BPM adjusted to match current
 - Transition effects: Filter, Echo, Tremolo, Neural Mix
@@ -45,6 +48,7 @@ Source: [Spotify DJ Takes Requests](https://newsroom.spotify.com/2025-05-13/dj-v
 Source: [Algoriddim Automix](https://help.algoriddim.com/user-manual/djay-pro-windows/mixing-basics/automix), [Spotify + djay](https://magneticmag.com/2025/12/algoriddim-brings-spotify-integration-to-djay/)
 
 ### What Professional DJ Sets Do (DJ.Studio analysis)
+
 - Five-phase energy arc: Warm-up → Build → Peak → Release → Finale
 - Avoid sustained peak intensity — contrast between high and low maintains engagement
 - Group similar genres into clusters; use breakdowns as bridges between clusters
@@ -54,6 +58,7 @@ Source: [Algoriddim Automix](https://help.algoriddim.com/user-manual/djay-pro-wi
 Source: [Anatomy of a Great DJ Mix](https://dj.studio/blog/anatomy-great-dj-mix-structure-energy-flow-transition-logic)
 
 ### What Our App Currently Does (Code-Verified)
+
 - **Two separate pages** with zero shared context (chat at `/`, mix at `/mix`)
 - **9-step startup sequence**: Login → see playlists → select playlist → switch to "DJ mode" in chat OR click "Mix" in header → see start dialog → click "Start" → wait 8-15s → see queue
 - **NowPlaying bar** at the bottom of chat page is 48px tall, shows track + basic controls
@@ -64,7 +69,9 @@ Source: [Anatomy of a Great DJ Mix](https://dj.studio/blog/anatomy-great-dj-mix-
 ## 4. Current UX Problems (Specific)
 
 ### P1: Too Many Steps to Start
+
 A user who opens the app for the first time has to:
+
 1. Login with Spotify (1 click + redirect)
 2. See playlists page (automatic)
 3. Click a playlist (1 click)
@@ -78,12 +85,15 @@ A user who opens the app for the first time has to:
 **That's 5 user actions + 1 wait before music plays.** Spotify's DJ: 1 tap on "DJ" → music plays.
 
 ### P2: Two Pages, Two Mental Models
+
 - Chat page: text-based, analytical, no playback controls beyond the tiny NowPlaying bar
 - Mix page: visual, playback-focused, no chat/text input except the "Steer" text field in VibeControls
 - User has to decide which mode they want before they start — but they don't know what each mode does
 
 ### P3: Information Overload on Mix Page
+
 The MixInterface renders ALL of these simultaneously:
+
 - NowPlayingHero (album art 300px, progress, controls, device picker, up-next preview)
 - QueuePanel (scrollable list of tracks with metadata, scores, reasons, remove buttons)
 - SuggestionsPanel (separate scrollable list with scores, BPM, reasons)
@@ -93,13 +103,16 @@ The MixInterface renders ALL of these simultaneously:
 A new user doesn't know where to look. There's no visual hierarchy — everything competes for attention equally.
 
 ### P4: No Feedback Visibility
+
 When the DJ adapts (vibe changes, queue rebuilds, taste model updates), the user sees nothing. There's no indicator of:
+
 - "I noticed you skipped 3 tracks, shifting away from hip-hop"
 - "Your energy has been climbing, keeping the momentum going"
 - "Queue low, finding more tracks..."
 - Progress of background operations
 
 ### P5: Steer UX is Buried
+
 The natural-language steering (the most powerful feature) is a small text input at the bottom of VibeControls, labeled "Steer the Vibe" with a generic text placeholder. Meanwhile, the 4 preset buttons ("More Energy", "Chill Out", etc.) take prominent space but are one-shot actions with no feedback.
 
 ## 5. Proposed Changes
@@ -147,6 +160,7 @@ The natural-language steering (the most powerful feature) is a small text input 
 ```
 
 **Key design decisions:**
+
 - **NowPlaying is the hero** but compact (200px art, not 300px). It's the constant anchor.
 - **DJ Messages replace both chat and suggestions panels.** The DJ narrates what it's doing, why it chose tracks, and how it's adapting. This is the primary feedback channel.
 - **Up Next is a single line** showing the next track, not a full scrollable panel. Tap to expand.
@@ -158,16 +172,19 @@ The natural-language steering (the most powerful feature) is a small text input 
 **Replace the 9-step flow with a 1-tap start.**
 
 When the user opens the app (already authenticated):
+
 1. Show their playlists as a horizontal scrollable strip at top
 2. Show a prominent "▶ Start DJ" button below
 3. Below that: "Pick a playlist to seed the vibe, or just hit Start"
 
 When they tap Start:
+
 - If a playlist is selected → seed from it (Phase 2 already built)
 - If no playlist selected → "surprise me" from top tracks (Phase 2 already built)
 - Music starts within 3-5 seconds (fallback pool plays immediately, AI-generated queue loads in background)
 
 **The first thing the DJ says:**
+
 ```
 🎧 Starting from your "Chill Vibes" playlist.
    Feeling: lo-fi, ambient, indie. Energy: medium.
@@ -175,6 +192,7 @@ When they tap Start:
 ```
 
 If using "surprise me":
+
 ```
 🎧 Based on what you've been listening to lately:
    lots of indie rock and electronic.
@@ -187,16 +205,16 @@ If using "surprise me":
 
 **Narration triggers (automatic, not user-initiated):**
 
-| Event | What the DJ says |
-|-------|-----------------|
-| Session start | Describes the seed vibe, what it noticed about the playlist |
-| Track queued | Brief reason: "Added X — great transition from the current BPM" |
-| Skip detected | "Noticed you skipped that one. Steering away from [genre/artist]" |
-| 3+ skips | "Okay, clearly not the right direction. Rebuilding with [new vibe]" |
-| Vibe shift detected | "Energy's been climbing for 4 tracks. Keeping it going." |
-| Queue low | "Running low on tracks, finding more..." |
-| Fallback used | "Pulling from your playlist favorites while I think of something better" |
-| User steers | Responds conversationally, explains what it's changing |
+| Event               | What the DJ says                                                         |
+| ------------------- | ------------------------------------------------------------------------ |
+| Session start       | Describes the seed vibe, what it noticed about the playlist              |
+| Track queued        | Brief reason: "Added X — great transition from the current BPM"          |
+| Skip detected       | "Noticed you skipped that one. Steering away from [genre/artist]"        |
+| 3+ skips            | "Okay, clearly not the right direction. Rebuilding with [new vibe]"      |
+| Vibe shift detected | "Energy's been climbing for 4 tracks. Keeping it going."                 |
+| Queue low           | "Running low on tracks, finding more..."                                 |
+| Fallback used       | "Pulling from your playlist favorites while I think of something better" |
+| User steers         | Responds conversationally, explains what it's changing                   |
 
 **Implementation:** Each narration is a single Opus 4.6 call with a tight prompt (~100 tokens output) that receives the event context and generates a 1-2 sentence response in the DJ's voice. These are stored in `session.conversation` and sent to the frontend via a new SSE event type `dj_message` on the player-stream.
 
@@ -240,6 +258,7 @@ When the user first opens the app (no session):
 ### 5.6 Chat as Steering (Not a Separate Feature)
 
 The text input at the bottom serves ALL purposes:
+
 - **"more energy"** → vibe steer (parsed as preset or sent to Claude)
 - **"play some Radiohead"** → artist search + queue
 - **"what's playing?"** → DJ responds with current track info
@@ -252,41 +271,41 @@ This means the existing `POST /api/chat-stream/message` endpoint (with all 15 to
 
 ### New Files
 
-| File | Purpose |
-|------|---------|
-| `apps/web/src/features/dj/DJPage.tsx` | Single-page DJ layout |
-| `apps/web/src/features/dj/DJMessages.tsx` | Narration message stream |
-| `apps/web/src/features/dj/PlaylistStrip.tsx` | Horizontal scrollable playlist picker |
-| `apps/web/src/features/dj/CompactNowPlaying.tsx` | Compact 200px album art + controls |
-| `apps/web/src/features/dj/UpNext.tsx` | Single-line expandable next track |
-| `apps/web/src/features/dj/SettingsDrawer.tsx` | Slide-up vibe controls + preferences |
-| `apps/web/src/features/dj/DJPage.module.css` | Styles |
-| `apps/web/src/stores/djStore.ts` | Unified store (replaces mixStore + playlistStore) |
-| `workers/api/src/lib/dj-narrator.ts` | Opus 4.6 narration generator |
+| File                                             | Purpose                                           |
+| ------------------------------------------------ | ------------------------------------------------- |
+| `apps/web/src/features/dj/DJPage.tsx`            | Single-page DJ layout                             |
+| `apps/web/src/features/dj/DJMessages.tsx`        | Narration message stream                          |
+| `apps/web/src/features/dj/PlaylistStrip.tsx`     | Horizontal scrollable playlist picker             |
+| `apps/web/src/features/dj/CompactNowPlaying.tsx` | Compact 200px album art + controls                |
+| `apps/web/src/features/dj/UpNext.tsx`            | Single-line expandable next track                 |
+| `apps/web/src/features/dj/SettingsDrawer.tsx`    | Slide-up vibe controls + preferences              |
+| `apps/web/src/features/dj/DJPage.module.css`     | Styles                                            |
+| `apps/web/src/stores/djStore.ts`                 | Unified store (replaces mixStore + playlistStore) |
+| `workers/api/src/lib/dj-narrator.ts`             | Opus 4.6 narration generator                      |
 
 ### Modified Files
 
-| File | Change |
-|------|--------|
-| `apps/web/src/App.tsx` | Single `<DJPage />` (remove route switching) |
-| `apps/web/src/stores/navigationStore.ts` | Simplify to `{ showSettings: boolean }` or remove |
-| `workers/api/src/routes/player-stream.ts` | Add `dj_message` SSE event type for narration push |
-| `workers/api/src/routes/mix-openapi.ts` | Trigger narration on key events (start, skip, steer) |
-| `apps/web/src/stores/playbackStore.ts` | Handle `dj_message` SSE event |
+| File                                      | Change                                               |
+| ----------------------------------------- | ---------------------------------------------------- |
+| `apps/web/src/App.tsx`                    | Single `<DJPage />` (remove route switching)         |
+| `apps/web/src/stores/navigationStore.ts`  | Simplify to `{ showSettings: boolean }` or remove    |
+| `workers/api/src/routes/player-stream.ts` | Add `dj_message` SSE event type for narration push   |
+| `workers/api/src/routes/mix-openapi.ts`   | Trigger narration on key events (start, skip, steer) |
+| `apps/web/src/stores/playbackStore.ts`    | Handle `dj_message` SSE event                        |
 
 ### Deprecated Files
 
-| File | Action |
-|------|--------|
-| `apps/web/src/stores/mixStore.ts` | Replaced by djStore |
-| `apps/web/src/stores/playlistStore.ts` | Replaced by djStore |
-| `apps/web/src/features/chat/ChatInterface.tsx` | Replaced by DJMessages + input |
-| `apps/web/src/features/mix/MixInterface.tsx` | Replaced by DJPage |
-| `apps/web/src/features/mix/NowPlayingHero.tsx` | Replaced by CompactNowPlaying |
-| `apps/web/src/features/mix/SuggestionsPanel.tsx` | Absorbed into DJ narration |
-| `apps/web/src/features/mix/VibeControls.tsx` | Moved to SettingsDrawer |
-| `apps/web/src/pages/MixPage.tsx` | Replaced by DJPage |
-| `apps/web/src/features/playlist/UserPlaylists.tsx` | Replaced by PlaylistStrip |
+| File                                               | Action                         |
+| -------------------------------------------------- | ------------------------------ |
+| `apps/web/src/stores/mixStore.ts`                  | Replaced by djStore            |
+| `apps/web/src/stores/playlistStore.ts`             | Replaced by djStore            |
+| `apps/web/src/features/chat/ChatInterface.tsx`     | Replaced by DJMessages + input |
+| `apps/web/src/features/mix/MixInterface.tsx`       | Replaced by DJPage             |
+| `apps/web/src/features/mix/NowPlayingHero.tsx`     | Replaced by CompactNowPlaying  |
+| `apps/web/src/features/mix/SuggestionsPanel.tsx`   | Absorbed into DJ narration     |
+| `apps/web/src/features/mix/VibeControls.tsx`       | Moved to SettingsDrawer        |
+| `apps/web/src/pages/MixPage.tsx`                   | Replaced by DJPage             |
+| `apps/web/src/features/playlist/UserPlaylists.tsx` | Replaced by PlaylistStrip      |
 
 ## 7. Acceptance Criteria
 
@@ -312,6 +331,7 @@ pnpm build
 ```
 
 Manual:
+
 1. Open app → see playlists + Start button (no routing)
 2. Tap Start without selecting playlist → music plays within 5s
 3. See DJ narration: "Starting from your recent listening..."
@@ -330,6 +350,7 @@ Manual:
 - **Preserve backend:** All backend work from v2 spec is unchanged. This is purely frontend + narration.
 
 Sources:
+
 - [Spotify DJ Takes Requests](https://newsroom.spotify.com/2025-05-13/dj-voice-requests/)
 - [Text-based Spotify DJ](https://techcrunch.com/2025/10/15/you-can-now-text-spotifys-ai-dj/)
 - [Algoriddim Automix](https://help.algoriddim.com/user-manual/djay-pro-windows/mixing-basics/automix)

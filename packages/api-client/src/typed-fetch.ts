@@ -89,11 +89,9 @@ interface TypedFetchOptions<TBody> {
 export function createApiClient(config: ApiClientConfig = {}) {
   const {baseUrl = '', getAuthToken, onUnauthorized} = config
 
-  return function typedFetch<R extends {method: string; path: string;}>(
+  return function typedFetch<R extends {method: string; path: string}>(
     route: R,
-  ): (
-    options?: TypedFetchOptions<ExtractRequestBody<R>>,
-  ) => Promise<ExtractResponseBody<R>> {
+  ): (options?: TypedFetchOptions<ExtractRequestBody<R>>) => Promise<ExtractResponseBody<R>> {
     const {method, path} = route
 
     return async (options?: TypedFetchOptions<ExtractRequestBody<R>>) => {
@@ -156,11 +154,9 @@ export function createApiClient(config: ApiClientConfig = {}) {
  * })
  * ```
  */
-export function createTypedFetch<R extends {method: string; path: string;}>(
+export function createTypedFetch<R extends {method: string; path: string}>(
   route: R,
-): (
-  options?: TypedFetchOptions<ExtractRequestBody<R>>,
-) => Promise<ExtractResponseBody<R>> {
+): (options?: TypedFetchOptions<ExtractRequestBody<R>>) => Promise<ExtractResponseBody<R>> {
   const {method, path} = route
 
   return async (options?: TypedFetchOptions<ExtractRequestBody<R>>) => {
@@ -197,8 +193,5 @@ export function createTypedFetch<R extends {method: string; path: string;}>(
  */
 function replacePathParams(path: string, params?: Record<string, number | string>): string {
   if (!params) return path
-  return Object.entries(params).reduce(
-    (p, [key, value]) => p.replace(`{${key}}`, String(value)),
-    path,
-  )
+  return Object.entries(params).reduce((p, [key, value]) => p.replace(`{${key}}`, String(value)), path)
 }

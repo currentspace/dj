@@ -67,9 +67,7 @@ describe('MarkdownContent', () => {
 
   describe('XSS prevention (SECURITY CRITICAL)', () => {
     it('should render script tags as text, not execute them', () => {
-      const {container} = render(
-        <MarkdownContent>{'<script>alert("xss")</script>'}</MarkdownContent>
-      )
+      const {container} = render(<MarkdownContent>{'<script>alert("xss")</script>'}</MarkdownContent>)
       // Script tag should be rendered as text, not as an actual script element
       expect(container.querySelector('script')).toBeNull()
       // The text content should contain the escaped script
@@ -77,17 +75,13 @@ describe('MarkdownContent', () => {
     })
 
     it('should render script tags in bold as text', () => {
-      const {container} = render(
-        <MarkdownContent>{'**<script>alert("xss")</script>**'}</MarkdownContent>
-      )
+      const {container} = render(<MarkdownContent>{'**<script>alert("xss")</script>**'}</MarkdownContent>)
       expect(container.querySelector('script')).toBeNull()
       expect(container.querySelector('strong')).toBeInTheDocument()
     })
 
     it('should not execute img onerror handlers', () => {
-      const {container} = render(
-        <MarkdownContent>{'<img src=x onerror="alert(1)">'}</MarkdownContent>
-      )
+      const {container} = render(<MarkdownContent>{'<img src=x onerror="alert(1)">'}</MarkdownContent>)
       // No actual img element should be created
       expect(container.querySelector('img')).toBeNull()
       // The text should be visible
@@ -95,9 +89,7 @@ describe('MarkdownContent', () => {
     })
 
     it('should not execute onclick handlers', () => {
-      const {container} = render(
-        <MarkdownContent>{'<div onclick="evil()">click me</div>'}</MarkdownContent>
-      )
+      const {container} = render(<MarkdownContent>{'<div onclick="evil()">click me</div>'}</MarkdownContent>)
       // No div with onclick should exist
       const divs = container.querySelectorAll('div')
       divs.forEach(div => {
@@ -106,23 +98,17 @@ describe('MarkdownContent', () => {
     })
 
     it('should not execute svg onload handlers', () => {
-      const {container} = render(
-        <MarkdownContent>{'<svg onload="alert(1)"></svg>'}</MarkdownContent>
-      )
+      const {container} = render(<MarkdownContent>{'<svg onload="alert(1)"></svg>'}</MarkdownContent>)
       expect(container.querySelector('svg')).toBeNull()
     })
 
     it('should not render iframes', () => {
-      const {container} = render(
-        <MarkdownContent>{'<iframe src="https://evil.com"></iframe>'}</MarkdownContent>
-      )
+      const {container} = render(<MarkdownContent>{'<iframe src="https://evil.com"></iframe>'}</MarkdownContent>)
       expect(container.querySelector('iframe')).toBeNull()
     })
 
     it('should not create javascript: links', () => {
-      const {container} = render(
-        <MarkdownContent>{'[click](javascript:alert(1))'}</MarkdownContent>
-      )
+      const {container} = render(<MarkdownContent>{'[click](javascript:alert(1))'}</MarkdownContent>)
       const links = container.querySelectorAll('a')
       links.forEach(link => {
         const href = link.getAttribute('href')
@@ -132,9 +118,7 @@ describe('MarkdownContent', () => {
 
     it('should not create data: links with scripts', () => {
       const {container} = render(
-        <MarkdownContent>
-          {'[click](data:text/html,<script>alert(1)</script>)'}
-        </MarkdownContent>
+        <MarkdownContent>{'[click](data:text/html,<script>alert(1)</script>)'}</MarkdownContent>,
       )
       const links = container.querySelectorAll('a')
       links.forEach(link => {
@@ -164,9 +148,7 @@ describe('MarkdownContent', () => {
     })
 
     it('should handle nested XSS attempts', () => {
-      const {container} = render(
-        <MarkdownContent>{'**<script>**alert(1)**</script>**'}</MarkdownContent>
-      )
+      const {container} = render(<MarkdownContent>{'**<script>**alert(1)**</script>**'}</MarkdownContent>)
       expect(container.querySelector('script')).toBeNull()
     })
   })
@@ -191,9 +173,7 @@ describe('MarkdownContent', () => {
     })
 
     it('should apply className to wrapper div', () => {
-      const {container} = render(
-        <MarkdownContent className="custom-class">**test**</MarkdownContent>
-      )
+      const {container} = render(<MarkdownContent className="custom-class">**test**</MarkdownContent>)
       // The wrapper div should have the class
       const wrapper = container.querySelector('.custom-class')
       expect(wrapper).toBeInTheDocument()

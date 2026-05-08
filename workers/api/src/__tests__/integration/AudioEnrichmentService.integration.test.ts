@@ -15,11 +15,11 @@
  * Run: pnpm test:integration AudioEnrichmentService
  */
 
-import { beforeEach, describe, expect, it } from 'vitest'
+import {beforeEach, describe, expect, it} from 'vitest'
 
-import { AudioEnrichmentService } from '../../services/AudioEnrichmentService'
-import { createTestTrack, KNOWN_TEST_TRACKS, measureExecutionTime } from '../helpers/integration-setup'
-import { MockKVNamespace } from './setup'
+import {AudioEnrichmentService} from '../../services/AudioEnrichmentService'
+import {createTestTrack, KNOWN_TEST_TRACKS, measureExecutionTime} from '../helpers/integration-setup'
+import {MockKVNamespace} from './setup'
 
 // These integration tests make real API calls to Deezer (public API)
 // Run with: pnpm test:integration AudioEnrichmentService
@@ -29,7 +29,7 @@ describe('AudioEnrichmentService Integration', () => {
 
   beforeEach(() => {
     mockKv = new MockKVNamespace()
-     
+
     service = new AudioEnrichmentService(mockKv as any)
   })
 
@@ -304,7 +304,7 @@ describe('AudioEnrichmentService Integration', () => {
       })
 
       // Should not throw, should return null enrichment
-       
+
       const result = await service.enrichTrack(track as any)
 
       expect(result).toBeDefined()
@@ -327,7 +327,6 @@ describe('AudioEnrichmentService Integration', () => {
         name: 'Not Found Track',
       })
 
-       
       await service.enrichTrack(track as any)
 
       // Verify cache was populated even for miss
@@ -355,7 +354,6 @@ describe('AudioEnrichmentService Integration', () => {
         name: 'Very Obscure Track',
       })
 
-       
       const result = await service.enrichTrack(track as any)
 
       // Should return null enrichment, not throw
@@ -371,7 +369,7 @@ describe('AudioEnrichmentService Integration', () => {
     it('should fallback to MusicBrainz for ISRC lookup when Spotify has no ISRC', async () => {
       // Create track without ISRC (simulating Spotify track without external_ids.isrc)
       const track = {
-        artists: [{ id: '1', name: 'Queen' }],
+        artists: [{id: '1', name: 'Queen'}],
         duration_ms: 354320, // Match Bohemian Rhapsody duration
         id: 'no-isrc-track',
         name: 'Bohemian Rhapsody',
@@ -396,7 +394,7 @@ describe('AudioEnrichmentService Integration', () => {
 
     it('should cache MusicBrainz ISRC lookups to avoid repeated API calls', async () => {
       const track = {
-        artists: [{ id: '1', name: 'Led Zeppelin' }],
+        artists: [{id: '1', name: 'Led Zeppelin'}],
         duration_ms: 482000,
         id: 'no-isrc-track-2',
         name: 'Stairway to Heaven',

@@ -41,9 +41,6 @@ export function useScopeDebugQuery() {
 }
 
 function getToken(): null | string {
-  const tokenData = storage.get<null | {expiresAt: null | number; token: string}>(
-    STORAGE_KEYS.SPOTIFY_TOKEN_DATA,
-    null,
-  )
+  const tokenData = storage.get<null | {expiresAt: null | number; token: string}>(STORAGE_KEYS.SPOTIFY_TOKEN_DATA, null)
   return tokenData?.token ?? null
 }

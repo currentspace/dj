@@ -18,11 +18,13 @@ The DJ codebase has a **well-structured but incomplete caching strategy**. While
 **File**: `/workers/api/src/services/AudioEnrichmentService.ts`
 
 **What's Cached**:
+
 - ✅ Track BPM enrichment data (Deezer lookup results)
 - ✅ Gain and rank data from Deezer
 - ✅ Release date from Deezer
 
 **Cache Details**:
+
 ```typescript
 // KV Namespace: AUDIO_FEATURES_CACHE
 // Cache Key: "bpm:{spotify_track_id}"
@@ -47,6 +49,7 @@ The DJ codebase has a **well-structured but incomplete caching strategy**. While
 ```
 
 **Lookup Flow**:
+
 ```
 enrichTrack() →
   1. Check KV cache by track_id
@@ -59,6 +62,7 @@ enrichTrack() →
 ```
 
 **Performance Metrics**:
+
 - **Rate Limiting**: Deezer calls go through orchestrator (10 concurrent)
 - **Parallel Processing**: Multiple tracks enriched in parallel
 - **Progress Streaming**: Updates every 5 tracks
@@ -74,10 +78,12 @@ enrichTrack() →
 **File**: `/workers/api/src/services/LastFmService.ts`
 
 **What's Cached**:
+
 - ✅ Track signals (tags, listeners, playcount, similar tracks)
 - ✅ Artist info (bio, images, similar artists, stats)
 
 **Cache Details**:
+
 ```typescript
 // KV Namespace: AUDIO_FEATURES_CACHE (same namespace!)
 // Cache Keys:
@@ -125,6 +131,7 @@ enrichTrack() →
 ```
 
 **Lookup Flow**:
+
 ```
 getTrackSignals() →
   1. Check KV cache by track key
@@ -148,6 +155,7 @@ batchGetArtistInfo() →
 ```
 
 **Performance Metrics**:
+
 - **Rate Limiting**: Last.fm calls go through orchestrator (10 concurrent)
 - **Artist Optimization**: Deduplicates and batches unique artists separately
   - Example: 50 tracks with 20 unique artists = 20 API calls (not 50)
@@ -164,6 +172,7 @@ batchGetArtistInfo() →
 **File**: `/workers/api/src/lib/spotify-tools.ts`
 
 **What's NOT Cached**:
+
 - ❌ Playlist metadata (name, description, total tracks)
 - ❌ Playlist tracks (fetched fresh every time)
 - ❌ Audio features (energy, danceability, tempo, etc.)
@@ -173,6 +182,7 @@ batchGetArtistInfo() →
 - ❌ User profile
 
 **Current Flow** (from analyzePlaylist):
+
 ```
 analyzePlaylist() →
   1. Fetch playlist metadata (1 call)
@@ -184,6 +194,7 @@ analyzePlaylist() →
 ```
 
 **Performance Impact**:
+
 - Every playlist analysis makes 3 Spotify API calls minimum
 - User asks "analyze this playlist" → 3 fresh API calls every time
 - No caching of frequently-accessed playlists
@@ -195,6 +206,7 @@ analyzePlaylist() →
 **File**: `/workers/api/src/services/AudioEnrichmentService.ts` (lines 391-452)
 
 **Current Implementation**:
+
 ```typescript
 private async findISRCViaMusicBrainz(
   trackName: string,
@@ -204,16 +216,19 @@ private async findISRCViaMusicBrainz(
 ```
 
 **What's NOT Cached**:
+
 - ❌ ISRC lookup by track name + artist
 - ❌ Recording search results
 - ❌ ISRC discovery attempts
 
 **Performance Issue**:
+
 - Every track without ISRC → Fresh MusicBrainz search
 - User re-analyzes playlist → All ISRC searches repeated
 - No deduplication of artist-track combinations
 
 **Typical Flow for 100 Tracks with No ISRCs**:
+
 ```
 • 20 Spotify tracks have ISRC → 20 Deezer lookups cached or done
 • 80 tracks missing ISRC → 80 MusicBrainz searches (NOT CACHED)
@@ -225,14 +240,16 @@ private async findISRCViaMusicBrainz(
 ## KV Namespace Organization
 
 **Current Setup** (from `index.ts`):
+
 ```typescript
 interface Env {
-  AUDIO_FEATURES_CACHE?: KVNamespace  // Used by: Deezer + Last.fm
-  SESSIONS?: KVNamespace              // Used by: OAuth session management
+  AUDIO_FEATURES_CACHE?: KVNamespace // Used by: Deezer + Last.fm
+  SESSIONS?: KVNamespace // Used by: OAuth session management
 }
 ```
 
 **Key Naming Conventions**:
+
 ```
 bpm:{track_id}              → Deezer enrichment data
 lastfm:{hash}               → Last.fm track signals
@@ -249,6 +266,7 @@ artist_{hash}               → Last.fm artist info
 ### Enrichment Flow for Typical 100-Track Playlist (First Analysis)
 
 **Timeline**:
+
 ```
 1. Fetch playlist metadata (Spotify)           [1 call] ~300ms
 2. Fetch 100 tracks (Spotify)                  [1 call] ~500ms
@@ -270,6 +288,7 @@ Cache: ~3KB (minimal, just summary data to Claude)
 ### Enrichment Flow for Same Playlist (Second Analysis)
 
 **Without Spotify caching**:
+
 ```
 1. Fetch playlist metadata (Spotify)           [1 call] ~300ms (REPEATED)
 2. Fetch 100 tracks (Spotify)                  [1 call] ~500ms (REPEATED)
@@ -292,6 +311,7 @@ BUT: Re-fetching same Spotify data adds 1.2 seconds of wasted calls
 ### CRITICAL (High Impact)
 
 **1. Spotify Playlist Tracks Cache**
+
 - **Impact**: 30-40% of enrichment time
 - **TTL**: 24 hours (playlists change infrequently)
 - **Key**: `spotify:playlist_tracks:{playlist_id}:{offset}`
@@ -300,6 +320,7 @@ BUT: Re-fetching same Spotify data adds 1.2 seconds of wasted calls
 - **Mitigation**: Short TTL + invalidate on user update
 
 **Example Cache Entry**:
+
 ```json
 {
   "spotify:playlist_tracks:37i9dQZF2DMg0SWrLw1I6d:0": {
@@ -313,6 +334,7 @@ BUT: Re-fetching same Spotify data adds 1.2 seconds of wasted calls
 ```
 
 **2. Spotify Audio Features Cache**
+
 - **Impact**: 20-30% of enrichment time (500ms+ per call)
 - **TTL**: 7 days (audio features don't change)
 - **Key**: `spotify:audio_features:{track_id_csv}`
@@ -320,6 +342,7 @@ BUT: Re-fetching same Spotify data adds 1.2 seconds of wasted calls
 - **Note**: Can batch up to 100 track IDs per call
 
 **Example**:
+
 ```json
 {
   "spotify:audio_features:3n3Ppam7vgaVa1iaRUc9Lp,5mJpFqGiV1hRFZXPv6R8c0": {
@@ -331,12 +354,14 @@ BUT: Re-fetching same Spotify data adds 1.2 seconds of wasted calls
 ```
 
 **3. MusicBrainz ISRC Lookups Cache**
+
 - **Impact**: 10-20% of enrichment time for tracks without ISRC
 - **TTL**: 30 days (stable recordings)
 - **Key**: `mb:isrc:{artist_normalized}:{track_normalized}:{duration_s}`
 - **Payload**: ~20 bytes (just ISRC string)
 
 **Example**:
+
 ```json
 {
   "mb:isrc:the_beatles:hey_jude:427": "GBUM71505078"
@@ -346,22 +371,26 @@ BUT: Re-fetching same Spotify data adds 1.2 seconds of wasted calls
 ### MODERATE (Medium Impact)
 
 **4. Last.fm Track Corrections Cache**
+
 - **Impact**: 5-10% of enrichment time
 - **TTL**: 30 days (artist/track names don't change)
 - **Key**: `lastfm:correction:{artist_hash}:{track_hash}`
 - **Payload**: ~100 bytes
 
 **Current Issue**: Called 4 times per track in `getTrackSignals()`:
+
 - Once in `getCorrection()` (NOT cached)
 - Names used for `getInfo()`, `getTopTags()`, `getSimilar()` (all require canonical names)
 
 **5. Spotify Playlist Metadata Cache**
+
 - **Impact**: 5-10% of enrichment time
 - **TTL**: 24 hours
 - **Key**: `spotify:playlist:{playlist_id}`
 - **Payload**: ~500 bytes
 
 **6. Deezer Search Results Cache**
+
 - **Impact**: 5-10% for tracks without direct ISRC
 - **TTL**: 7 days
 - **Key**: `deezer:search:{isrc}:{duration_s}`
@@ -370,18 +399,21 @@ BUT: Re-fetching same Spotify data adds 1.2 seconds of wasted calls
 ### NICE-TO-HAVE (Lower Impact)
 
 **7. Spotify User Profile Cache**
+
 - **Impact**: <1% (only needed once per user session)
 - **TTL**: 7 days
 - **Key**: `spotify:user:{user_id}`
 - **Payload**: ~500 bytes
 
 **8. Spotify Track Details Cache**
+
 - **Impact**: 1-5% (used when user asks for specific track details)
 - **TTL**: 7 days
 - **Key**: `spotify:track:{track_id}`
 - **Payload**: ~5KB per track
 
 **9. Spotify Search Results Cache**
+
 - **Impact**: 2-5% (user searches for tracks)
 - **TTL**: 7 days
 - **Key**: `spotify:search:{query_hash}`
@@ -394,16 +426,14 @@ BUT: Re-fetching same Spotify data adds 1.2 seconds of wasted calls
 ### Phase 1: Critical Performance Improvements (Est. 40-50% reduction in enrichment time)
 
 **1. Add Spotify Audio Features Cache**
+
 ```typescript
 // New file: workers/api/src/services/SpotifyEnrichmentService.ts
 export class SpotifyEnrichmentService {
   private cache: KVNamespace | null
-  private cacheTTL: number = 7 * 24 * 60 * 60  // 7 days
+  private cacheTTL: number = 7 * 24 * 60 * 60 // 7 days
 
-  async getAudioFeatures(
-    trackIds: string[],
-    token: string
-  ): Promise<Map<string, SpotifyAudioFeatures>> {
+  async getAudioFeatures(trackIds: string[], token: string): Promise<Map<string, SpotifyAudioFeatures>> {
     // 1. Deduplicate requested IDs
     // 2. Check cache for each ID
     // 3. Batch fetch uncached IDs (up to 100 per call)
@@ -414,6 +444,7 @@ export class SpotifyEnrichmentService {
 ```
 
 **2. Add MusicBrainz ISRC Cache**
+
 ```typescript
 // In AudioEnrichmentService.findISRCViaMusicBrainz():
 private async getCachedISRC(artist: string, track: string): Promise<string | null>
@@ -421,6 +452,7 @@ private async setCachedISRC(artist: string, track: string, isrc: string): Promis
 ```
 
 **3. Add Last.fm Correction Cache**
+
 ```typescript
 // In LastFmService.getCorrection():
 private async getCachedCorrection(artist: string, track: string)
@@ -430,12 +462,14 @@ private async setCachedCorrection(artist: string, track: string, corrected: {...
 ### Phase 2: Medium Improvements (Est. 20-30% reduction)
 
 **4. Add Spotify Playlist Tracks Cache**
+
 ```typescript
 // In spotify-tools.ts analyzePlaylist():
 // Check cache before fetching from Spotify API
 ```
 
 **5. Add Spotify Playlist Metadata Cache**
+
 ```typescript
 // Cache playlist name, description, total tracks
 ```
@@ -454,38 +488,40 @@ Extend naming scheme to prevent issues:
 
 ```typescript
 // Namespace: AUDIO_FEATURES_CACHE
-"bpm:{track_id}"              // Existing: Deezer enrichment
-"lastfm:{hash}"               // Existing: Last.fm signals
-"artist_{hash}"               // Existing: Last.fm artist info
+'bpm:{track_id}' // Existing: Deezer enrichment
+'lastfm:{hash}' // Existing: Last.fm signals
+'artist_{hash}' // Existing: Last.fm artist info
 
 // NEW:
-"spotify:audio_features:{track_id}"     // Single track features
-"spotify:audio_features_batch:{batch_hash}"  // Batch of up to 100
-"mb:isrc:{artist}:{track}:{duration}"   // MusicBrainz ISRC
-"lastfm:correction:{artist}:{track}"    // Last.fm canonical names
-"spotify:playlist:{playlist_id}"        // Playlist metadata
-"deezer:search:{isrc}:{duration}"       // Deezer search results
+'spotify:audio_features:{track_id}' // Single track features
+'spotify:audio_features_batch:{batch_hash}' // Batch of up to 100
+'mb:isrc:{artist}:{track}:{duration}' // MusicBrainz ISRC
+'lastfm:correction:{artist}:{track}' // Last.fm canonical names
+'spotify:playlist:{playlist_id}' // Playlist metadata
+'deezer:search:{isrc}:{duration}' // Deezer search results
 ```
 
 ### Estimated Performance Gains
 
-| Cache | Current Cost | With Cache | Reduction |
-|-------|-------------|-----------|-----------|
-| Spotify audio features | 400ms | 50ms (cache hit) | 350ms |
-| MusicBrainz ISRC | 600ms (30 tracks × 20ms) | 0ms | 600ms |
-| Last.fm corrections | 400ms (50 calls × 8ms) | 0ms | 400ms |
-| Spotify playlist tracks | 500ms | 0ms | 500ms |
-| Total enrichment time | 16s | 6-8s | 50-60% |
+| Cache                   | Current Cost             | With Cache       | Reduction |
+| ----------------------- | ------------------------ | ---------------- | --------- |
+| Spotify audio features  | 400ms                    | 50ms (cache hit) | 350ms     |
+| MusicBrainz ISRC        | 600ms (30 tracks × 20ms) | 0ms              | 600ms     |
+| Last.fm corrections     | 400ms (50 calls × 8ms)   | 0ms              | 400ms     |
+| Spotify playlist tracks | 500ms                    | 0ms              | 500ms     |
+| Total enrichment time   | 16s                      | 6-8s             | 50-60%    |
 
 ---
 
 ## Cache Invalidation Strategy
 
 ### Time-Based (Current)
+
 - Hits: 7-90 days TTL
 - Misses: 5 minutes TTL (retry failed lookups)
 
 ### Event-Based (Recommended)
+
 - User deletes/adds tracks → Invalidate playlist cache
 - User creates new playlist → Cache from first analysis
 - Explicit cache bust endpoint for debugging
@@ -495,18 +531,21 @@ Extend naming scheme to prevent issues:
 ## Cloudflare KV Limits & Costs
 
 **Current Usage Estimate** (100-track playlist analyzed):
+
 - Deezer enrichment: ~10KB (50 track entries × 200 bytes)
 - Last.fm enrichment: ~30KB (50 track entries × 600 bytes)
 - Artist info: ~5KB (20 artist entries × 250 bytes)
 - **Total per analysis**: ~45KB
 
 **New Usage with Phase 1**:
+
 - Add Spotify audio features: ~10KB per 100 tracks
 - Add MusicBrainz ISRC cache: ~2KB per playlist
 - Add Last.fm corrections: ~1KB per playlist
 - **Total overhead**: +13KB per analysis
 
 **Cloudflare KV Limits**:
+
 - Max value size: 25MB (no issue)
 - Read limit: 10M reads/month on free tier
 - Write limit: 1M writes/month on free tier
@@ -516,13 +555,12 @@ Extend naming scheme to prevent issues:
 
 ## Summary Table
 
-| Service | What's Cached | TTL (Hit/Miss) | Cache Key | Performance Impact | Notes |
-|---------|--------------|---|-----------|-------------------|-------|
-| **Deezer** | Track BPM, gain, rank | 90d / 5m | `bpm:{id}` | 3-5s saved | Via orchestrator, 10 concurrent |
-| **Last.fm Signals** | Tags, listeners, playcount | 7d / 5m | `lastfm:{hash}` | 8-10s saved | Dedupes unique artists |
-| **Last.fm Artists** | Bio, images, stats | 7d / 5m | `artist_{hash}` | 2-3s saved | Batched separately |
-| **MusicBrainz** | ❌ NOT CACHED | - | - | **2-3s lost** | **CRITICAL GAP** |
-| **Spotify Tracks** | ❌ NOT CACHED | - | - | **0.5s lost** | **HIGH IMPACT** |
-| **Spotify Features** | ❌ NOT CACHED | - | - | **0.4s lost** | **HIGH IMPACT** |
-| **Spotify Playlist** | ❌ NOT CACHED | - | - | **0.3s lost** | **MEDIUM GAP** |
-
+| Service              | What's Cached              | TTL (Hit/Miss) | Cache Key       | Performance Impact | Notes                           |
+| -------------------- | -------------------------- | -------------- | --------------- | ------------------ | ------------------------------- |
+| **Deezer**           | Track BPM, gain, rank      | 90d / 5m       | `bpm:{id}`      | 3-5s saved         | Via orchestrator, 10 concurrent |
+| **Last.fm Signals**  | Tags, listeners, playcount | 7d / 5m        | `lastfm:{hash}` | 8-10s saved        | Dedupes unique artists          |
+| **Last.fm Artists**  | Bio, images, stats         | 7d / 5m        | `artist_{hash}` | 2-3s saved         | Batched separately              |
+| **MusicBrainz**      | ❌ NOT CACHED              | -              | -               | **2-3s lost**      | **CRITICAL GAP**                |
+| **Spotify Tracks**   | ❌ NOT CACHED              | -              | -               | **0.5s lost**      | **HIGH IMPACT**                 |
+| **Spotify Features** | ❌ NOT CACHED              | -              | -               | **0.4s lost**      | **HIGH IMPACT**                 |
+| **Spotify Playlist** | ❌ NOT CACHED              | -              | -               | **0.3s lost**      | **MEDIUM GAP**                  |

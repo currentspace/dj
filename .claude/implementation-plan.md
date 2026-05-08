@@ -20,18 +20,21 @@ This document provides step-by-step implementation details for building the "Liv
 **Line**: 51-52
 
 **Current**:
+
 ```typescript
 scope:
   'playlist-modify-public playlist-modify-private user-read-private user-read-playback-state user-read-currently-playing user-read-recently-played user-top-read playlist-read-private playlist-read-collaborative',
 ```
 
 **Change To**:
+
 ```typescript
 scope:
   'playlist-modify-public playlist-modify-private user-read-private user-read-playback-state user-read-currently-playing user-read-recently-played user-top-read playlist-read-private playlist-read-collaborative user-modify-playback-state streaming',
 ```
 
 **New Scopes Added**:
+
 - `user-modify-playback-state` - Control playback (play/pause/skip/seek)
 - `streaming` - Web Playback SDK access (Premium users only)
 
@@ -43,6 +46,7 @@ scope:
 **Section**: OAuth Scopes (around line 282)
 
 Add to Required Scopes list:
+
 ```markdown
 - `user-modify-playback-state` - Control playback (play, pause, skip, seek)
 - `streaming` - Access streaming API (Premium only)
@@ -65,20 +69,21 @@ Update to show new scopes as "Requested and Used".
 
 **Endpoints to Implement**:
 
-| Endpoint | Method | Spotify API | Purpose |
-|----------|--------|-------------|---------|
-| `/api/player/state` | GET | `GET /v1/me/player` | Current playback state |
-| `/api/player/devices` | GET | `GET /v1/me/player/devices` | Available devices |
-| `/api/player/queue` | GET | `GET /v1/me/player/queue` | Current queue |
-| `/api/player/play` | POST | `PUT /v1/me/player/play` | Start/resume playback |
-| `/api/player/pause` | POST | `PUT /v1/me/player/pause` | Pause playback |
-| `/api/player/next` | POST | `POST /v1/me/player/next` | Skip to next |
-| `/api/player/previous` | POST | `POST /v1/me/player/previous` | Previous track |
-| `/api/player/seek` | POST | `PUT /v1/me/player/seek` | Seek to position |
-| `/api/player/device` | PUT | `PUT /v1/me/player` | Transfer playback |
-| `/api/player/queue/add` | POST | `POST /v1/me/player/queue` | Add to queue |
+| Endpoint                | Method | Spotify API                   | Purpose                |
+| ----------------------- | ------ | ----------------------------- | ---------------------- |
+| `/api/player/state`     | GET    | `GET /v1/me/player`           | Current playback state |
+| `/api/player/devices`   | GET    | `GET /v1/me/player/devices`   | Available devices      |
+| `/api/player/queue`     | GET    | `GET /v1/me/player/queue`     | Current queue          |
+| `/api/player/play`      | POST   | `PUT /v1/me/player/play`      | Start/resume playback  |
+| `/api/player/pause`     | POST   | `PUT /v1/me/player/pause`     | Pause playback         |
+| `/api/player/next`      | POST   | `POST /v1/me/player/next`     | Skip to next           |
+| `/api/player/previous`  | POST   | `POST /v1/me/player/previous` | Previous track         |
+| `/api/player/seek`      | POST   | `PUT /v1/me/player/seek`      | Seek to position       |
+| `/api/player/device`    | PUT    | `PUT /v1/me/player`           | Transfer playback      |
+| `/api/player/queue/add` | POST   | `POST /v1/me/player/queue`    | Add to queue           |
 
 **Code Pattern** (from playlists-openapi.ts):
+
 ```typescript
 import {Hono} from 'hono'
 import {getLogger} from '../utils/LoggerContext'
@@ -158,11 +163,13 @@ export function registerPlayerRoutes(app: Hono<{Bindings: Env}>) {
 **File**: `/workers/api/src/index.ts`
 
 **Add Import**:
+
 ```typescript
 import {registerPlayerRoutes} from './routes/player-openapi'
 ```
 
 **Add Registration** (after other route registrations):
+
 ```typescript
 registerPlayerRoutes(app)
 ```
@@ -172,6 +179,7 @@ registerPlayerRoutes(app)
 **File**: `/packages/shared-types/src/schemas/spotify-schemas.ts`
 
 **Add New Schemas**:
+
 ```typescript
 export const SpotifyDeviceSchema = z.object({
   id: z.string().nullable(),
@@ -209,6 +217,7 @@ export const SpotifyQueueSchema = z.object({
 **New Directory**: `/apps/web/src/features/playback/`
 
 **New Files**:
+
 - `NowPlaying.tsx` - Main component
 - `PlayerControls.tsx` - Play/pause/skip buttons
 - `ProgressBar.tsx` - Track progress with seeking
@@ -615,11 +624,13 @@ export const NowPlaying = memo(function NowPlaying({token}: NowPlayingProps) {
 **File**: `/apps/web/src/App.tsx`
 
 **Add Import**:
+
 ```typescript
 import {NowPlaying} from './features/playback/NowPlaying'
 ```
 
 **Update Layout** (add at bottom of main-content):
+
 ```tsx
 <main className="main-content">
   {/* existing content */}
@@ -630,6 +641,7 @@ import {NowPlaying} from './features/playback/NowPlaying'
 **Update CSS**: `/apps/web/src/styles/app-layout.css`
 
 Add to support fixed bottom player:
+
 ```css
 .app-container {
   display: flex;
@@ -652,6 +664,7 @@ Add to support fixed bottom player:
 **File**: `/workers/api/src/lib/spotify-tools.ts`
 
 **Add After Line 75** (after existing schemas):
+
 ```typescript
 // Queue Management Schemas
 export const AddToQueueSchema = z.object({
@@ -672,6 +685,7 @@ export const ControlPlaybackSchema = z.object({
 **File**: `/workers/api/src/lib/spotify-tools.ts`
 
 **Add to spotifyTools Array** (after line 214):
+
 ```typescript
 // Queue & Playback Tools
 {
@@ -728,6 +742,7 @@ export const ControlPlaybackSchema = z.object({
 **File**: `/workers/api/src/lib/spotify-tools.ts`
 
 **Add to executeSpotifyTool Switch** (after line 281):
+
 ```typescript
 case 'add_to_queue':
   result = await addToQueue(args, token)
@@ -747,6 +762,7 @@ case 'control_playback':
 ```
 
 **Add Implementation Functions** (at bottom of file):
+
 ```typescript
 async function addToQueue(args: Record<string, unknown>, token: string) {
   const uri = isString(args.uri) ? args.uri : null
@@ -763,7 +779,7 @@ async function addToQueue(args: Record<string, unknown>, token: string) {
         method: 'POST',
       }),
     undefined,
-    'player:queue'
+    'player:queue',
   )
 
   if (response.status === 204) {
@@ -787,7 +803,7 @@ async function getNowPlaying(_args: Record<string, unknown>, token: string) {
         headers: {Authorization: `Bearer ${token}`},
       }),
     undefined,
-    'player:current'
+    'player:current',
   )
 
   if (response.status === 204) {
@@ -830,7 +846,7 @@ async function getQueue(_args: Record<string, unknown>, token: string) {
         headers: {Authorization: `Bearer ${token}`},
       }),
     undefined,
-    'player:queue'
+    'player:queue',
   )
 
   if (!response.ok) {
@@ -891,7 +907,7 @@ async function controlPlayback(args: Record<string, unknown>, token: string) {
         method,
       }),
     undefined,
-    `player:${action}`
+    `player:${action}`,
   )
 
   if (response.status === 204 || response.ok) {
@@ -908,6 +924,7 @@ async function controlPlayback(args: Record<string, unknown>, token: string) {
 **File**: `/workers/api/src/routes/chat-stream.ts`
 
 **Add to createStreamingSpotifyTools Function** (after line 652):
+
 ```typescript
 // Queue & Playback Tools
 {
@@ -1014,6 +1031,7 @@ async function controlPlayback(args: Record<string, unknown>, token: string) {
 **File**: `/workers/api/src/routes/chat-stream.ts`
 
 **Update Mode Type** (around line 58):
+
 ```typescript
 mode: z.enum(['analyze', 'create', 'edit', 'dj']),
 ```
@@ -1023,20 +1041,22 @@ mode: z.enum(['analyze', 'create', 'edit', 'dj']),
 **File**: `/workers/api/src/routes/chat-stream.ts`
 
 **Add DJ Mode Prompt Generation** (in getSystemPrompt function):
+
 ```typescript
-function getDJModePrompt(nowPlaying?: {
-  artist: string
-  progress_ms: number
-  total_ms: number
-  track: string
-}, queueDepth?: number): string {
+function getDJModePrompt(
+  nowPlaying?: {
+    artist: string
+    progress_ms: number
+    total_ms: number
+    track: string
+  },
+  queueDepth?: number,
+): string {
   const trackInfo = nowPlaying
     ? `Now Playing: "${nowPlaying.track}" by ${nowPlaying.artist} (${Math.floor(nowPlaying.progress_ms / 1000)}s / ${Math.floor(nowPlaying.total_ms / 1000)}s)`
     : 'Nothing currently playing'
 
-  const queueInfo = queueDepth !== undefined
-    ? `Queue Depth: ${queueDepth} tracks`
-    : 'Queue: Unknown'
+  const queueInfo = queueDepth !== undefined ? `Queue Depth: ${queueDepth} tracks` : 'Queue: Unknown'
 
   return `<role>
 You are a live DJ assistant. Music is playing RIGHT NOW. Your job is to:
@@ -1082,6 +1102,7 @@ When skipping: "Skipping this one - what kind of vibe are you feeling?"
 **File**: `/workers/api/src/routes/chat-stream.ts`
 
 **In the message handler**, add DJ mode handling:
+
 ```typescript
 // If DJ mode, fetch current playback state for context
 let djContext: {nowPlaying?: {...}; queueDepth?: number} | undefined
@@ -1132,17 +1153,15 @@ const systemPrompt = request.mode === 'dj'
 **File**: `/apps/web/src/features/chat/ChatInterface.tsx`
 
 **Update Mode Type**:
+
 ```typescript
 type ConversationMode = 'analyze' | 'create' | 'dj' | 'edit'
 ```
 
 **Add DJ Mode Button** (in mode selector JSX):
+
 ```tsx
-<button
-  className={`mode-button ${mode === 'dj' ? 'active' : ''}`}
-  onClick={() => handleModeChange('dj')}
-  type="button"
->
+<button className={`mode-button ${mode === 'dj' ? 'active' : ''}`} onClick={() => handleModeChange('dj')} type="button">
   🎧 DJ
 </button>
 ```
@@ -1152,11 +1171,12 @@ type ConversationMode = 'analyze' | 'create' | 'dj' | 'edit'
 **File**: `/apps/web/src/features/chat/ChatInterface.tsx`
 
 **Add DJ Mode Welcome Message**:
+
 ```typescript
 const getWelcomeMessage = (mode: ConversationMode): string => {
   switch (mode) {
     case 'dj':
-      return "I'm your live DJ assistant! I can see what's playing and help shape your mix. Try:\n• \"What's playing?\"\n• \"Add some chill jazz\"\n• \"Skip this and play something more upbeat\"\n• \"Queue up some 90s hip hop\""
+      return 'I\'m your live DJ assistant! I can see what\'s playing and help shape your mix. Try:\n• "What\'s playing?"\n• "Add some chill jazz"\n• "Skip this and play something more upbeat"\n• "Queue up some 90s hip hop"'
     // ... existing cases
   }
 }
@@ -1167,12 +1187,13 @@ const getWelcomeMessage = (mode: ConversationMode): string => {
 **File**: `/apps/web/src/styles/chat-interface.css`
 
 **Add**:
+
 ```css
-.mode-button[data-mode="dj"] {
+.mode-button[data-mode='dj'] {
   background: linear-gradient(135deg, #667eea, #764ba2);
 }
 
-.mode-button[data-mode="dj"].active {
+.mode-button[data-mode='dj'].active {
   box-shadow: 0 0 12px rgba(102, 126, 234, 0.5);
 }
 ```
@@ -1182,24 +1203,28 @@ const getWelcomeMessage = (mode: ConversationMode): string => {
 ## Implementation Checklist
 
 ### Phase 1: OAuth & Auth ✅
+
 - [x] Add `user-modify-playback-state` scope to spotify-openapi.ts
 - [x] Add `streaming` scope to spotify-openapi.ts
 - [x] Update CLAUDE.md documentation
 - [x] Update product-capabilities.md
 
 ### Phase 2: Player API Routes ✅
+
 - [x] Create player-openapi.ts with all endpoints
 - [x] Register routes in index.ts
 - [x] Add Zod schemas to shared-types (inline in player-openapi.ts)
 - [x] Test all endpoints manually
 
 ### Phase 3: NowPlaying Component ✅
+
 - [x] Create NowPlaying.tsx component
 - [x] Create now-playing.css styles
 - [x] Integrate into App.tsx layout
 - [x] Test polling and controls
 
 ### Phase 4: Claude Tools ✅
+
 - [x] Add tool schemas to spotify-tools.ts
 - [x] Add tool definitions to spotifyTools array
 - [x] Implement tool functions
@@ -1207,12 +1232,14 @@ const getWelcomeMessage = (mode: ConversationMode): string => {
 - [x] Test tools via chat
 
 ### Phase 5: DJ Mode Prompt ✅
+
 - [x] Add 'dj' to mode enum
 - [x] Create DJ mode system prompt (inline in chat-stream.ts)
 - [x] Add DJ context fetching
 - [x] Integrate into chat stream handler
 
 ### Phase 6: Frontend DJ Mode ✅
+
 - [x] Add DJ mode to mode selector
 - [x] Update welcome messages
 - [x] Update streaming-client.ts mode types
@@ -1223,16 +1250,19 @@ const getWelcomeMessage = (mode: ConversationMode): string => {
 ## Testing Strategy
 
 ### Unit Tests
+
 - Player route error handling
 - Tool function edge cases
 - Schema validation
 
 ### Integration Tests
+
 - OAuth flow with new scopes
 - Player API → Spotify API
 - Tool execution in chat stream
 
 ### E2E Tests
+
 - Full DJ mode flow
 - Queue management
 - Playback controls
@@ -1251,10 +1281,10 @@ const getWelcomeMessage = (mode: ConversationMode): string => {
 
 ## Risk Mitigation
 
-| Risk | Mitigation |
-|------|------------|
+| Risk                       | Mitigation                                             |
+| -------------------------- | ------------------------------------------------------ |
 | Existing users lose access | Graceful degradation - features work if scopes present |
-| Rate limiting | Use rateLimitedSpotifyCall for all new endpoints |
-| Premium-only features | Detect free tier and show appropriate message |
-| Polling performance | 1s interval with cleanup, pause when tab hidden |
-| Token expiration mid-DJ | Handle 401 and prompt re-auth |
+| Rate limiting              | Use rateLimitedSpotifyCall for all new endpoints       |
+| Premium-only features      | Detect free tier and show appropriate message          |
+| Polling performance        | 1s interval with cleanup, pause when tab hidden        |
+| Token expiration mid-DJ    | Handle 401 and prompt re-auth                          |

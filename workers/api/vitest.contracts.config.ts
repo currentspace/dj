@@ -1,5 +1,5 @@
-import { defineConfig } from 'vitest/config'
-import { sharedConfig } from '../../vitest.shared'
+import {defineConfig} from 'vitest/config'
+import {sharedConfig} from '../../vitest.shared'
 
 /**
  * Vitest configuration for contract tests
@@ -22,12 +22,7 @@ export default defineConfig({
 
     // Only match contract test files
     include: ['src/**/*.contract.test.{ts,js}'],
-    exclude: [
-      '**/node_modules/**',
-      '**/dist/**',
-      '**/build/**',
-      '**/.{idea,git,cache,output,temp}/**',
-    ],
+    exclude: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/.{idea,git,cache,output,temp}/**'],
 
     // Contract tests can be slow (real API calls)
     testTimeout: 30000,

@@ -24,6 +24,7 @@ You are entering MARVEL Building Mode. This phase executes the plan from a prior
 For each step in the plan:
 
 1. **Announce** the step before starting:
+
    ```
    ## Executing Step N: <Description>
    ```

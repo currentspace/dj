@@ -55,11 +55,11 @@ Mock data for Spotify API objects including tokens, users, playlists, tracks, al
 **Usage:**
 
 ```typescript
-import { buildPlaylist, mockUserProfile, seedSpotifyToken } from './__tests__/fixtures'
+import {buildPlaylist, mockUserProfile, seedSpotifyToken} from './__tests__/fixtures'
 
 // Create mock data
-const playlist = buildPlaylist({ name: 'Test Playlist', tracks: { total: 50 } })
-const user = mockUserProfile({ display_name: 'John Doe' })
+const playlist = buildPlaylist({name: 'Test Playlist', tracks: {total: 50}})
+const user = mockUserProfile({display_name: 'John Doe'})
 
 // Seed storage
 seedSpotifyToken('test_token')
@@ -103,18 +103,13 @@ Mock Server-Sent Events infrastructure for testing real-time streaming chat.
 **Usage:**
 
 ```typescript
-import {
-  mockContentEvent,
-  mockDoneEvent,
-  createMockSSEResponse,
-  MOCK_EVENT_SEQUENCES
-} from './__tests__/fixtures'
+import {mockContentEvent, mockDoneEvent, createMockSSEResponse, MOCK_EVENT_SEQUENCES} from './__tests__/fixtures'
 
 // Create custom stream
 const stream = createMockSSEResponse([
   mockThinkingEvent('Analyzing...'),
   mockContentEvent('Your playlist is great!'),
-  mockDoneEvent()
+  mockDoneEvent(),
 ])
 
 // Use pre-made sequence
@@ -170,11 +165,7 @@ Mock localStorage and sessionStorage with full Web Storage API compliance.
 **Usage:**
 
 ```typescript
-import {
-  setupMockStorage,
-  seedSpotifyToken,
-  STORAGE_SCENARIOS
-} from './__tests__/fixtures'
+import {setupMockStorage, seedSpotifyToken, STORAGE_SCENARIOS} from './__tests__/fixtures'
 
 // Setup in beforeEach
 beforeEach(() => {
@@ -277,12 +268,12 @@ Central export file for easy imports. Import from a single location instead of m
 
 ```typescript
 // Instead of:
-import { buildPlaylist } from './__tests__/fixtures/spotify-mocks'
-import { mockContentEvent } from './__tests__/fixtures/sse-events'
-import { renderWithAuth } from './__tests__/fixtures/test-helpers'
+import {buildPlaylist} from './__tests__/fixtures/spotify-mocks'
+import {mockContentEvent} from './__tests__/fixtures/sse-events'
+import {renderWithAuth} from './__tests__/fixtures/test-helpers'
 
 // Do this:
-import { buildPlaylist, mockContentEvent, renderWithAuth } from './__tests__/fixtures'
+import {buildPlaylist, mockContentEvent, renderWithAuth} from './__tests__/fixtures'
 ```
 
 ## Common Testing Patterns
@@ -321,19 +312,10 @@ it('displays playlist info', () => {
 ### 3. Testing SSE Streaming
 
 ```typescript
-import {
-  mockChatStream,
-  mockThinkingEvent,
-  mockContentEvent,
-  mockDoneEvent
-} from './__tests__/fixtures'
+import {mockChatStream, mockThinkingEvent, mockContentEvent, mockDoneEvent} from './__tests__/fixtures'
 
 it('handles streaming responses', async () => {
-  mockChatStream([
-    mockThinkingEvent('Processing...'),
-    mockContentEvent('Here is your response'),
-    mockDoneEvent()
-  ])
+  mockChatStream([mockThinkingEvent('Processing...'), mockContentEvent('Here is your response'), mockDoneEvent()])
 
   // Trigger chat
   // Assert on streaming behavior
@@ -343,11 +325,7 @@ it('handles streaming responses', async () => {
 ### 4. Testing Storage Behavior
 
 ```typescript
-import {
-  setupMockStorage,
-  seedSpotifyToken,
-  expectLocalStorageKey
-} from './__tests__/fixtures'
+import {setupMockStorage, seedSpotifyToken, expectLocalStorageKey} from './__tests__/fixtures'
 
 it('saves token to storage', () => {
   setupMockStorage()
@@ -361,7 +339,7 @@ it('saves token to storage', () => {
 ### 5. Testing OAuth Flow
 
 ```typescript
-import { setupOAuthCallback, clearOAuthCallback } from './__tests__/fixtures'
+import {setupOAuthCallback, clearOAuthCallback} from './__tests__/fixtures'
 
 it('handles OAuth callback', () => {
   setupOAuthCallback('test_token', 3600)
@@ -434,8 +412,8 @@ seedSpotifyToken('test_token') // Too late!
 All fixtures are fully typed using types from `@dj/shared-types`. Enjoy full autocomplete and type safety:
 
 ```typescript
-import { buildPlaylist } from './__tests__/fixtures'
-import type { SpotifyPlaylist } from '@dj/shared-types'
+import {buildPlaylist} from './__tests__/fixtures'
+import type {SpotifyPlaylist} from '@dj/shared-types'
 
 const playlist: SpotifyPlaylist = buildPlaylist() // ✅ Type-safe
 ```
@@ -445,7 +423,7 @@ const playlist: SpotifyPlaylist = buildPlaylist() // ✅ Type-safe
 Use the debugging helpers when tests fail:
 
 ```typescript
-import { logStorageState, logFetchCalls } from './__tests__/fixtures'
+import {logStorageState, logFetchCalls} from './__tests__/fixtures'
 
 it('my test', () => {
   // ... test code ...

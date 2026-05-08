@@ -58,23 +58,28 @@ When the first search does not yield results, try these alternatives:
 ## Exploration: <question or topic>
 
 ### Structure
+
 <Directory/file layout relevant to the topic>
 
 ### Key Files
-| File | Role |
-|------|------|
+
+| File   | Role          |
+| ------ | ------------- |
 | <path> | <description> |
 
 ### Flow (if tracing a code path)
+
 1. <entry point> -- <what happens>
 2. <next step> -- <what happens>
 3. ...
 
 ### Patterns Observed
+
 - <pattern description>
 - ...
 
 ### Open Questions
+
 - <anything unclear or requiring further investigation>
 ```
 

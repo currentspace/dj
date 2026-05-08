@@ -69,7 +69,7 @@ export function buildApiApp() {
         </body>
       </html>
     `
-     
+
     return c.html(html)
   })
 

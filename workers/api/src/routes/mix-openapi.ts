@@ -88,7 +88,15 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
 
       // Phase 2: Extract vibe from seed playlist or user profile
       try {
-        let seedTracks: {album?: {images?: {url: string}[], release_date?: string}, artists: {name: string}[], duration_ms?: number; id: string, name: string, popularity?: number, uri: string,}[] = []
+        let seedTracks: {
+          album?: {images?: {url: string}[]; release_date?: string}
+          artists: {name: string}[]
+          duration_ms?: number
+          id: string
+          name: string
+          popularity?: number
+          uri: string
+        }[] = []
 
         if (seedPlaylistId) {
           // Seed from specific playlist
@@ -101,7 +109,7 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
         }
 
         if (seedTracks.length > 0) {
-          const { fallbackPool, vibe: extractedVibe } = await extractQuickVibe(token, seedTracks, c.env)
+          const {fallbackPool, vibe: extractedVibe} = await extractQuickVibe(token, seedTracks, c.env)
 
           // Apply extracted vibe to session
           if (extractedVibe.genres?.length) session.vibe.genres = extractedVibe.genres
@@ -111,7 +119,10 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
           session.fallbackPool = fallbackPool
 
           await sessionService.updateSession(session)
-          getLogger()?.info('Applied seed vibe to session', { energy: session.vibe.energyLevel, genres: session.vibe.genres })
+          getLogger()?.info('Applied seed vibe to session', {
+            energy: session.vibe.energyLevel,
+            genres: session.vibe.genres,
+          })
         }
       } catch (err) {
         getLogger()?.error('Seed vibe extraction failed (continuing with defaults):', err)
@@ -282,7 +293,7 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
         position ?? session.queue.length,
         VIBE_DEFAULTS.USER_TRACK_VIBE_SCORE,
         'Manually added',
-        'user'
+        'user',
       )
 
       // Add to queue
@@ -522,21 +533,19 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       // Calculate what changed for response
       const changes: string[] = []
       if (updatedVibe.energyLevel !== session.vibe.energyLevel) {
-        changes.push(
-          `Energy: ${session.vibe.energyLevel}/10 → ${updatedVibe.energyLevel}/10`
-        )
+        changes.push(`Energy: ${session.vibe.energyLevel}/10 → ${updatedVibe.energyLevel}/10`)
       }
       if (updatedVibe.energyDirection !== session.vibe.energyDirection) {
         changes.push(`Direction: ${session.vibe.energyDirection} → ${updatedVibe.energyDirection}`)
       }
       if (JSON.stringify(updatedVibe.era) !== JSON.stringify(session.vibe.era)) {
         changes.push(
-          `Era: ${session.vibe.era.start}-${session.vibe.era.end} → ${updatedVibe.era.start}-${updatedVibe.era.end}`
+          `Era: ${session.vibe.era.start}-${session.vibe.era.end} → ${updatedVibe.era.start}-${updatedVibe.era.end}`,
         )
       }
       if (JSON.stringify(updatedVibe.bpmRange) !== JSON.stringify(session.vibe.bpmRange)) {
         changes.push(
-          `BPM: ${session.vibe.bpmRange.min}-${session.vibe.bpmRange.max} → ${updatedVibe.bpmRange.min}-${updatedVibe.bpmRange.max}`
+          `BPM: ${session.vibe.bpmRange.min}-${session.vibe.bpmRange.max} → ${updatedVibe.bpmRange.min}-${updatedVibe.bpmRange.max}`,
         )
       }
       if (updatedVibe.genres.length !== session.vibe.genres.length) {
@@ -613,7 +622,13 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
       const lastFmService = new LastFmService(c.env.LASTFM_API_KEY ?? '', c.env.AUDIO_FEATURES_CACHE)
       const audioService = new AudioEnrichmentService(c.env.AUDIO_FEATURES_CACHE)
       const enableThinking = true // Enable extended thinking for deeper track selection reasoning
-      const suggestionEngine = new SuggestionEngine(lastFmService, audioService, token, c.env.ANTHROPIC_API_KEY, enableThinking)
+      const suggestionEngine = new SuggestionEngine(
+        lastFmService,
+        audioService,
+        token,
+        c.env.ANTHROPIC_API_KEY,
+        enableThinking,
+      )
 
       // Generate suggestions
       const suggestions = await suggestionEngine.generateSuggestions(session, count)
@@ -637,7 +652,7 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
           },
           suggestions,
         },
-        200
+        200,
       )
     } catch (error) {
       getLogger()?.error('Get suggestions error:', error)
@@ -759,7 +774,7 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
           success: true,
           trackCount: trackUris.length,
         },
-        200
+        200,
       )
     } catch (error) {
       getLogger()?.error('Save mix error:', error)
@@ -786,7 +801,7 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
 
       // Validate required fields - return 500 as that's what the contract supports
       if (!trackId || typeof trackId !== 'string' || !trackUri || typeof trackUri !== 'string') {
-        getLogger()?.error('track-played: Missing or invalid trackId/trackUri', { trackId, trackUri })
+        getLogger()?.error('track-played: Missing or invalid trackId/trackUri', {trackId, trackUri})
         return c.json({error: 'Missing or invalid track data'}, 500)
       }
 
@@ -866,19 +881,21 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
 
       // Auto-fill queue in background — don't block the response (Phase 1b)
       if (movedToHistory && session.queue.length < TARGET_QUEUE_SIZE) {
-        c.executionCtx.waitUntil((async () => {
-          try {
-            // Re-fetch session since we're in background and the response already returned
-            const freshSession = await sessionService.getSession(userId)
-            if (!freshSession || freshSession.queue.length >= TARGET_QUEUE_SIZE) return
-            const addedCount = await autoFillQueue(c.env, token, freshSession, sessionService)
-            if (addedCount > 0) {
-              getLogger()?.info(`[track-played] Background auto-fill added ${addedCount} tracks`)
+        c.executionCtx.waitUntil(
+          (async () => {
+            try {
+              // Re-fetch session since we're in background and the response already returned
+              const freshSession = await sessionService.getSession(userId)
+              if (!freshSession || freshSession.queue.length >= TARGET_QUEUE_SIZE) return
+              const addedCount = await autoFillQueue(c.env, token, freshSession, sessionService)
+              if (addedCount > 0) {
+                getLogger()?.info(`[track-played] Background auto-fill added ${addedCount} tracks`)
+              }
+            } catch (err) {
+              getLogger()?.error('Background auto-fill failed:', err)
             }
-          } catch (err) {
-            getLogger()?.error('Background auto-fill failed:', err)
-          }
-        })())
+          })(),
+        )
       }
 
       return c.json({movedToHistory, session, success: true}, 200)
@@ -902,15 +919,12 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
 
       // Call Spotify's Queue API
       // POST https://api.spotify.com/v1/me/player/queue?uri={uri}
-      const response = await fetch(
-        `https://api.spotify.com/v1/me/player/queue?uri=${encodeURIComponent(trackUri)}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-          method: 'POST',
-        }
-      )
+      const response = await fetch(`https://api.spotify.com/v1/me/player/queue?uri=${encodeURIComponent(trackUri)}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        method: 'POST',
+      })
 
       if (response.status === 204) {
         // Success - no content
@@ -920,10 +934,7 @@ export function registerMixRoutes(app: OpenAPIHono<{Bindings: Env}>) {
 
       if (response.status === 404) {
         // No active device
-        return c.json(
-          {error: 'No active Spotify device. Start playing on a device first.'},
-          403
-        )
+        return c.json({error: 'No active Spotify device. Start playing on a device first.'}, 403)
       }
 
       if (response.status === 403) {

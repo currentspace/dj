@@ -9,9 +9,9 @@
  */
 
 export interface BuildOrderWarning {
-  command: string;
-  message: string;
-  suggestion: string;
+  command: string
+  message: string
+  suggestion: string
 }
 
 /**
@@ -19,7 +19,7 @@ export interface BuildOrderWarning {
  * variants like build:all, build:shared, build:web, build:backend,
  * cf:build, or --filter commands.
  */
-const BARE_BUILD_PATTERN = /^pnpm\s+(run\s+)?build(\s|$)/;
+const BARE_BUILD_PATTERN = /^pnpm\s+(run\s+)?build(\s|$)/
 
 /**
  * Check if a command is a bare build that skips workspace dependencies.
@@ -27,18 +27,18 @@ const BARE_BUILD_PATTERN = /^pnpm\s+(run\s+)?build(\s|$)/;
  * compiling workspace dependencies first.
  */
 export function checkBuildOrder(command: string): BuildOrderWarning | null {
-  const trimmed = command.trim();
+  const trimmed = command.trim()
 
   if (!BARE_BUILD_PATTERN.test(trimmed)) {
-    return null;
+    return null
   }
 
   return {
     command: trimmed,
     message:
-      "STOP: `pnpm build` only runs the root build — it does NOT compile workspace dependencies. " +
-      "Use `pnpm build:all` to build all packages in topological order. " +
-      "If you see module resolution errors for workspace packages, this is a build-order problem, not a code bug.",
-    suggestion: "pnpm build:all",
-  };
+      'STOP: `pnpm build` only runs the root build — it does NOT compile workspace dependencies. ' +
+      'Use `pnpm build:all` to build all packages in topological order. ' +
+      'If you see module resolution errors for workspace packages, this is a build-order problem, not a code bug.',
+    suggestion: 'pnpm build:all',
+  }
 }

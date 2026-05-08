@@ -8,36 +8,36 @@
  * Call checkCompatibility() on hooks startup to detect version mismatches.
  */
 
-import { execSync } from 'node:child_process';
+import {execSync} from 'node:child_process'
 
-import { CLAUDE_CODE_VERSION, getAllHookTypes, getAllToolNames } from './constants.js';
+import {CLAUDE_CODE_VERSION, getAllHookTypes, getAllToolNames} from './constants.js'
 
 /**
  * Compatibility check result
  */
 export interface CompatibilityResult {
-  compatible: boolean;
-  errors: string[];
+  compatible: boolean
+  errors: string[]
   version: {
-    detected: null | string;
-    expected: string;
-    match: boolean;
-  };
-  warnings: string[];
+    detected: null | string
+    expected: string
+    match: boolean
+  }
+  warnings: string[]
 }
 
 /**
  * Run full compatibility check
  */
 export function checkCompatibility(): CompatibilityResult {
-  const warnings: string[] = [];
-  const errors: string[] = [];
+  const warnings: string[] = []
+  const errors: string[] = []
 
   // Detect Claude Code version
-  const detectedVersion = detectClaudeCodeVersion();
-  const expectedVersion = CLAUDE_CODE_VERSION.full;
+  const detectedVersion = detectClaudeCodeVersion()
+  const expectedVersion = CLAUDE_CODE_VERSION.full
 
-  let versionMatch = false;
+  let versionMatch = false
 
   if (detectedVersion === null) {
     warnings.push(
@@ -46,26 +46,26 @@ export function checkCompatibility(): CompatibilityResult {
         expectedVersion +
         '. ' +
         'If running outside Claude Code, this is expected.',
-    );
+    )
   } else if (!isVersionCompatible(detectedVersion, expectedVersion)) {
-    const comparison = compareVersions(detectedVersion, expectedVersion);
+    const comparison = compareVersions(detectedVersion, expectedVersion)
 
     if (comparison < 0) {
       errors.push(
         `Claude Code version ${detectedVersion} is older than expected ${expectedVersion}. ` +
           'Some features may not work correctly. Consider updating Claude Code.',
-      );
+      )
     } else {
       warnings.push(
         `Claude Code version ${detectedVersion} is newer than expected ${expectedVersion}. ` +
           'MARVEL should still work, but check for breaking changes in Claude Code.',
-      );
+      )
     }
   } else {
-    versionMatch = true;
+    versionMatch = true
   }
 
-  const compatible = errors.length === 0;
+  const compatible = errors.length === 0
 
   return {
     compatible,
@@ -76,7 +76,7 @@ export function checkCompatibility(): CompatibilityResult {
       match: versionMatch,
     },
     warnings,
-  };
+  }
 }
 
 /**
@@ -84,16 +84,16 @@ export function checkCompatibility(): CompatibilityResult {
  * Returns: -1 if a < b, 0 if equal, 1 if a > b
  */
 export function compareVersions(a: string, b: string): number {
-  const va = parseVersion(a);
-  const vb = parseVersion(b);
+  const va = parseVersion(a)
+  const vb = parseVersion(b)
 
-  if (!va || !vb) return 0;
+  if (!va || !vb) return 0
 
-  if (va.major !== vb.major) return va.major > vb.major ? 1 : -1;
-  if (va.minor !== vb.minor) return va.minor > vb.minor ? 1 : -1;
-  if (va.patch !== vb.patch) return va.patch > vb.patch ? 1 : -1;
+  if (va.major !== vb.major) return va.major > vb.major ? 1 : -1
+  if (va.minor !== vb.minor) return va.minor > vb.minor ? 1 : -1
+  if (va.patch !== vb.patch) return va.patch > vb.patch ? 1 : -1
 
-  return 0;
+  return 0
 }
 
 /**
@@ -106,18 +106,18 @@ export function detectClaudeCodeVersion(): null | string {
     const output = execSync('claude --version 2>/dev/null', {
       encoding: 'utf-8',
       timeout: 5000,
-    }).trim();
+    }).trim()
 
     // Parse version from output (format may vary)
-    const match = /(\d+\.\d+\.\d+)/.exec(output);
+    const match = /(\d+\.\d+\.\d+)/.exec(output)
     if (match) {
-      return match[1];
+      return match[1]
     }
 
-    return output;
+    return output
   } catch {
     // Claude Code CLI not available or command failed
-    return null;
+    return null
   }
 }
 
@@ -125,44 +125,44 @@ export function detectClaudeCodeVersion(): null | string {
  * Get a summary of all assumptions for audit purposes
  */
 export function getAssumptionsSummary(): {
-  assumptions: { name: string; value: number | string | string[] }[];
-  category: string;
+  assumptions: {name: string; value: number | string | string[]}[]
+  category: string
 }[] {
   return [
     {
       assumptions: [
-        { name: 'Expected Version', value: CLAUDE_CODE_VERSION.full },
-        { name: 'Release Date', value: CLAUDE_CODE_VERSION.releaseDate },
+        {name: 'Expected Version', value: CLAUDE_CODE_VERSION.full},
+        {name: 'Release Date', value: CLAUDE_CODE_VERSION.releaseDate},
       ],
       category: 'Version',
     },
     {
-      assumptions: [{ name: 'Known Tool Names', value: getAllToolNames() }],
+      assumptions: [{name: 'Known Tool Names', value: getAllToolNames()}],
       category: 'Tools',
     },
     {
-      assumptions: [{ name: 'Known Hook Types', value: getAllHookTypes() }],
+      assumptions: [{name: 'Known Hook Types', value: getAllHookTypes()}],
       category: 'Hooks',
     },
-  ];
+  ]
 }
 
 /**
  * Check if detected version is compatible with expected version
  */
 export function isVersionCompatible(detected: string, expected: string): boolean {
-  const vDetected = parseVersion(detected);
-  const vExpected = parseVersion(expected);
+  const vDetected = parseVersion(detected)
+  const vExpected = parseVersion(expected)
 
-  if (!vDetected || !vExpected) return false;
+  if (!vDetected || !vExpected) return false
 
   // Major version must match
-  if (vDetected.major !== vExpected.major) return false;
+  if (vDetected.major !== vExpected.major) return false
 
   // Minor version should be >= expected (backward compatible)
-  if (vDetected.minor < vExpected.minor) return false;
+  if (vDetected.minor < vExpected.minor) return false
 
-  return true;
+  return true
 }
 
 /**
@@ -171,46 +171,42 @@ export function isVersionCompatible(detected: string, expected: string): boolean
 export function logCompatibilityResult(result: CompatibilityResult): void {
   if (result.compatible) {
     if (result.version.match) {
-      console.log(`✓ Claude Code compatibility: v${result.version.expected}`);
+      console.log(`✓ Claude Code compatibility: v${result.version.expected}`)
     } else if (result.version.detected) {
-      console.log(
-        `⚠ Claude Code v${result.version.detected} (expected v${result.version.expected})`,
-      );
+      console.log(`⚠ Claude Code v${result.version.detected} (expected v${result.version.expected})`)
     }
   } else {
-    console.error(`✗ Claude Code compatibility check failed`);
+    console.error(`✗ Claude Code compatibility check failed`)
   }
 
   for (const warning of result.warnings) {
-    console.warn(`  ⚠ ${warning}`);
+    console.warn(`  ⚠ ${warning}`)
   }
 
   for (const error of result.errors) {
-    console.error(`  ✗ ${error}`);
+    console.error(`  ✗ ${error}`)
   }
 }
 
 /**
  * Parse version string into components
  */
-export function parseVersion(
-  version: string,
-): null | { major: number; minor: number; patch: number } {
-  const match = /^v?(\d+)\.(\d+)\.(\d+)/.exec(version);
-  if (!match) return null;
+export function parseVersion(version: string): null | {major: number; minor: number; patch: number} {
+  const match = /^v?(\d+)\.(\d+)\.(\d+)/.exec(version)
+  if (!match) return null
 
   return {
     major: parseInt(match[1], 10),
     minor: parseInt(match[2], 10),
     patch: parseInt(match[3], 10),
-  };
+  }
 }
 
 /**
  * Verify hook type is supported
  */
 export function verifyHookType(hookType: string): boolean {
-  return getAllHookTypes().includes(hookType);
+  return getAllHookTypes().includes(hookType)
 }
 
 /**
@@ -220,18 +216,18 @@ export function verifyToolCall(
   toolName: string,
   _params: Record<string, unknown>,
 ): {
-  valid: boolean;
-  warnings: string[];
+  valid: boolean
+  warnings: string[]
 } {
-  const warnings: string[] = [];
+  const warnings: string[] = []
 
   // Check if tool name is known
   if (!getAllToolNames().includes(toolName)) {
-    warnings.push(`Unknown tool: ${toolName}. May be a new Claude Code feature.`);
+    warnings.push(`Unknown tool: ${toolName}. May be a new Claude Code feature.`)
   }
 
   return {
     valid: warnings.length === 0,
     warnings,
-  };
+  }
 }

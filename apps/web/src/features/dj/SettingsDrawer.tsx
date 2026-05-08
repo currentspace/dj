@@ -51,18 +51,18 @@ export function SettingsDrawer({
     <div
       className={styles.settingsOverlay}
       onClick={onClose}
-      onKeyDown={(e) => { if (e.key === 'Escape') onClose() }}
+      onKeyDown={e => {
+        if (e.key === 'Escape') onClose()
+      }}
       role="button"
-      tabIndex={0}
-    >
+      tabIndex={0}>
       {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- keyboard handled by overlay wrapper */}
-      <div
-        className={styles.settingsDrawer}
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className={styles.settingsDrawer} onClick={e => e.stopPropagation()}>
         <div className={styles.settingsHeader}>
           <h3>Settings</h3>
-          <button className={styles.settingsCloseBtn} onClick={onClose} type="button">Close</button>
+          <button className={styles.settingsCloseBtn} onClick={onClose} type="button">
+            Close
+          </button>
         </div>
 
         <div className={styles.settingsBody}>
@@ -84,19 +84,21 @@ export function SettingsDrawer({
             <>
               <div className={styles.settingsSection}>
                 <span className={styles.settingsLabel}>BPM Range</span>
-                <span className={styles.settingsValue}>{vibe.bpmRange.min} - {vibe.bpmRange.max}</span>
-              </div>
-
-              <div className={styles.settingsSection}>
-                <span className={styles.settingsLabel}>Genres</span>
                 <span className={styles.settingsValue}>
-                  {vibe.genres.length > 0 ? vibe.genres.join(', ') : 'Any'}
+                  {vibe.bpmRange.min} - {vibe.bpmRange.max}
                 </span>
               </div>
 
               <div className={styles.settingsSection}>
+                <span className={styles.settingsLabel}>Genres</span>
+                <span className={styles.settingsValue}>{vibe.genres.length > 0 ? vibe.genres.join(', ') : 'Any'}</span>
+              </div>
+
+              <div className={styles.settingsSection}>
                 <span className={styles.settingsLabel}>Era</span>
-                <span className={styles.settingsValue}>{vibe.era.start} - {vibe.era.end}</span>
+                <span className={styles.settingsValue}>
+                  {vibe.era.start} - {vibe.era.end}
+                </span>
               </div>
             </>
           )}
@@ -106,11 +108,7 @@ export function SettingsDrawer({
           </div>
 
           <div className={styles.settingsSection}>
-            <DevicePicker
-              currentDeviceId={deviceId}
-              currentDeviceName={deviceName ?? undefined}
-              token={token}
-            />
+            <DevicePicker currentDeviceId={deviceId} currentDeviceName={deviceName ?? undefined} token={token} />
           </div>
 
           <div className={styles.settingsSection}>

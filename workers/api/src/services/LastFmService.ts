@@ -33,10 +33,12 @@ import {getGlobalOrchestrator, rateLimitedLastFmCall} from '../utils/RateLimited
 
 /** Schema for cached artist info */
 const CachedArtistInfoSchema = z.object({
-  bio: z.object({
-    content: z.string(),
-    summary: z.string(),
-  }).nullable(),
+  bio: z
+    .object({
+      content: z.string(),
+      summary: z.string(),
+    })
+    .nullable(),
   images: z.object({
     large: z.string().nullable(),
     medium: z.string().nullable(),
@@ -44,10 +46,12 @@ const CachedArtistInfoSchema = z.object({
   }),
   listeners: z.number(),
   playcount: z.number(),
-  similar: z.array(z.object({
-    name: z.string(),
-    url: z.string(),
-  })),
+  similar: z.array(
+    z.object({
+      name: z.string(),
+      url: z.string(),
+    }),
+  ),
   tags: z.array(z.string()),
 })
 
@@ -61,50 +65,62 @@ const CachedCorrectionSchema = z.object({
 
 /** Schema for LastFmSignals (used in cache) */
 const LastFmSignalsSchema = z.object({
-  album: z.object({
-    artist: z.string(),
-    image: z.string().nullable(),
-    mbid: z.string().nullable(),
-    title: z.string(),
-    url: z.string().nullable(),
-  }).nullable(),
-  artistInfo: z.object({
-    bio: z.object({
-      content: z.string(),
-      summary: z.string(),
-    }).nullable(),
-    images: z.object({
-      large: z.string().nullable(),
-      medium: z.string().nullable(),
-      small: z.string().nullable(),
-    }),
-    listeners: z.number(),
-    playcount: z.number(),
-    similar: z.array(z.object({
-      name: z.string(),
-      url: z.string(),
-    })),
-    tags: z.array(z.string()),
-  }).nullable(),
+  album: z
+    .object({
+      artist: z.string(),
+      image: z.string().nullable(),
+      mbid: z.string().nullable(),
+      title: z.string(),
+      url: z.string().nullable(),
+    })
+    .nullable(),
+  artistInfo: z
+    .object({
+      bio: z
+        .object({
+          content: z.string(),
+          summary: z.string(),
+        })
+        .nullable(),
+      images: z.object({
+        large: z.string().nullable(),
+        medium: z.string().nullable(),
+        small: z.string().nullable(),
+      }),
+      listeners: z.number(),
+      playcount: z.number(),
+      similar: z.array(
+        z.object({
+          name: z.string(),
+          url: z.string(),
+        }),
+      ),
+      tags: z.array(z.string()),
+    })
+    .nullable(),
   canonicalArtist: z.string(),
   canonicalTrack: z.string(),
   duration: z.number().nullable(),
   listeners: z.number(),
   mbid: z.string().nullable(),
   playcount: z.number(),
-  similar: z.array(z.object({
-    artist: z.string(),
-    match: z.number(),
-    name: z.string(),
-  })),
+  similar: z.array(
+    z.object({
+      artist: z.string(),
+      match: z.number(),
+      name: z.string(),
+    }),
+  ),
   topTags: z.array(z.string()),
   url: z.string().nullable(),
   userplaycount: z.number().optional(),
-  wiki: z.object({
-    content: z.string(),
-    published: z.string(),
-    summary: z.string(),
-  }).nullable(),
+  wiki: z
+    .object({
+      content: z.string(),
+      published: z.string(),
+      summary: z.string(),
+    })
+    .nullable(),
 })
 
 /** Schema for LastFmCache */
@@ -708,7 +724,9 @@ export class LastFmService {
       // Cache the result
       if (this.cache) {
         await this.cache.put(cacheKey, JSON.stringify(result ?? 'null'), {expirationTtl: CORRECTION_CACHE_TTL})
-        getLogger()?.info(`[LastFm] Cached correction: ${artist} - ${track} → ${result ? `${result.artist} - ${result.track}` : 'null'}`)
+        getLogger()?.info(
+          `[LastFm] Cached correction: ${artist} - ${track} → ${result ? `${result.artist} - ${result.track}` : 'null'}`,
+        )
       }
 
       return result

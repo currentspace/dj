@@ -218,7 +218,7 @@ it('shows tool execution progress', async () => {
 ### Testing Pre-made Event Sequences
 
 ```typescript
-import { MOCK_EVENT_SEQUENCES } from './__tests__/fixtures'
+import {MOCK_EVENT_SEQUENCES} from './__tests__/fixtures'
 
 it('handles basic chat sequence', async () => {
   mockChatStream(MOCK_EVENT_SEQUENCES.basicChat)
@@ -587,7 +587,7 @@ import {
   mockToolStartEvent,
   mockToolEndEvent,
   mockContentEvent,
-  mockDoneEvent
+  mockDoneEvent,
 } from './__tests__/fixtures'
 
 it('handles complex multi-tool workflow', async () => {
@@ -595,19 +595,19 @@ it('handles complex multi-tool workflow', async () => {
     mockThinkingEvent('Starting analysis...'),
 
     // Tool 1: Analyze playlist
-    mockToolStartEvent('analyze_playlist', { playlist_id: 'abc' }),
-    mockToolEndEvent('analyze_playlist', { total_tracks: 50 }),
+    mockToolStartEvent('analyze_playlist', {playlist_id: 'abc'}),
+    mockToolEndEvent('analyze_playlist', {total_tracks: 50}),
 
     // Tool 2: Extract vibe
-    mockToolStartEvent('extract_playlist_vibe', { analysis_data: {} }),
-    mockToolEndEvent('extract_playlist_vibe', { vibe_profile: 'energetic' }),
+    mockToolStartEvent('extract_playlist_vibe', {analysis_data: {}}),
+    mockToolEndEvent('extract_playlist_vibe', {vibe_profile: 'energetic'}),
 
     // Tool 3: Get recommendations
-    mockToolStartEvent('get_recommendations', { seed_tracks: [] }),
-    mockToolEndEvent('get_recommendations', { tracks: [] }),
+    mockToolStartEvent('get_recommendations', {seed_tracks: []}),
+    mockToolEndEvent('get_recommendations', {tracks: []}),
 
     mockContentEvent('Based on your playlist, I found some great recommendations!'),
-    mockDoneEvent()
+    mockDoneEvent(),
   ]
 
   mockChatStream(events, 50) // 50ms delay between events
@@ -640,7 +640,7 @@ it('handles request cancellation', async () => {
 ### Debugging Failed Tests
 
 ```typescript
-import { logStorageState, logFetchCalls } from './__tests__/fixtures'
+import {logStorageState, logFetchCalls} from './__tests__/fixtures'
 
 it('complex test that might fail', async () => {
   // ... test code ...
@@ -661,7 +661,7 @@ it('complex test that might fail', async () => {
 ### 1. Always Clean Up
 
 ```typescript
-import { setupTestEnvironment, cleanupTestEnvironment } from './__tests__/fixtures'
+import {setupTestEnvironment, cleanupTestEnvironment} from './__tests__/fixtures'
 
 describe('MyTests', () => {
   beforeEach(() => {
@@ -678,12 +678,10 @@ describe('MyTests', () => {
 
 ```typescript
 // ✅ Good
-const tracks = buildMockTracks(10).map((track, i) =>
-  buildTrack({ ...track, name: `Track ${i + 1}` })
-)
+const tracks = buildMockTracks(10).map((track, i) => buildTrack({...track, name: `Track ${i + 1}`}))
 
 // ❌ Bad
-const tracks = Array.from({ length: 10 }, (_, i) => ({
+const tracks = Array.from({length: 10}, (_, i) => ({
   id: `track_${i}`,
   name: `Track ${i + 1}`,
   // ... manual object construction
@@ -693,7 +691,7 @@ const tracks = Array.from({ length: 10 }, (_, i) => ({
 ### 3. Reuse Pre-made Data
 
 ```typescript
-import { MOCK_TRACKS, MOCK_PLAYLISTS, MOCK_ARTISTS } from './__tests__/fixtures'
+import {MOCK_TRACKS, MOCK_PLAYLISTS, MOCK_ARTISTS} from './__tests__/fixtures'
 
 // Use pre-made data when possible
 const playlist = MOCK_PLAYLISTS.workoutMix
@@ -704,7 +702,7 @@ const artist = MOCK_ARTISTS.daftPunk
 ### 4. Test Edge Cases
 
 ```typescript
-import { buildEmptyPlaylist, buildLargePlaylist } from './__tests__/fixtures'
+import {buildEmptyPlaylist, buildLargePlaylist} from './__tests__/fixtures'
 
 it('handles empty playlist', () => {
   const playlist = buildEmptyPlaylist()

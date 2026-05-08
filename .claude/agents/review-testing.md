@@ -64,11 +64,13 @@ Review test files and the code they test to identify testing anti-patterns that 
 ## Test Quality Review
 
 ### Summary
+
 <1-2 sentence overview of test quality>
 
 ### Findings
 
 #### [CRITICAL] <finding title>
+
 - **File**: <absolute path>:<line number>
 - **Pattern**: <which anti-pattern>
 - **Issue**: <why this is a problem>
@@ -76,16 +78,20 @@ Review test files and the code they test to identify testing anti-patterns that 
 - **Fix**: <specific improvement>
 
 #### [WARNING] <finding title>
+
 - ...
 
 ### Coverage Gaps
+
 - <code path or function> has no test coverage for <scenario>.
 - ...
 
 ### Positive Patterns
+
 - <good testing practices observed>
 
 ### Recommendations
+
 1. <prioritized improvement>
 2. ...
 ```

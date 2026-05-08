@@ -11,29 +11,29 @@
  * Uses in-memory storage with automatic cleanup of stale entries.
  */
 
-import type { LogContext } from "./logger.js";
+import type {LogContext} from './logger.js'
 
-import { logDebug } from "./logger.js";
+import {logDebug} from './logger.js'
 
 interface PendingDecision {
-  command: string;
-  description?: string;
-  reason: string;
-  suggestedRule?: { pattern: string; reason: string; type: string; };
-  timestamp: number;
+  command: string
+  description?: string
+  reason: string
+  suggestedRule?: {pattern: string; reason: string; type: string}
+  timestamp: number
 }
 
 // In-memory map of pending decisions
 // Key: normalized command string
-const pendingDecisions = new Map<string, PendingDecision>();
+const pendingDecisions = new Map<string, PendingDecision>()
 
 // How long to keep pending decisions (5 minutes)
-const PENDING_TTL_MS = 5 * 60 * 1000;
+const PENDING_TTL_MS = 5 * 60 * 1000
 
 // Cleanup interval (1 minute)
-const CLEANUP_INTERVAL_MS = 60 * 1000;
+const CLEANUP_INTERVAL_MS = 60 * 1000
 
-let cleanupTimer: null | ReturnType<typeof setInterval> = null;
+let cleanupTimer: null | ReturnType<typeof setInterval> = null
 
 /**
  * Add a command to the pending decisions set.
@@ -44,28 +44,28 @@ export function addPendingDecision(
   reason: string,
   description?: string,
   context?: LogContext,
-  suggestedRule?: { pattern: string; reason: string; type: string; }
+  suggestedRule?: {pattern: string; reason: string; type: string},
 ): void {
-  ensureCleanupTimer();
+  ensureCleanupTimer()
 
-  const key = normalizeCommand(command);
+  const key = normalizeCommand(command)
   const decision: PendingDecision = {
     command,
     description,
     reason,
     suggestedRule,
     timestamp: Date.now(),
-  };
+  }
 
-  pendingDecisions.set(key, decision);
-  logDebug(`Added pending decision for command: ${key.slice(0, 50)}...`, context);
+  pendingDecisions.set(key, decision)
+  logDebug(`Added pending decision for command: ${key.slice(0, 50)}...`, context)
 }
 
 /**
  * Clear all pending decisions (useful for testing).
  */
 export function clearPendingDecisions(): void {
-  pendingDecisions.clear();
+  pendingDecisions.clear()
 }
 
 /**
@@ -74,79 +74,76 @@ export function clearPendingDecisions(): void {
  *
  * Called from PostToolUse to check if a Bash command had a pending decision.
  */
-export function consumePendingDecision(
-  command: string,
-  context?: LogContext
-): null | PendingDecision {
-  const key = normalizeCommand(command);
-  const decision = pendingDecisions.get(key);
+export function consumePendingDecision(command: string, context?: LogContext): null | PendingDecision {
+  const key = normalizeCommand(command)
+  const decision = pendingDecisions.get(key)
 
   if (!decision) {
-    return null;
+    return null
   }
 
   // Check if still within TTL
-  const now = Date.now();
+  const now = Date.now()
   if (now - decision.timestamp > PENDING_TTL_MS) {
-    pendingDecisions.delete(key);
-    return null;
+    pendingDecisions.delete(key)
+    return null
   }
 
   // Consume the decision (remove from pending)
-  pendingDecisions.delete(key);
-  logDebug(`Consumed pending decision for command: ${key.slice(0, 50)}...`, context);
+  pendingDecisions.delete(key)
+  logDebug(`Consumed pending decision for command: ${key.slice(0, 50)}...`, context)
 
-  return decision;
+  return decision
 }
 
 /**
  * Get the count of pending decisions (for debugging/stats).
  */
 export function getPendingCount(): number {
-  return pendingDecisions.size;
+  return pendingDecisions.size
 }
 
 /**
  * Check if a command has a pending decision without consuming it.
  */
 export function hasPendingDecision(command: string): boolean {
-  const key = normalizeCommand(command);
-  const decision = pendingDecisions.get(key);
+  const key = normalizeCommand(command)
+  const decision = pendingDecisions.get(key)
 
   if (!decision) {
-    return false;
+    return false
   }
 
   // Check if still within TTL
-  const now = Date.now();
+  const now = Date.now()
   if (now - decision.timestamp > PENDING_TTL_MS) {
-    pendingDecisions.delete(key);
-    return false;
+    pendingDecisions.delete(key)
+    return false
   }
 
-  return true;
+  return true
 }
 
 /**
  * Start the cleanup timer if not already running.
  */
 function ensureCleanupTimer(): void {
-  if (cleanupTimer) return;
+  if (cleanupTimer) return
 
   cleanupTimer = setInterval(() => {
-    const now = Date.now();
-    const cutoff = now - PENDING_TTL_MS;
+    const now = Date.now()
+    const cutoff = now - PENDING_TTL_MS
 
     for (const [key, decision] of pendingDecisions.entries()) {
       if (decision.timestamp < cutoff) {
-        pendingDecisions.delete(key);
+        pendingDecisions.delete(key)
       }
     }
-  }, CLEANUP_INTERVAL_MS);
+  }, CLEANUP_INTERVAL_MS)
 
   // Don't prevent process exit
   if (cleanupTimer.unref) {
-    cleanupTimer.unref();
+    cleanupTimer.unref()
   }
 }
 
@@ -155,5 +152,5 @@ function ensureCleanupTimer(): void {
  * Trims whitespace and collapses multiple spaces.
  */
 function normalizeCommand(command: string): string {
-  return command.trim().replace(/\s+/g, " ");
+  return command.trim().replace(/\s+/g, ' ')
 }

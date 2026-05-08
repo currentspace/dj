@@ -18,7 +18,6 @@ export const streamChatMessage = createRoute({
     body: {
       content: {
         'application/json': {
-           
           schema: ChatRequestSchema,
         },
       },
@@ -74,7 +73,6 @@ export const sendChatMessage = createRoute({
     body: {
       content: {
         'application/json': {
-           
           schema: ChatRequestSchema,
         },
       },

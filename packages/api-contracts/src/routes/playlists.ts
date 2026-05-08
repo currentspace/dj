@@ -27,7 +27,6 @@ export const getUserPlaylists = createRoute({
     200: {
       content: {
         'application/json': {
-
           schema: UserPlaylistsResponseSchema,
         },
       },
@@ -150,7 +149,6 @@ export const createPlaylist = createRoute({
     201: {
       content: {
         'application/json': {
-
           schema: SpotifyPlaylistSimpleSchema,
         },
       },

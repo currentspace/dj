@@ -20,18 +20,18 @@ const CATEGORY_LABELS: Record<'all' | DebugCategory, string> = {
 const FILTER_ORDER: ('all' | DebugCategory)[] = ['all', 'sse', 'api', 'error', 'steer', 'state']
 
 export function DebugPanel() {
-  const events = useDebugStore((s) => s.events)
-  const filter = useDebugStore((s) => s.filter)
-  const errorCount = useDebugStore((s) => s.errorCount)
-  const connectedAt = useDebugStore((s) => s.connectedAt)
-  const setFilter = useDebugStore((s) => s.setFilter)
-  const clear = useDebugStore((s) => s.clear)
-  const toggle = useDebugStore((s) => s.toggle)
+  const events = useDebugStore(s => s.events)
+  const filter = useDebugStore(s => s.filter)
+  const errorCount = useDebugStore(s => s.errorCount)
+  const connectedAt = useDebugStore(s => s.connectedAt)
+  const setFilter = useDebugStore(s => s.setFilter)
+  const clear = useDebugStore(s => s.clear)
+  const toggle = useDebugStore(s => s.toggle)
 
   const listRef = useRef<HTMLDivElement>(null)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
-  const filtered = filter ? events.filter((e) => e.category === filter) : events
+  const filtered = filter ? events.filter(e => e.category === filter) : events
 
   // Auto-scroll to bottom on new events.
   // queueMicrotask defers until after commit so scrollHeight reflects the
@@ -50,7 +50,7 @@ export function DebugPanel() {
   /* eslint-enable react-hooks/refs */
 
   const handleToggleExpand = (id: string) => {
-    setExpanded((prev) => {
+    setExpanded(prev => {
       const next = new Set(prev)
       if (next.has(id)) {
         next.delete(id)
@@ -65,23 +65,24 @@ export function DebugPanel() {
     <div className={styles.panel}>
       <div className={styles.header}>
         <div className={styles.filters}>
-          {FILTER_ORDER.map((cat) => (
+          {FILTER_ORDER.map(cat => (
             <button
               className={`${styles.filterChip} ${(cat === 'all' ? !filter : filter === cat) ? styles.filterActive : ''}`}
               key={cat}
               onClick={() => setFilter(cat === 'all' ? null : cat)}
-              type="button"
-            >
+              type="button">
               {CATEGORY_LABELS[cat]}
-              {cat === 'error' && errorCount > 0 && (
-                <span className={styles.errorBadge}>{errorCount}</span>
-              )}
+              {cat === 'error' && errorCount > 0 && <span className={styles.errorBadge}>{errorCount}</span>}
             </button>
           ))}
         </div>
         <div className={styles.headerActions}>
-          <button className={styles.clearBtn} onClick={clear} type="button">Clear</button>
-          <button className={styles.closeBtn} onClick={toggle} type="button">Close</button>
+          <button className={styles.clearBtn} onClick={clear} type="button">
+            Clear
+          </button>
+          <button className={styles.closeBtn} onClick={toggle} type="button">
+            Close
+          </button>
         </div>
       </div>
 
@@ -89,7 +90,7 @@ export function DebugPanel() {
         {filtered.length === 0 ? (
           <div className={styles.emptyState}>No events{filter ? ` in "${filter}" category` : ''}</div>
         ) : (
-          filtered.map((event) => (
+          filtered.map(event => (
             <EventRow
               event={event}
               isExpanded={expanded.has(event.id)}
@@ -124,9 +125,7 @@ function EventRow({event, isExpanded, onToggle}: {event: DebugEvent; isExpanded:
           <span className={styles.eventDuration}>{event.meta.durationMs}ms</span>
         )}
         {event.meta?.status !== undefined && (
-          <span className={event.meta.status >= 400 ? styles.statusError : styles.statusOk}>
-            {event.meta.status}
-          </span>
+          <span className={event.meta.status >= 400 ? styles.statusError : styles.statusOk}>{event.meta.status}</span>
         )}
       </button>
       {isExpanded && event.data !== undefined && (

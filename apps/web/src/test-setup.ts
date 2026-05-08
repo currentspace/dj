@@ -7,12 +7,24 @@ import {afterEach, beforeEach, vi} from 'vitest'
 function makeStorage(): Storage {
   let store: Record<string, string> = {}
   return {
-    clear() { store = {} },
-    getItem(key) { return key in store ? store[key] : null },
-    key(i) { return Object.keys(store)[i] ?? null },
-    get length() { return Object.keys(store).length },
-    removeItem(key) { delete store[key] },
-    setItem(key, value) { store[key] = String(value) },
+    clear() {
+      store = {}
+    },
+    getItem(key) {
+      return key in store ? store[key] : null
+    },
+    key(i) {
+      return Object.keys(store)[i] ?? null
+    },
+    get length() {
+      return Object.keys(store).length
+    },
+    removeItem(key) {
+      delete store[key]
+    },
+    setItem(key, value) {
+      store[key] = String(value)
+    },
   }
 }
 Object.defineProperty(globalThis, 'localStorage', {configurable: true, value: makeStorage(), writable: true})
@@ -50,7 +62,9 @@ globalThis.fetch = vi.fn(() =>
     blob: async () => new Blob(),
     body: null,
     bodyUsed: false,
-    clone: function() { return this },
+    clone: function () {
+      return this
+    },
     formData: async () => new FormData(),
     headers: new Headers(),
     json: async () => ({id: 'user123'}),
@@ -60,5 +74,5 @@ globalThis.fetch = vi.fn(() =>
     text: async () => JSON.stringify({id: 'user123'}),
     type: 'basic',
     url: '',
-  } as Response)
+  } as Response),
 )

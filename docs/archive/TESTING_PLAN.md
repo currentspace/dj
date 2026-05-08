@@ -17,6 +17,7 @@ This document outlines the comprehensive testing strategy for the DJ monorepo, i
 ### 1.1 Vitest Configuration (2025 Best Practices)
 
 **Key Changes from 2024:**
+
 - Use `projects` config instead of deprecated `workspaces`
 - Shared config via `vitest.shared.ts` (not extends, due to projects inheritance issue)
 - Per-package configs for optimal cache hits
@@ -24,6 +25,7 @@ This document outlines the comprehensive testing strategy for the DJ monorepo, i
 - nodejs environment for backend services
 
 **Files to Create:**
+
 ```
 /vitest.config.ts                    # Root projects config
 /vitest.shared.ts                    # Shared configuration
@@ -53,6 +55,7 @@ This document outlines the comprehensive testing strategy for the DJ monorepo, i
 ### 1.3 Test Scripts
 
 Add to root `package.json`:
+
 ```json
 {
   "scripts": {
@@ -73,51 +76,81 @@ Add to root `package.json`:
 ### 2.1 Frontend Mocks (`apps/web/src/__tests__/fixtures/`)
 
 **Files:**
+
 - `spotify-mocks.ts` - Mock Spotify API responses
 - `sse-events.ts` - Mock SSE event streams
 - `storage-mocks.ts` - Mock localStorage
 - `test-helpers.tsx` - React testing utilities
 
 **Key Mocks:**
+
 ```typescript
 // spotify-mocks.ts
-export const mockSpotifyToken = { /* ... */ }
-export const mockUserProfile = { /* ... */ }
-export const mockPlaylist = { /* ... */ }
-export const mockTracks = [{ /* ... */ }]
+export const mockSpotifyToken = {
+  /* ... */
+}
+export const mockUserProfile = {
+  /* ... */
+}
+export const mockPlaylist = {
+  /* ... */
+}
+export const mockTracks = [
+  {
+    /* ... */
+  },
+]
 
 // sse-events.ts
-export const mockSSEStream = (events: SSEEvent[]) => { /* ... */ }
-export const mockContentEvent = { /* ... */ }
-export const mockToolEvent = { /* ... */ }
+export const mockSSEStream = (events: SSEEvent[]) => {
+  /* ... */
+}
+export const mockContentEvent = {
+  /* ... */
+}
+export const mockToolEvent = {
+  /* ... */
+}
 
 // test-helpers.tsx
-export const renderWithAuth = (component) => { /* ... */ }
-export const waitForSSEEvent = (type) => { /* ... */ }
+export const renderWithAuth = component => {
+  /* ... */
+}
+export const waitForSSEEvent = type => {
+  /* ... */
+}
 ```
 
 ### 2.2 Backend Mocks (`workers/api/src/__tests__/fixtures/`)
 
 **Files:**
+
 - `cloudflare-mocks.ts` - Mock KV, Env, ExecutionContext
 - `api-mocks.ts` - Mock external APIs (Spotify, Deezer, Last.fm)
 - `anthropic-mocks.ts` - Mock Claude SDK
 - `test-builders.ts` - Factory functions for test data
 
 **Key Mocks:**
+
 ```typescript
 // cloudflare-mocks.ts
-export class MockKVNamespace implements KVNamespace { /* ... */ }
-export const createMockEnv = () => ({ /* ... */ })
+export class MockKVNamespace implements KVNamespace {
+  /* ... */
+}
+export const createMockEnv = () => ({
+  /* ... */
+})
 
 // api-mocks.ts
-export const mockDeezerAPI = createMockServer([
-  rest.get('https://api.deezer.com/track/isrc:*', /* ... */)
-])
+export const mockDeezerAPI = createMockServer([rest.get('https://api.deezer.com/track/isrc:*' /* ... */)])
 
 // test-builders.ts
-export const buildSpotifyTrack = (overrides?) => ({ /* ... */ })
-export const buildPlaylist = (overrides?) => ({ /* ... */ })
+export const buildSpotifyTrack = (overrides?) => ({
+  /* ... */
+})
+export const buildPlaylist = (overrides?) => ({
+  /* ... */
+})
 ```
 
 ---
@@ -126,13 +159,13 @@ export const buildPlaylist = (overrides?) => ({ /* ... */ })
 
 ### 3.1 HIGH PRIORITY (Complex, Critical Path)
 
-| Component | Lines | Est. Tests | Complexity | Files |
-|-----------|-------|-----------|------------|-------|
-| useSpotifyAuth | 566 | 45 | Very High | apps/web/src/hooks/useSpotifyAuth.ts |
-| AudioEnrichmentService | 18KB | 28 | High | workers/api/src/services/AudioEnrichmentService.ts |
-| LastFmService | 24KB | 35 | High | workers/api/src/services/LastFmService.ts |
-| chat-stream route | 130KB | 55 | Very High | workers/api/src/routes/chat-stream.ts |
-| RateLimitedQueue | 100+ | 22 | High | workers/api/src/utils/RateLimitedQueue.ts |
+| Component              | Lines | Est. Tests | Complexity | Files                                              |
+| ---------------------- | ----- | ---------- | ---------- | -------------------------------------------------- |
+| useSpotifyAuth         | 566   | 45         | Very High  | apps/web/src/hooks/useSpotifyAuth.ts               |
+| AudioEnrichmentService | 18KB  | 28         | High       | workers/api/src/services/AudioEnrichmentService.ts |
+| LastFmService          | 24KB  | 35         | High       | workers/api/src/services/LastFmService.ts          |
+| chat-stream route      | 130KB | 55         | Very High  | workers/api/src/routes/chat-stream.ts              |
+| RateLimitedQueue       | 100+  | 22         | High       | workers/api/src/utils/RateLimitedQueue.ts          |
 
 **Total: 185 tests**
 
@@ -141,6 +174,7 @@ export const buildPlaylist = (overrides?) => ({ /* ... */ })
 **Test File:** `apps/web/src/__tests__/hooks/useSpotifyAuth.test.ts`
 
 **Test Categories:**
+
 1. Store Creation & State Management (10 tests)
    - Initial state from localStorage
    - Token save/load/clear operations
@@ -178,6 +212,7 @@ export const buildPlaylist = (overrides?) => ({ /* ... */ })
 **Test File:** `workers/api/src/__tests__/services/AudioEnrichmentService.test.ts`
 
 **Test Categories:**
+
 1. Direct ISRC Enrichment (8 tests)
    - Track with ISRC → Deezer query
    - Valid BPM (45-220)
@@ -210,6 +245,7 @@ export const buildPlaylist = (overrides?) => ({ /* ... */ })
 **Test File:** `workers/api/src/__tests__/services/LastFmService.test.ts`
 
 **Test Categories:**
+
 1. Track Signal Fetching (12 tests)
    - Successful fetch
    - Track correction API
@@ -247,6 +283,7 @@ export const buildPlaylist = (overrides?) => ({ /* ... */ })
 **Test File:** `workers/api/src/__tests__/routes/chat-stream.test.ts`
 
 **Test Categories:**
+
 1. Request Validation (10 tests)
    - Valid request format
    - Required fields
@@ -292,6 +329,7 @@ export const buildPlaylist = (overrides?) => ({ /* ... */ })
 **Test File:** `workers/api/src/__tests__/utils/RateLimitedQueue.test.ts`
 
 **Test Categories:**
+
 1. Token Bucket (6 tests)
    - Initial burst allocation
    - Token refill
@@ -316,21 +354,21 @@ export const buildPlaylist = (overrides?) => ({ /* ... */ })
 
 ### 3.2 MEDIUM PRIORITY (63 tests)
 
-| Component | Tests | File |
-|-----------|-------|------|
-| ChatInterface | 18 | apps/web/src/__tests__/features/chat/ChatInterface.test.tsx |
-| App.tsx | 12 | apps/web/src/__tests__/App.test.tsx |
-| spotify-tools | 18 | workers/api/src/__tests__/lib/spotify-tools.test.ts |
-| UserPlaylists | 8 | apps/web/src/__tests__/features/playlist/UserPlaylists.test.tsx |
-| SpotifyAuth | 7 | apps/web/src/__tests__/features/auth/SpotifyAuth.test.tsx |
+| Component     | Tests | File                                                            |
+| ------------- | ----- | --------------------------------------------------------------- |
+| ChatInterface | 18    | apps/web/src/**tests**/features/chat/ChatInterface.test.tsx     |
+| App.tsx       | 12    | apps/web/src/**tests**/App.test.tsx                             |
+| spotify-tools | 18    | workers/api/src/**tests**/lib/spotify-tools.test.ts             |
+| UserPlaylists | 8     | apps/web/src/**tests**/features/playlist/UserPlaylists.test.tsx |
+| SpotifyAuth   | 7     | apps/web/src/**tests**/features/auth/SpotifyAuth.test.tsx       |
 
 ### 3.3 LOW PRIORITY (39 tests)
 
-| Component | Tests | File |
-|-----------|-------|------|
-| guards.ts | 9 | workers/api/src/__tests__/lib/guards.test.ts |
-| shared-types schemas | 20 | packages/shared-types/src/__tests__/schemas.test.ts |
-| Other utilities | 10 | Various |
+| Component            | Tests | File                                                |
+| -------------------- | ----- | --------------------------------------------------- |
+| guards.ts            | 9     | workers/api/src/**tests**/lib/guards.test.ts        |
+| shared-types schemas | 20    | packages/shared-types/src/**tests**/schemas.test.ts |
+| Other utilities      | 10    | Various                                             |
 
 ---
 
@@ -339,6 +377,7 @@ export const buildPlaylist = (overrides?) => ({ /* ... */ })
 ### 4.1 Frontend Integration Tests
 
 **Test:** Full auth flow
+
 ```typescript
 describe('Spotify Authentication Flow', () => {
   it('should complete OAuth flow end-to-end', async () => {
@@ -352,6 +391,7 @@ describe('Spotify Authentication Flow', () => {
 ```
 
 **Test:** Chat streaming flow
+
 ```typescript
 describe('Chat Streaming', () => {
   it('should stream messages and handle tools', async () => {
@@ -367,6 +407,7 @@ describe('Chat Streaming', () => {
 ### 4.2 Backend Integration Tests
 
 **Test:** Enrichment pipeline
+
 ```typescript
 describe('Enrichment Pipeline', () => {
   it('should enrich tracks with Deezer and Last.fm', async () => {
@@ -381,6 +422,7 @@ describe('Enrichment Pipeline', () => {
 ```
 
 **Test:** Rate limiting
+
 ```typescript
 describe('Rate Limiting', () => {
   it('should respect 40 TPS limit', async () => {
@@ -398,12 +440,12 @@ describe('Rate Limiting', () => {
 
 ### 5.1 Target Coverage
 
-| Package | Target | Priority |
-|---------|--------|----------|
-| @dj/api-worker | 80% | HIGH |
-| @dj/web | 75% | HIGH |
-| @dj/shared-types | 90% | MEDIUM |
-| @dj/api-client | 70% | MEDIUM |
+| Package          | Target | Priority |
+| ---------------- | ------ | -------- |
+| @dj/api-worker   | 80%    | HIGH     |
+| @dj/web          | 75%    | HIGH     |
+| @dj/shared-types | 90%    | MEDIUM   |
+| @dj/api-client   | 70%    | MEDIUM   |
 
 ### 5.2 Critical Paths (100% coverage required)
 
@@ -419,6 +461,7 @@ describe('Rate Limiting', () => {
 ## 6. Execution Plan
 
 ### Phase 1: Infrastructure (Day 1)
+
 1. ✅ Research 2025 vitest best practices
 2. ✅ Analyze codebase architecture
 3. Create vitest configs (root + packages)
@@ -427,6 +470,7 @@ describe('Rate Limiting', () => {
 6. Create mock infrastructure
 
 ### Phase 2: HIGH Priority Tests (Days 2-4)
+
 1. useSpotifyAuth (45 tests) - Agent 1
 2. AudioEnrichmentService (28 tests) - Agent 2
 3. LastFmService (35 tests) - Agent 2
@@ -434,21 +478,25 @@ describe('Rate Limiting', () => {
 5. RateLimitedQueue (22 tests) - Agent 4
 
 ### Phase 3: MEDIUM Priority Tests (Day 5)
+
 1. ChatInterface (18 tests) - Agent 5
 2. App.tsx (12 tests) - Agent 5
 3. spotify-tools (18 tests) - Agent 6
 
 ### Phase 4: LOW Priority Tests (Day 6)
+
 1. guards.ts (9 tests) - Agent 7
 2. shared-types schemas (20 tests) - Agent 7
 3. Utilities (10 tests) - Agent 7
 
 ### Phase 5: Integration Tests (Day 7)
+
 1. Frontend integration tests - Agent 8
 2. Backend integration tests - Agent 8
 3. End-to-end flows - Agent 8
 
 ### Phase 6: Validation (Day 8)
+
 1. Run full test suite
 2. Generate coverage report
 3. Fix failing tests
@@ -460,43 +508,51 @@ describe('Rate Limiting', () => {
 ## 7. Agent Assignment
 
 ### Agent 1: Frontend Infrastructure & useSpotifyAuth
+
 - Create web vitest config
 - Set up React Testing Library
 - Create frontend fixtures
 - Implement useSpotifyAuth tests (45)
 
 ### Agent 2: Backend Services (Enrichment)
+
 - Create api-worker vitest config
 - Set up Cloudflare mocks
 - Implement AudioEnrichmentService tests (28)
 - Implement LastFmService tests (35)
 
 ### Agent 3: Streaming & Routes
+
 - Create SSE mocking utilities
 - Implement chat-stream tests (55)
 - Create Anthropic SDK mocks
 
 ### Agent 4: Utilities & Core Logic
+
 - Implement RateLimitedQueue tests (22)
 - Create timing test utilities
 - Implement guards tests (9)
 
 ### Agent 5: React Components
+
 - Implement ChatInterface tests (18)
 - Implement App.tsx tests (12)
 - Create component test helpers
 
 ### Agent 6: API Tools & Integration
+
 - Implement spotify-tools tests (18)
 - Create Spotify API mocks
 - Integration tests for tools
 
 ### Agent 7: Shared Types & Low Priority
+
 - Create shared-types vitest config
 - Implement schema validation tests (20)
 - Implement remaining utility tests (10)
 
 ### Agent 8: Integration & E2E
+
 - Frontend integration tests
 - Backend integration tests
 - End-to-end flow tests
@@ -528,6 +584,7 @@ describe('Rate Limiting', () => {
 ### 9.1 Testing Guidelines
 
 Create `TESTING_GUIDELINES.md`:
+
 - How to write new tests
 - Mock patterns
 - Naming conventions
@@ -536,6 +593,7 @@ Create `TESTING_GUIDELINES.md`:
 ### 9.2 CI/CD Integration
 
 Update `.github/workflows/test.yml`:
+
 ```yaml
 - name: Run tests
   run: pnpm test
@@ -551,26 +609,28 @@ Update `.github/workflows/test.yml`:
 
 ## 10. Timeline
 
-| Phase | Duration | Tests | Status |
-|-------|----------|-------|--------|
-| Infrastructure | 1 day | 0 | 🚧 In Progress |
-| HIGH Priority | 3 days | 185 | ⏳ Pending |
-| MEDIUM Priority | 1 day | 63 | ⏳ Pending |
-| LOW Priority | 1 day | 39 | ⏳ Pending |
-| Integration | 1 day | TBD | ⏳ Pending |
-| Validation | 1 day | - | ⏳ Pending |
-| **TOTAL** | **8 days** | **287+** | **0% → 80%** |
+| Phase           | Duration   | Tests    | Status         |
+| --------------- | ---------- | -------- | -------------- |
+| Infrastructure  | 1 day      | 0        | 🚧 In Progress |
+| HIGH Priority   | 3 days     | 185      | ⏳ Pending     |
+| MEDIUM Priority | 1 day      | 63       | ⏳ Pending     |
+| LOW Priority    | 1 day      | 39       | ⏳ Pending     |
+| Integration     | 1 day      | TBD      | ⏳ Pending     |
+| Validation      | 1 day      | -        | ⏳ Pending     |
+| **TOTAL**       | **8 days** | **287+** | **0% → 80%**   |
 
 ---
 
 ## Appendix A: Key Resources
 
 ### 2025 Vitest Best Practices
+
 - [Vitest 3 Monorepo Setup](https://www.thecandidstartup.org/2025/09/08/vitest-3-monorepo-setup.html)
 - [Vitest Projects Guide](https://vitest.dev/guide/projects)
 - [React Testing Best Practices 2025](https://www.codingeasypeasy.com/blog/react-component-testing-best-practices-with-vitest-and-jest-2025-guide)
 
 ### Testing Patterns
+
 - React Testing Library
 - Cloudflare Workers testing
 - Rate limiting testing

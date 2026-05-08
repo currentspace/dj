@@ -2,9 +2,9 @@
  * Tests for Vibe Steering AI
  */
 
-import type { VibeProfile } from '@dj/shared-types'
+import type {VibeProfile} from '@dj/shared-types'
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {beforeEach, describe, expect, it, vi} from 'vitest'
 
 import {
   applyPreset,
@@ -16,7 +16,7 @@ import {
 } from '../vibe-steering'
 
 // Hoist the mock using vi.hoisted()
-const { mockCreate } = vi.hoisted(() => {
+const {mockCreate} = vi.hoisted(() => {
   return {
     mockCreate: vi.fn(),
   }
@@ -45,10 +45,10 @@ vi.mock('../../utils/LoggerContext', () => ({
 
 describe('Vibe Steering AI', () => {
   const defaultVibe: VibeProfile = {
-    bpmRange: { max: 130, min: 110 },
+    bpmRange: {max: 130, min: 110},
     energyDirection: 'steady',
     energyLevel: 6,
-    era: { end: 2020, start: 2010 },
+    era: {end: 2020, start: 2010},
     genres: ['indie rock', 'alt pop'],
     mood: ['upbeat'],
   }
@@ -95,9 +95,7 @@ describe('Vibe Steering AI', () => {
     })
 
     it('matches fuzzy substring matches', () => {
-      expect(findMatchingPreset('make it more energy please')).toEqual(
-        PRESET_MAPPINGS['more energy']
-      )
+      expect(findMatchingPreset('make it more energy please')).toEqual(PRESET_MAPPINGS['more energy'])
       expect(findMatchingPreset('lets go retro baby')).toEqual(PRESET_MAPPINGS['go retro'])
     })
 
@@ -115,45 +113,45 @@ describe('Vibe Steering AI', () => {
 
   describe('applyPreset', () => {
     it('applies relative energy level adjustments', () => {
-      const preset: VibePreset = { energyLevel: +2 }
+      const preset: VibePreset = {energyLevel: +2}
       const result = applyPreset(defaultVibe, preset)
       expect(result.energyLevel).toBe(8) // 6 + 2
     })
 
     it('applies negative energy level adjustments', () => {
-      const preset: VibePreset = { energyLevel: -3 }
+      const preset: VibePreset = {energyLevel: -3}
       const result = applyPreset(defaultVibe, preset)
       expect(result.energyLevel).toBe(3) // 6 - 3
     })
 
     it('clamps energy level to 1-10 bounds', () => {
-      const preset1: VibePreset = { energyLevel: +10 }
+      const preset1: VibePreset = {energyLevel: +10}
       expect(applyPreset(defaultVibe, preset1).energyLevel).toBe(10)
 
-      const preset2: VibePreset = { energyLevel: -10 }
+      const preset2: VibePreset = {energyLevel: -10}
       expect(applyPreset(defaultVibe, preset2).energyLevel).toBe(1)
     })
 
     it('replaces energy direction', () => {
-      const preset: VibePreset = { energyDirection: 'winding_down' }
+      const preset: VibePreset = {energyDirection: 'winding_down'}
       const result = applyPreset(defaultVibe, preset)
       expect(result.energyDirection).toBe('winding_down')
     })
 
     it('replaces era entirely', () => {
-      const preset: VibePreset = { era: { end: 1989, start: 1980 } }
+      const preset: VibePreset = {era: {end: 1989, start: 1980}}
       const result = applyPreset(defaultVibe, preset)
-      expect(result.era).toEqual({ end: 1989, start: 1980 })
+      expect(result.era).toEqual({end: 1989, start: 1980})
     })
 
     it('replaces BPM range entirely', () => {
-      const preset: VibePreset = { bpmRange: { max: 100, min: 60 } }
+      const preset: VibePreset = {bpmRange: {max: 100, min: 60}}
       const result = applyPreset(defaultVibe, preset)
-      expect(result.bpmRange).toEqual({ max: 100, min: 60 })
+      expect(result.bpmRange).toEqual({max: 100, min: 60})
     })
 
     it('merges and deduplicates genres', () => {
-      const preset: VibePreset = { genres: ['synthpop', 'indie rock', 'new wave'] }
+      const preset: VibePreset = {genres: ['synthpop', 'indie rock', 'new wave']}
       const result = applyPreset(defaultVibe, preset)
       // Should have: indie rock, alt pop, synthpop, new wave (indie rock deduplicated)
       expect(result.genres).toContain('indie rock')
@@ -164,7 +162,7 @@ describe('Vibe Steering AI', () => {
     })
 
     it('merges and deduplicates moods', () => {
-      const preset: VibePreset = { mood: ['upbeat', 'energetic', 'nostalgic'] }
+      const preset: VibePreset = {mood: ['upbeat', 'energetic', 'nostalgic']}
       const result = applyPreset(defaultVibe, preset)
       // Should have: upbeat, energetic, nostalgic (upbeat deduplicated)
       expect(result.mood).toContain('upbeat')
@@ -177,7 +175,7 @@ describe('Vibe Steering AI', () => {
       const preset: VibePreset = {
         energyDirection: 'building',
         energyLevel: +2,
-        era: { end: 1989, start: 1980 },
+        era: {end: 1989, start: 1980},
         genres: ['synthpop'],
         mood: ['nostalgic'],
       }
@@ -186,11 +184,11 @@ describe('Vibe Steering AI', () => {
       expect(result.energyDirection).toBe('building')
       expect(result.genres).toContain('synthpop')
       expect(result.mood).toContain('nostalgic')
-      expect(result.era).toEqual({ end: 1989, start: 1980 })
+      expect(result.era).toEqual({end: 1989, start: 1980})
     })
 
     it('leaves unchanged fields untouched', () => {
-      const preset: VibePreset = { energyLevel: +1 }
+      const preset: VibePreset = {energyLevel: +1}
       const result = applyPreset(defaultVibe, preset)
       expect(result.genres).toEqual(defaultVibe.genres)
       expect(result.mood).toEqual(defaultVibe.mood)
@@ -235,18 +233,14 @@ describe('Vibe Steering AI', () => {
         ],
       })
 
-      const result = await steerVibe(
-        defaultVibe,
-        'add some electronic dance vibes',
-        'fake-api-key'
-      )
+      const result = await steerVibe(defaultVibe, 'add some electronic dance vibes', 'fake-api-key')
 
       expect(mockCreate).toHaveBeenCalledWith(
         expect.objectContaining({
           max_tokens: 500,
           model: 'claude-haiku-4-5-20251001',
           temperature: 0.3,
-        })
+        }),
       )
 
       expect(result.energyLevel).toBe(9) // 6 + 3
@@ -375,7 +369,7 @@ describe('Vibe Steering AI', () => {
         content: [
           {
             text: JSON.stringify({
-              era: { end: 2010, start: 2000 },
+              era: {end: 2010, start: 2000},
             }),
             type: 'text',
           },
@@ -384,7 +378,7 @@ describe('Vibe Steering AI', () => {
 
       const result = await steerVibe(defaultVibe, 'early 2000s', 'fake-api-key')
 
-      expect(result.era).toEqual({ end: 2010, start: 2000 })
+      expect(result.era).toEqual({end: 2010, start: 2000})
     })
 
     it('validates BPM range structure from Claude', async () => {
@@ -392,7 +386,7 @@ describe('Vibe Steering AI', () => {
         content: [
           {
             text: JSON.stringify({
-              bpmRange: { max: 120, min: 80 },
+              bpmRange: {max: 120, min: 80},
             }),
             type: 'text',
           },
@@ -401,7 +395,7 @@ describe('Vibe Steering AI', () => {
 
       const result = await steerVibe(defaultVibe, 'slower tempo', 'fake-api-key')
 
-      expect(result.bpmRange).toEqual({ max: 120, min: 80 })
+      expect(result.bpmRange).toEqual({max: 120, min: 80})
     })
   })
 
@@ -420,7 +414,7 @@ describe('Vibe Steering AI', () => {
 
     it('applies "80s vibes" preset correctly', () => {
       const result = applyPreset(defaultVibe, PRESET_MAPPINGS['80s vibes'])
-      expect(result.era).toEqual({ end: 1989, start: 1980 })
+      expect(result.era).toEqual({end: 1989, start: 1980})
       expect(result.genres).toContain('synthpop')
       expect(result.genres).toContain('new wave')
     })

@@ -5,7 +5,7 @@
  * Keep prompts focused and specific to their task.
  */
 
-import type { MixSession } from '@dj/shared-types'
+import type {MixSession} from '@dj/shared-types'
 
 // =============================================================================
 // DJ MODE PROMPTS
@@ -15,10 +15,10 @@ import type { MixSession } from '@dj/shared-types'
  * Prompt for curating/ranking track recommendations
  */
 export function buildCurationPrompt(args: {
-  candidate_tracks: { artists?: string; id: string; name: string; popularity?: number; source?: string }[]
+  candidate_tracks: {artists?: string; id: string; name: string; popularity?: number; source?: string}[]
   playlist_context?: {
     avg_popularity?: number
-    bpm_range?: { max: number; min: number; }
+    bpm_range?: {max: number; min: number}
     dominant_tags?: string[]
     era?: string
   }
@@ -44,7 +44,10 @@ ${args.playlist_context?.era ? `Era: ${args.playlist_context.era}` : ''}
 CANDIDATE TRACKS (${args.candidate_tracks.length} total):
 ${args.candidate_tracks
   .slice(0, 50)
-  .map((t, i) => `${i + 1}. "${t.name}" by ${t.artists} (popularity: ${t.popularity ?? 'unknown'}, source: ${t.source ?? 'unknown'})`)
+  .map(
+    (t, i) =>
+      `${i + 1}. "${t.name}" by ${t.artists} (popularity: ${t.popularity ?? 'unknown'}, source: ${t.source ?? 'unknown'})`,
+  )
   .join('\n')}
 </candidate_pool>
 
@@ -149,13 +152,11 @@ Do NOT include markdown code blocks, only the raw JSON.`
  */
 export function buildNextTrackPrompt(
   vibeDescription: string,
-  recentTracks: { artist: string; name: string; }[],
+  recentTracks: {artist: string; name: string}[],
   count: number,
-  tasteContext?: { dislikedGenres: string[]; likedGenres: string[]; skippedArtists: string[] },
+  tasteContext?: {dislikedGenres: string[]; likedGenres: string[]; skippedArtists: string[]},
 ): string {
-  const recentList = recentTracks
-    .map((t, i) => `${i + 1}. "${t.name}" by ${t.artist}`)
-    .join('\n')
+  const recentList = recentTracks.map((t, i) => `${i + 1}. "${t.name}" by ${t.artist}`).join('\n')
 
   let tasteSection = ''
   if (tasteContext) {
@@ -214,12 +215,13 @@ Do NOT include markdown code blocks, only the raw JSON.`
 export function buildSteeringSuggestionsPrompt(
   vibeDescription: string,
   steerDirection: string,
-  recentTracks: { artist: string; name: string; }[],
-  count: number
+  recentTracks: {artist: string; name: string}[],
+  count: number,
 ): string {
-  const recentList = recentTracks.length > 0
-    ? recentTracks.map((t, i) => `${i + 1}. "${t.name}" by ${t.artist}`).join('\n')
-    : '(Starting fresh)'
+  const recentList =
+    recentTracks.length > 0
+      ? recentTracks.map((t, i) => `${i + 1}. "${t.name}" by ${t.artist}`).join('\n')
+      : '(Starting fresh)'
 
   return `You are an expert DJ helping steer a mix in a new direction. The listener wants to shift towards "${steerDirection}".
 
@@ -287,7 +289,7 @@ export function buildVibeExtractionPrompt(args: {
   deezer_analysis?: Record<string, unknown>
   lastfm_analysis?: Record<string, unknown>
   metadata_analysis?: Record<string, unknown>
-  sample_tracks?: { artists: string; name: string; }[]
+  sample_tracks?: {artists: string; name: string}[]
 }): string {
   return `<task>
 You are a music critic with expertise in identifying subtle sonic and emotional characteristics. Your task is to analyze the provided playlist data and extract a deep vibe profile that captures signals beyond simple genre labels.

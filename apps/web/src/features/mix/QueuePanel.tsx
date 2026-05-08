@@ -47,26 +47,24 @@ export function QueuePanel({isSearching, onRemove, onReorder, queue}: QueuePanel
                       {track.addedBy === 'ai' ? 'AI' : 'You'}
                     </span>
 
-                    {track.addedBy === 'ai' && (
-                      <span className={styles.vibeScore}>{track.vibeScore}%</span>
-                    )}
+                    {track.addedBy === 'ai' && <span className={styles.vibeScore}>{track.vibeScore}%</span>}
 
-                    {track.bpm && (
-                      <span className={styles.bpmBadge}>{Math.round(track.bpm)} BPM</span>
-                    )}
+                    {track.bpm && <span className={styles.bpmBadge}>{Math.round(track.bpm)} BPM</span>}
 
                     {track.energy !== undefined && track.energy !== null && (
-                      <span className={styles.energyBadge} style={{
-                        '--energy-hue': `${120 * track.energy}`,
-                      } as React.CSSProperties}>
+                      <span
+                        className={styles.energyBadge}
+                        style={
+                          {
+                            '--energy-hue': `${120 * track.energy}`,
+                          } as React.CSSProperties
+                        }>
                         E:{Math.round(track.energy * 100)}%
                       </span>
                     )}
                   </div>
 
-                  {track.reason && (
-                    <div className={styles.aiReason}>{track.reason}</div>
-                  )}
+                  {track.reason && <div className={styles.aiReason}>{track.reason}</div>}
                 </div>
               </div>
 
@@ -76,8 +74,7 @@ export function QueuePanel({isSearching, onRemove, onReorder, queue}: QueuePanel
                   disabled={index === 0}
                   onClick={() => onReorder(index, index - 1)}
                   title="Move up"
-                  type="button"
-                >
+                  type="button">
                   <svg fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                     <path d="M5 15l7-7 7 7" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
@@ -87,13 +84,16 @@ export function QueuePanel({isSearching, onRemove, onReorder, queue}: QueuePanel
                   disabled={index === queue.length - 1}
                   onClick={() => onReorder(index, index + 1)}
                   title="Move down"
-                  type="button"
-                >
+                  type="button">
                   <svg fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                     <path d="M19 9l-7 7-7-7" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </button>
-                <button className={styles.removeButton} onClick={() => onRemove(track.position)} title="Remove from queue" type="button">
+                <button
+                  className={styles.removeButton}
+                  onClick={() => onRemove(track.position)}
+                  title="Remove from queue"
+                  type="button">
                   <svg fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                     <path d="M6 18L18 6M6 6l12 12" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>

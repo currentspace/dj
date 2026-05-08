@@ -45,7 +45,10 @@ describe('useAddToQueueMutation', () => {
     client.setQueryData(queryKeys.mix.session(), initial)
 
     vi.mocked(mixApiClient.addToQueue).mockImplementation(
-      () => new Promise(() => { /* never resolves so we can observe optimistic state */ }),
+      () =>
+        new Promise(() => {
+          /* never resolves so we can observe optimistic state */
+        }),
     )
 
     const {result} = renderHook(
@@ -99,7 +102,15 @@ describe('useAddToQueueMutation', () => {
     client.setQueryData(queryKeys.mix.session(), initial)
 
     const serverQueue = [
-      {addedBy: 'user', artist: 'A', name: 'Real', position: 0, trackId: 'x', trackUri: 'spotify:track:x', vibeScore: 0},
+      {
+        addedBy: 'user',
+        artist: 'A',
+        name: 'Real',
+        position: 0,
+        trackId: 'x',
+        trackUri: 'spotify:track:x',
+        vibeScore: 0,
+      },
     ]
     vi.mocked(mixApiClient.addToQueue).mockResolvedValue(serverQueue as never)
 

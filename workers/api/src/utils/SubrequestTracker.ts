@@ -107,7 +107,9 @@ export class SubrequestTracker {
     this.count += count
 
     if (this.enableLogging) {
-      getLogger()?.info(`[SubrequestTracker] Recorded ${count} subrequest(s), total: ${this.count}/${this.maxSubrequests}`)
+      getLogger()?.info(
+        `[SubrequestTracker] Recorded ${count} subrequest(s), total: ${this.count}/${this.maxSubrequests}`,
+      )
     }
 
     // Check warning threshold
@@ -214,10 +216,7 @@ export function getSubrequestTracker(): SubrequestTracker | undefined {
  * Initialize subrequest tracker context for a request scope
  * Must be called with async/await (not thenables) to ensure context preservation
  */
-export async function runWithSubrequestTracker<T>(
-  tracker: SubrequestTracker,
-  fn: () => Promise<T>,
-): Promise<T> {
+export async function runWithSubrequestTracker<T>(tracker: SubrequestTracker, fn: () => Promise<T>): Promise<T> {
   const context: SubrequestTrackerContext = {tracker}
 
   // Validate context before using it

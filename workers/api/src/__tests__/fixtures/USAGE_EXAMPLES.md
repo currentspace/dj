@@ -28,7 +28,7 @@ import {mockDeezerAPI, buildDeezerTrack} from './fixtures/api-mocks'
 
 // Set up mock
 const cleanup = mockDeezerAPI({
-  'USUM71234567': buildDeezerTrack({bpm: 128, rank: 900000}),
+  USUM71234567: buildDeezerTrack({bpm: 128, rank: 900000}),
 })
 
 // Use in test
@@ -51,7 +51,7 @@ import {
 
 // Text response
 const client = createMockAnthropicClient({
-  'analyze': buildTextResponseStream('Analysis complete'),
+  analyze: buildTextResponseStream('Analysis complete'),
 })
 
 // Tool call response
@@ -66,18 +66,10 @@ const client2 = createMockAnthropicClient({
 ## 4. Test Data Builders
 
 ```typescript
-import {
-  EnrichmentResultBuilder,
-  LastFmSignalsBuilder,
-  buildPlaylistAnalysis,
-  faker,
-} from './fixtures/test-builders'
+import {EnrichmentResultBuilder, LastFmSignalsBuilder, buildPlaylistAnalysis, faker} from './fixtures/test-builders'
 
 // Builder pattern
-const enrichment = new EnrichmentResultBuilder()
-  .withBPM(140)
-  .withGain(-10)
-  .build()
+const enrichment = new EnrichmentResultBuilder().withBPM(140).withGain(-10).build()
 
 // Faker utilities
 const isrc = faker.isrc() // 'USUM71234567'

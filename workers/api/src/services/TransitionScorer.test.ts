@@ -303,9 +303,7 @@ describe('orderByTransition', () => {
   })
 
   it('includes valid PlannedTrack fields in output', () => {
-    const candidates = [
-      {...buildTrackProfile({artist: 'Artist 1', name: 'Track 1'}), spotifyUri: 'spotify:track:1'},
-    ]
+    const candidates = [{...buildTrackProfile({artist: 'Artist 1', name: 'Track 1'}), spotifyUri: 'spotify:track:1'}]
 
     const ordered = orderByTransition(candidates, [buildArcPhase()])
 

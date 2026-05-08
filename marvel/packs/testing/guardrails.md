@@ -23,7 +23,7 @@ Vitest 4.x testing standards with strict type safety and Zod validation.
 
 ```typescript
 // WRONG — type assertion in tests
-const session = { id: 'test' } as MixSession
+const session = {id: 'test'} as MixSession
 
 // CORRECT — builder with Zod validation
 function buildTestSession(overrides?: Partial<MixSession>): MixSession {

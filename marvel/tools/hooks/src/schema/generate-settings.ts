@@ -16,31 +16,31 @@
  *   node dist/schema/generate-settings.js --write
  */
 
-import * as fs from "fs";
-import * as path from "path";
-import { fileURLToPath } from "url";
+import * as fs from 'fs'
+import * as path from 'path'
+import {fileURLToPath} from 'url'
 
-import type { ClaudeSettings, CommandHookHandler, MatcherGroup } from "./settings-types.js";
+import type {ClaudeSettings, CommandHookHandler, MatcherGroup} from './settings-types.js'
 
 // Use $CLAUDE_PROJECT_DIR for working directory independence
-const PROJECT_DIR = '"$CLAUDE_PROJECT_DIR"';
+const PROJECT_DIR = '"$CLAUDE_PROJECT_DIR"'
 
 // Unified entry point - handles daemon lifecycle automatically
-const HOOK_SCRIPT = `${PROJECT_DIR}/marvel/tools/hooks/scripts/marvel-hook.sh`;
+const HOOK_SCRIPT = `${PROJECT_DIR}/marvel/tools/hooks/scripts/marvel-hook.sh`
 
 function commandHook(hookType: string, timeout?: number): CommandHookHandler {
   const hook: CommandHookHandler = {
     command: `${HOOK_SCRIPT} ${hookType}`,
-    type: "command",
-  };
-  if (timeout !== undefined) {
-    hook.timeout = timeout;
+    type: 'command',
   }
-  return hook;
+  if (timeout !== undefined) {
+    hook.timeout = timeout
+  }
+  return hook
 }
 
 function matcherGroup(hooks: CommandHookHandler[], matcher?: string): MatcherGroup {
-  return matcher ? { hooks, matcher } : { hooks };
+  return matcher ? {hooks, matcher} : {hooks}
 }
 
 /**
@@ -55,152 +55,112 @@ function matcherGroup(hooks: CommandHookHandler[], matcher?: string): MatcherGro
 export const settings: ClaudeSettings = {
   hooks: {
     // Track notifications
-    Notification: [
-      matcherGroup([commandHook("notification")]),
-    ],
+    Notification: [matcherGroup([commandHook('notification')])],
 
     // Security gate for permission requests
-    PermissionRequest: [
-      matcherGroup(
-        [commandHook("permission-request", 90)],
-        "Bash"
-      ),
-    ],
+    PermissionRequest: [matcherGroup([commandHook('permission-request', 90)], 'Bash')],
 
     // Record tool calls to trace
-    PostToolUse: [
-      matcherGroup(
-        [commandHook("post-tool-use")],
-        "Edit|Write|Bash|Read|Grep|Glob"
-      ),
-    ],
+    PostToolUse: [matcherGroup([commandHook('post-tool-use')], 'Edit|Write|Bash|Read|Grep|Glob')],
 
     // Track failed tool calls
-    PostToolUseFailure: [
-      matcherGroup(
-        [commandHook("post-tool-use-failure")],
-        "Edit|Write|Bash"
-      ),
-    ],
+    PostToolUseFailure: [matcherGroup([commandHook('post-tool-use-failure')], 'Edit|Write|Bash')],
 
     // Snapshot state before context compaction
-    PreCompact: [
-      matcherGroup([commandHook("pre-compact")]),
-    ],
+    PreCompact: [matcherGroup([commandHook('pre-compact')])],
 
     // Inject lessons before file operations; security gate for Bash
-    PreToolUse: [
-      matcherGroup(
-        [commandHook("pre-tool-use", 90)],
-        "Bash|Edit|Write|Read"
-      ),
-    ],
+    PreToolUse: [matcherGroup([commandHook('pre-tool-use', 90)], 'Bash|Edit|Write|Read')],
 
     // Stop daemon on session end
-    SessionEnd: [
-      matcherGroup([commandHook("session-end")]),
-    ],
+    SessionEnd: [matcherGroup([commandHook('session-end')])],
 
     // Starts daemon, initializes session
-    SessionStart: [
-      matcherGroup([commandHook("session-start")]),
-    ],
+    SessionStart: [matcherGroup([commandHook('session-start')])],
 
     // Reflection at end of turn
-    Stop: [
-      matcherGroup([commandHook("stop")]),
-    ],
+    Stop: [matcherGroup([commandHook('stop')])],
     // Track subagent lifecycle
-    SubagentStart: [
-      matcherGroup([commandHook("subagent-start")]),
-    ],
+    SubagentStart: [matcherGroup([commandHook('subagent-start')])],
 
-    SubagentStop: [
-      matcherGroup([commandHook("subagent-stop")]),
-    ],
+    SubagentStop: [matcherGroup([commandHook('subagent-stop')])],
 
     // Track task completions
-    TaskCompleted: [
-      matcherGroup([commandHook("task-completed")]),
-    ],
+    TaskCompleted: [matcherGroup([commandHook('task-completed')])],
 
     // Track teammate idle events
-    TeammateIdle: [
-      matcherGroup([commandHook("teammate-idle")]),
-    ],
+    TeammateIdle: [matcherGroup([commandHook('teammate-idle')])],
 
     // Capture corrections and handle "marvel status"
-    UserPromptSubmit: [
-      matcherGroup([commandHook("user-prompt-submit")]),
-    ],
+    UserPromptSubmit: [matcherGroup([commandHook('user-prompt-submit')])],
   },
-};
+}
 
 function findProjectRoot(startDir: string): null | string {
-  let current = startDir;
-  const root = path.parse(current).root;
+  let current = startDir
+  const root = path.parse(current).root
 
   while (current !== root) {
-    if (fs.existsSync(path.join(current, ".claude"))) {
-      return current;
+    if (fs.existsSync(path.join(current, '.claude'))) {
+      return current
     }
-    current = path.dirname(current);
+    current = path.dirname(current)
   }
 
-  return null;
+  return null
 }
 
 function generateSettings(): string {
-  return JSON.stringify(settings, null, 2);
+  return JSON.stringify(settings, null, 2)
 }
 
 function main(): void {
-  const args = process.argv.slice(2);
-  const writeFlag = args.includes("--write") || args.includes("-w");
+  const args = process.argv.slice(2)
+  const writeFlag = args.includes('--write') || args.includes('-w')
 
-  const json = generateSettings();
+  const json = generateSettings()
 
   if (writeFlag) {
-    const __dirname = path.dirname(fileURLToPath(import.meta.url));
-    const projectRoot = findProjectRoot(process.cwd()) || findProjectRoot(__dirname);
+    const __dirname = path.dirname(fileURLToPath(import.meta.url))
+    const projectRoot = findProjectRoot(process.cwd()) || findProjectRoot(__dirname)
 
     if (!projectRoot) {
-      console.error("Error: Could not find project root (no .claude directory found)");
-      process.exit(1);
+      console.error('Error: Could not find project root (no .claude directory found)')
+      process.exit(1)
     }
 
-    const settingsPath = path.join(projectRoot, ".claude", "settings.json");
-    const claudeDir = path.dirname(settingsPath);
+    const settingsPath = path.join(projectRoot, '.claude', 'settings.json')
+    const claudeDir = path.dirname(settingsPath)
 
     if (!fs.existsSync(claudeDir)) {
-      fs.mkdirSync(claudeDir, { recursive: true });
+      fs.mkdirSync(claudeDir, {recursive: true})
     }
 
     // Read-merge-write: preserve existing settings, only update the hooks key
-    const generated = JSON.parse(json) as Record<string, unknown>;
-    let merged = generated;
+    const generated = JSON.parse(json) as Record<string, unknown>
+    let merged = generated
 
     if (fs.existsSync(settingsPath)) {
       try {
-        const existing = JSON.parse(fs.readFileSync(settingsPath, "utf-8")) as Record<string, unknown>;
-        merged = { ...existing, hooks: generated.hooks };
+        const existing = JSON.parse(fs.readFileSync(settingsPath, 'utf-8')) as Record<string, unknown>
+        merged = {...existing, hooks: generated.hooks}
       } catch {
         // Existing file is corrupted — back it up before overwriting
-        const backupPath = settingsPath + `.backup-${Date.now()}`;
+        const backupPath = settingsPath + `.backup-${Date.now()}`
         try {
-          fs.copyFileSync(settingsPath, backupPath);
-          console.error(`Backed up corrupted settings to: ${backupPath}`);
+          fs.copyFileSync(settingsPath, backupPath)
+          console.error(`Backed up corrupted settings to: ${backupPath}`)
         } catch {
           // Best-effort backup
         }
       }
     }
 
-    fs.writeFileSync(settingsPath, JSON.stringify(merged, null, 2) + "\n");
-    console.error(`Written to: ${settingsPath}`);
+    fs.writeFileSync(settingsPath, JSON.stringify(merged, null, 2) + '\n')
+    console.error(`Written to: ${settingsPath}`)
   } else {
-    console.log(json);
+    console.log(json)
   }
 }
 
-main();
+main()

@@ -9,9 +9,9 @@
  * 2. Domain: guidance.jsonl to packs lessons.jsonl
  */
 
-import { spawnSync } from "child_process";
-import * as fs from "fs";
-import * as path from "path";
+import {spawnSync} from 'child_process'
+import * as fs from 'fs'
+import * as path from 'path'
 
 import type {
   ExternalRule,
@@ -21,30 +21,25 @@ import type {
   PromotionCandidate,
   PromotionReport,
   RuleFile,
-} from "../types.js";
-import type { LogContext } from "./logger.js";
+} from '../types.js'
+import type {LogContext} from './logger.js'
 
-import { loadAllPacks } from "../loaders/pack-loader.js";
-import { matchesAllowlist } from "./external-rules.js";
-import {
-  safeAppendFile,
-  safeParseJsonl,
-  safeReadJson,
-  safeWriteJson,
-} from "./file-ops.js";
-import { isPatternSafe } from "./learned-rules.js";
-import { logDebug, logWarn } from "./logger.js";
-import { findMarvelRoot, getSecurityDir } from "./paths.js";
-import { redactSensitive } from "./redact.js";
+import {loadAllPacks} from '../loaders/pack-loader.js'
+import {matchesAllowlist} from './external-rules.js'
+import {safeAppendFile, safeParseJsonl, safeReadJson, safeWriteJson} from './file-ops.js'
+import {isPatternSafe} from './learned-rules.js'
+import {logDebug, logWarn} from './logger.js'
+import {findMarvelRoot, getSecurityDir} from './paths.js'
+import {redactSensitive} from './redact.js'
 
 interface LearnedRuleEntry {
-  approvedCommand: string;
-  id: string;
-  learnedAt: string;
-  pattern: string;
-  reason: string;
-  sessionId?: string;
-  type: "contains" | "prefix" | "regex";
+  approvedCommand: string
+  id: string
+  learnedAt: string
+  pattern: string
+  reason: string
+  sessionId?: string
+  type: 'contains' | 'prefix' | 'regex'
 }
 
 // ─── Security Candidates ────────────────────────────────────────
@@ -52,77 +47,76 @@ interface LearnedRuleEntry {
 /**
  * Find security rule candidates for promotion from learned.jsonl → allowlist.json.
  */
-export function findSecurityCandidates(
-  context: LogContext
-): { candidates: PromotionCandidate[]; duplicates: number; unsafe: number } {
-  const learnedPath = path.join(getSecurityDir(), "learned.jsonl");
+export function findSecurityCandidates(context: LogContext): {
+  candidates: PromotionCandidate[]
+  duplicates: number
+  unsafe: number
+} {
+  const learnedPath = path.join(getSecurityDir(), 'learned.jsonl')
 
-  const entries = safeParseJsonl<LearnedRuleEntry>(learnedPath, context);
+  const entries = safeParseJsonl<LearnedRuleEntry>(learnedPath, context)
   if (entries.length === 0) {
-    return { candidates: [], duplicates: 0, unsafe: 0 };
+    return {candidates: [], duplicates: 0, unsafe: 0}
   }
 
   // Group by pattern to deduplicate and count frequency
-  const byPattern = new Map<string, { entries: LearnedRuleEntry[]; rule: ExternalRule }>();
+  const byPattern = new Map<string, {entries: LearnedRuleEntry[]; rule: ExternalRule}>()
   for (const entry of entries) {
-    const key = `${entry.type}:${entry.pattern}`;
+    const key = `${entry.type}:${entry.pattern}`
     if (!byPattern.has(key)) {
       byPattern.set(key, {
         entries: [],
-        rule: { id: entry.id, pattern: entry.pattern, reason: entry.reason, type: entry.type },
-      });
+        rule: {id: entry.id, pattern: entry.pattern, reason: entry.reason, type: entry.type},
+      })
     }
-    byPattern.get(key)!.entries.push(entry);
+    byPattern.get(key)!.entries.push(entry)
   }
 
-  let duplicates = 0;
-  let unsafe = 0;
-  const candidates: PromotionCandidate[] = [];
+  let duplicates = 0
+  let unsafe = 0
+  const candidates: PromotionCandidate[] = []
 
-  for (const [, { entries: group, rule }] of byPattern) {
+  for (const [, {entries: group, rule}] of byPattern) {
     // Count duplicates (beyond the first)
     if (group.length > 1) {
-      duplicates += group.length - 1;
+      duplicates += group.length - 1
     }
 
     // Filter out rules already in allowlist
     if (matchesAllowlist(rule.pattern, context)) {
-      duplicates++;
-      continue;
+      duplicates++
+      continue
     }
 
     // Filter out unsafe patterns
-    const baseCommand = rule.pattern.trim().split(/\s+/)[0];
-    const safetyCheck = isPatternSafe(rule.pattern, baseCommand);
+    const baseCommand = rule.pattern.trim().split(/\s+/)[0]
+    const safetyCheck = isPatternSafe(rule.pattern, baseCommand)
     if (!safetyCheck.safe) {
-      unsafe++;
-      continue;
+      unsafe++
+      continue
     }
 
-    const sorted = group.sort((a, b) => a.learnedAt.localeCompare(b.learnedAt));
+    const sorted = group.sort((a, b) => a.learnedAt.localeCompare(b.learnedAt))
     // Redact historical secrets from candidate output
     const redactedRule: ExternalRule = {
       ...rule,
       pattern: redactSensitive(rule.pattern),
       reason: redactSensitive(rule.reason),
-    };
+    }
     candidates.push({
       firstSeen: sorted[0].learnedAt,
       frequency: group.length,
       lastSeen: sorted[sorted.length - 1].learnedAt,
       rule: redactedRule,
-      source: "learned",
-    });
+      source: 'learned',
+    })
   }
 
   // Sort by frequency desc
-  candidates.sort((a, b) => b.frequency - a.frequency);
+  candidates.sort((a, b) => b.frequency - a.frequency)
 
-  logDebug(
-    `Found ${candidates.length} security candidates (${duplicates} dupes, ${unsafe} unsafe)`,
-    context
-  );
-  return { candidates, duplicates, unsafe };
+  logDebug(`Found ${candidates.length} security candidates (${duplicates} dupes, ${unsafe} unsafe)`, context)
+  return {candidates, duplicates, unsafe}
 }
 
 // ─── Lesson Generalization ──────────────────────────────────────
@@ -133,10 +127,10 @@ Specific correction: "{content}"
 Category: {category}
 
 Return ONLY valid JSON (no markdown fences):
-{"title":"imperative rule in under 10 words","description":"why this matters in 1-2 sentences","actionable":"what to do concretely in any instance of this pattern"}`;
+{"title":"imperative rule in under 10 words","description":"why this matters in 1-2 sentences","actionable":"what to do concretely in any instance of this pattern"}`
 
-const GENERALIZE_TIMEOUT_MS = 8000;
-const GENERALIZE_MODEL = "haiku";
+const GENERALIZE_TIMEOUT_MS = 8000
+const GENERALIZE_MODEL = 'haiku'
 
 /**
  * Commit approved domain lessons to their pack's lessons.jsonl.
@@ -144,65 +138,57 @@ const GENERALIZE_MODEL = "haiku";
 export function commitDomainPromotions(
   lessons: LessonCandidate[],
   marvelRoot: string,
-  context: LogContext
-): { added: number } {
+  context: LogContext,
+): {added: number} {
   if (lessons.length === 0) {
-    return { added: 0 };
+    return {added: 0}
   }
 
-  let added = 0;
+  let added = 0
   for (const candidate of lessons) {
-    const lessonsPath = path.join(
-      marvelRoot,
-      "packs",
-      candidate.suggestedPack,
-      "lessons.jsonl"
-    );
+    const lessonsPath = path.join(marvelRoot, 'packs', candidate.suggestedPack, 'lessons.jsonl')
 
-    const line = JSON.stringify(candidate.suggestedLesson) + "\n";
+    const line = JSON.stringify(candidate.suggestedLesson) + '\n'
     if (safeAppendFile(lessonsPath, line, context)) {
-      added++;
+      added++
     }
   }
 
-  logDebug(`Committed ${added} domain promotions`, context);
-  return { added };
+  logDebug(`Committed ${added} domain promotions`, context)
+  return {added}
 }
 
 /**
  * Commit approved security rules to allowlist.json.
  */
-export function commitSecurityPromotions(
-  rules: ExternalRule[],
-  context: LogContext
-): { added: number } {
+export function commitSecurityPromotions(rules: ExternalRule[], context: LogContext): {added: number} {
   if (rules.length === 0) {
-    return { added: 0 };
+    return {added: 0}
   }
 
-  const allowlistPath = path.join(getSecurityDir(), "allowlist.json");
+  const allowlistPath = path.join(getSecurityDir(), 'allowlist.json')
 
-  const existing = safeReadJson<RuleFile>(allowlistPath, context) || { rules: [] };
-  const existingIds = new Set(existing.rules.map((r) => r.id));
+  const existing = safeReadJson<RuleFile>(allowlistPath, context) || {rules: []}
+  const existingIds = new Set(existing.rules.map(r => r.id))
 
-  let added = 0;
+  let added = 0
   for (const rule of rules) {
     // Generate a promotion-prefixed ID to avoid conflicts
     const promotedRule: ExternalRule = {
       ...rule,
       id: existingIds.has(rule.id) ? `promoted-${Date.now()}-${rule.id}` : rule.id,
-    };
-    existing.rules.push(promotedRule);
-    added++;
+    }
+    existing.rules.push(promotedRule)
+    added++
   }
 
-  safeWriteJson(allowlistPath, existing, context);
-  logDebug(`Committed ${added} security promotions`, context);
+  safeWriteJson(allowlistPath, existing, context)
+  logDebug(`Committed ${added} security promotions`, context)
 
   // Clean promoted entries from learned.jsonl
-  cleanPromotedFromLearned(rules, context);
+  cleanPromotedFromLearned(rules, context)
 
-  return { added };
+  return {added}
 }
 
 // ─── Domain Candidates ──────────────────────────────────────────
@@ -213,7 +199,7 @@ export function commitSecurityPromotions(
  * (backslashes, quotes, newlines, tabs, control chars, etc.).
  */
 export function escapeForPromptTemplate(value: string): string {
-  return JSON.stringify(value).slice(1, -1);
+  return JSON.stringify(value).slice(1, -1)
 }
 
 // ─── Commit Promotions ──────────────────────────────────────────
@@ -223,24 +209,24 @@ export function escapeForPromptTemplate(value: string): string {
  */
 export async function findDomainCandidates(
   marvelRoot: string,
-  context: LogContext
-): Promise<{ candidates: LessonCandidate[]; totalGuidance: number }> {
+  context: LogContext,
+): Promise<{candidates: LessonCandidate[]; totalGuidance: number}> {
   // Collect guidance from all run dirs
-  const allGuidance: Guidance[] = [];
+  const allGuidance: Guidance[] = []
 
   // Read from individual run dirs
-  const runsDir = path.join(marvelRoot, "runs");
+  const runsDir = path.join(marvelRoot, 'runs')
   if (fs.existsSync(runsDir)) {
     try {
       const runDirs = fs
         .readdirSync(runsDir)
-        .filter((name) => name.startsWith("run_"))
-        .map((name) => path.join(runsDir, name));
+        .filter(name => name.startsWith('run_'))
+        .map(name => path.join(runsDir, name))
 
       for (const runDir of runDirs) {
-        const guidancePath = path.join(runDir, "guidance.jsonl");
-        const items = safeParseJsonl<Guidance>(guidancePath, context);
-        allGuidance.push(...items);
+        const guidancePath = path.join(runDir, 'guidance.jsonl')
+        const items = safeParseJsonl<Guidance>(guidancePath, context)
+        allGuidance.push(...items)
       }
     } catch {
       // runs dir may not be readable
@@ -248,129 +234,118 @@ export async function findDomainCandidates(
   }
 
   // Read from archive file (persisted across sessions)
-  const archivePath = path.join(marvelRoot, "guidance-archive.jsonl");
-  const archived = safeParseJsonl<Guidance>(archivePath, context);
-  allGuidance.push(...archived);
+  const archivePath = path.join(marvelRoot, 'guidance-archive.jsonl')
+  const archived = safeParseJsonl<Guidance>(archivePath, context)
+  allGuidance.push(...archived)
 
   if (allGuidance.length === 0) {
-    return { candidates: [], totalGuidance: 0 };
+    return {candidates: [], totalGuidance: 0}
   }
 
   // Filter to corrections and directions only
-  const actionable = allGuidance.filter(
-    (g) => g.type === "correction" || g.type === "direction"
-  );
+  const actionable = allGuidance.filter(g => g.type === 'correction' || g.type === 'direction')
 
   // Deduplicate by content similarity (exact match for now)
-  const seen = new Set<string>();
-  const unique: Guidance[] = [];
+  const seen = new Set<string>()
+  const unique: Guidance[] = []
   for (const g of actionable) {
-    const key = g.content.trim().toLowerCase();
+    const key = g.content.trim().toLowerCase()
     if (!seen.has(key)) {
-      seen.add(key);
-      unique.push(g);
+      seen.add(key)
+      unique.push(g)
     }
   }
 
   // Load existing packs to check for duplicates
-  const packs = await loadAllPacks(marvelRoot);
-  const existingLessons = new Set<string>();
+  const packs = await loadAllPacks(marvelRoot)
+  const existingLessons = new Set<string>()
   for (const pack of packs) {
     for (const lesson of pack.lessons) {
-      existingLessons.add(lesson.actionable.trim().toLowerCase());
+      existingLessons.add(lesson.actionable.trim().toLowerCase())
     }
   }
 
-  const candidates: LessonCandidate[] = [];
+  const candidates: LessonCandidate[] = []
 
   for (const g of unique) {
     // Skip if already exists as a lesson
     if (existingLessons.has(g.content.trim().toLowerCase())) {
-      continue;
+      continue
     }
 
     // Determine target pack from category
-    const suggestedPack = g.category || "code-standards-typescript";
+    const suggestedPack = g.category || 'code-standards-typescript'
 
     // Check pack actually exists
-    const packExists = packs.some((p) => p.metadata.name === suggestedPack);
+    const packExists = packs.some(p => p.metadata.name === suggestedPack)
     if (!packExists) {
-      continue;
+      continue
     }
 
     // Transform guidance → lesson (generalize with LLM if available)
-    const generalized = generalizeLessonWithLLM(g.content, g.category || "general", context);
-    const fallbackTitle = g.content.split(/[.!?\n]/)[0].trim().slice(0, 80);
+    const generalized = generalizeLessonWithLLM(g.content, g.category || 'general', context)
+    const fallbackTitle = g.content
+      .split(/[.!?\n]/)[0]
+      .trim()
+      .slice(0, 80)
     const suggestedLesson: Lesson = {
       actionable: generalized?.actionable || g.content,
-      category: g.category || "general",
+      category: g.category || 'general',
       description: generalized?.description || g.content,
       run_id: g.run_id,
       timestamp: new Date().toISOString(),
       title: generalized?.title || fallbackTitle,
-    };
+    }
 
     candidates.push({
       confidence: g.confidence,
       guidance: g,
       suggestedLesson,
       suggestedPack,
-    });
+    })
   }
 
   // Sort by confidence desc
-  candidates.sort((a, b) => b.confidence - a.confidence);
+  candidates.sort((a, b) => b.confidence - a.confidence)
 
-  logDebug(
-    `Found ${candidates.length} domain candidates from ${allGuidance.length} total guidance`,
-    context
-  );
-  return { candidates, totalGuidance: allGuidance.length };
+  logDebug(`Found ${candidates.length} domain candidates from ${allGuidance.length} total guidance`, context)
+  return {candidates, totalGuidance: allGuidance.length}
 }
 
 /**
  * Generate a full promotion report (security + domain).
  */
-export async function generatePromotionReport(
-  context: LogContext
-): Promise<PromotionReport> {
-  const marvelRoot = findMarvelRoot();
-  const security = findSecurityCandidates(context);
-  const domain = marvelRoot
-    ? await findDomainCandidates(marvelRoot, context)
-    : { candidates: [], totalGuidance: 0 };
+export async function generatePromotionReport(context: LogContext): Promise<PromotionReport> {
+  const marvelRoot = findMarvelRoot()
+  const security = findSecurityCandidates(context)
+  const domain = marvelRoot ? await findDomainCandidates(marvelRoot, context) : {candidates: [], totalGuidance: 0}
 
   return {
     domain,
     security,
-  };
+  }
 }
 
 /**
  * Remove promoted rules from learned.jsonl to avoid re-suggesting.
  */
-function cleanPromotedFromLearned(
-  promotedRules: ExternalRule[],
-  context: LogContext
-): void {
-  const learnedPath = path.join(getSecurityDir(), "learned.jsonl");
+function cleanPromotedFromLearned(promotedRules: ExternalRule[], context: LogContext): void {
+  const learnedPath = path.join(getSecurityDir(), 'learned.jsonl')
 
-  const entries = safeParseJsonl<LearnedRuleEntry>(learnedPath, context);
-  if (entries.length === 0) return;
+  const entries = safeParseJsonl<LearnedRuleEntry>(learnedPath, context)
+  if (entries.length === 0) return
 
-  const promotedPatterns = new Set(promotedRules.map((r) => `${r.type}:${r.pattern}`));
-  const remaining = entries.filter(
-    (e) => !promotedPatterns.has(`${e.type}:${e.pattern}`)
-  );
+  const promotedPatterns = new Set(promotedRules.map(r => `${r.type}:${r.pattern}`))
+  const remaining = entries.filter(e => !promotedPatterns.has(`${e.type}:${e.pattern}`))
 
   // Rewrite the file with remaining entries
-  const content = remaining.map((e) => JSON.stringify(e)).join("\n") + (remaining.length ? "\n" : "");
+  const content = remaining.map(e => JSON.stringify(e)).join('\n') + (remaining.length ? '\n' : '')
   try {
-    fs.writeFileSync(learnedPath, content, { mode: 0o600 });
-    logDebug(`Cleaned ${entries.length - remaining.length} promoted entries from learned.jsonl`, context);
+    fs.writeFileSync(learnedPath, content, {mode: 0o600})
+    logDebug(`Cleaned ${entries.length - remaining.length} promoted entries from learned.jsonl`, context)
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    logWarn(`Failed to clean learned.jsonl: ${message}`, context);
+    const message = error instanceof Error ? error.message : String(error)
+    logWarn(`Failed to clean learned.jsonl: ${message}`, context)
   }
 }
 
@@ -383,72 +358,73 @@ function cleanPromotedFromLearned(
 function generalizeLessonWithLLM(
   content: string,
   category: string,
-  context: LogContext
-): null | { actionable: string; description: string; title: string; } {
-  const prompt = GENERALIZE_PROMPT
-    .replace("{content}", escapeForPromptTemplate(content))
-    .replace("{category}", escapeForPromptTemplate(category));
+  context: LogContext,
+): null | {actionable: string; description: string; title: string} {
+  const prompt = GENERALIZE_PROMPT.replace('{content}', escapeForPromptTemplate(content)).replace(
+    '{category}',
+    escapeForPromptTemplate(category),
+  )
 
   try {
     const result = spawnSync(
-      "claude",
-      ["-p", prompt, "--model", GENERALIZE_MODEL, "--output-format", "json", "--tools", ""],
+      'claude',
+      ['-p', prompt, '--model', GENERALIZE_MODEL, '--output-format', 'json', '--tools', ''],
       {
-        encoding: "utf-8",
+        encoding: 'utf-8',
         env: {
           ...process.env,
           CLAUDE_PROJECT_DIR: undefined,
-          MARVEL_SECURITY_EVAL: "1",
+          MARVEL_SECURITY_EVAL: '1',
           MAX_THINKING_TOKENS: undefined,
         },
-        input: "",
-        stdio: ["pipe", "pipe", "pipe"],
+        input: '',
+        stdio: ['pipe', 'pipe', 'pipe'],
         timeout: GENERALIZE_TIMEOUT_MS,
-      }
-    );
+      },
+    )
 
     if (result.error || result.status !== 0 || !result.stdout) {
-      logDebug("LLM generalization failed — using verbatim", context);
-      return null;
+      logDebug('LLM generalization failed — using verbatim', context)
+      return null
     }
 
     // Parse the JSON response — claude --output-format json wraps in {"result": "..."}
-    let responseText = result.stdout;
+    let responseText = result.stdout
     try {
-      const jsonWrapper = JSON.parse(result.stdout) as { result?: string };
+      const jsonWrapper = JSON.parse(result.stdout) as {result?: string}
       if (jsonWrapper.result) {
-        responseText = jsonWrapper.result;
+        responseText = jsonWrapper.result
       }
     } catch {
       // Not wrapped, use as-is
     }
 
     // Remove markdown code fences if present
-    const fenceMatch = /```(?:json)?\s*([\s\S]*?)```/.exec(responseText);
+    const fenceMatch = /```(?:json)?\s*([\s\S]*?)```/.exec(responseText)
     if (fenceMatch) {
-      responseText = fenceMatch[1].trim();
+      responseText = fenceMatch[1].trim()
     }
 
     const parsed = JSON.parse(responseText.trim()) as {
-      actionable?: string;
-      description?: string;
-      title?: string;
-    };
-
-    if (!parsed.title?.trim() || !parsed.description?.trim() || !parsed.actionable?.trim()) {
-      logDebug("LLM returned incomplete generalization — using verbatim", context);
-      return null;
+      actionable?: string
+      description?: string
+      title?: string
     }
 
-    logDebug(`Generalized lesson: "${parsed.title}"`, context);
+    if (!parsed.title?.trim() || !parsed.description?.trim() || !parsed.actionable?.trim()) {
+      logDebug('LLM returned incomplete generalization — using verbatim', context)
+      return null
+    }
+
+    logDebug(`Generalized lesson: "${parsed.title}"`, context)
     return {
       actionable: parsed.actionable.trim(),
       description: parsed.description.trim(),
       title: parsed.title.trim(),
-    };
+    }
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-    logWarn(`LLM generalization error: ${msg}`, context);
-    return null;
+    const msg = error instanceof Error ? error.message : String(error)
+    logWarn(`LLM generalization error: ${msg}`, context)
+    return null
   }
 }

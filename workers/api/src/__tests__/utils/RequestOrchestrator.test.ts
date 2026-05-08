@@ -227,12 +227,14 @@ describe('RequestOrchestrator', () => {
     it('should maintain rate limit with fast-completing tasks', async () => {
       const timestamps: number[] = []
 
-      const tasks = Array.from({length: 80}, () =>
-        orchestrator.execute(async () => {
-          timestamps.push(performance.now())
-          // Instant completion (no delay)
-          return 'fast'
-        }, 'anthropic'), // Use anthropic lane for more predictable concurrency (2)
+      const tasks = Array.from(
+        {length: 80},
+        () =>
+          orchestrator.execute(async () => {
+            timestamps.push(performance.now())
+            // Instant completion (no delay)
+            return 'fast'
+          }, 'anthropic'), // Use anthropic lane for more predictable concurrency (2)
       )
 
       const {durationMs} = await measureExecutionTime(async () => {
@@ -465,9 +467,11 @@ describe('RequestOrchestrator', () => {
           successfulTasks.push(1)
           return 1
         }, 'default'),
-        orchestrator.execute(async () => {
-          throw new Error('Task 2 failed')
-        }, 'default').catch(() => -1),
+        orchestrator
+          .execute(async () => {
+            throw new Error('Task 2 failed')
+          }, 'default')
+          .catch(() => -1),
         orchestrator.execute(async () => {
           successfulTasks.push(3)
           return 3
@@ -496,11 +500,13 @@ describe('RequestOrchestrator', () => {
       const timestamps: number[] = []
 
       // Submit 50 tasks as fast as possible
-      const tasks = Array.from({length: 50}, () =>
-        orchestrator.execute(async () => {
-          timestamps.push(performance.now())
-          return 'done'
-        }, 'anthropic'), // Use anthropic for predictable concurrency
+      const tasks = Array.from(
+        {length: 50},
+        () =>
+          orchestrator.execute(async () => {
+            timestamps.push(performance.now())
+            return 'done'
+          }, 'anthropic'), // Use anthropic for predictable concurrency
       )
 
       const {durationMs} = await measureExecutionTime(async () => {
@@ -542,9 +548,7 @@ describe('RequestOrchestrator', () => {
   describe('Performance Characteristics', () => {
     it('should complete 100 tasks within reasonable time', async () => {
       const {durationMs} = await measureExecutionTime(async () => {
-        const tasks = Array.from({length: 100}, () =>
-          orchestrator.execute(async () => 'done', 'anthropic'),
-        )
+        const tasks = Array.from({length: 100}, () => orchestrator.execute(async () => 'done', 'anthropic'))
         await Promise.all(tasks)
       })
 
@@ -582,9 +586,7 @@ describe('RequestOrchestrator', () => {
     it('should not accumulate memory with many tasks', async () => {
       // Execute 500 tasks sequentially (simulating long-running service)
       for (let batch = 0; batch < 5; batch++) {
-        const tasks = Array.from({length: 100}, () =>
-          orchestrator.execute(async () => 'done', 'default'),
-        )
+        const tasks = Array.from({length: 100}, () => orchestrator.execute(async () => 'done', 'default'))
         await Promise.all(tasks)
       }
 

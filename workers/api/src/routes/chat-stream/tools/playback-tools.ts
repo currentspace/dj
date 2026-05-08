@@ -18,7 +18,8 @@ export function createPlaybackTools(
 ): NativeTool[] {
   return [
     {
-      description: "Add a track to the user's playback queue. Use when user asks to queue a song or add something to play next.",
+      description:
+        "Add a track to the user's playback queue. Use when user asks to queue a song or add something to play next.",
       func: async args => {
         if (abortSignal?.aborted) throw new Error('Request aborted')
 
@@ -100,7 +101,10 @@ export function createPlaybackTools(
         const result = await executeSpotifyTool('control_playback', args, spotifyToken, env?.AUDIO_FEATURES_CACHE)
 
         await sseWriter.write({
-          data: {result: `Playback ${isString(args.action) ? args.action : 'action'} executed`, tool: 'control_playback'},
+          data: {
+            result: `Playback ${isString(args.action) ? args.action : 'action'} executed`,
+            tool: 'control_playback',
+          },
           type: 'tool_end',
         })
 

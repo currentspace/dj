@@ -13,52 +13,52 @@
  *   node dist/cli.bundle.js promote
  */
 
-import type { LogContext } from "../lib/logger.js";
+import type {LogContext} from '../lib/logger.js'
 
-import { compileMarvelStatus } from "../lib/marvel-status.js";
-import { findMarvelRoot } from "../lib/paths.js";
-import { generatePromotionReport } from "../lib/promote.js";
-import { loadAllPacks } from "../loaders/pack-loader.js";
+import {compileMarvelStatus} from '../lib/marvel-status.js'
+import {findMarvelRoot} from '../lib/paths.js'
+import {generatePromotionReport} from '../lib/promote.js'
+import {loadAllPacks} from '../loaders/pack-loader.js'
 
-const args = process.argv.slice(2);
+const args = process.argv.slice(2)
 
 async function main(): Promise<void> {
-  const command = args[0];
-  const subcommand = args[1];
+  const command = args[0]
+  const subcommand = args[1]
 
   switch (command) {
-    case "--help":
+    case '--help':
 
-    case "-h":
+    case '-h':
 
-    case "help":
-      usage();
-      break;
-    case "promote":
-      await promote();
-      break;
-    case "query":
+    case 'help':
+      usage()
+      break
+    case 'promote':
+      await promote()
+      break
+    case 'query':
       switch (subcommand) {
-        case "packs":
-          await queryPacks();
-          break;
-        case "status":
-          await queryStatus();
-          break;
+        case 'packs':
+          await queryPacks()
+          break
+        case 'status':
+          await queryStatus()
+          break
         default:
-          console.error(`Unknown query subcommand: ${subcommand}`);
-          usage();
-          process.exit(1);
+          console.error(`Unknown query subcommand: ${subcommand}`)
+          usage()
+          process.exit(1)
       }
-      break;
+      break
 
     default:
       if (!command) {
-        usage();
+        usage()
       } else {
-        console.error(`Unknown command: ${command}`);
-        usage();
-        process.exit(1);
+        console.error(`Unknown command: ${command}`)
+        usage()
+        process.exit(1)
       }
   }
 }
@@ -68,109 +68,99 @@ function makeContext(hookType: string): LogContext {
     daemonId: process.env.MARVEL_DAEMON_ID,
     hookType,
     sessionId: process.env.CLAUDE_SESSION_ID,
-  };
+  }
 }
 
 async function promote(): Promise<void> {
-  const context = makeContext("cli-promote");
-  const report = await generatePromotionReport(context);
+  const context = makeContext('cli-promote')
+  const report = await generatePromotionReport(context)
 
-  const lines: string[] = [];
+  const lines: string[] = []
 
   // Security candidates
   if (report.security.candidates.length > 0) {
-    lines.push(`Security Promotion Candidates (${report.security.candidates.length}):`);
-    lines.push("");
+    lines.push(`Security Promotion Candidates (${report.security.candidates.length}):`)
+    lines.push('')
     for (const c of report.security.candidates) {
-      lines.push(
-        `  - ${c.rule.pattern} (${c.rule.type}) — seen ${c.frequency}x, reason: ${c.rule.reason}`
-      );
+      lines.push(`  - ${c.rule.pattern} (${c.rule.type}) — seen ${c.frequency}x, reason: ${c.rule.reason}`)
     }
     if (report.security.duplicates > 0) {
-      lines.push(`  (${report.security.duplicates} duplicates filtered)`);
+      lines.push(`  (${report.security.duplicates} duplicates filtered)`)
     }
     if (report.security.unsafe > 0) {
-      lines.push(`  (${report.security.unsafe} unsafe patterns excluded)`);
+      lines.push(`  (${report.security.unsafe} unsafe patterns excluded)`)
     }
-    lines.push("");
+    lines.push('')
   } else {
-    lines.push("No security candidates for promotion.");
-    lines.push("");
+    lines.push('No security candidates for promotion.')
+    lines.push('')
   }
 
   // Domain candidates
   if (report.domain.candidates.length > 0) {
     lines.push(
-      `Domain Lesson Candidates (${report.domain.candidates.length} from ${report.domain.totalGuidance} guidance entries):`
-    );
-    lines.push("");
+      `Domain Lesson Candidates (${report.domain.candidates.length} from ${report.domain.totalGuidance} guidance entries):`,
+    )
+    lines.push('')
     for (const c of report.domain.candidates) {
-      lines.push(
-        `  - ${c.suggestedLesson.title} → ${c.suggestedPack} pack (confidence: ${c.confidence})`
-      );
+      lines.push(`  - ${c.suggestedLesson.title} → ${c.suggestedPack} pack (confidence: ${c.confidence})`)
     }
-    lines.push("");
+    lines.push('')
   } else {
-    lines.push(
-      `No domain lesson candidates (${report.domain.totalGuidance} guidance entries reviewed).`
-    );
-    lines.push("");
+    lines.push(`No domain lesson candidates (${report.domain.totalGuidance} guidance entries reviewed).`)
+    lines.push('')
   }
 
-  console.log(lines.join("\n"));
+  console.log(lines.join('\n'))
 }
 
 async function queryPacks(): Promise<void> {
-  const marvelRoot = findMarvelRoot();
+  const marvelRoot = findMarvelRoot()
   if (!marvelRoot) {
-    console.error("Could not find MARVEL root directory.");
-    console.error("Ensure you are in a project with a marvel/ directory.");
-    process.exit(1);
+    console.error('Could not find MARVEL root directory.')
+    console.error('Ensure you are in a project with a marvel/ directory.')
+    process.exit(1)
   }
 
-  const packs = await loadAllPacks(marvelRoot);
+  const packs = await loadAllPacks(marvelRoot)
 
   if (packs.length === 0) {
-    console.log("No packs found.");
-    return;
+    console.log('No packs found.')
+    return
   }
 
-  console.log(`Found ${packs.length} packs:\n`);
+  console.log(`Found ${packs.length} packs:\n`)
 
   for (const pack of packs) {
-    const meta = pack.metadata;
-    const categories = meta.categories?.join(", ") || "none";
-    const extensions = meta.applies_to?.extensions?.join(", ") || "any";
-    const lessonCount = pack.lessons.length;
+    const meta = pack.metadata
+    const categories = meta.categories?.join(', ') || 'none'
+    const extensions = meta.applies_to?.extensions?.join(', ') || 'any'
+    const lessonCount = pack.lessons.length
 
-    console.log(`  ${meta.name}`);
-    console.log(`    Description: ${meta.description || "—"}`);
-    console.log(`    Categories:  ${categories}`);
-    console.log(`    Extensions:  ${extensions}`);
-    console.log(`    Lessons:     ${lessonCount}`);
-    console.log();
+    console.log(`  ${meta.name}`)
+    console.log(`    Description: ${meta.description || '—'}`)
+    console.log(`    Categories:  ${categories}`)
+    console.log(`    Extensions:  ${extensions}`)
+    console.log(`    Lessons:     ${lessonCount}`)
+    console.log()
   }
 }
 
 async function queryStatus(): Promise<void> {
-  const context = makeContext("cli-status");
-  const result = compileMarvelStatus(context);
+  const context = makeContext('cli-status')
+  const result = compileMarvelStatus(context)
 
   // Extract the text from the hook output
-  const specific = result.hookSpecificOutput as
-    | undefined
-    | { additionalContext?: string };
-  const text = specific?.additionalContext;
+  const specific = result.hookSpecificOutput as undefined | {additionalContext?: string}
+  const text = specific?.additionalContext
 
   if (text) {
     // Strip XML tags for clean terminal output
-    const clean = text
-      .replace(/<marvel-status>\n?/, "")
-      .replace(/\n?<\/marvel-status>/, "");
-    console.log(clean);
+    const clean = text.replace(/<marvel-status>\n?/, '').replace(/\n?<\/marvel-status>/, '')
+    console.log(clean)
   } else {
-    console.log("No MARVEL session status available.");
-    console.log("Ensure the MARVEL daemon is running and a session is active.");
+    console.log('No MARVEL session status available.')
+    console.log('Ensure the MARVEL daemon is running and a session is active.')
   }
 }
 
@@ -182,10 +172,10 @@ Usage:
   marvel-cli query packs      List loaded packs
   marvel-cli promote          Find promotion candidates
   marvel-cli help             Show this help
-`);
+`)
 }
 
 main().catch((err: unknown) => {
-  console.error("MARVEL CLI error:", err instanceof Error ? err.message : String(err));
-  process.exit(1);
-});
+  console.error('MARVEL CLI error:', err instanceof Error ? err.message : String(err))
+  process.exit(1)
+})

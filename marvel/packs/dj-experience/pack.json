@@ -4,7 +4,7 @@
   "owner": "team",
   "description": "Auto DJ experience design patterns, Opus 4.6 DJ brain architecture, narration voice, progressive disclosure, and playback-first UX",
   "categories": ["ux", "dj", "narration", "experience", "progressive-disclosure"],
-  "applies_to": { "extensions": [".tsx", ".ts", ".css"] },
+  "applies_to": {"extensions": [".tsx", ".ts", ".css"]},
   "sensitive_paths": [
     "**/features/dj/**",
     "**/stores/djStore**",

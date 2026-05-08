@@ -130,17 +130,11 @@ test.describe('Chat Flow', () => {
 
       // Analyze mode
       await chatPage.setMode('analyze')
-      await expect(page.locator(chatPage.chatInput)).toHaveAttribute(
-        'placeholder',
-        /Ask me about any song/,
-      )
+      await expect(page.locator(chatPage.chatInput)).toHaveAttribute('placeholder', /Ask me about any song/)
 
       // Create mode
       await chatPage.setMode('create')
-      await expect(page.locator(chatPage.chatInput)).toHaveAttribute(
-        'placeholder',
-        /Describe the playlist/,
-      )
+      await expect(page.locator(chatPage.chatInput)).toHaveAttribute('placeholder', /Describe the playlist/)
 
       // DJ mode
       await chatPage.setMode('dj')

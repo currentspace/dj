@@ -10,14 +10,14 @@
  * - Response caching to minimize API calls
  */
 
-import { afterAll, beforeAll } from 'vitest'
+import {afterAll, beforeAll} from 'vitest'
 
 // Get native globals that were stored before mocking in test-setup.ts
- 
+
 const nativeFetch = (global as any).__nativeFetch as typeof fetch
- 
+
 const nativeSetTimeout = (global as any).__nativeSetTimeout as typeof setTimeout
- 
+
 const nativeClearTimeout = (global as any).__nativeClearTimeout as typeof clearTimeout
 
 // Restore native globals for contract tests (they need real network access and timers)
@@ -70,7 +70,7 @@ export const RATE_LIMITS = {
 /**
  * In-memory cache for API responses (minimize repeated API calls)
  */
-const responseCache = new Map<string, { data: unknown; timestamp: number }>()
+const responseCache = new Map<string, {data: unknown; timestamp: number}>()
 
 /**
  * Cache TTL (5 minutes - contract tests should run quickly)
@@ -121,7 +121,7 @@ function validateEnvironment(): void {
   if (missing.length > 0) {
     console.warn('\n⚠️  Contract tests require API credentials:')
     console.warn('Missing environment variables:')
-    missing.forEach((msg) => console.warn(`  - ${msg}`))
+    missing.forEach(msg => console.warn(`  - ${msg}`))
     console.warn('\nTests will skip if credentials are not available.\n')
   }
 }

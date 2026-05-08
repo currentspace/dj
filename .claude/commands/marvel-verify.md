@@ -27,6 +27,7 @@ Run these commands in order:
 For each target:
 
 1. Announce which target is running:
+
    ```
    Running verification [1/4]: lint...
    ```
@@ -46,12 +47,14 @@ For each target:
 ### Failure Handling
 
 **Without `--fix`:**
+
 - Stop at the first failure.
 - Display the full error output.
 - Analyze the root cause and explain what went wrong.
 - Propose specific fixes but do NOT apply them.
 
 **With `--fix`:**
+
 - On failure, analyze the root cause.
 - Apply the fix automatically.
 - Re-run the failed verification target.

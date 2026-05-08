@@ -288,9 +288,9 @@ export const useAuthStore = create<AuthState>()(
       }
     },
 
-    setError: (error) => set({error}),
+    setError: error => set({error}),
 
-    setLoading: (isLoading) => set({isLoading}),
+    setLoading: isLoading => set({isLoading}),
 
     setToken: (token, expiresIn) => {
       const expiresAt = expiresIn ? Date.now() + expiresIn * 1000 : null
@@ -308,7 +308,7 @@ export const useAuthStore = create<AuthState>()(
       }
     },
 
-    setValidating: (isValidating) => set({isValidating}),
+    setValidating: isValidating => set({isValidating}),
 
     token: initial.token,
 
@@ -364,7 +364,7 @@ export const useAuthStore = create<AuthState>()(
         return false
       }
     },
-  }))
+  })),
 )
 
 // =============================================================================
@@ -403,7 +403,7 @@ export function processOAuthCallback(): void {
 // =============================================================================
 
 if (typeof window !== 'undefined') {
-  window.addEventListener('storage', (event) => {
+  window.addEventListener('storage', event => {
     if (event.key !== STORAGE_KEYS.SPOTIFY_TOKEN_DATA) return
 
     if (!event.newValue) {

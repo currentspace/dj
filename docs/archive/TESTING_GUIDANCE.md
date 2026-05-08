@@ -15,6 +15,7 @@
 ### The Golden Rule
 
 **Before writing a test, ask:**
+
 1. What **complicated logic** does this test validate?
 2. If I remove this test, what **real bug** would I miss?
 3. Am I testing **real behavior** or just **mock behavior**?
@@ -82,12 +83,12 @@ Is the dependency external (API, database, file system)?
 
 ## The Test Type Matrix
 
-| Test Type | When to Use | Mocking Level | Run Frequency | Example |
-|-----------|-------------|---------------|---------------|---------|
-| **Unit** | Pure logic, algorithms | 0-20% | Every commit | Token bucket refill |
-| **Integration** | Service interactions | 0-30% | On merge | API → Service → Cache |
-| **Contract** | API compatibility | 0% | Nightly | Spotify schema validation |
-| **E2E** | User workflows | 0-10% | Pre-release | Login → Analyze → Create |
+| Test Type       | When to Use            | Mocking Level | Run Frequency | Example                   |
+| --------------- | ---------------------- | ------------- | ------------- | ------------------------- |
+| **Unit**        | Pure logic, algorithms | 0-20%         | Every commit  | Token bucket refill       |
+| **Integration** | Service interactions   | 0-30%         | On merge      | API → Service → Cache     |
+| **Contract**    | API compatibility      | 0%            | Nightly       | Spotify schema validation |
+| **E2E**         | User workflows         | 0-10%         | Pre-release   | Login → Analyze → Create  |
 
 ---
 
@@ -96,25 +97,28 @@ Is the dependency external (API, database, file system)?
 ### 🚨 Anti-Pattern #1: "Testing Your Own Mock"
 
 **BAD:**
+
 ```typescript
 // Step 1: Tell mock what to return
 global.fetch = vi.fn().mockResolvedValue({
-  json: () => Promise.resolve({ bpm: 120 })
+  json: () => Promise.resolve({bpm: 120}),
 })
 
 // Step 2: Call service
 const result = await service.enrichTrack(track)
 
 // Step 3: Verify mock returned what you configured ❌
-expect(result.bpm).toBe(120)  // You're testing the mock!
+expect(result.bpm).toBe(120) // You're testing the mock!
 ```
 
 **Why it's bad:**
+
 - Verifies mock configuration, not real behavior
 - When API changes, test still passes
 - False confidence in code quality
 
 **GOOD:**
+
 ```typescript
 // Use REAL API in integration test
 const result = await service.enrichTrack(realTrack)
@@ -135,6 +139,7 @@ expect(() => DeezerTrackSchema.parse(data)).not.toThrow()
 ### 🚨 Anti-Pattern #2: "Testing Library Behavior"
 
 **BAD:**
+
 ```typescript
 describe('SpotifyTrackSchema', () => {
   it('validates track object', () => {
@@ -146,11 +151,13 @@ describe('SpotifyTrackSchema', () => {
 ```
 
 **Why it's bad:**
+
 - Tests Zod library, not your code
 - Doesn't validate real API compatibility
 - No value for catching bugs
 
 **GOOD:**
+
 ```typescript
 describe('Spotify API Contract', () => {
   it('real track response matches schema', async () => {
@@ -175,6 +182,7 @@ describe('Spotify API Contract', () => {
 ### 🚨 Anti-Pattern #3: "Testing Simulations Instead of Real Code"
 
 **BAD:**
+
 ```typescript
 // Create a SIMPLIFIED version of your handler
 async function simulateChatStreamHandler(context, client) {
@@ -186,29 +194,30 @@ async function simulateChatStreamHandler(context, client) {
 
 // Test the simulation
 it('validates request', async () => {
-  await expect(simulateChatStreamHandler(mockContext, mockClient))
-    .rejects.toThrow('Required')
+  await expect(simulateChatStreamHandler(mockContext, mockClient)).rejects.toThrow('Required')
   // ↑ Real handler could be broken and test passes!
 })
 ```
 
 **Why it's bad:**
+
 - Tests your simulation, not real code
 - Real handler can diverge from simulation
 - False confidence
 
 **GOOD:**
+
 ```typescript
 // Import REAL handler
-import { chatStreamRouter } from './routes/chat-stream'
+import {chatStreamRouter} from './routes/chat-stream'
 
 it('validates request', async () => {
   const response = await chatStreamRouter.fetch(
     new Request('http://localhost/api/chat-stream/message', {
       method: 'POST',
-      body: JSON.stringify({})  // Missing required field
+      body: JSON.stringify({}), // Missing required field
     }),
-    mockEnv
+    mockEnv,
   )
 
   expect(response.status).toBe(400)
@@ -221,6 +230,7 @@ it('validates request', async () => {
 ### 🚨 Anti-Pattern #4: "100% Mocking in Integration Tests"
 
 **BAD:**
+
 ```typescript
 describe('Full Analysis Pipeline', () => {
   it('analyzes playlist', async () => {
@@ -231,18 +241,20 @@ describe('Full Analysis Pipeline', () => {
 
     const result = await analyzePlaylist('id')
 
-    expect(result.bpm.avg).toBe(120)  // All mocked!
+    expect(result.bpm.avg).toBe(120) // All mocked!
     // ↑ Not testing real integration!
   })
 })
 ```
 
 **Why it's bad:**
+
 - Claims to test integration, but everything is mocked
 - Doesn't test real service interactions
 - Doesn't validate data flows
 
 **GOOD:**
+
 ```typescript
 describe('Full Analysis Pipeline Integration', () => {
   it('analyzes playlist with real APIs', async () => {
@@ -270,30 +282,38 @@ describe('Full Analysis Pipeline Integration', () => {
 ### 1. Unit Tests (Pure Logic)
 
 **When to write:**
+
 - Algorithms (token bucket, rate limiting)
 - Data transformations (tag aggregation)
 - Pure functions (no side effects)
 - State machines
 
 **Mocking guidance:**
+
 - Mock: External APIs, databases, file system
 - Don't mock: Pure functions, simple utilities
 - Keep mocking <20%
 
 **Example (GOOD):**
+
 ```typescript
 describe('Tag Aggregation', () => {
   it('aggregates tags from multiple tracks', () => {
     const tracks = [
-      { tags: [{ name: 'rock', count: 100 }] },
-      { tags: [{ name: 'rock', count: 50 }, { name: 'classic', count: 75 }] }
+      {tags: [{name: 'rock', count: 100}]},
+      {
+        tags: [
+          {name: 'rock', count: 50},
+          {name: 'classic', count: 75},
+        ],
+      },
     ]
 
     const aggregated = LastFmService.aggregateTags(tracks)
 
     expect(aggregated).toEqual([
-      { tag: 'rock', count: 150 },
-      { tag: 'classic', count: 75 }
+      {tag: 'rock', count: 150},
+      {tag: 'classic', count: 75},
     ])
     // ↑ Tests real algorithm with real data structures
   })
@@ -305,17 +325,20 @@ describe('Tag Aggregation', () => {
 ### 2. Integration Tests (Service Interactions)
 
 **When to write:**
+
 - Services calling external APIs
 - Services interacting with each other
 - Cache behavior (hit/miss/expiry)
 - Rate limiting under load
 
 **Mocking guidance:**
+
 - Mock: NOTHING (or <10%)
 - Use: Real APIs with test credentials
 - Run: Slower, on merge to main
 
 **Example (GOOD):**
+
 ```typescript
 describe('AudioEnrichmentService Integration', () => {
   it('enriches track with real Deezer API', async () => {
@@ -344,16 +367,19 @@ describe('AudioEnrichmentService Integration', () => {
 ### 3. Contract Tests (API Compatibility)
 
 **When to write:**
+
 - Validating external API schemas
 - Catching API breaking changes
 - Documenting API expectations
 
 **Mocking guidance:**
+
 - Mock: NOTHING (0%)
 - Use: Real APIs exclusively
 - Run: Nightly (rate limit friendly)
 
 **Example (GOOD):**
+
 ```typescript
 describe('Deezer API Contract', () => {
   it('track response matches DeezerTrackSchema', async () => {
@@ -390,21 +416,24 @@ describe('Deezer API Contract', () => {
 ### 4. E2E Tests (User Workflows)
 
 **When to write:**
+
 - Critical user journeys (login → analyze → create)
 - Multi-step workflows
 - Golden paths
 - Error recovery flows
 
 **Mocking guidance:**
+
 - Mock: Almost nothing (<10%)
 - Use: Real frontend + backend + APIs
 - Run: Pre-release (slowest)
 
 **Example (GOOD):**
-```typescript
-import { test, expect } from '@playwright/test'
 
-test('user analyzes playlist end-to-end', async ({ page }) => {
+```typescript
+import {test, expect} from '@playwright/test'
+
+test('user analyzes playlist end-to-end', async ({page}) => {
   // Real browser automation
   await page.goto('http://localhost:3000')
 
@@ -418,9 +447,9 @@ test('user analyzes playlist end-to-end', async ({ page }) => {
   await page.click('button[type="submit"]')
 
   // Real streaming response
-  await expect(page.getByText(/analyzing/i)).toBeVisible({ timeout: 5000 })
-  await expect(page.getByText(/analyze_playlist/)).toBeVisible({ timeout: 10000 })
-  await expect(page.getByText(/bpm/i)).toBeVisible({ timeout: 30000 })
+  await expect(page.getByText(/analyzing/i)).toBeVisible({timeout: 5000})
+  await expect(page.getByText(/analyze_playlist/)).toBeVisible({timeout: 10000})
+  await expect(page.getByText(/bpm/i)).toBeVisible({timeout: 30000})
 
   // Verify persistence
   await page.reload()
@@ -436,24 +465,28 @@ test('user analyzes playlist end-to-end', async ({ page }) => {
 Before submitting a test file, verify:
 
 ### ✅ Value Check
+
 - [ ] Tests complicated logic, not simple pass-through
 - [ ] Tests real behavior, not mock behavior
 - [ ] Tests business rules, not library behavior
 - [ ] Removing test would allow real bugs to slip through
 
 ### ✅ Mocking Check
+
 - [ ] Mocking is <20% for unit tests (or test is wrong type)
 - [ ] Integration tests use real APIs
 - [ ] Contract tests use real APIs (0% mocking)
 - [ ] E2E tests use real frontend + backend
 
 ### ✅ Clarity Check
+
 - [ ] Test name describes WHAT and WHY
 - [ ] Failure message clearly indicates problem
 - [ ] Test has single responsibility
 - [ ] Setup/teardown is clear and isolated
 
 ### ✅ Reliability Check
+
 - [ ] Test doesn't depend on test order
 - [ ] Test cleans up after itself
 - [ ] Test doesn't have race conditions
@@ -466,24 +499,27 @@ Before submitting a test file, verify:
 ### Example 1: Service Testing
 
 **❌ BAD (Testing Mock):**
+
 ```typescript
 describe('LastFmService', () => {
   it('fetches track info', async () => {
     global.fetch = vi.fn().mockResolvedValue({
-      json: () => Promise.resolve({
-        listeners: 10000,
-        playcount: 50000
-      })
+      json: () =>
+        Promise.resolve({
+          listeners: 10000,
+          playcount: 50000,
+        }),
     })
 
     const info = await service.getTrackInfo('Artist', 'Track')
 
-    expect(info.listeners).toBe(10000)  // Testing mock!
+    expect(info.listeners).toBe(10000) // Testing mock!
   })
 })
 ```
 
 **✅ GOOD (Testing Real Integration):**
+
 ```typescript
 describe('LastFmService Integration', () => {
   it('fetches real track info from Last.fm API', async () => {
@@ -491,7 +527,7 @@ describe('LastFmService Integration', () => {
     const info = await service.getTrackInfo('Queen', 'Bohemian Rhapsody')
 
     // Verify real data characteristics
-    expect(info.listeners).toBeGreaterThan(1000000)  // Popular track!
+    expect(info.listeners).toBeGreaterThan(1000000) // Popular track!
     expect(info.playcount).toBeGreaterThan(info.listeners)
     expect(info.topTags.length).toBeGreaterThan(0)
     expect(info.topTags[0]).toHaveProperty('name')
@@ -508,13 +544,14 @@ describe('LastFmService Integration', () => {
 ### Example 2: Schema Testing
 
 **❌ BAD (Testing Zod):**
+
 ```typescript
 describe('SpotifySchemas', () => {
   it('validates track', () => {
     const track = {
       id: '123',
       name: 'Song',
-      artists: [{ id: 'a1', name: 'Artist' }]
+      artists: [{id: 'a1', name: 'Artist'}],
     }
 
     expect(() => SpotifyTrackSchema.parse(track)).not.toThrow()
@@ -524,14 +561,14 @@ describe('SpotifySchemas', () => {
 ```
 
 **✅ GOOD (Testing API Contract):**
+
 ```typescript
 describe('Spotify API Contract', () => {
   it('real track matches SpotifyTrackSchema', async () => {
     // Use REAL Spotify API
-    const response = await fetch(
-      'https://api.spotify.com/v1/tracks/6rqhFgbbKwnb9MLmUQDhG6',
-      { headers: { Authorization: `Bearer ${token}` } }
-    )
+    const response = await fetch('https://api.spotify.com/v1/tracks/6rqhFgbbKwnb9MLmUQDhG6', {
+      headers: {Authorization: `Bearer ${token}`},
+    })
     const track = await response.json()
 
     // Validate real response
@@ -552,6 +589,7 @@ describe('Spotify API Contract', () => {
 ### Example 3: Route Handler Testing
 
 **❌ BAD (Testing Simulation):**
+
 ```typescript
 describe('Chat Stream Route', () => {
   // Create simplified simulation
@@ -569,17 +607,18 @@ describe('Chat Stream Route', () => {
 ```
 
 **✅ GOOD (Testing Real Handler):**
+
 ```typescript
 describe('Chat Stream Route Integration', () => {
   it('validates request with real handler', async () => {
     // Import REAL route handler
-    const { chatStreamRouter } = await import('./routes/chat-stream')
+    const {chatStreamRouter} = await import('./routes/chat-stream')
 
     // Create real request
     const request = new Request('http://localhost/api/chat-stream/message', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({})  // Missing required field
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({}), // Missing required field
     })
 
     // Call REAL handler
@@ -599,16 +638,18 @@ describe('Chat Stream Route Integration', () => {
 ### Acceptable Mocking Scenarios
 
 **1. External Services You Don't Control**
+
 ```typescript
 // OK to mock in unit tests
 const emailService = {
-  send: vi.fn().mockResolvedValue({ sent: true })
+  send: vi.fn().mockResolvedValue({sent: true}),
 }
 
 // But ALSO write integration test with real email (test mode)
 ```
 
 **2. Slow/Expensive Operations in Unit Tests**
+
 ```typescript
 // OK to mock database in unit tests
 const db = {
@@ -619,6 +660,7 @@ const db = {
 ```
 
 **3. Time-Dependent Logic**
+
 ```typescript
 // OK to mock Date.now() for time-dependent tests
 vi.spyOn(Date, 'now').mockReturnValue(1234567890)
@@ -627,6 +669,7 @@ vi.spyOn(Date, 'now').mockReturnValue(1234567890)
 ```
 
 **4. Non-Deterministic Behavior**
+
 ```typescript
 // OK to mock random for predictable tests
 vi.spyOn(Math, 'random').mockReturnValue(0.5)
@@ -637,6 +680,7 @@ vi.spyOn(Math, 'random').mockReturnValue(0.5)
 ### The Key Rule for Mocking
 
 **If you mock in unit tests:**
+
 - ✅ ALSO write integration tests with real implementation
 - ✅ Keep unit tests fast and focused
 - ✅ Keep integration tests comprehensive and realistic
@@ -704,6 +748,7 @@ describe('User Journey: FeatureName', () => {
 ### Q: "How much mocking is too much?"
 
 **A:** If >50% of your test is mock setup, you're probably testing mocks. Ask:
+
 - What real logic am I validating?
 - Would integration test be more valuable?
 - Am I just testing that mocks work?
@@ -713,6 +758,7 @@ describe('User Journey: FeatureName', () => {
 ### Q: "Should I mock internal services?"
 
 **A:** Depends on the test type:
+
 - **Unit test:** Yes, mock internal services
 - **Integration test:** No, use real internal services
 - **E2E test:** No, everything should be real
@@ -722,6 +768,7 @@ describe('User Journey: FeatureName', () => {
 ### Q: "When should I write contract tests?"
 
 **A:** For ALL external APIs you depend on:
+
 - Spotify, Deezer, Last.fm, MusicBrainz
 - Anthropic Claude API
 - Any external service where schema matters
@@ -733,6 +780,7 @@ Run nightly to catch API changes early.
 ### Q: "How do I know if a test has value?"
 
 **A:** Ask the "deletion test":
+
 1. Imagine deleting this test
 2. What real bug would you miss?
 3. If answer is "none" or "mock behavior" → delete the test
@@ -742,6 +790,7 @@ Run nightly to catch API changes early.
 ### Q: "What if external APIs are rate-limited?"
 
 **A:** Layer your testing:
+
 - **Unit tests:** Mock (fast, run every commit)
 - **Integration tests:** Real APIs (medium, run on merge)
 - **Contract tests:** Real APIs (slow, run nightly)
@@ -773,6 +822,6 @@ If your test doesn't do that, it's testing theater, not testing value.
 
 ---
 
-**When in doubt, ask:** *"Am I testing real behavior or just testing my mocks?"*
+**When in doubt, ask:** _"Am I testing real behavior or just testing my mocks?"_
 
 If you're testing mocks, **stop and write an integration test instead**.

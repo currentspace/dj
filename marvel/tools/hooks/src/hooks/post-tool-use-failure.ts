@@ -7,38 +7,38 @@
  * Tracks failed tool calls as complement to post-tool-use.
  */
 
-import * as path from "path";
+import * as path from 'path'
 
-import type { PostToolUseFailureHookInput, SyncHookJSONOutput } from "../sdk-types.js";
-import type { RunState, ToolCallRecord } from "../types.js";
+import type {PostToolUseFailureHookInput, SyncHookJSONOutput} from '../sdk-types.js'
+import type {RunState, ToolCallRecord} from '../types.js'
 
-import { safeAppendFile, safeReadJson, safeWriteJson } from "../lib/file-ops.js";
-import { buildHookContext, logDebug } from "../lib/logger.js";
-import { findRunDir } from "../lib/paths.js";
-import { getInputSummary, summarize } from "../lib/tool-summary.js";
+import {safeAppendFile, safeReadJson, safeWriteJson} from '../lib/file-ops.js'
+import {buildHookContext, logDebug} from '../lib/logger.js'
+import {findRunDir} from '../lib/paths.js'
+import {getInputSummary, summarize} from '../lib/tool-summary.js'
 
 export async function handlePostToolUseFailure(input: PostToolUseFailureHookInput): Promise<SyncHookJSONOutput> {
-  const context = buildHookContext("post-tool-use-failure", input);
+  const context = buildHookContext('post-tool-use-failure', input)
 
-  const toolName = input.tool_name;
+  const toolName = input.tool_name
   if (!toolName) {
-    return {};
+    return {}
   }
 
-  const runDir = findRunDir();
+  const runDir = findRunDir()
   if (!runDir) {
-    logDebug("Run directory not found, skipping failure recording", context);
-    return {};
+    logDebug('Run directory not found, skipping failure recording', context)
+    return {}
   }
 
-  const runJsonPath = path.join(runDir, "run.json");
-  const runState = safeReadJson<RunState>(runJsonPath, context);
+  const runJsonPath = path.join(runDir, 'run.json')
+  const runState = safeReadJson<RunState>(runJsonPath, context)
   if (!runState) {
-    logDebug("Run state not found, skipping failure recording", context);
-    return {};
+    logDebug('Run state not found, skipping failure recording', context)
+    return {}
   }
 
-  const sequence = (runState.toolCallCount || 0) + 1;
+  const sequence = (runState.toolCallCount || 0) + 1
 
   const record: ToolCallRecord = {
     input_summary: getInputSummary(input),
@@ -47,26 +47,26 @@ export async function handlePostToolUseFailure(input: PostToolUseFailureHookInpu
     success: false,
     timestamp: new Date().toISOString(),
     tool: toolName,
-  };
-
-  // Append to tool_calls.jsonl
-  const tracePath = path.join(runDir, "tool_calls.jsonl");
-  safeAppendFile(tracePath, JSON.stringify(record) + "\n", context);
-
-  // Update run state
-  runState.toolCallCount = sequence;
-  runState.recentActivity = runState.recentActivity || [];
-  runState.recentActivity.push({
-    data: { input_summary: record.input_summary, tool: toolName },
-    timestamp: record.timestamp,
-    type: "tool_failure",
-  });
-
-  if (runState.recentActivity.length > 20) {
-    runState.recentActivity = runState.recentActivity.slice(-20);
   }
 
-  safeWriteJson(runJsonPath, runState, context);
+  // Append to tool_calls.jsonl
+  const tracePath = path.join(runDir, 'tool_calls.jsonl')
+  safeAppendFile(tracePath, JSON.stringify(record) + '\n', context)
 
-  return {};
+  // Update run state
+  runState.toolCallCount = sequence
+  runState.recentActivity = runState.recentActivity || []
+  runState.recentActivity.push({
+    data: {input_summary: record.input_summary, tool: toolName},
+    timestamp: record.timestamp,
+    type: 'tool_failure',
+  })
+
+  if (runState.recentActivity.length > 20) {
+    runState.recentActivity = runState.recentActivity.slice(-20)
+  }
+
+  safeWriteJson(runJsonPath, runState, context)
+
+  return {}
 }

@@ -57,19 +57,23 @@ Insert verification checkpoints at logical boundaries:
 ## Implementation Plan: <title>
 
 ### Context
+
 <Brief summary of the goal and constraints>
 
 ### Affected Areas
+
 - <module/file>: <what changes>
 - ...
 
 ### Risks
+
 - <risk description> — Mitigation: <approach>
 - ...
 
 ### Steps
 
 #### Step 1: <title>
+
 - **What**: ...
 - **Where**: ...
 - **Why**: ...
@@ -77,9 +81,11 @@ Insert verification checkpoints at logical boundaries:
 - **Verify**: ...
 
 #### Step 2: <title>
+
 - ...
 
 ### Verification Checkpoints
+
 - [ ] After Step N: <verification command>
 - [ ] Final: full verification suite
 ```

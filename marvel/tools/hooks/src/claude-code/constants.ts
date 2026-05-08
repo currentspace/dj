@@ -19,7 +19,7 @@ export const CLAUDE_CODE_VERSION = {
   minor: 1,
   patch: 38,
   releaseDate: '2026-02-01',
-} as const;
+} as const
 
 /**
  * Tool names as they appear in Claude Code tool calls
@@ -59,7 +59,7 @@ export const TOOL_NAMES = {
   webSearch: 'WebSearch',
 
   write: 'Write',
-} as const;
+} as const
 
 /**
  * Tool parameter names
@@ -108,7 +108,7 @@ export const TOOL_PARAMS = {
     content: 'content',
     filePath: 'file_path',
   },
-} as const;
+} as const
 
 /**
  * Hook types supported by Claude Code
@@ -129,7 +129,7 @@ export const HOOK_TYPES = {
   taskCompleted: 'TaskCompleted',
   teammateIdle: 'TeammateIdle',
   userPromptSubmit: 'UserPromptSubmit',
-} as const;
+} as const
 
 /**
  * Hook input/output format expectations
@@ -151,7 +151,7 @@ export const HOOK_FORMAT = {
   },
   // Hook returns JSON on stdout
   outputFormat: 'json',
-} as const;
+} as const
 
 /**
  * Agent types available via Task tool
@@ -162,7 +162,7 @@ export const AGENT_TYPES = {
   generalPurpose: 'general-purpose',
   plan: 'Plan',
   // Note: These are built-in agent names
-} as const;
+} as const
 
 /**
  * Permission format in settings.json
@@ -172,7 +172,7 @@ export const PERMISSION_FORMAT = {
   examples: ['Bash(pnpm:*)', 'Bash(git:*)', 'Read(/tmp/**)', 'WebFetch(domain:github.com)'],
   // Permission patterns use this format
   pattern: 'Tool(pattern:*)',
-} as const;
+} as const
 
 /**
  * Settings.json structure expectations
@@ -185,7 +185,7 @@ export const SETTINGS_STRUCTURE = {
   // Permission sub-keys
   permissionsAllow: 'allow',
   permissionsDeny: 'deny',
-} as const;
+} as const
 
 /**
  * Token budget expectations
@@ -197,32 +197,32 @@ export const TOKEN_BUDGET = {
   marvelOverhead: 5000,
   // Approximate Claude Code system prompt size
   systemPromptTokens: 15000,
-} as const;
+} as const
 
 /**
  * Get all hook types as an array
  */
 export function getAllHookTypes(): string[] {
-  return Object.values(HOOK_TYPES);
+  return Object.values(HOOK_TYPES)
 }
 
 /**
  * Get all tool names as an array
  */
 export function getAllToolNames(): string[] {
-  return Object.values(TOOL_NAMES);
+  return Object.values(TOOL_NAMES)
 }
 
 /**
  * Check if a string is a known hook type
  */
 export function isKnownHookType(type: string): boolean {
-  return getAllHookTypes().includes(type);
+  return getAllHookTypes().includes(type)
 }
 
 /**
  * Check if a string is a known tool name
  */
 export function isKnownTool(name: string): boolean {
-  return getAllToolNames().includes(name);
+  return getAllToolNames().includes(name)
 }

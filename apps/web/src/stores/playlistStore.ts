@@ -53,7 +53,7 @@ interface PlaylistState {
 export const usePlaylistStore = create<PlaylistState>()(
   subscribeWithSelector((set, get) => ({
     addMessage: (playlistId, message) => {
-      set((state) => {
+      set(state => {
         const newMap = new Map(state.conversationsByPlaylist)
         const messages = newMap.get(playlistId) ?? []
 
@@ -71,8 +71,8 @@ export const usePlaylistStore = create<PlaylistState>()(
       set({conversationsByPlaylist: new Map()})
     },
 
-    clearConversation: (playlistId) => {
-      set((state) => {
+    clearConversation: playlistId => {
+      set(state => {
         const newMap = new Map(state.conversationsByPlaylist)
         newMap.delete(playlistId)
         return {conversationsByPlaylist: newMap}
@@ -83,7 +83,7 @@ export const usePlaylistStore = create<PlaylistState>()(
 
     selectedPlaylist: null,
 
-    selectPlaylist: (playlist) => {
+    selectPlaylist: playlist => {
       const current = get().selectedPlaylist
       if (current?.id === playlist?.id) return // No change
 
@@ -96,7 +96,7 @@ export const usePlaylistStore = create<PlaylistState>()(
     },
 
     updateLastMessage: (playlistId, content) => {
-      set((state) => {
+      set(state => {
         const newMap = new Map(state.conversationsByPlaylist)
         const messages = newMap.get(playlistId) ?? []
 
@@ -105,10 +105,7 @@ export const usePlaylistStore = create<PlaylistState>()(
         const lastMessage = messages[messages.length - 1]
         if (lastMessage.role === 'assistant') {
           // Update existing assistant message
-          newMap.set(playlistId, [
-            ...messages.slice(0, -1),
-            {...lastMessage, content},
-          ])
+          newMap.set(playlistId, [...messages.slice(0, -1), {...lastMessage, content}])
         } else {
           // Add new assistant message
           newMap.set(playlistId, [...messages, {content, role: 'assistant' as const}])
@@ -117,7 +114,7 @@ export const usePlaylistStore = create<PlaylistState>()(
         return {conversationsByPlaylist: newMap}
       })
     },
-  }))
+  })),
 )
 
 // =============================================================================
@@ -128,10 +125,7 @@ export const usePlaylistStore = create<PlaylistState>()(
  * Removes oldest conversations when exceeding MAX_CONVERSATIONS.
  * Keeps the most recently accessed conversations.
  */
-function cleanupOldConversations(
-  get: () => PlaylistState,
-  set: (partial: Partial<PlaylistState>) => void
-) {
+function cleanupOldConversations(get: () => PlaylistState, set: (partial: Partial<PlaylistState>) => void) {
   const {conversationsByPlaylist, selectedPlaylist} = get()
 
   if (conversationsByPlaylist.size <= MAX_CONVERSATIONS) return
@@ -141,9 +135,7 @@ function cleanupOldConversations(
   const currentId = selectedPlaylist?.id
 
   // Remove oldest conversations (first in Map = oldest)
-  const toRemove = playlistIds
-    .filter((id) => id !== currentId)
-    .slice(0, conversationsByPlaylist.size - MAX_CONVERSATIONS)
+  const toRemove = playlistIds.filter(id => id !== currentId).slice(0, conversationsByPlaylist.size - MAX_CONVERSATIONS)
 
   if (toRemove.length === 0) return
 
@@ -179,10 +171,7 @@ export const selectCurrentMessages = (state: PlaylistState): ChatMessage[] => {
  * @example
  * const messages = usePlaylistStore((s) => selectMessagesForPlaylist(s, playlistId))
  */
-export const selectMessagesForPlaylist = (
-  state: PlaylistState,
-  playlistId: string
-): ChatMessage[] => {
+export const selectMessagesForPlaylist = (state: PlaylistState, playlistId: string): ChatMessage[] => {
   return state.conversationsByPlaylist.get(playlistId) ?? []
 }
 
@@ -192,10 +181,7 @@ export const selectMessagesForPlaylist = (
  * @example
  * const hasHistory = usePlaylistStore((s) => selectHasConversation(s, playlistId))
  */
-export const selectHasConversation = (
-  state: PlaylistState,
-  playlistId: string
-): boolean => {
+export const selectHasConversation = (state: PlaylistState, playlistId: string): boolean => {
   const messages = state.conversationsByPlaylist.get(playlistId)
   return messages !== undefined && messages.length > 0
 }

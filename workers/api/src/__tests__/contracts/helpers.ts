@@ -5,17 +5,17 @@
  * match our schema expectations.
  */
 
-import type { ZodSchema } from 'zod'
+import type {ZodSchema} from 'zod'
 
-import { config } from 'dotenv'
-import { resolve } from 'path'
+import {config} from 'dotenv'
+import {resolve} from 'path'
 
-import { cacheResponse, getCachedResponse } from './setup'
+import {cacheResponse, getCachedResponse} from './setup'
 
 // Load environment variables from .dev.vars (Cloudflare Workers format)
-config({ path: resolve(__dirname, '../../../../.dev.vars') })
+config({path: resolve(__dirname, '../../../../.dev.vars')})
 // Also try .env at project root
-config({ path: resolve(__dirname, '../../../../../.env') })
+config({path: resolve(__dirname, '../../../../../.env')})
 
 /**
  * Type guard to narrow `unknown` from response.json() to Record<string, unknown>.
@@ -77,7 +77,7 @@ export async function getSpotifyAccessToken(): Promise<null | string> {
     const raw: unknown = await response.json()
     const data = asRecord(raw)
     cachedSpotifyToken = String(data.access_token)
-    tokenExpiresAt = Date.now() + (Number(data.expires_in) * 1000)
+    tokenExpiresAt = Date.now() + Number(data.expires_in) * 1000
 
     console.log('✅ Spotify access token obtained (expires in 1 hour)')
     return cachedSpotifyToken
@@ -109,11 +109,7 @@ const lastRequestTime = new Map<string, number>()
  * // Throws with detailed error if validation fails
  * ```
  */
-export function assertSchemaMatches<T>(
-  schema: ZodSchema<T>,
-  data: unknown,
-  schemaName: string
-): asserts data is T {
+export function assertSchemaMatches<T>(schema: ZodSchema<T>, data: unknown, schemaName: string): asserts data is T {
   const result = validateSchema(schema, data)
 
   if (!result.success) {
@@ -142,11 +138,7 @@ export function assertSchemaMatches<T>(
  * )
  * ```
  */
-export async function cachedFetch(
-  url: string,
-  delay: number,
-  options?: RequestInit
-): Promise<unknown> {
+export async function cachedFetch(url: string, delay: number, options?: RequestInit): Promise<unknown> {
   // Check cache first
   const cached = getCachedResponse(url)
   if (cached !== null) {
@@ -213,11 +205,7 @@ export function getTestCredentials() {
  * @param errors - Validation errors
  * @param sampleData - Optional sample of actual data
  */
-export function logSchemaFailure(
-  schemaName: string,
-  errors: string[],
-  sampleData?: unknown
-): void {
+export function logSchemaFailure(schemaName: string, errors: string[], sampleData?: unknown): void {
   console.error(`\n❌ ${schemaName} validation failed:`)
   console.error(formatValidationErrors(errors))
 
@@ -250,11 +238,7 @@ export function logSchemaFailure(
  * )
  * ```
  */
-export async function rateLimitedFetch(
-  url: string,
-  delay: number,
-  options?: RequestInit
-): Promise<Response> {
+export async function rateLimitedFetch(url: string, delay: number, options?: RequestInit): Promise<Response> {
   // Extract domain for rate limiting key
   const domain = new URL(url).hostname
 
@@ -265,7 +249,7 @@ export async function rateLimitedFetch(
 
   // Wait if needed
   if (timeToWait > 0) {
-    await new Promise((resolve) => setTimeout(resolve, timeToWait))
+    await new Promise(resolve => setTimeout(resolve, timeToWait))
   }
 
   // Update last request time
@@ -329,7 +313,7 @@ export function skipIfMissingCredentials(envVar: string): void {
  */
 export function validateSchema<T>(
   schema: ZodSchema<T>,
-  data: unknown
+  data: unknown,
 ): {
   data?: T
   details?: unknown

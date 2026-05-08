@@ -7,133 +7,128 @@
  * Loads pack metadata and lessons with caching.
  */
 
-import * as fs from "fs";
-import * as path from "path";
+import * as fs from 'fs'
+import * as path from 'path'
 
-import type { Lesson, LoadedPack, PackMetadata } from "../types.js";
+import type {Lesson, LoadedPack, PackMetadata} from '../types.js'
 
 interface CacheEntry {
-  lessonsJsonlMtime: number;
-  loadedAt: number;
-  pack: LoadedPack;
-  packJsonMtime: number;
+  lessonsJsonlMtime: number
+  loadedAt: number
+  pack: LoadedPack
+  packJsonMtime: number
 }
 
-const packCache = new Map<string, CacheEntry>();
+const packCache = new Map<string, CacheEntry>()
 
 /**
  * Load all packs from the marvel/packs directory.
  */
 export async function loadAllPacks(marvelRoot: string): Promise<LoadedPack[]> {
-  const packsDir = path.join(marvelRoot, "packs");
+  const packsDir = path.join(marvelRoot, 'packs')
 
   if (!fs.existsSync(packsDir)) {
-    return [];
+    return []
   }
 
   const packDirs = fs
     .readdirSync(packsDir)
-    .filter((name) => !name.startsWith("_"))
-    .map((name) => path.join(packsDir, name))
-    .filter((dir) => {
+    .filter(name => !name.startsWith('_'))
+    .map(name => path.join(packsDir, name))
+    .filter(dir => {
       try {
-        return fs.statSync(dir).isDirectory();
+        return fs.statSync(dir).isDirectory()
       } catch {
-        return false;
+        return false
       }
-    });
+    })
 
-  const packs: LoadedPack[] = [];
+  const packs: LoadedPack[] = []
 
   for (const packDir of packDirs) {
-    const pack = loadPack(packDir);
+    const pack = loadPack(packDir)
     if (pack) {
-      packs.push(pack);
+      packs.push(pack)
     }
   }
 
-  return packs;
+  return packs
 }
 
 function getFileMtime(filePath: string): number {
   try {
-    return fs.statSync(filePath).mtimeMs;
+    return fs.statSync(filePath).mtimeMs
   } catch {
-    return 0;
+    return 0
   }
 }
 
 function loadLessons(lessonsPath: string): Lesson[] {
   if (!fs.existsSync(lessonsPath)) {
-    return [];
+    return []
   }
 
-  const content = fs.readFileSync(lessonsPath, "utf-8").trim();
+  const content = fs.readFileSync(lessonsPath, 'utf-8').trim()
   if (!content) {
-    return [];
+    return []
   }
 
   return content
-    .split("\n")
-    .filter((line) => line.trim())
+    .split('\n')
+    .filter(line => line.trim())
     .map((line, index) => {
       try {
-        const parsed = JSON.parse(line) as Record<string, unknown>;
+        const parsed = JSON.parse(line) as Record<string, unknown>
         // Validate required Lesson fields
         if (
-          typeof parsed.title !== "string" ||
+          typeof parsed.title !== 'string' ||
           !parsed.title.trim() ||
-          typeof parsed.actionable !== "string" ||
+          typeof parsed.actionable !== 'string' ||
           !parsed.actionable.trim()
         ) {
           console.error(
-            `[marvel] Skipping malformed lesson at line ${index + 1} in ${lessonsPath}: missing or empty title/actionable`
-          );
-          return null;
+            `[marvel] Skipping malformed lesson at line ${index + 1} in ${lessonsPath}: missing or empty title/actionable`,
+          )
+          return null
         }
-        return parsed as unknown as Lesson;
+        return parsed as unknown as Lesson
       } catch {
-        return null;
+        return null
       }
     })
-    .filter((lesson): lesson is Lesson => lesson !== null);
+    .filter((lesson): lesson is Lesson => lesson !== null)
 }
 
 function loadPack(packDir: string): LoadedPack | null {
-  const packJsonPath = path.join(packDir, "pack.json");
-  const lessonsPath = path.join(packDir, "lessons.jsonl");
-  const guardrailsPath = path.join(packDir, "guardrails.md");
+  const packJsonPath = path.join(packDir, 'pack.json')
+  const lessonsPath = path.join(packDir, 'lessons.jsonl')
+  const guardrailsPath = path.join(packDir, 'guardrails.md')
 
   if (!fs.existsSync(packJsonPath)) {
-    return null;
+    return null
   }
 
-  const packName = path.basename(packDir);
-  const packJsonMtime = getFileMtime(packJsonPath);
-  const lessonsJsonlMtime = getFileMtime(lessonsPath);
+  const packName = path.basename(packDir)
+  const packJsonMtime = getFileMtime(packJsonPath)
+  const lessonsJsonlMtime = getFileMtime(lessonsPath)
 
   // Check cache
-  const cached = packCache.get(packName);
-  if (
-    cached?.packJsonMtime === packJsonMtime &&
-    cached.lessonsJsonlMtime === lessonsJsonlMtime
-  ) {
-    return cached.pack;
+  const cached = packCache.get(packName)
+  if (cached?.packJsonMtime === packJsonMtime && cached.lessonsJsonlMtime === lessonsJsonlMtime) {
+    return cached.pack
   }
 
   // Load fresh
   try {
-    const metadata = JSON.parse(
-      fs.readFileSync(packJsonPath, "utf-8")
-    ) as PackMetadata;
-    const lessons = loadLessons(lessonsPath);
+    const metadata = JSON.parse(fs.readFileSync(packJsonPath, 'utf-8')) as PackMetadata
+    const lessons = loadLessons(lessonsPath)
 
     const pack: LoadedPack = {
       guardrailsPath,
       lessons,
       loadedAt: Date.now(),
       metadata,
-    };
+    }
 
     // Update cache
     packCache.set(packName, {
@@ -141,10 +136,10 @@ function loadPack(packDir: string): LoadedPack | null {
       loadedAt: Date.now(),
       pack,
       packJsonMtime,
-    });
+    })
 
-    return pack;
+    return pack
   } catch {
-    return null;
+    return null
   }
 }

@@ -22,43 +22,43 @@
  * "rm /specific/file" should not allow "rm -rf /").
  */
 
-import * as fs from "fs";
-import * as path from "path";
+import * as fs from 'fs'
+import * as path from 'path'
 
-import type { SecurityEvaluationResponse } from "../types.js";
-import type { LogContext } from "./logger.js";
+import type {SecurityEvaluationResponse} from '../types.js'
+import type {LogContext} from './logger.js'
 
-import { analyzeWithAgent } from "./agent-evaluator.js";
-import { matchesAllowlist, matchesDenylist } from "./external-rules.js";
-import { addLearnedRule, matchesLearnedRules } from "./learned-rules.js";
-import { logDebug, logWarn } from "./logger.js";
-import { findRunDir } from "./paths.js";
-import { addPendingDecision, consumePendingDecision } from "./pending-decisions.js";
+import {analyzeWithAgent} from './agent-evaluator.js'
+import {matchesAllowlist, matchesDenylist} from './external-rules.js'
+import {addLearnedRule, matchesLearnedRules} from './learned-rules.js'
+import {logDebug, logWarn} from './logger.js'
+import {findRunDir} from './paths.js'
+import {addPendingDecision, consumePendingDecision} from './pending-decisions.js'
 
 /**
  * Security gate metrics for tracking decision sources
  */
 export interface SecurityMetrics {
-  autoAcceptRate: number;
+  autoAcceptRate: number
   byDecision: {
-    allow: number;
-    ask: number;
-    deny: number;
-  };
+    allow: number
+    ask: number
+    deny: number
+  }
   bySource: {
-    allowlist: number;
-    denylist: number;
-    error: number;
-    learned: number;
-    llm: number;
-  };
-  lastUpdated: string;
-  startedAt: string;
-  total: number;
+    allowlist: number
+    denylist: number
+    error: number
+    learned: number
+    llm: number
+  }
+  lastUpdated: string
+  startedAt: string
+  total: number
 }
 
 // In-memory metrics
-let metrics: SecurityMetrics = createFreshMetrics();
+let metrics: SecurityMetrics = createFreshMetrics()
 
 /**
  * Evaluate a Bash command through the security gate.
@@ -71,91 +71,91 @@ let metrics: SecurityMetrics = createFreshMetrics();
 export async function evaluateBashCommand(
   command: string,
   description: string | undefined,
-  context: LogContext
+  context: LogContext,
 ): Promise<SecurityEvaluationResponse> {
   // Recursion guard: if we're in a security evaluation call, always allow
   // This prevents infinite loops when `claude -p` triggers hooks
   if (isRecursiveCall()) {
-    logDebug("Recursion guard triggered - allowing command", context);
+    logDebug('Recursion guard triggered - allowing command', context)
     return {
-      decision: "allow",
-      reason: "Recursive security evaluation call",
-      source: "allowlist",
-    };
+      decision: 'allow',
+      reason: 'Recursive security evaluation call',
+      source: 'allowlist',
+    }
   }
 
   // Layer 1: Check allowlist
-  const allowRule = matchesAllowlist(command, context);
+  const allowRule = matchesAllowlist(command, context)
   if (allowRule) {
-    logDebug(`Allowlist match: ${allowRule.id}`, context);
-    trackDecision("allowlist", "allow");
-    persistMetrics(context);
+    logDebug(`Allowlist match: ${allowRule.id}`, context)
+    trackDecision('allowlist', 'allow')
+    persistMetrics(context)
     return {
-      decision: "allow",
+      decision: 'allow',
       reason: allowRule.reason,
-      source: "allowlist",
-    };
+      source: 'allowlist',
+    }
   }
 
   // Layer 2: Check denylist (BEFORE learned rules for safety)
   // This prevents dangerous commands from being allowed via overly broad learned patterns
-  const denyRule = matchesDenylist(command, context);
+  const denyRule = matchesDenylist(command, context)
   if (denyRule) {
-    logDebug(`Denylist match: ${denyRule.id}`, context);
-    trackDecision("denylist", "deny");
-    persistMetrics(context);
+    logDebug(`Denylist match: ${denyRule.id}`, context)
+    trackDecision('denylist', 'deny')
+    persistMetrics(context)
     return {
-      decision: "deny",
+      decision: 'deny',
       reason: denyRule.reason,
-      source: "denylist",
-    };
+      source: 'denylist',
+    }
   }
 
   // Layer 3: Check learned rules (user previously approved similar commands)
-  const learnedRule = matchesLearnedRules(command, context);
+  const learnedRule = matchesLearnedRules(command, context)
   if (learnedRule) {
-    logDebug(`Learned rule match: ${learnedRule.id}`, context);
-    trackDecision("learned", "allow");
-    persistMetrics(context);
+    logDebug(`Learned rule match: ${learnedRule.id}`, context)
+    trackDecision('learned', 'allow')
+    persistMetrics(context)
     return {
-      decision: "allow",
+      decision: 'allow',
       reason: `Previously approved: ${learnedRule.reason}`,
-      source: "learned",
-    };
+      source: 'learned',
+    }
   }
 
   // Layer 4: LLM evaluation (no list matches)
-  logDebug("No list match, evaluating with LLM", context);
+  logDebug('No list match, evaluating with LLM', context)
   try {
-    const llmResult = await analyzeWithAgent(command, description, context);
+    const llmResult = await analyzeWithAgent(command, description, context)
 
     // Track "ask" and "allow" decisions so we can learn from them.
     // "ask": user will approve/deny → PostToolUse learns from approval.
     // "allow": LLM already approved → PostToolUse learns the pattern to skip LLM next time.
-    if (llmResult.decision === "ask" || llmResult.decision === "allow") {
-      addPendingDecision(command, llmResult.reason, description, context, llmResult.suggestedRule);
+    if (llmResult.decision === 'ask' || llmResult.decision === 'allow') {
+      addPendingDecision(command, llmResult.reason, description, context, llmResult.suggestedRule)
     }
 
-    trackDecision("llm", llmResult.decision);
-    persistMetrics(context);
+    trackDecision('llm', llmResult.decision)
+    persistMetrics(context)
     return {
       decision: llmResult.decision,
       reason: llmResult.reason,
-      source: "llm",
+      source: 'llm',
       suggestions: llmResult.suggestions,
-    };
+    }
   } catch (error) {
     // Fail-ask: on error, prompt user instead of silently allowing
-    const message = error instanceof Error ? error.message : String(error);
-    logWarn(`LLM evaluation failed, asking user: ${message}`, context);
+    const message = error instanceof Error ? error.message : String(error)
+    logWarn(`LLM evaluation failed, asking user: ${message}`, context)
 
-    trackDecision("error", "ask");
-    persistMetrics(context);
+    trackDecision('error', 'ask')
+    persistMetrics(context)
     return {
-      decision: "ask",
-      reason: "Security check unavailable - user confirmation required",
-      source: "error",
-    };
+      decision: 'ask',
+      reason: 'Security check unavailable - user confirmation required',
+      source: 'error',
+    }
   }
 }
 
@@ -163,7 +163,7 @@ export async function evaluateBashCommand(
  * Get current security metrics.
  */
 export function getSecurityMetrics(): SecurityMetrics {
-  return { ...metrics };
+  return {...metrics}
 }
 
 /**
@@ -176,38 +176,35 @@ export function getSecurityMetrics(): SecurityMetrics {
  * @param context - Logging context
  * @returns true if a new rule was learned, false otherwise
  */
-export function processApprovedCommand(
-  command: string,
-  context?: LogContext
-): boolean {
+export function processApprovedCommand(command: string, context?: LogContext): boolean {
   // Check if this command had a pending decision (from "ask" or LLM "allow")
-  const pending = consumePendingDecision(command, context);
+  const pending = consumePendingDecision(command, context)
   if (!pending) {
     // Command was not in pending set - it was either:
     // - Auto-allowed by allowlist/learned rules
     // - Already processed
-    return false;
+    return false
   }
 
   // Command was approved (by user or LLM) - try to learn from it
   // addLearnedRule returns null if the pattern is too dangerous to learn
-  logDebug(`Attempting to learn from approved command: ${command.slice(0, 50)}...`, context);
-  const rule = addLearnedRule(command, context, pending.suggestedRule);
+  logDebug(`Attempting to learn from approved command: ${command.slice(0, 50)}...`, context)
+  const rule = addLearnedRule(command, context, pending.suggestedRule)
 
   if (rule) {
-    logDebug(`Successfully learned rule: ${rule.id}`, context);
-    return true;
+    logDebug(`Successfully learned rule: ${rule.id}`, context)
+    return true
   }
 
-  logDebug("Pattern rejected as unsafe - not learning this command", context);
-  return false;
+  logDebug('Pattern rejected as unsafe - not learning this command', context)
+  return false
 }
 
 /**
  * Reset security metrics (useful for testing).
  */
 export function resetSecurityMetrics(): void {
-  metrics = createFreshMetrics();
+  metrics = createFreshMetrics()
 }
 
 function createFreshMetrics(): SecurityMetrics {
@@ -228,7 +225,7 @@ function createFreshMetrics(): SecurityMetrics {
     lastUpdated: new Date().toISOString(),
     startedAt: new Date().toISOString(),
     total: 0,
-  };
+  }
 }
 
 /**
@@ -236,20 +233,20 @@ function createFreshMetrics(): SecurityMetrics {
  * This prevents infinite loops when the LLM evaluation itself triggers Bash commands.
  */
 function isRecursiveCall(): boolean {
-  return process.env.MARVEL_SECURITY_EVAL === "1";
+  return process.env.MARVEL_SECURITY_EVAL === '1'
 }
 
 /**
  * Persist metrics to the run directory.
  */
 function persistMetrics(context?: LogContext): void {
-  const runDir = findRunDir();
-  if (!runDir) return;
+  const runDir = findRunDir()
+  if (!runDir) return
 
   try {
-    const metricsPath = path.join(runDir, "security-metrics.json");
-    fs.writeFileSync(metricsPath, JSON.stringify(metrics, null, 2), { mode: 0o600 });
-    logDebug("Persisted security metrics", context);
+    const metricsPath = path.join(runDir, 'security-metrics.json')
+    fs.writeFileSync(metricsPath, JSON.stringify(metrics, null, 2), {mode: 0o600})
+    logDebug('Persisted security metrics', context)
   } catch {
     // Ignore persistence errors - metrics are in-memory anyway
   }
@@ -258,13 +255,13 @@ function persistMetrics(context?: LogContext): void {
 /**
  * Update metrics after a security decision.
  */
-function trackDecision(source: SecurityEvaluationResponse["source"], decision: "allow" | "ask" | "deny"): void {
-  metrics.bySource[source]++;
-  metrics.byDecision[decision]++;
-  metrics.total++;
+function trackDecision(source: SecurityEvaluationResponse['source'], decision: 'allow' | 'ask' | 'deny'): void {
+  metrics.bySource[source]++
+  metrics.byDecision[decision]++
+  metrics.total++
 
   // Auto-accept includes allowlist and learned rules
-  const autoAccepts = metrics.bySource.allowlist + metrics.bySource.learned;
-  metrics.autoAcceptRate = metrics.total > 0 ? autoAccepts / metrics.total : 0;
-  metrics.lastUpdated = new Date().toISOString();
+  const autoAccepts = metrics.bySource.allowlist + metrics.bySource.learned
+  metrics.autoAcceptRate = metrics.total > 0 ? autoAccepts / metrics.total : 0
+  metrics.lastUpdated = new Date().toISOString()
 }

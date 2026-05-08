@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest'
+import {describe, expect, it} from 'vitest'
 
-import { asRecord } from '../contracts/helpers'
+import {asRecord} from '../contracts/helpers'
 
 describe.skip('Fetch Test', () => {
   it('should be able to call fetch directly', async () => {

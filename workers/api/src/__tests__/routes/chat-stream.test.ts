@@ -21,12 +21,7 @@ import {
   mockLastFmAPI,
   mockSpotifyAPI,
 } from '../fixtures/api-mocks'
-import {
-  createMockContext,
-  createMockEnv,
-  createMockRequest,
-  MockKVNamespace,
-} from '../fixtures/cloudflare-mocks'
+import {createMockContext, createMockEnv, createMockRequest, MockKVNamespace} from '../fixtures/cloudflare-mocks'
 
 // Import the route handler (we'll need to access it)
 // For now, we'll test through a simulated handler structure
@@ -39,12 +34,18 @@ import {
 function createMockSSEResponse() {
   const chunks: string[] = []
   const writer = {
-    abort: async () => { /* noop */ },
-    close: async () => { /* noop */ },
+    abort: async () => {
+      /* noop */
+    },
+    close: async () => {
+      /* noop */
+    },
     closed: Promise.resolve(),
     desiredSize: 1,
     ready: Promise.resolve(),
-    releaseLock: () => { /* noop */ },
+    releaseLock: () => {
+      /* noop */
+    },
     write: async (chunk: Uint8Array) => {
       chunks.push(new TextDecoder().decode(chunk))
     },
@@ -63,11 +64,11 @@ function createMockSSEResponse() {
 /**
  * Parse SSE events from raw stream output
  */
-function parseSSEEvents(text: string): {data?: string; event?: string;}[] {
-  const events: {data?: string; event?: string;}[] = []
+function parseSSEEvents(text: string): {data?: string; event?: string}[] {
+  const events: {data?: string; event?: string}[] = []
   const lines = text.split('\n')
 
-  let currentEvent: {data?: string; event?: string;} = {}
+  let currentEvent: {data?: string; event?: string} = {}
   for (const line of lines) {
     if (line.startsWith('event:')) {
       currentEvent.event = line.substring(6).trim()
@@ -90,7 +91,7 @@ function parseSSEEvents(text: string): {data?: string; event?: string;}[] {
 async function simulateChatStreamHandler(
   c: ReturnType<typeof createMockContext>,
   anthropicClient: ReturnType<typeof createMockAnthropicClient>,
-): Promise<{events: {data?: string; event?: string;}[]; status: number}> {
+): Promise<{events: {data?: string; event?: string}[]; status: number}> {
   const body = await c.req.json()
 
   // Validate request
@@ -98,8 +99,12 @@ async function simulateChatStreamHandler(
     return {events: [], status: 400}
   }
 
-  const {conversationHistory = [], message, mode = 'analyze'} = body as {
-    conversationHistory?: {content: string; role: string;}[]
+  const {
+    conversationHistory = [],
+    message,
+    mode = 'analyze',
+  } = body as {
+    conversationHistory?: {content: string; role: string}[]
     message?: string
     mode?: string
   }
@@ -145,7 +150,7 @@ async function simulateChatStreamHandler(
       if (event.type === 'content_block_start') {
         if (event.content_block?.type === 'text') {
           await mockSSE.writer.write(
-            new TextEncoder().encode(`data: ${JSON.stringify({data: 'Processing...', type: 'thinking'})}\n\n`)
+            new TextEncoder().encode(`data: ${JSON.stringify({data: 'Processing...', type: 'thinking'})}\n\n`),
           )
         } else if (event.content_block?.type === 'tool_use') {
           await mockSSE.writer.write(
@@ -153,24 +158,20 @@ async function simulateChatStreamHandler(
               `data: ${JSON.stringify({
                 data: {args: {}, tool: event.content_block.name},
                 type: 'tool_start',
-              })}\n\n`
-            )
+              })}\n\n`,
+            ),
           )
         }
       } else if (event.type === 'content_block_delta') {
         if (event.delta?.type === 'text_delta') {
           await mockSSE.writer.write(
-            new TextEncoder().encode(
-              `data: ${JSON.stringify({data: event.delta.text, type: 'content'})}\n\n`
-            )
+            new TextEncoder().encode(`data: ${JSON.stringify({data: event.delta.text, type: 'content'})}\n\n`),
           )
         }
       } else if (event.type === 'content_block_stop') {
         // No-op
       } else if (event.type === 'message_stop') {
-        await mockSSE.writer.write(
-          new TextEncoder().encode(`data: ${JSON.stringify({data: null, type: 'done'})}\n\n`)
-        )
+        await mockSSE.writer.write(new TextEncoder().encode(`data: ${JSON.stringify({data: null, type: 'done'})}\n\n`))
       }
     }
 
@@ -179,8 +180,8 @@ async function simulateChatStreamHandler(
   } catch (error) {
     await mockSSE.writer.write(
       new TextEncoder().encode(
-        `data: ${JSON.stringify({data: error instanceof Error ? error.message : 'Unknown error', type: 'error'})}\n\n`
-      )
+        `data: ${JSON.stringify({data: error instanceof Error ? error.message : 'Unknown error', type: 'error'})}\n\n`,
+      ),
     )
     await mockSSE.writer.close()
     return {events: mockSSE.getEvents(), status: 200}
@@ -228,9 +229,7 @@ describe('chat-stream Route - Request Validation (real ChatRequestSchema)', () =
   })
 
   it('rejects a non-array conversationHistory', () => {
-    expect(
-      ChatRequestSchema.safeParse({conversationHistory: 'not an array', message: 'Test'}).success,
-    ).toBe(false)
+    expect(ChatRequestSchema.safeParse({conversationHistory: 'not an array', message: 'Test'}).success).toBe(false)
   })
 
   it('rejects a conversation history longer than 20 messages', () => {
@@ -238,9 +237,7 @@ describe('chat-stream Route - Request Validation (real ChatRequestSchema)', () =
       content: `Message ${i}`,
       role: i % 2 === 0 ? 'user' : 'assistant',
     }))
-    expect(
-      ChatRequestSchema.safeParse({conversationHistory: history, message: 'Test'}).success,
-    ).toBe(false)
+    expect(ChatRequestSchema.safeParse({conversationHistory: history, message: 'Test'}).success).toBe(false)
   })
 
   it('rejects an invalid mode enum value', () => {
@@ -274,7 +271,7 @@ describe('chat-stream Route - Simulated Handler (legacy — to be migrated to re
     })
     const c = createMockContext({env, request})
     const anthropic = createMockAnthropicClient({
-      'Analyze': buildToolCallResponseStream('analyze_playlist', {playlist_id: 'auto-injected'}),
+      Analyze: buildToolCallResponseStream('analyze_playlist', {playlist_id: 'auto-injected'}),
     })
 
     const result = await simulateChatStreamHandler(c, anthropic)
@@ -289,7 +286,7 @@ describe('chat-stream Route - SSE Response Setup', () => {
     const response = new Response('test', {
       headers: {
         'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
+        Connection: 'keep-alive',
         'Content-Type': 'text/event-stream',
       },
     })
@@ -313,7 +310,7 @@ describe('chat-stream Route - SSE Response Setup', () => {
   it('should include Connection: keep-alive header', () => {
     const response = new Response('test', {
       headers: {
-        'Connection': 'keep-alive',
+        Connection: 'keep-alive',
         'Content-Type': 'text/event-stream',
       },
     })
@@ -451,7 +448,7 @@ describe('chat-stream Route - Tool Execution Flow', () => {
     })
 
     const anthropic = createMockAnthropicClient({
-      'Search': buildToolCallResponseStream('search_spotify_tracks', {limit: 10, query: 'indie rock'}),
+      Search: buildToolCallResponseStream('search_spotify_tracks', {limit: 10, query: 'indie rock'}),
     })
 
     const result = await simulateChatStreamHandler(c, anthropic)
@@ -471,7 +468,7 @@ describe('chat-stream Route - Tool Execution Flow', () => {
 
     // Claude tries to call with invalid args (missing required field)
     const anthropic = createMockAnthropicClient({
-      'Search': buildToolCallResponseStream('search_spotify_tracks', {limit: 10}), // Missing query
+      Search: buildToolCallResponseStream('search_spotify_tracks', {limit: 10}), // Missing query
     })
 
     const result = await simulateChatStreamHandler(c, anthropic)
@@ -516,7 +513,7 @@ describe('chat-stream Route - Tool Execution Flow', () => {
     })
 
     const anthropic = createMockAnthropicClient({
-      'Analyze': buildToolCallResponseStream('analyze_playlist', {playlist_id: 'test-playlist'}),
+      Analyze: buildToolCallResponseStream('analyze_playlist', {playlist_id: 'test-playlist'}),
     })
 
     const result = await simulateChatStreamHandler(c, anthropic)
@@ -535,17 +532,14 @@ describe('chat-stream Route - Tool Execution Flow', () => {
     cleanupFetch = mockSpotifyAPI({
       'GET /v1/playlists/:id/tracks': {
         'test-playlist': {
-          items: [
-            {track: buildSpotifyTrack({name: 'Track 1'})},
-            {track: buildSpotifyTrack({name: 'Track 2'})},
-          ],
+          items: [{track: buildSpotifyTrack({name: 'Track 1'})}, {track: buildSpotifyTrack({name: 'Track 2'})}],
           total: 2,
         },
       },
     })
 
     const anthropic = createMockAnthropicClient({
-      'Get': buildToolCallResponseStream('get_playlist_tracks', {
+      Get: buildToolCallResponseStream('get_playlist_tracks', {
         limit: 20,
         offset: 0,
         playlist_id: 'test-playlist',
@@ -566,14 +560,11 @@ describe('chat-stream Route - Tool Execution Flow', () => {
     const c = createMockContext({env, request})
 
     cleanupFetch = mockSpotifyAPI({
-      'GET /v1/search': () => [
-        buildSpotifyTrack({name: 'Jazz Track 1'}),
-        buildSpotifyTrack({name: 'Jazz Track 2'}),
-      ],
+      'GET /v1/search': () => [buildSpotifyTrack({name: 'Jazz Track 1'}), buildSpotifyTrack({name: 'Jazz Track 2'})],
     })
 
     const anthropic = createMockAnthropicClient({
-      'Search': buildToolCallResponseStream('search_spotify_tracks', {limit: 10, query: 'jazz'}),
+      Search: buildToolCallResponseStream('search_spotify_tracks', {limit: 10, query: 'jazz'}),
     })
 
     const result = await simulateChatStreamHandler(c, anthropic)
@@ -590,7 +581,7 @@ describe('chat-stream Route - Tool Execution Flow', () => {
     const c = createMockContext({env, request})
 
     const anthropic = createMockAnthropicClient({
-      'Get': buildToolCallResponseStream('get_recommendations', {
+      Get: buildToolCallResponseStream('get_recommendations', {
         limit: 10,
         seed_tracks: ['track1', 'track2'],
       }),
@@ -610,7 +601,7 @@ describe('chat-stream Route - Tool Execution Flow', () => {
     const c = createMockContext({env, request})
 
     const anthropic = createMockAnthropicClient({
-      'Create': buildToolCallResponseStream('create_playlist', {
+      Create: buildToolCallResponseStream('create_playlist', {
         description: 'Test',
         name: 'New Playlist',
         track_uris: ['spotify:track:1', 'spotify:track:2'],
@@ -635,7 +626,7 @@ describe('chat-stream Route - Tool Execution Flow', () => {
     })
 
     const anthropic = createMockAnthropicClient({
-      'Test': buildToolCallResponseStream('search_spotify_tracks', {limit: 1, query: 'test'}),
+      Test: buildToolCallResponseStream('search_spotify_tracks', {limit: 1, query: 'test'}),
     })
 
     const result = await simulateChatStreamHandler(c, anthropic)
@@ -672,7 +663,7 @@ describe('chat-stream Route - Tool Execution Flow', () => {
     cleanupFetch = mockSpotifyAPI({})
 
     const anthropic = createMockAnthropicClient({
-      'Test': buildToolCallResponseStream('search_spotify_tracks', {query: 'test'}),
+      Test: buildToolCallResponseStream('search_spotify_tracks', {query: 'test'}),
     })
 
     const result = await simulateChatStreamHandler(c, anthropic)
@@ -694,7 +685,7 @@ describe('chat-stream Route - Tool Execution Flow', () => {
     })
 
     const anthropic = createMockAnthropicClient({
-      'Search': buildToolCallResponseStream('search_spotify_tracks', {query: 'test'}),
+      Search: buildToolCallResponseStream('search_spotify_tracks', {query: 'test'}),
     })
 
     const result = await simulateChatStreamHandler(c, anthropic)
@@ -716,7 +707,7 @@ describe('chat-stream Route - Tool Execution Flow', () => {
     })
 
     const anthropic = createMockAnthropicClient({
-      'Search': buildToolCallResponseStream('search_spotify_tracks', {query: 'test'}),
+      Search: buildToolCallResponseStream('search_spotify_tracks', {query: 'test'}),
     })
 
     const result = await simulateChatStreamHandler(c, anthropic)
@@ -734,16 +725,12 @@ describe('chat-stream Route - Tool Execution Flow', () => {
     const c = createMockContext({env, request})
 
     cleanupFetch = mockSpotifyAPI({
-      'GET /v1/playlists/:id': {'test': buildSpotifyPlaylist()},
+      'GET /v1/playlists/:id': {test: buildSpotifyPlaylist()},
       'GET /v1/search': () => [buildSpotifyTrack()],
     })
 
     const anthropic = createMockAnthropicClient({
-      'Search and analyze': buildMixedResponseStream(
-        'Let me search first',
-        'search_spotify_tracks',
-        {query: 'test'}
-      ),
+      'Search and analyze': buildMixedResponseStream('Let me search first', 'search_spotify_tracks', {query: 'test'}),
     })
 
     const result = await simulateChatStreamHandler(c, anthropic)
@@ -764,12 +751,11 @@ describe('chat-stream Route - Enrichment Integration', () => {
   it('should call AudioEnrichmentService during analyze_playlist', async () => {
     // This tests service integration - actual enrichment tested in AudioEnrichmentService.test.ts
     const mockKv = new MockKVNamespace()
-     
+
     const env = createMockEnv({
       AUDIO_FEATURES_CACHE: mockKv as any,
     })
 
-     
     const service = new AudioEnrichmentService(env.AUDIO_FEATURES_CACHE as any)
 
     // Service should be instantiable with KV
@@ -779,7 +765,7 @@ describe('chat-stream Route - Enrichment Integration', () => {
   it('should run Deezer enrichment if KV available', async () => {
     // This tests KV availability - actual enrichment tested in AudioEnrichmentService.test.ts
     const kv = new MockKVNamespace()
-     
+
     const service = new AudioEnrichmentService(kv as any)
 
     // Service should be instantiable with KV
@@ -790,7 +776,7 @@ describe('chat-stream Route - Enrichment Integration', () => {
     // Progress streaming is handled in the route implementation
     // This is tested in integration by checking SSE events
     const kv = new MockKVNamespace()
-     
+
     const service = new AudioEnrichmentService(kv as any)
 
     // Service exists and can be called
@@ -801,7 +787,7 @@ describe('chat-stream Route - Enrichment Integration', () => {
     // Error handling tested in AudioEnrichmentService.test.ts
     // Here we verify the route doesn't crash on service errors
     const kv = new MockKVNamespace()
-     
+
     const service = new AudioEnrichmentService(kv as any)
 
     // Service handles errors gracefully
@@ -810,13 +796,12 @@ describe('chat-stream Route - Enrichment Integration', () => {
 
   it('should call LastFmService during analyze_playlist', async () => {
     const mockKv = new MockKVNamespace()
-     
+
     const env = createMockEnv({
       AUDIO_FEATURES_CACHE: mockKv as any,
       LASTFM_API_KEY: 'test-key',
     })
 
-     
     const service = new LastFmService(env.LASTFM_API_KEY, env.AUDIO_FEATURES_CACHE as any)
 
     cleanupFetch = mockLastFmAPI({
@@ -828,9 +813,7 @@ describe('chat-stream Route - Enrichment Integration', () => {
       },
     })
 
-    const result = await service.batchGetSignals([
-      {artist: 'Test Artist', name: 'Test Track'},
-    ])
+    const result = await service.batchGetSignals([{artist: 'Test Artist', name: 'Test Track'}])
 
     expect(result.size).toBeGreaterThan(0)
     const firstSignal = Array.from(result.values())[0]
@@ -842,7 +825,7 @@ describe('chat-stream Route - Enrichment Integration', () => {
     // Last.fm enrichment behavior tested in LastFmService.test.ts
     // Here we verify API key enables the service
     const kv = new MockKVNamespace()
-     
+
     const service = new LastFmService('test-key', kv as any)
 
     // Service should be instantiable with API key
@@ -851,7 +834,7 @@ describe('chat-stream Route - Enrichment Integration', () => {
 
   it('should stream Last.fm enrichment progress', async () => {
     const kv = new MockKVNamespace()
-     
+
     const service = new LastFmService('test-key', kv as any)
 
     cleanupFetch = mockLastFmAPI({
@@ -872,7 +855,7 @@ describe('chat-stream Route - Enrichment Integration', () => {
 
   it('should not crash on Last.fm enrichment errors', async () => {
     const kv = new MockKVNamespace()
-     
+
     const service = new LastFmService('test-key', kv as any)
 
     cleanupFetch = mockLastFmAPI({}) // No tracks found
@@ -889,7 +872,7 @@ describe('chat-stream Route - Enrichment Integration', () => {
     // Here we verify cache is available
     const kv = new MockKVNamespace()
     // Verify service can be constructed with cache (constructor side-effect test)
-     
+
     void new AudioEnrichmentService(kv as any)
 
     // Can write to cache
@@ -921,7 +904,7 @@ describe('chat-stream Route - Message Streaming', () => {
     })
     const c = createMockContext({env, request})
     const anthropic = createMockAnthropicClient({
-      'Hello': buildTextResponseStream('Hello! How can I help?'),
+      Hello: buildTextResponseStream('Hello! How can I help?'),
     })
 
     const result = await simulateChatStreamHandler(c, anthropic)
@@ -953,7 +936,7 @@ describe('chat-stream Route - Message Streaming', () => {
     })
     const c = createMockContext({env, request})
     const anthropic = createMockAnthropicClient({
-      'Search': buildToolCallResponseStream('search_spotify_tracks', {query: 'test'}),
+      Search: buildToolCallResponseStream('search_spotify_tracks', {query: 'test'}),
     })
 
     const result = await simulateChatStreamHandler(c, anthropic)
@@ -1038,9 +1021,7 @@ describe('chat-stream Route - Message Streaming', () => {
     const mockSSE = createMockSSEResponse()
     const encoder = new TextEncoder()
 
-    await mockSSE.writer.write(
-      encoder.encode('data: {"type":"content","data":"test"}\n\n')
-    )
+    await mockSSE.writer.write(encoder.encode('data: {"type":"content","data":"test"}\n\n'))
 
     const chunks = mockSSE.getChunks()
     expect(chunks[0]).toContain('data: ')

@@ -50,8 +50,15 @@ Action: [promote] [edit] [skip]
 For each candidate, the user can:
 
 - **Promote**: Append the lesson to the target pack's `lessons.jsonl` file. Format the entry as:
+
   ```json
-  {"timestamp":"<now>","category":"<category>","title":"<title>","description":"<desc>","actionable":"<actionable>"}
+  {
+    "timestamp": "<now>",
+    "category": "<category>",
+    "title": "<title>",
+    "description": "<desc>",
+    "actionable": "<actionable>"
+  }
   ```
 
 - **Edit**: Let the user modify the title, description, actionable text, or target pack before promoting.

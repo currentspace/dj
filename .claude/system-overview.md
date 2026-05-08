@@ -4,13 +4,13 @@ This document provides a high-level architecture overview for Claude Code to ref
 
 ## Quick Reference
 
-| Layer | Technology | Key Files |
-|-------|------------|-----------|
-| **Frontend** | React 19.2 + Vite 7.1 | `apps/web/src/` |
-| **Backend** | Cloudflare Workers + Hono | `workers/api/src/` |
-| **AI** | Claude Sonnet 4.5 + Haiku 4.5 | `chat-stream.ts` |
-| **Data** | Spotify + Deezer + Last.fm | `services/*.ts` |
-| **State** | KV + AsyncLocalStorage | `utils/*.ts` |
+| Layer        | Technology                    | Key Files          |
+| ------------ | ----------------------------- | ------------------ |
+| **Frontend** | React 19.2 + Vite 7.1         | `apps/web/src/`    |
+| **Backend**  | Cloudflare Workers + Hono     | `workers/api/src/` |
+| **AI**       | Claude Sonnet 4.5 + Haiku 4.5 | `chat-stream.ts`   |
+| **Data**     | Spotify + Deezer + Last.fm    | `services/*.ts`    |
+| **State**    | KV + AsyncLocalStorage        | `utils/*.ts`       |
 
 ## Architecture Diagram
 
@@ -70,49 +70,49 @@ This document provides a high-level architecture overview for Claude Code to ref
 
 ### React 19.2 Patterns
 
-| Pattern | Description | Reference |
-|---------|-------------|-----------|
-| **Direct State Sync** | No useEffect for prop-to-state | `ChatInterface.tsx:37-41` |
-| **useSyncExternalStore** | Auth state management | `useSpotifyAuth.ts` |
-| **useTransition** | Non-blocking mode changes | `ChatInterface.tsx:32` |
-| **Map for Per-Entity State** | Conversations per playlist | `ChatInterface.tsx:29-30` |
-| **flushSync** | Immediate DOM for scroll | `ChatInterface.tsx:88-96` |
+| Pattern                      | Description                    | Reference                 |
+| ---------------------------- | ------------------------------ | ------------------------- |
+| **Direct State Sync**        | No useEffect for prop-to-state | `ChatInterface.tsx:37-41` |
+| **useSyncExternalStore**     | Auth state management          | `useSpotifyAuth.ts`       |
+| **useTransition**            | Non-blocking mode changes      | `ChatInterface.tsx:32`    |
+| **Map for Per-Entity State** | Conversations per playlist     | `ChatInterface.tsx:29-30` |
+| **flushSync**                | Immediate DOM for scroll       | `ChatInterface.tsx:88-96` |
 
 See: [React 19 Guidelines](guidelines/react-19.md)
 
 ### LLM/Claude Patterns
 
-| Pattern | Description | Reference |
-|---------|-------------|-----------|
-| **Extended Thinking** | 5000 token budget (initial call) | `chat-stream.ts:2913-2916` |
-| **Tool-Bound Streaming** | Tools emit SSE progress | `chat-stream.ts:270-520` |
-| **Three-Tier Data** | Summary → Compact → Full | `chat-stream.ts:436-520` |
-| **Agentic Loop** | Max 5 turns with loop detection | `chat-stream.ts:3079-3112` |
-| **Prompt Caching** | System prompt cached | `chat-stream.ts:2906-2908` |
+| Pattern                  | Description                      | Reference                  |
+| ------------------------ | -------------------------------- | -------------------------- |
+| **Extended Thinking**    | 5000 token budget (initial call) | `chat-stream.ts:2913-2916` |
+| **Tool-Bound Streaming** | Tools emit SSE progress          | `chat-stream.ts:270-520`   |
+| **Three-Tier Data**      | Summary → Compact → Full         | `chat-stream.ts:436-520`   |
+| **Agentic Loop**         | Max 5 turns with loop detection  | `chat-stream.ts:3079-3112` |
+| **Prompt Caching**       | System prompt cached             | `chat-stream.ts:2906-2908` |
 
 See: [LLM Prompts Guidelines](guidelines/llm-prompts.md)
 
 ### Cloudflare Workers Patterns
 
-| Pattern | Description | Reference |
-|---------|-------------|-----------|
-| **TransformStream SSE** | Immediate response + async | `chat-stream.ts:2537-2548` |
-| **SSEWriter Queue** | Serialized writes | `chat-stream.ts:151-226` |
-| **Three-Layer Rate Limiting** | RPS + Lane + Budget | `RequestOrchestrator.ts` |
-| **AsyncLocalStorage** | Per-request context | `LoggerContext.ts` |
-| **Differential TTL** | 90d hits, 5m misses | `AudioEnrichmentService.ts` |
+| Pattern                       | Description                | Reference                   |
+| ----------------------------- | -------------------------- | --------------------------- |
+| **TransformStream SSE**       | Immediate response + async | `chat-stream.ts:2537-2548`  |
+| **SSEWriter Queue**           | Serialized writes          | `chat-stream.ts:151-226`    |
+| **Three-Layer Rate Limiting** | RPS + Lane + Budget        | `RequestOrchestrator.ts`    |
+| **AsyncLocalStorage**         | Per-request context        | `LoggerContext.ts`          |
+| **Differential TTL**          | 90d hits, 5m misses        | `AudioEnrichmentService.ts` |
 
 See: [Cloudflare Workers Guidelines](guidelines/cloudflare-workers.md)
 
 ### Tool/MCP Patterns
 
-| Pattern | Description | Reference |
-|---------|-------------|-----------|
-| **Native Tool Interface** | Lightweight, no Langchain | `chat-stream.ts:15-21` |
-| **Zod + zodToJsonSchema** | Type-safe tool schemas | `chat-stream.ts:231-251` |
-| **Auto-Injection** | Context-aware parameters | `chat-stream.ts:355-370` |
-| **Vibe-Driven Discovery** | 5-phase AI workflow | `chat-stream.ts` |
-| **Compact Results** | 96% size reduction | `chat-stream.ts:436-520` |
+| Pattern                   | Description               | Reference                |
+| ------------------------- | ------------------------- | ------------------------ |
+| **Native Tool Interface** | Lightweight, no Langchain | `chat-stream.ts:15-21`   |
+| **Zod + zodToJsonSchema** | Type-safe tool schemas    | `chat-stream.ts:231-251` |
+| **Auto-Injection**        | Context-aware parameters  | `chat-stream.ts:355-370` |
+| **Vibe-Driven Discovery** | 5-phase AI workflow       | `chat-stream.ts`         |
+| **Compact Results**       | 96% size reduction        | `chat-stream.ts:436-520` |
 
 See: [Tools/MCP Guidelines](guidelines/tools-mcp.md)
 
@@ -164,31 +164,31 @@ dj/
 
 ```typescript
 // Layer 1: Global token bucket
-const rateLimiter = new RateLimitedQueue(40)  // 40 RPS
+const rateLimiter = new RateLimitedQueue(40) // 40 RPS
 
 // Layer 2: Per-service concurrency
 const LANE_LIMITS = {
-  anthropic: 2,   // SDK limitation
+  anthropic: 2, // SDK limitation
   spotify: 5,
   deezer: 10,
   lastfm: 10,
 }
 
 // Layer 3: Subrequest budget
-const tracker = new SubrequestTracker({ maxSubrequests: 950 })
+const tracker = new SubrequestTracker({maxSubrequests: 950})
 ```
 
 ### SSE Event Types
 
 ```typescript
 type StreamEvent =
-  | { type: 'content', data: string }      // Text from Claude
-  | { type: 'thinking', data: string }     // Progress messages
-  | { type: 'tool_start', data: ToolData } // Tool execution start
-  | { type: 'tool_end', data: ToolResult } // Tool completion
-  | { type: 'log', data: LogData }         // Debug logs
-  | { type: 'error', data: string }        // Error messages
-  | { type: 'done', data: null }           // Stream complete
+  | {type: 'content'; data: string} // Text from Claude
+  | {type: 'thinking'; data: string} // Progress messages
+  | {type: 'tool_start'; data: ToolData} // Tool execution start
+  | {type: 'tool_end'; data: ToolResult} // Tool completion
+  | {type: 'log'; data: LogData} // Debug logs
+  | {type: 'error'; data: string} // Error messages
+  | {type: 'done'; data: null} // Stream complete
 ```
 
 ### Tool Result Size Strategy
@@ -245,17 +245,17 @@ git add -A && git commit -m "message" && git push
 
 ## Key Constraints
 
-| Constraint | Value | Source |
-|------------|-------|--------|
-| Cloudflare subrequests | 1000/request | Platform |
-| Rate limit | 40 RPS | Cloudflare Workers |
-| Anthropic concurrency | 2 | SDK limitation in Workers |
-| Max conversation history | 20 messages | Context management |
-| Max agentic turns | 5 | Cost control |
-| Tool result size | <5KB | Context optimization |
-| SSE heartbeat | 15 seconds | Keep-alive |
-| Session TTL | 4 hours | OAuth tokens |
-| BPM cache TTL | 90 days (hit) / 5 min (miss) | Data freshness |
+| Constraint               | Value                        | Source                    |
+| ------------------------ | ---------------------------- | ------------------------- |
+| Cloudflare subrequests   | 1000/request                 | Platform                  |
+| Rate limit               | 40 RPS                       | Cloudflare Workers        |
+| Anthropic concurrency    | 2                            | SDK limitation in Workers |
+| Max conversation history | 20 messages                  | Context management        |
+| Max agentic turns        | 5                            | Cost control              |
+| Tool result size         | <5KB                         | Context optimization      |
+| SSE heartbeat            | 15 seconds                   | Keep-alive                |
+| Session TTL              | 4 hours                      | OAuth tokens              |
+| BPM cache TTL            | 90 days (hit) / 5 min (miss) | Data freshness            |
 
 ## Debugging Resources
 

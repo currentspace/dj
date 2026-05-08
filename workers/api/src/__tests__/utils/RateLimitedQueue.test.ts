@@ -5,10 +5,7 @@
 import {describe, expect, it} from 'vitest'
 
 import {RateLimitedQueue} from '../../utils/RateLimitedQueue'
-import {
-  measureExecutionTime,
-  verifyRateLimitCompliance,
-} from '../fixtures/rate-limit-mocks'
+import {measureExecutionTime, verifyRateLimitCompliance} from '../fixtures/rate-limit-mocks'
 describe('RateLimitedQueue', () => {
   // Note: We use real timers for these tests because we're testing actual timing behavior
   // Fake timers would interfere with the token bucket refill mechanism
@@ -310,7 +307,7 @@ describe('RateLimitedQueue', () => {
         throw new Error('Another failure')
       })
       queue.enqueue(async () => 4)
-      await queue.processAllWithCallback((result) => {
+      await queue.processAllWithCallback(result => {
         callbackResults.push(result as null | number)
       })
       expect(callbackResults).toEqual([0, null, 2, null, 4])

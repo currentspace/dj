@@ -9,8 +9,8 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 
-import { LLM } from '../constants'
-import { getLogger } from '../utils/LoggerContext'
+import {LLM} from '../constants'
+import {getLogger} from '../utils/LoggerContext'
 
 // =============================================================================
 // TYPE GUARDS
@@ -56,7 +56,7 @@ export interface AIServiceConfig {
 /** Request parameters for Anthropic messages API with optional thinking */
 interface AnthropicRequestParams {
   max_tokens: number
-  messages: { content: string; role: 'assistant' | 'user'; }[]
+  messages: {content: string; role: 'assistant' | 'user'}[]
   model: string
   system?: string
   temperature?: number
@@ -72,7 +72,7 @@ export class AIService {
   private defaultTemperature: number
 
   constructor(config: AIServiceConfig) {
-    this.client = new Anthropic({ apiKey: config.apiKey })
+    this.client = new Anthropic({apiKey: config.apiKey})
     this.defaultModel = config.defaultModel ?? LLM.MODEL
     this.defaultTemperature = config.defaultTemperature ?? 0.7
   }
@@ -108,7 +108,7 @@ export class AIService {
       const model = options.model ?? this.defaultModel
 
       // Build request parameters with proper typing
-      const messages: AnthropicRequestParams['messages'] = [{ content: prompt, role: 'user' }]
+      const messages: AnthropicRequestParams['messages'] = [{content: prompt, role: 'user'}]
 
       const requestParams: AnthropicRequestParams = {
         max_tokens: options.maxTokens ?? 2000,
@@ -193,7 +193,7 @@ export class AIService {
     try {
       const response = await this.client.messages.create({
         max_tokens: options.maxTokens ?? 2000,
-        messages: [{ content: prompt, role: 'user' }],
+        messages: [{content: prompt, role: 'user'}],
         model: options.model ?? this.defaultModel,
         system: options.system ?? 'You are an AI assistant.',
         temperature: options.temperature ?? this.defaultTemperature,
@@ -215,8 +215,14 @@ export class AIService {
 // =============================================================================
 
 /** Type guard for thinking blocks in Claude's response */
-function isThinkingBlock(block: Anthropic.ContentBlock): block is Anthropic.ContentBlock & { thinking: string; type: 'thinking'; } {
-  return block.type === 'thinking' && 'thinking' in block && typeof (block as unknown as Record<string, unknown>).thinking === 'string'
+function isThinkingBlock(
+  block: Anthropic.ContentBlock,
+): block is Anthropic.ContentBlock & {thinking: string; type: 'thinking'} {
+  return (
+    block.type === 'thinking' &&
+    'thinking' in block &&
+    typeof (block as unknown as Record<string, unknown>).thinking === 'string'
+  )
 }
 
 // =============================================================================
@@ -244,6 +250,6 @@ export function getAIService(apiKey?: string): AIService | null {
     return null
   }
 
-  aiServiceInstance = new AIService({ apiKey })
+  aiServiceInstance = new AIService({apiKey})
   return aiServiceInstance
 }

@@ -4,17 +4,22 @@
  * Uses AI/Claude for intelligent recommendations when no history exists
  */
 
-import type { AudioEnrichmentService } from './AudioEnrichmentService'
-import type { LastFmService } from './LastFmService'
-import type { MixSession, PlayedTrack, Suggestion } from '@dj/shared-types'
+import type {AudioEnrichmentService} from './AudioEnrichmentService'
+import type {LastFmService} from './LastFmService'
+import type {MixSession, PlayedTrack, Suggestion} from '@dj/shared-types'
 
-import { z } from 'zod'
+import {z} from 'zod'
 
-import { buildInitialSuggestionsPrompt, buildNextTrackPrompt, buildVibeDescription, SYSTEM_PROMPTS } from '../lib/ai-prompts'
-import { AIService, createAIService } from '../lib/ai-service'
-import { safeParse } from '../lib/guards'
-import { getLogger } from '../utils/LoggerContext'
-import { scoreBpmCompatibility, scoreEnergyFlow } from './TransitionScorer'
+import {
+  buildInitialSuggestionsPrompt,
+  buildNextTrackPrompt,
+  buildVibeDescription,
+  SYSTEM_PROMPTS,
+} from '../lib/ai-prompts'
+import {AIService, createAIService} from '../lib/ai-service'
+import {safeParse} from '../lib/guards'
+import {getLogger} from '../utils/LoggerContext'
+import {scoreBpmCompatibility, scoreEnergyFlow} from './TransitionScorer'
 
 // =============================================================================
 // ZOD SCHEMAS
@@ -23,13 +28,13 @@ import { scoreBpmCompatibility, scoreEnergyFlow } from './TransitionScorer'
 /** Zod schema for Spotify track from search API */
 const SpotifyTrackSchema = z.object({
   album: z.object({
-    images: z.array(z.object({ url: z.string() })),
+    images: z.array(z.object({url: z.string()})),
     name: z.string(),
     release_date: z.string(),
   }),
-  artists: z.array(z.object({ name: z.string() })),
+  artists: z.array(z.object({name: z.string()})),
   duration_ms: z.number(),
-  external_ids: z.object({ isrc: z.string().optional() }).optional(),
+  external_ids: z.object({isrc: z.string().optional()}).optional(),
   id: z.string(),
   name: z.string(),
   popularity: z.number(),
@@ -38,18 +43,22 @@ const SpotifyTrackSchema = z.object({
 
 /** Zod schema for Spotify search response */
 const SpotifySearchResponseSchema = z.object({
-  tracks: z.object({
-    items: z.array(SpotifyTrackSchema),
-  }).optional(),
+  tracks: z
+    .object({
+      items: z.array(SpotifyTrackSchema),
+    })
+    .optional(),
 })
 
 /** Zod schema for AI track suggestion response */
 const AITrackSuggestionsSchema = z.object({
-  tracks: z.array(z.object({
-    artist: z.string(),
-    name: z.string(),
-    reason: z.string(),
-  })),
+  tracks: z.array(
+    z.object({
+      artist: z.string(),
+      name: z.string(),
+      reason: z.string(),
+    }),
+  ),
 })
 
 type AITrackSuggestions = z.infer<typeof AITrackSuggestionsSchema>
@@ -60,13 +69,13 @@ type AITrackSuggestions = z.infer<typeof AITrackSuggestionsSchema>
 
 interface SpotifyTrack {
   album: {
-    images: { url: string }[]
+    images: {url: string}[]
     name: string
     release_date: string
   }
-  artists: { name: string }[]
+  artists: {name: string}[]
   duration_ms: number
-  external_ids?: { isrc?: string }
+  external_ids?: {isrc?: string}
   id: string
   name: string
   popularity: number
@@ -88,10 +97,10 @@ export class SuggestionEngine {
     private spotifyToken: string,
     anthropicApiKey?: string,
     /** Enable extended thinking for deeper AI reasoning (costs more tokens) */
-    enableThinking = false
+    enableThinking = false,
   ) {
     if (anthropicApiKey) {
-      this.aiService = createAIService({ apiKey: anthropicApiKey })
+      this.aiService = createAIService({apiKey: anthropicApiKey})
     }
     this.enableThinking = enableThinking
   }
@@ -126,7 +135,7 @@ export class SuggestionEngine {
     _lastTrack?: PlayedTrack,
     bpm: null | number = null,
     energy: null | number = null,
-    genres: string[] = []
+    genres: string[] = [],
   ): number {
     let score = 0
 
@@ -176,10 +185,7 @@ export class SuggestionEngine {
       score += 25
     } else {
       // Penalize if way off
-      const eraDiff = Math.min(
-        Math.abs(releaseYear - vibe.era.start),
-        Math.abs(releaseYear - vibe.era.end)
-      )
+      const eraDiff = Math.min(Math.abs(releaseYear - vibe.era.start), Math.abs(releaseYear - vibe.era.end))
       if (eraDiff <= 5) {
         score += 15
       } else if (eraDiff <= 10) {
@@ -197,7 +203,7 @@ export class SuggestionEngine {
    */
   scoreTransition(
     fromTrack: PlayedTrack,
-    toTrack: { bpm: null | number; energy: null | number },
+    toTrack: {bpm: null | number; energy: null | number},
     targetEnergy?: number,
   ): number {
     const bpmScore = scoreBpmCompatibility(fromTrack.bpm, toTrack.bpm)
@@ -211,10 +217,7 @@ export class SuggestionEngine {
   /**
    * Deduplicate against history and queue
    */
-  private filterAlreadyPlayed(
-    candidates: SpotifyTrack[],
-    session: MixSession
-  ): SpotifyTrack[] {
+  private filterAlreadyPlayed(candidates: SpotifyTrack[], session: MixSession): SpotifyTrack[] {
     const playedIds = new Set(session.history.map(t => t.trackId))
     const queuedIds = new Set(session.queue.map(t => t.trackId))
 
@@ -226,20 +229,17 @@ export class SuggestionEngine {
   /**
    * Find candidates using Last.fm similar tracks
    */
-  private async findSimilarCandidates(
-    history: PlayedTrack[],
-    limit: number
-  ): Promise<SpotifyTrack[]> {
+  private async findSimilarCandidates(history: PlayedTrack[], limit: number): Promise<SpotifyTrack[]> {
     try {
       // Get similar tracks from Last.fm for most recent tracks
       const recentTracks = history.slice(-3) // Last 3 tracks
-      const allSimilar: { artist: string; match: number; name: string; }[] = []
+      const allSimilar: {artist: string; match: number; name: string}[] = []
 
       for (const track of recentTracks) {
         try {
           const signals = await this.lastFmService.getTrackSignals(
-            { artist: track.artist, name: track.name },
-            true // Skip artist info for performance
+            {artist: track.artist, name: track.name},
+            true, // Skip artist info for performance
           )
 
           if (signals?.similar) {
@@ -256,9 +256,7 @@ export class SuggestionEngine {
 
       // Deduplicate and sort by match score
       const uniqueSimilar = Array.from(
-        new Map(
-          allSimilar.map(s => [`${s.artist}-${s.name}`.toLowerCase(), s])
-        ).values()
+        new Map(allSimilar.map(s => [`${s.artist}-${s.name}`.toLowerCase(), s])).values(),
       ).sort((a, b) => b.match - a.match)
 
       // Convert to Spotify tracks via search
@@ -290,12 +288,9 @@ export class SuggestionEngine {
    * Generate context-aware suggestions using AI when there's play history
    * Uses vibe profile AND recent tracks to suggest what comes next
    */
-  private async generateContextAwareSuggestions(
-    session: MixSession,
-    count: number
-  ): Promise<Suggestion[]> {
+  private async generateContextAwareSuggestions(session: MixSession, count: number): Promise<Suggestion[]> {
     try {
-      const { history, vibe } = session
+      const {history, vibe} = session
 
       if (!this.aiService) {
         getLogger()?.warn('[SuggestionEngine] No AI service available, falling back to Last.fm similarity')
@@ -304,18 +299,20 @@ export class SuggestionEngine {
 
       // Build prompt using vibe, recent history, and taste model (Phase 4d)
       const vibeDescription = buildVibeDescription(vibe)
-      const recentTracks = history.slice(-5).map(t => ({ artist: t.artist, name: t.name }))
+      const recentTracks = history.slice(-5).map(t => ({artist: t.artist, name: t.name}))
 
       // Extract taste context from taste model if available
-      let tasteContext: undefined | { dislikedGenres: string[]; likedGenres: string[]; skippedArtists: string[] }
+      let tasteContext: undefined | {dislikedGenres: string[]; likedGenres: string[]; skippedArtists: string[]}
       if (session.tasteModel) {
         const likedGenres = Object.entries(session.tasteModel.genreWeights)
-          .filter(([_, w]) => w > 0.2).map(([g]) => g)
+          .filter(([_, w]) => w > 0.2)
+          .map(([g]) => g)
         const dislikedGenres = Object.entries(session.tasteModel.genreWeights)
-          .filter(([_, w]) => w < -0.2).map(([g]) => g)
+          .filter(([_, w]) => w < -0.2)
+          .map(([g]) => g)
         const skippedArtists = session.tasteModel.skipPatterns.slice(-5)
         if (likedGenres.length > 0 || dislikedGenres.length > 0 || skippedArtists.length > 0) {
-          tasteContext = { dislikedGenres, likedGenres, skippedArtists }
+          tasteContext = {dislikedGenres, likedGenres, skippedArtists}
         }
       }
 
@@ -382,7 +379,7 @@ export class SuggestionEngine {
         filtered.slice(0, count).map(async (track, index) => {
           const enrichment = await this.audioService.enrichTrack(track)
           const vibeScore = this.scoreSuggestion(track, vibe, lastTrack, enrichment.bpm, null, [])
-          const transitionScore = lastTrack ? this.scoreTransition(lastTrack, { bpm: enrichment.bpm, energy: null }) : 50
+          const transitionScore = lastTrack ? this.scoreTransition(lastTrack, {bpm: enrichment.bpm, energy: null}) : 50
           // eslint-disable-next-line security/detect-object-injection -- safe: index is a controlled integer from Array.map callback
           const aiReason = aiSuggestions.tracks[index]?.reason || 'AI-recommended for your vibe and recent tracks'
 
@@ -396,7 +393,7 @@ export class SuggestionEngine {
             trackUri: track.uri,
             vibeScore: Math.round((vibeScore + transitionScore) / 2),
           }
-        })
+        }),
       )
 
       // Sort by vibe score
@@ -414,12 +411,9 @@ export class SuggestionEngine {
    * Generate initial suggestions using AI when no history exists
    * Uses Claude to suggest tracks that match the vibe profile
    */
-  private async generateInitialSuggestions(
-    session: MixSession,
-    count: number
-  ): Promise<Suggestion[]> {
+  private async generateInitialSuggestions(session: MixSession, count: number): Promise<Suggestion[]> {
     try {
-      const { vibe } = session
+      const {vibe} = session
 
       if (!this.aiService) {
         getLogger()?.warn('[SuggestionEngine] No AI service available, cannot generate suggestions')
@@ -502,7 +496,7 @@ export class SuggestionEngine {
             trackUri: track.uri,
             vibeScore,
           }
-        })
+        }),
       )
 
       // Sort by vibe score
@@ -519,10 +513,7 @@ export class SuggestionEngine {
   /**
    * Fallback to Last.fm similarity-based suggestions when AI is unavailable
    */
-  private async generateLastFmFallbackSuggestions(
-    session: MixSession,
-    count: number
-  ): Promise<Suggestion[]> {
+  private async generateLastFmFallbackSuggestions(session: MixSession, count: number): Promise<Suggestion[]> {
     try {
       // Find similar candidates using Last.fm
       const candidates = await this.findSimilarCandidates(session.history, count * 3)
@@ -550,16 +541,14 @@ export class SuggestionEngine {
             genres: [],
             track,
           }
-        })
+        }),
       )
 
       // Score each candidate
       const lastTrack = session.history[session.history.length - 1]
-      const scoredSuggestions = enrichedCandidates.map(({ bpm, energy, genres, track }) => {
+      const scoredSuggestions = enrichedCandidates.map(({bpm, energy, genres, track}) => {
         const vibeScore = this.scoreSuggestion(track, session.vibe, lastTrack, bpm, energy, genres)
-        const transitionScore = lastTrack
-          ? this.scoreTransition(lastTrack, { bpm, energy })
-          : 50
+        const transitionScore = lastTrack ? this.scoreTransition(lastTrack, {bpm, energy}) : 50
 
         // Build reason string
         const reasons: string[] = []
@@ -595,9 +584,7 @@ export class SuggestionEngine {
       })
 
       // Sort by combined score and return top N
-      const topSuggestions = scoredSuggestions
-        .sort((a, b) => b.vibeScore - a.vibeScore)
-        .slice(0, count)
+      const topSuggestions = scoredSuggestions.sort((a, b) => b.vibeScore - a.vibeScore).slice(0, count)
 
       getLogger()?.info(`[SuggestionEngine] Generated ${topSuggestions.length} Last.fm fallback suggestions`)
       return topSuggestions

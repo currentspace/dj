@@ -43,10 +43,7 @@ try {
 
   // Replace the version constant
   const newVersion = `${commitHash}-${Date.now()}`
-  swContent = swContent.replace(
-    /const SW_VERSION = '[^']+'/,
-    `const SW_VERSION = '${newVersion}'`
-  )
+  swContent = swContent.replace(/const SW_VERSION = '[^']+'/, `const SW_VERSION = '${newVersion}'`)
 
   writeFileSync(swPath, swContent)
   console.log(`✅ Service worker version updated to ${newVersion}`)

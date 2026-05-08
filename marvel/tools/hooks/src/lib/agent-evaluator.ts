@@ -13,27 +13,20 @@
  * + evaluation prefix cached after first eval).
  */
 
-import * as fs from "fs";
-import { type ChildProcess, spawn } from "node:child_process";
-import * as os from "os";
-import * as path from "path";
+import * as fs from 'fs'
+import {type ChildProcess, spawn} from 'node:child_process'
+import * as os from 'os'
+import * as path from 'path'
 
-import type { LogContext } from "./logger.js";
-import type { LlmAnalysisResult } from "./security-llm.js";
+import type {LogContext} from './logger.js'
+import type {LlmAnalysisResult} from './security-llm.js'
 
-import { EvalWsServer, type IEvalWsServer } from "./eval-ws-server.js";
-import {
-  isValidSecurityDecision,
-  SECURITY_DECISION_SCHEMA,
-} from "./evaluation-schemas.js";
-import { logDebug, logError, logWarn } from "./logger.js";
-import { getSecurityDir } from "./paths.js";
-import { redactSensitive } from "./redact.js";
-import {
-  escapeForPrompt,
-  logDecision,
-  logSuggestion,
-} from "./security-llm.js";
+import {EvalWsServer, type IEvalWsServer} from './eval-ws-server.js'
+import {isValidSecurityDecision, SECURITY_DECISION_SCHEMA} from './evaluation-schemas.js'
+import {logDebug, logError, logWarn} from './logger.js'
+import {getSecurityDir} from './paths.js'
+import {redactSensitive} from './redact.js'
+import {escapeForPrompt, logDecision, logSuggestion} from './security-llm.js'
 
 // Default configuration
 const DEFAULT_CONFIG = {
@@ -42,24 +35,24 @@ const DEFAULT_CONFIG = {
   evaluation_timeout_ms: 30000,
   idle_timeout_ms: 3600000,
   max_cumulative_cost_usd: 0.5,
-  model: "haiku",
-};
+  model: 'haiku',
+}
 
 interface AgentEvaluatorConfig {
-  confidence_auto_threshold: number;
-  enabled: boolean;
-  evaluation_timeout_ms: number;
-  idle_timeout_ms: number;
-  max_cumulative_cost_usd: number;
-  model: string;
+  confidence_auto_threshold: number
+  enabled: boolean
+  evaluation_timeout_ms: number
+  idle_timeout_ms: number
+  max_cumulative_cost_usd: number
+  model: string
 }
 
 // Module-level persistent state (lives in daemon process memory)
-let evalServer: IEvalWsServer | null = null;
-let cliProcess: ChildProcess | null = null;
-let generationCounter = 0;
-let evaluationCounter = 0;
-let lastSessionId = "";
+let evalServer: IEvalWsServer | null = null
+let cliProcess: ChildProcess | null = null
+let generationCounter = 0
+let evaluationCounter = 0
+let lastSessionId = ''
 
 // ── Concurrency control ─────────────────────────────────────────────
 // The daemon processes multiple hook requests concurrently (pre-tool-use
@@ -73,30 +66,32 @@ let lastSessionId = "";
 //   3. Cache: stores results keyed by command so the second caller gets the
 //      same answer without re-evaluating
 
-let evalLockTail: Promise<void> = Promise.resolve();
+let evalLockTail: Promise<void> = Promise.resolve()
 
 interface CachedResult {
-  expiresAt: number;
-  result: LlmAnalysisResult;
+  expiresAt: number
+  result: LlmAnalysisResult
 }
 
 function withEvalLock<T>(fn: () => Promise<T>): Promise<T> {
-  const prev = evalLockTail;
-  let release: () => void;
-  evalLockTail = new Promise<void>((r) => { release = r; });
-  return prev.then(fn).finally(() => release!());
+  const prev = evalLockTail
+  let release: () => void
+  evalLockTail = new Promise<void>(r => {
+    release = r
+  })
+  return prev.then(fn).finally(() => release!())
 }
 
-const evalResultCache = new Map<string, CachedResult>();
-const EVAL_CACHE_TTL_MS = 60 * 60 * 1000; // 60 minutes — cache security
+const evalResultCache = new Map<string, CachedResult>()
+const EVAL_CACHE_TTL_MS = 60 * 60 * 1000 // 60 minutes — cache security
 // decisions for the daemon's lifetime. Same command gets the same answer
 // without re-evaluating (saves Haiku API calls and latency).
 
 function pruneEvalCache(): void {
-  const now = Date.now();
+  const now = Date.now()
   for (const [key, entry] of evalResultCache) {
     if (now >= entry.expiresAt) {
-      evalResultCache.delete(key);
+      evalResultCache.delete(key)
     }
   }
 }
@@ -117,7 +112,7 @@ Decision criteria:
 - ask: anything uncertain or potentially dangerous that needs user confirmation
 
 Investigate if needed, then provide your decision with confidence score and reasoning.
-If this command type should be auto-allowed/denied in the future, suggest a pattern rule.`;
+If this command type should be auto-allowed/denied in the future, suggest a pattern rule.`
 
 /**
  * Analyze a command using the persistent agent evaluation session.
@@ -132,73 +127,69 @@ If this command type should be auto-allowed/denied in the future, suggest a patt
 export async function analyzeWithAgent(
   command: string,
   description?: string,
-  context?: LogContext
+  context?: LogContext,
 ): Promise<LlmAnalysisResult> {
-  const config = loadConfig();
+  const config = loadConfig()
 
   // Feature flag check (no lock needed)
   if (!config.enabled) {
-    logWarn("Agent evaluator disabled — unknown commands will require manual confirmation", context);
-    return { decision: "ask", reason: "Agent evaluator disabled — user confirmation required" };
+    logWarn('Agent evaluator disabled — unknown commands will require manual confirmation', context)
+    return {decision: 'ask', reason: 'Agent evaluator disabled — user confirmation required'}
   }
 
   return withEvalLock(async () => {
     // Dedupe: check cache for recent evaluation of this exact command
-    const cached = evalResultCache.get(command);
+    const cached = evalResultCache.get(command)
     if (cached && Date.now() < cached.expiresAt) {
-      logDebug(`Eval dedupe cache hit for command: ${command.slice(0, 50)}...`, context);
-      return cached.result;
+      logDebug(`Eval dedupe cache hit for command: ${command.slice(0, 50)}...`, context)
+      return cached.result
     }
 
     try {
-      const result = await runAgentEvaluation(command, description, config, context);
-      evalResultCache.set(command, { expiresAt: Date.now() + EVAL_CACHE_TTL_MS, result });
-      pruneEvalCache();
-      return result;
+      const result = await runAgentEvaluation(command, description, config, context)
+      evalResultCache.set(command, {expiresAt: Date.now() + EVAL_CACHE_TTL_MS, result})
+      pruneEvalCache()
+      return result
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      logWarn(`Agent evaluation failed: ${message}`, context);
+      const message = error instanceof Error ? error.message : String(error)
+      logWarn(`Agent evaluation failed: ${message}`, context)
 
       // Clean up broken session — next eval will create fresh
-      cleanupSession();
+      cleanupSession()
 
       const fallback: LlmAnalysisResult = {
-        decision: "ask",
+        decision: 'ask',
         reason: `Agent evaluation failed — user confirmation required: ${message}`,
-      };
+      }
       // Cache failures too so the dedupe partner doesn't retry and fail again
-      evalResultCache.set(command, { expiresAt: Date.now() + EVAL_CACHE_TTL_MS, result: fallback });
-      return fallback;
+      evalResultCache.set(command, {expiresAt: Date.now() + EVAL_CACHE_TTL_MS, result: fallback})
+      return fallback
     }
-  });
+  })
 }
 
 /**
  * Load agent evaluator configuration from marvel/security/config.json.
  */
 function loadConfig(): AgentEvaluatorConfig {
-  const configPath = path.join(getSecurityDir(), "config.json");
+  const configPath = path.join(getSecurityDir(), 'config.json')
 
   try {
     if (fs.existsSync(configPath)) {
-      const raw = fs.readFileSync(configPath, "utf-8");
-      const config = JSON.parse(raw) as Record<string, unknown>;
-      const evalConfig = config.marvel_evaluation as
-        | Record<string, unknown>
-        | undefined;
-      const agentConfig = evalConfig?.agent_evaluator as
-        | Partial<AgentEvaluatorConfig>
-        | undefined;
+      const raw = fs.readFileSync(configPath, 'utf-8')
+      const config = JSON.parse(raw) as Record<string, unknown>
+      const evalConfig = config.marvel_evaluation as Record<string, unknown> | undefined
+      const agentConfig = evalConfig?.agent_evaluator as Partial<AgentEvaluatorConfig> | undefined
 
       if (agentConfig) {
-        return { ...DEFAULT_CONFIG, ...agentConfig };
+        return {...DEFAULT_CONFIG, ...agentConfig}
       }
     }
   } catch {
     // Use defaults on parse error
   }
 
-  return { ...DEFAULT_CONFIG };
+  return {...DEFAULT_CONFIG}
 }
 
 /**
@@ -214,18 +205,18 @@ function logAgentEvaluation(
   costUsd: number,
   durationMs: number,
   numTurns: number,
-  context?: LogContext
+  context?: LogContext,
 ): void {
-  const logPath = path.join(getSecurityDir(), "agent-evaluations.jsonl");
+  const logPath = path.join(getSecurityDir(), 'agent-evaluations.jsonl')
 
-  const dir = path.dirname(logPath);
+  const dir = path.dirname(logPath)
   try {
     if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { mode: 0o700, recursive: true });
+      fs.mkdirSync(dir, {mode: 0o700, recursive: true})
     }
   } catch {
-    logWarn(`Failed to create agent evaluations directory: ${dir}`, context);
-    return;
+    logWarn(`Failed to create agent evaluations directory: ${dir}`, context)
+    return
   }
 
   const entry = {
@@ -235,24 +226,24 @@ function logAgentEvaluation(
     decision,
     description: description ? redactSensitive(description) : null,
     durationMs,
-    evaluator: "agent",
+    evaluator: 'agent',
     investigated,
     numTurns,
     reasoning,
     timestamp: new Date().toISOString(),
-  };
+  }
 
   try {
-    fs.appendFileSync(logPath, JSON.stringify(entry) + "\n", { mode: 0o600 });
-    logDebug("Logged agent evaluation", context);
+    fs.appendFileSync(logPath, JSON.stringify(entry) + '\n', {mode: 0o600})
+    logDebug('Logged agent evaluation', context)
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    logWarn(`Failed to log agent evaluation: ${message}`, context);
+    const message = error instanceof Error ? error.message : String(error)
+    logWarn(`Failed to log agent evaluation: ${message}`, context)
   }
 }
 
 // Tracked warmup promise — shutdown awaits this to avoid orphaned CLI processes.
-let warmupPromise: null | Promise<void> = null;
+let warmupPromise: null | Promise<void> = null
 
 /**
  * Shut down the evaluation session.
@@ -262,26 +253,26 @@ let warmupPromise: null | Promise<void> = null;
  * Check whether the agent evaluator is enabled.
  * Used by session-start to surface a warning when the evaluator is off.
  */
-export function isEvalEnabled(): { enabled: boolean; reason?: string } {
-  const config = loadConfig();
+export function isEvalEnabled(): {enabled: boolean; reason?: string} {
+  const config = loadConfig()
   if (!config.enabled) {
-    return { enabled: false, reason: "agent_evaluator.enabled is false in marvel/security/config.json" };
+    return {enabled: false, reason: 'agent_evaluator.enabled is false in marvel/security/config.json'}
   }
-  return { enabled: true };
+  return {enabled: true}
 }
 
 export async function shutdownEvalSession(): Promise<void> {
-  logDebug("Shutting down agent evaluation session");
+  logDebug('Shutting down agent evaluation session')
   // Await in-flight warmup so we don't orphan a CLI process
   if (warmupPromise) {
     try {
-      await warmupPromise;
+      await warmupPromise
     } catch {
       // Warmup already logs its own errors
     }
   }
-  cleanupSession();
-  evalResultCache.clear();
+  cleanupSession()
+  evalResultCache.clear()
 }
 
 /**
@@ -291,22 +282,22 @@ export async function shutdownEvalSession(): Promise<void> {
  * withEvalLock prevents races with the first real evaluation.
  */
 export function warmupEvalSession(): void {
-  const config = loadConfig();
-  if (!config.enabled) return;
+  const config = loadConfig()
+  if (!config.enabled) return
 
   warmupPromise = withEvalLock(async () => {
-    if (evalServer && evalServer.isAlive) return; // already warm
+    if (evalServer && evalServer.isAlive) return // already warm
     try {
-      await initSession(config);
-      logDebug("Eval session pre-warmed successfully");
+      await initSession(config)
+      logDebug('Eval session pre-warmed successfully')
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      logWarn(`Eval session warmup failed (non-fatal): ${message}`);
-      cleanupSession();
+      const message = error instanceof Error ? error.message : String(error)
+      logWarn(`Eval session warmup failed (non-fatal): ${message}`)
+      cleanupSession()
     }
   }).finally(() => {
-    warmupPromise = null;
-  });
+    warmupPromise = null
+  })
 }
 
 /**
@@ -314,17 +305,17 @@ export function warmupEvalSession(): void {
  */
 function cleanupSession(): void {
   if (evalServer) {
-    evalServer.close();
-    evalServer = null;
+    evalServer.close()
+    evalServer = null
   }
 
   if (cliProcess) {
     try {
-      cliProcess.kill("SIGTERM");
+      cliProcess.kill('SIGTERM')
     } catch {
       // Process may already be dead
     }
-    cliProcess = null;
+    cliProcess = null
   }
 }
 
@@ -333,41 +324,38 @@ function cleanupSession(): void {
  * If lastSessionId is available, attempts --resume for faster startup;
  * falls back to fresh session if CLI exits within 2s (resume rejection).
  */
-async function initSession(
-  config: AgentEvaluatorConfig,
-  context?: LogContext
-): Promise<void> {
+async function initSession(config: AgentEvaluatorConfig, context?: LogContext): Promise<void> {
   // Clean up any previous session
-  cleanupSession();
+  cleanupSession()
 
-  logDebug("Initializing agent evaluation session", context);
+  logDebug('Initializing agent evaluation session', context)
 
   // Start WebSocket server
-  evalServer = new EvalWsServer(config.idle_timeout_ms);
-  const port = await evalServer.start();
+  evalServer = new EvalWsServer(config.idle_timeout_ms)
+  const port = await evalServer.start()
 
-  const resumeId = lastSessionId;
-  spawnCli(config, port, resumeId, context);
+  const resumeId = lastSessionId
+  spawnCli(config, port, resumeId, context)
 
   // Quick-death fallback: if CLI exits within 2s after resume, clear
   // lastSessionId and retry with a fresh session
   if (resumeId) {
-    const quickDeathDetected = await new Promise<boolean>((resolve) => {
-      const timer = setTimeout(() => resolve(false), 2000);
-      if (timer.unref) timer.unref();
-      cliProcess?.on("exit", () => {
-        clearTimeout(timer);
-        resolve(true);
-      });
-    });
+    const quickDeathDetected = await new Promise<boolean>(resolve => {
+      const timer = setTimeout(() => resolve(false), 2000)
+      if (timer.unref) timer.unref()
+      cliProcess?.on('exit', () => {
+        clearTimeout(timer)
+        resolve(true)
+      })
+    })
 
     if (quickDeathDetected) {
-      logWarn(`CLI quick-death after --resume ${resumeId.slice(0, 8)}… — retrying fresh`, context);
-      lastSessionId = "";
-      cleanupSession();
-      evalServer = new EvalWsServer(config.idle_timeout_ms);
-      const freshPort = await evalServer.start();
-      spawnCli(config, freshPort, "", context);
+      logWarn(`CLI quick-death after --resume ${resumeId.slice(0, 8)}… — retrying fresh`, context)
+      lastSessionId = ''
+      cleanupSession()
+      evalServer = new EvalWsServer(config.idle_timeout_ms)
+      const freshPort = await evalServer.start()
+      spawnCli(config, freshPort, '', context)
     }
   }
 }
@@ -379,67 +367,51 @@ async function runAgentEvaluation(
   command: string,
   description: string | undefined,
   config: AgentEvaluatorConfig,
-  context?: LogContext
+  context?: LogContext,
 ): Promise<LlmAnalysisResult> {
   // Check cost cap
-  if (
-    evalServer &&
-    evalServer.totalCostUsd >= config.max_cumulative_cost_usd
-  ) {
+  if (evalServer && evalServer.totalCostUsd >= config.max_cumulative_cost_usd) {
     logWarn(
       `Agent eval cost cap reached ($${evalServer.totalCostUsd.toFixed(3)} >= $${config.max_cumulative_cost_usd})`,
-      context
-    );
-    cleanupSession();
-    return { decision: "ask", reason: "Agent eval cost cap reached — user confirmation required" };
+      context,
+    )
+    cleanupSession()
+    return {decision: 'ask', reason: 'Agent eval cost cap reached — user confirmation required'}
   }
 
   // Lazy init — create server + spawn CLI if needed
   if (!evalServer?.isAlive) {
-    await initSession(config, context);
+    await initSession(config, context)
   }
 
   // Build prompt
-  const prompt = AGENT_EVAL_PROMPT.replace(
-    "{command}",
-    escapeForPrompt(command)
-  ).replace(
-    "{description}",
-    description ? escapeForPrompt(description) : "No description"
-  );
+  const prompt = AGENT_EVAL_PROMPT.replace('{command}', escapeForPrompt(command)).replace(
+    '{description}',
+    description ? escapeForPrompt(description) : 'No description',
+  )
 
   // Run evaluation
-  const result = await evalServer!.evaluate(
-    prompt,
-    SECURITY_DECISION_SCHEMA,
-    config.evaluation_timeout_ms
-  );
+  const result = await evalServer!.evaluate(prompt, SECURITY_DECISION_SCHEMA, config.evaluation_timeout_ms)
 
   // Validate structured output
   if (!isValidSecurityDecision(result.decision)) {
-    throw new Error("Invalid structured output from evaluation");
+    throw new Error('Invalid structured output from evaluation')
   }
 
-  const decision = result.decision;
+  const decision = result.decision
 
   // Confidence-based asymmetry: low-confidence deny → ask
-  let finalDecision = decision.decision;
-  if (
-    finalDecision === "deny" &&
-    decision.confidence < config.confidence_auto_threshold
-  ) {
-    logDebug(
-      `Low-confidence deny (${decision.confidence}) → converting to ask`,
-      context
-    );
-    finalDecision = "ask";
+  let finalDecision = decision.decision
+  if (finalDecision === 'deny' && decision.confidence < config.confidence_auto_threshold) {
+    logDebug(`Low-confidence deny (${decision.confidence}) → converting to ask`, context)
+    finalDecision = 'ask'
   }
 
-  evaluationCounter++;
+  evaluationCounter++
 
   // Capture sessionId for --resume on next CLI spawn
   if (evalServer && evalServer.sessionId) {
-    lastSessionId = evalServer.sessionId;
+    lastSessionId = evalServer.sessionId
   }
 
   // Log to agent-evaluations.jsonl
@@ -453,40 +425,33 @@ async function runAgentEvaluation(
     result.costUsd,
     result.durationMs,
     result.numTurns,
-    context
-  );
+    context,
+  )
 
   // Log to shared decisions.jsonl
-  logDecision(
-    command,
-    description,
-    finalDecision,
-    decision.reasoning,
-    result.durationMs,
-    context
-  );
+  logDecision(command, description, finalDecision, decision.reasoning, result.durationMs, context)
 
   // Log suggestions if present
   if (decision.suggested_rule) {
-    const suggestions: LlmAnalysisResult["suggestions"] = {};
+    const suggestions: LlmAnalysisResult['suggestions'] = {}
     if (
-      decision.suggested_rule.type === "prefix" ||
-      decision.suggested_rule.type === "regex" ||
-      decision.suggested_rule.type === "contains"
+      decision.suggested_rule.type === 'prefix' ||
+      decision.suggested_rule.type === 'regex' ||
+      decision.suggested_rule.type === 'contains'
     ) {
       const ruleList = [
         {
           pattern: decision.suggested_rule.pattern,
           reason: decision.suggested_rule.reason,
         },
-      ];
-      if (finalDecision === "allow") {
-        suggestions.allow = ruleList;
-      } else if (finalDecision === "deny") {
-        suggestions.deny = ruleList;
+      ]
+      if (finalDecision === 'allow') {
+        suggestions.allow = ruleList
+      } else if (finalDecision === 'deny') {
+        suggestions.deny = ruleList
       }
     }
-    logSuggestion(command, suggestions, context);
+    logSuggestion(command, suggestions, context)
   }
 
   return {
@@ -495,7 +460,7 @@ async function runAgentEvaluation(
     suggestedRule: decision.suggested_rule,
     suggestions: decision.suggested_rule
       ? {
-          [finalDecision === "deny" ? "deny" : "allow"]: [
+          [finalDecision === 'deny' ? 'deny' : 'allow']: [
             {
               pattern: decision.suggested_rule.pattern,
               reason: decision.suggested_rule.reason,
@@ -503,46 +468,41 @@ async function runAgentEvaluation(
           ],
         }
       : undefined,
-  };
+  }
 }
 
 /**
  * Spawn Claude CLI subprocess with --sdk-url.
  */
-function spawnCli(
-  config: AgentEvaluatorConfig,
-  port: number,
-  resumeSessionId: string,
-  context?: LogContext
-): void {
+function spawnCli(config: AgentEvaluatorConfig, port: number, resumeSessionId: string, context?: LogContext): void {
   // Spawn Claude CLI with --sdk-url
   const args = [
-    "--sdk-url",
+    '--sdk-url',
     `ws://127.0.0.1:${port}`,
-    "--print",
-    "--output-format",
-    "stream-json",
-    "--input-format",
-    "stream-json",
-    "--verbose",
-    "--model",
+    '--print',
+    '--output-format',
+    'stream-json',
+    '--input-format',
+    'stream-json',
+    '--verbose',
+    '--model',
     config.model,
-    "--permission-mode",
-    "dontAsk",
-    "--allowedTools",
-    "Read",
-    "--allowedTools",
-    "Grep",
-    "--allowedTools",
-    "Glob",
-    "-p",
-    "",
-  ];
+    '--permission-mode',
+    'dontAsk',
+    '--allowedTools',
+    'Read',
+    '--allowedTools',
+    'Grep',
+    '--allowedTools',
+    'Glob',
+    '-p',
+    '',
+  ]
 
   // Session resume: reuse previous session for faster startup (prompt cache hit)
   if (resumeSessionId) {
-    args.push("--resume", resumeSessionId);
-    logDebug(`Attempting session resume: ${resumeSessionId.slice(0, 8)}…`, context);
+    args.push('--resume', resumeSessionId)
+    logDebug(`Attempting session resume: ${resumeSessionId.slice(0, 8)}…`, context)
   }
 
   // Isolation: child claude must not trigger the parent's hook pipeline.
@@ -551,62 +511,62 @@ function spawnCli(
   //   2. CLAUDE_PROJECT_DIR="" — explicitly disables project hook discovery.
   // Additionally, MARVEL_SECURITY_EVAL=1 causes bash-security-gate.isRecursiveCall() to
   // return true, preventing infinite recursion if hooks somehow fire.
-  cliProcess = spawn("claude", args, {
+  cliProcess = spawn('claude', args, {
     cwd: os.tmpdir(),
     env: {
       ...process.env,
-      CLAUDE_PROJECT_DIR: "",
+      CLAUDE_PROJECT_DIR: '',
       // Unset CLAUDECODE to allow nested claude invocation for security eval.
       // The parent session sets this; without clearing it, the child refuses
       // to start ("cannot be launched inside another Claude Code session").
       CLAUDECODE: undefined,
-      MARVEL_SECURITY_EVAL: "1",
+      MARVEL_SECURITY_EVAL: '1',
       MAX_THINKING_TOKENS: undefined,
     },
-    stdio: ["pipe", "pipe", "pipe"],
-  });
+    stdio: ['pipe', 'pipe', 'pipe'],
+  })
 
-  generationCounter++;
-  const gen = generationCounter;
-  const spawnedPid = cliProcess.pid;
-  evaluationCounter = 0;
+  generationCounter++
+  const gen = generationCounter
+  const spawnedPid = cliProcess.pid
+  evaluationCounter = 0
 
   logDebug(
-    `helper_spawn: generation=${gen}, port=${port}, pid=${spawnedPid}, resume=${resumeSessionId ? resumeSessionId.slice(0, 8) + "…" : "none"}, cwd=${os.tmpdir()}`,
-    context
-  );
+    `helper_spawn: generation=${gen}, port=${port}, pid=${spawnedPid}, resume=${resumeSessionId ? resumeSessionId.slice(0, 8) + '…' : 'none'}, cwd=${os.tmpdir()}`,
+    context,
+  )
 
-  cliProcess.on("error", (err) => {
-    logError("Eval CLI spawn error", err, context);
-    cleanupSession();
-  });
+  cliProcess.on('error', err => {
+    logError('Eval CLI spawn error', err, context)
+    cleanupSession()
+  })
 
-  cliProcess.on("exit", (code, signal) => {
+  cliProcess.on('exit', (code, signal) => {
     logDebug(
-      `helper_death: generation=${gen}, uses=${evaluationCounter}, code=${code}, signal=${signal || "none"}, pid=${spawnedPid}`,
-      context
-    );
+      `helper_death: generation=${gen}, uses=${evaluationCounter}, code=${code}, signal=${signal || 'none'}, pid=${spawnedPid}`,
+      context,
+    )
     // Only clean up if this exit is from the current generation.
     // Without this guard, an old process exiting after a new one spawns
     // would null out the reference to the active process.
     if (gen === generationCounter) {
-      cliProcess = null;
+      cliProcess = null
     }
-  });
+  })
 
   // Pipe stdout for debugging (but don't accumulate)
-  cliProcess.stdout?.on("data", (data: Buffer) => {
-    const msg = data.toString().trim();
+  cliProcess.stdout?.on('data', (data: Buffer) => {
+    const msg = data.toString().trim()
     if (msg) {
-      logDebug(`Eval CLI stdout: ${msg.slice(0, 500)}`, context);
+      logDebug(`Eval CLI stdout: ${msg.slice(0, 500)}`, context)
     }
-  });
+  })
 
   // Pipe stderr for debugging (but don't accumulate)
-  cliProcess.stderr?.on("data", (data: Buffer) => {
-    const msg = data.toString().trim();
+  cliProcess.stderr?.on('data', (data: Buffer) => {
+    const msg = data.toString().trim()
     if (msg) {
-      logDebug(`Eval CLI stderr: ${msg.slice(0, 500)}`, context);
+      logDebug(`Eval CLI stderr: ${msg.slice(0, 500)}`, context)
     }
-  });
+  })
 }

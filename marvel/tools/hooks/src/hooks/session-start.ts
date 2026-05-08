@@ -7,40 +7,38 @@
  * Initializes run directory and loads packs at session start.
  */
 
-import * as fs from "fs";
-import * as path from "path";
+import * as fs from 'fs'
+import * as path from 'path'
 
-import type { SessionStartHookInput, SessionStartHookSpecificOutput, SyncHookJSONOutput } from "../sdk-types.js";
-import type { RunState } from "../types.js";
+import type {SessionStartHookInput, SessionStartHookSpecificOutput, SyncHookJSONOutput} from '../sdk-types.js'
+import type {RunState} from '../types.js'
 
-import { isEvalEnabled } from "../lib/agent-evaluator.js";
-import { safeMkdir, safeWriteJson } from "../lib/file-ops.js";
-import { buildHookContext, logDebug, logWarn } from "../lib/logger.js";
-import { findMarvelRoot, getTempDir } from "../lib/paths.js";
-import { loadAllPacks } from "../loaders/pack-loader.js";
+import {isEvalEnabled} from '../lib/agent-evaluator.js'
+import {safeMkdir, safeWriteJson} from '../lib/file-ops.js'
+import {buildHookContext, logDebug, logWarn} from '../lib/logger.js'
+import {findMarvelRoot, getTempDir} from '../lib/paths.js'
+import {loadAllPacks} from '../loaders/pack-loader.js'
 
-export async function handleSessionStart(
-  input: SessionStartHookInput
-): Promise<SyncHookJSONOutput> {
-  const context = buildHookContext("session-start", input);
-  const marvelRoot = findMarvelRoot();
+export async function handleSessionStart(input: SessionStartHookInput): Promise<SyncHookJSONOutput> {
+  const context = buildHookContext('session-start', input)
+  const marvelRoot = findMarvelRoot()
   if (!marvelRoot) {
-    logDebug("MARVEL root not found, skipping session start", context);
-    return {};
+    logDebug('MARVEL root not found, skipping session start', context)
+    return {}
   }
 
-  const runId = generateRunId();
-  const runsDir = path.join(marvelRoot, "runs");
-  const runDir = path.join(runsDir, runId);
+  const runId = generateRunId()
+  const runsDir = path.join(marvelRoot, 'runs')
+  const runDir = path.join(runsDir, runId)
 
   // Create run directory
   if (!safeMkdir(runDir, context)) {
-    return {};
+    return {}
   }
 
   // Load packs
-  const packs = await loadAllPacks(marvelRoot);
-  const packNames = packs.map((p) => p.metadata.name);
+  const packs = await loadAllPacks(marvelRoot)
+  const packNames = packs.map(p => p.metadata.name)
 
   // Initialize run state
   const runState: RunState = {
@@ -50,73 +48,69 @@ export async function handleSessionStart(
     runId,
     startedAt: new Date().toISOString(),
     toolCallCount: 0,
-  };
+  }
 
   // Write run.json
-  const runJsonPath = path.join(runDir, "run.json");
+  const runJsonPath = path.join(runDir, 'run.json')
   if (!safeWriteJson(runJsonPath, runState, context)) {
-    return {};
+    return {}
   }
 
   // Set environment variable for other hooks
-  process.env.MARVEL_RUN_ID = runId;
-  process.env.MARVEL_RUN_DIR = runDir;
+  process.env.MARVEL_RUN_ID = runId
+  process.env.MARVEL_RUN_DIR = runDir
 
   // Health diagnostics
-  const sessionId = process.env.CLAUDE_SESSION_ID;
-  const healthLines: string[] = [];
+  const sessionId = process.env.CLAUDE_SESSION_ID
+  const healthLines: string[] = []
 
-  if (!sessionId || sessionId === "unknown") {
-    healthLines.push(
-      "WARNING: Session ID not set — pre-commit tracking will use shared state.",
-    );
-    logWarn("CLAUDE_SESSION_ID is not set — session state will use shared 'unknown' file", context);
+  if (!sessionId || sessionId === 'unknown') {
+    healthLines.push('WARNING: Session ID not set — pre-commit tracking will use shared state.')
+    logWarn("CLAUDE_SESSION_ID is not set — session state will use shared 'unknown' file", context)
   }
 
   // Check for stale daemon files
   try {
-    const tempDir = getTempDir();
-    const files = fs.readdirSync(tempDir).filter((f) => f.startsWith("p-") || f.startsWith("session-"));
-    const staleCount = files.filter((f) => f.endsWith(".pid")).length;
+    const tempDir = getTempDir()
+    const files = fs.readdirSync(tempDir).filter(f => f.startsWith('p-') || f.startsWith('session-'))
+    const staleCount = files.filter(f => f.endsWith('.pid')).length
     if (staleCount > 10) {
-      healthLines.push(`WARNING: ${staleCount} daemon PID files in temp dir — consider running cleanup.`);
-      logWarn(`${staleCount} daemon PID files in temp dir — consider running cleanup`, context);
+      healthLines.push(`WARNING: ${staleCount} daemon PID files in temp dir — consider running cleanup.`)
+      logWarn(`${staleCount} daemon PID files in temp dir — consider running cleanup`, context)
     }
-    logDebug(`Hook health: session=${sessionId ?? "unset"}, tempFiles=${files.length}, pidFiles=${staleCount}`, context);
+    logDebug(`Hook health: session=${sessionId ?? 'unset'}, tempFiles=${files.length}, pidFiles=${staleCount}`, context)
   } catch {
     // Non-fatal — don't block session start for diagnostics
   }
 
   // Check security evaluator health
-  const evalStatus = isEvalEnabled();
+  const evalStatus = isEvalEnabled()
   if (!evalStatus.enabled) {
     healthLines.push(
       `WARNING: Security LLM evaluator is disabled — unknown commands will require manual confirmation. ${evalStatus.reason}`,
-    );
-    logWarn(`Security evaluator disabled: ${evalStatus.reason}`, context);
+    )
+    logWarn(`Security evaluator disabled: ${evalStatus.reason}`, context)
   } else {
-    logDebug("Security evaluator enabled", context);
+    logDebug('Security evaluator enabled', context)
   }
 
   // Build context message
-  const packList = packNames.map((n) => `- ${n}`).join("\n");
-  const healthSection = healthLines.length > 0
-    ? healthLines.join("\n") + "\n"
-    : "";
-  const contextMessage = `${healthSection}MARVEL session started: ${runId}\nActive packs:\n${packList}`;
+  const packList = packNames.map(n => `- ${n}`).join('\n')
+  const healthSection = healthLines.length > 0 ? healthLines.join('\n') + '\n' : ''
+  const contextMessage = `${healthSection}MARVEL session started: ${runId}\nActive packs:\n${packList}`
 
-  logDebug("Session started successfully", { ...context, runId });
+  logDebug('Session started successfully', {...context, runId})
 
   const hookSpecificOutput: SessionStartHookSpecificOutput = {
     additionalContext: contextMessage,
-    hookEventName: "SessionStart",
-  };
-  return { hookSpecificOutput };
+    hookEventName: 'SessionStart',
+  }
+  return {hookSpecificOutput}
 }
 
 function generateRunId(): string {
-  const now = new Date();
-  const datePart = now.toISOString().slice(0, 10).replace(/-/g, "");
-  const timePart = now.toISOString().slice(11, 19).replace(/:/g, "");
-  return `run_${datePart}_${timePart}`;
+  const now = new Date()
+  const datePart = now.toISOString().slice(0, 10).replace(/-/g, '')
+  const timePart = now.toISOString().slice(11, 19).replace(/:/g, '')
+  return `run_${datePart}_${timePart}`
 }

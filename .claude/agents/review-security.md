@@ -65,11 +65,13 @@ Review code for security vulnerabilities following OWASP Top 10 categories and c
 ## Security Review
 
 ### Summary
+
 <1-2 sentence overview of security posture>
 
 ### Vulnerabilities
 
 #### [CRITICAL] <vulnerability title>
+
 - **Category**: <OWASP category>
 - **File**: <absolute path>:<line number>
 - **Description**: <what the vulnerability is>
@@ -77,20 +79,25 @@ Review code for security vulnerabilities following OWASP Top 10 categories and c
 - **Remediation**: <specific code change to fix>
 
 #### [HIGH] <vulnerability title>
+
 - ...
 
 #### [MEDIUM] <vulnerability title>
+
 - ...
 
 #### [LOW] <vulnerability title>
+
 - ...
 
 ### Secrets Scan
+
 - [ ] No hardcoded secrets found
 - [ ] No sensitive data in logs
 - [ ] Environment variables properly scoped
 
 ### Recommendations
+
 1. <prioritized security improvement>
 2. ...
 ```

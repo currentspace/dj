@@ -3,11 +3,7 @@ import type {ProgressNarrator} from '../../../lib/progress-narrator'
 import type {SSEWriter} from '../streaming/sse-writer'
 import type {AnalysisResult} from '../types'
 
-import {
-  SpotifyPlaylistFullSchema,
-  SpotifyPlaylistTracksResponseSchema,
-  type SpotifyTrackFull,
-} from '@dj/shared-types'
+import {SpotifyPlaylistFullSchema, SpotifyPlaylistTracksResponseSchema, type SpotifyTrackFull} from '@dj/shared-types'
 import {z} from 'zod'
 
 import {getLogger} from '../../../utils/LoggerContext'
@@ -87,9 +83,7 @@ export async function executeAnalyzePlaylist(
 
   const rawTracksData = await tracksResponse.json()
   const tracksData = SpotifyPlaylistTracksResponseSchema.parse(rawTracksData)
-  const tracks = tracksData.items
-    .map(item => item.track)
-    .filter((track): track is SpotifyTrackFull => track !== null)
+  const tracks = tracksData.items.map(item => item.track).filter((track): track is SpotifyTrackFull => track !== null)
   const trackIds = tracks.map(t => t.id)
 
   getLogger()?.info(`[SpotifyAPI] Loaded ${tracks.length} tracks from playlist`)
@@ -270,11 +264,7 @@ export async function executeAnalyzePlaylist(
     message: (() => {
       const sources = [
         deezerData
-          ? `Deezer (${[
-              deezerData.bpm ? 'BPM' : null,
-              deezerData.rank ? 'rank' : null,
-              deezerData.gain ? 'gain' : null,
-            ]
+          ? `Deezer (${[deezerData.bpm ? 'BPM' : null, deezerData.rank ? 'rank' : null, deezerData.gain ? 'gain' : null]
               .filter(Boolean)
               .join(', ')})`
           : null,

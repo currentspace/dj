@@ -23,11 +23,13 @@ node marvel/tools/hooks/dist/cli.bundle.js query packs
 If `cli.bundle.js` does not exist or the command fails:
 
 1. Check if the hooks need to be built:
+
    ```bash
    ls marvel/tools/hooks/dist/cli.bundle.js
    ```
 
 2. If the file is missing, inform the user:
+
    ```
    MARVEL CLI not built. Run: cd marvel/tools/hooks && pnpm build
    ```
@@ -38,6 +40,7 @@ If `cli.bundle.js` does not exist or the command fails:
    - Each `marvel/packs/<name>/guardrails.md` for guardrail presence
 
    Present the results in a formatted table:
+
    ```
    ## MARVEL Packs
 

@@ -22,7 +22,7 @@ useEffect(() => {
 const value = useSyncExternalStore(
   store.subscribe,
   store.getSnapshot,
-  store.getServerSnapshot  // optional SSR
+  store.getServerSnapshot, // optional SSR
 )
 
 // WRONG — useEffect for derived state
@@ -34,10 +34,12 @@ useEffect(() => {
 const playlistId = selectedPlaylist?.id ?? null
 
 // WRONG — useEffect for data fetching
-useEffect(() => { fetchData() }, [])
+useEffect(() => {
+  fetchData()
+}, [])
 
 // CORRECT — React Query
-const { data } = useQuery({ queryKey: ['playlists'], queryFn: fetchPlaylists })
+const {data} = useQuery({queryKey: ['playlists'], queryFn: fetchPlaylists})
 ```
 
 ## useRef for Value Tracking
@@ -49,7 +51,9 @@ const { data } = useQuery({ queryKey: ['playlists'], queryFn: fetchPlaylists })
 const prevTokenRef = useRef(token)
 if (token && token !== prevTokenRef.current) {
   prevTokenRef.current = token
-  startTransition(() => { connect(token) })
+  startTransition(() => {
+    connect(token)
+  })
 }
 ```
 
@@ -72,7 +76,7 @@ if (token && token !== prevTokenRef.current) {
 
 ```css
 /* apps/web/src/styles/theme.css */
-@import "tailwindcss";
+@import 'tailwindcss';
 
 @theme {
   --color-spotify-green: #1db954;

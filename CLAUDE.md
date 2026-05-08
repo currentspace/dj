@@ -28,13 +28,13 @@ Cloudflare Workers with a React 19.2 frontend.
 
 ### Key Constraints
 
-| Constraint | Value | Why |
-|------------|-------|-----|
-| **No useEffect for state sync** | Direct sync in component body | React 19.2 compiler-friendly |
-| **Tool result size** | <5KB | Context window optimization |
-| **Rate limit** | 40 RPS global | Cloudflare Workers constraint |
-| **Max agentic turns** | 5 | Cost control |
-| **Anthropic concurrency** | 2 | SDK limitation in Workers |
+| Constraint                      | Value                         | Why                           |
+| ------------------------------- | ----------------------------- | ----------------------------- |
+| **No useEffect for state sync** | Direct sync in component body | React 19.2 compiler-friendly  |
+| **Tool result size**            | <5KB                          | Context window optimization   |
+| **Rate limit**                  | 40 RPS global                 | Cloudflare Workers constraint |
+| **Max agentic turns**           | 5                             | Cost control                  |
+| **Anthropic concurrency**       | 2                             | SDK limitation in Workers     |
 
 ## Architecture
 

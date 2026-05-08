@@ -16,10 +16,12 @@
 ## Root Cause
 
 ### Issue Location
+
 **File:** `workers/api/src/utils/RateLimitedQueue.ts`
 **Lines:** 360, 394-399
 
 ### Code
+
 ```typescript
 // Line 360: Timer creation
 this.timer ??= toTimerId(setTimeout(tick, this.minTickMs))
@@ -35,13 +37,14 @@ function toTimerId(value: unknown): number {
 
 ### Environment Differences
 
-| Environment | setTimeout Return Type | isValidTimerId Result |
-|-------------|------------------------|----------------------|
-| **Cloudflare Workers** | `number` | ✅ true (works) |
-| **Node.js** | `Timeout` object | ❌ false (throws error) |
-| **Browser** | `number` | ✅ true (works) |
+| Environment            | setTimeout Return Type | isValidTimerId Result   |
+| ---------------------- | ---------------------- | ----------------------- |
+| **Cloudflare Workers** | `number`               | ✅ true (works)         |
+| **Node.js**            | `Timeout` object       | ❌ false (throws error) |
+| **Browser**            | `number`               | ✅ true (works)         |
 
 ### Error Message in Tests
+
 ```
 Error: Invalid timer ID: object
     at toTimerId (RateLimitedQueue.ts:398)
@@ -55,17 +58,20 @@ Error: Invalid timer ID: object
 ### Affected Environments
 
 #### ❌ Node.js Test Environment (Vitest)
+
 - **Status:** Broken
 - **Impact:** Cannot test RateLimitedQueue directly in integration tests
 - **Workaround:** Test rate limiting via service methods (AudioEnrichmentService, LastFmService)
 - **Current Tests:** 0 direct RateLimitedQueue integration tests due to this bug
 
 #### ✅ Cloudflare Workers Production
+
 - **Status:** Working correctly
 - **Impact:** None (setTimeout returns number)
 - **Production Use:** AudioEnrichmentService, LastFmService use RateLimitedQueue successfully
 
 #### ✅ Unit Tests
+
 - **Status:** Working correctly
 - **Impact:** None (unit tests don't use setTimeout timers)
 - **Current Tests:** 10 RateLimitedQueue unit tests pass
@@ -73,12 +79,14 @@ Error: Invalid timer ID: object
 ### Severity Justification
 
 **Medium Severity** because:
+
 - ✅ Production works correctly (Cloudflare Workers)
 - ❌ Cannot test RateLimitedQueue in integration tests (Node.js)
 - ⚠️ Limits test coverage expansion
 - ⚠️ Creates confusion about timer handling
 
 **Not High Severity** because:
+
 - Production is unaffected
 - Workarounds exist (test via service methods)
 - Unit tests still work
@@ -90,6 +98,7 @@ Error: Invalid timer ID: object
 ### setTimeout Return Types
 
 #### Cloudflare Workers
+
 ```typescript
 // In Cloudflare Workers global scope
 const timerId: number = setTimeout(() => {}, 100)
@@ -97,14 +106,16 @@ clearTimeout(timerId) // expects number
 ```
 
 #### Node.js
+
 ```typescript
 // In Node.js
-import { Timeout } from 'timers'
+import {Timeout} from 'timers'
 const timerId: Timeout = setTimeout(() => {}, 100)
 clearTimeout(timerId) // accepts Timeout object or number
 ```
 
 #### Browser
+
 ```typescript
 // In browser
 const timerId: number = setTimeout(() => {}, 100)
@@ -148,17 +159,18 @@ function toTimerId(value: unknown): number {
 }
 
 function isValidTimerId(value: unknown): value is number {
-  return typeof value === 'number' ||
-         (typeof value === 'object' && value !== null)
+  return typeof value === 'number' || (typeof value === 'object' && value !== null)
 }
 ```
 
 **Pros:**
+
 - Works in all environments
 - Maintains type safety
 - Simple implementation
 
 **Cons:**
+
 - Returns 0 for Node.js timers (acceptable since we don't use timer IDs for clearing in tests)
 
 ---
@@ -195,11 +207,13 @@ function toTimerId(value: unknown): number {
 ```
 
 **Pros:**
+
 - Type-safe with union types
 - Explicit about supported types
 - Clear intent
 
 **Cons:**
+
 - Requires NodeJS types
 - Still returns placeholder for Node.js timers
 
@@ -235,11 +249,13 @@ function toTimerId(value: unknown): number {
 ```
 
 **Pros:**
+
 - Explicit environment handling
 - Clear error messages per environment
 - No ambiguity
 
 **Cons:**
+
 - More complex
 - Requires environment detection
 - Might not handle all edge cases
@@ -263,17 +279,18 @@ function toTimerId(value: unknown): number {
 }
 
 function isValidTimerId(value: unknown): value is number {
-  return typeof value === 'number' ||
-         typeof value === 'object' // Node.js Timeout object
+  return typeof value === 'number' || typeof value === 'object' // Node.js Timeout object
 }
 ```
 
 **Pros:**
+
 - Simplest fix
 - Works in all environments
 - No timer tracking overhead in tests
 
 **Cons:**
+
 - Loses timer tracking in Node.js (acceptable for tests)
 
 ---
@@ -281,6 +298,7 @@ function isValidTimerId(value: unknown): value is number {
 ## Recommended Solution
 
 **Use Option 1 (Normalize Timer IDs)** because:
+
 1. ✅ Simple implementation
 2. ✅ Works in all environments
 3. ✅ Maintains type safety
@@ -305,12 +323,12 @@ function toTimerId(value: unknown): number {
 }
 
 function isValidTimerId(value: unknown): value is number {
-  return typeof value === 'number' ||
-         (typeof value === 'object' && value !== null)
+  return typeof value === 'number' || (typeof value === 'object' && value !== null)
 }
 ```
 
 **Why this works:**
+
 - Production (Cloudflare Workers): Returns actual number timer ID
 - Tests (Node.js): Returns 0 placeholder (timers clean up automatically)
 - Both environments: RateLimitedQueue functionality is identical
@@ -328,15 +346,11 @@ describe('RateLimitedQueue Integration', () => {
   it('respects rate limit with real timing', async () => {
     const queue = new RateLimitedQueue<number>(40) // 40 TPS
 
-    const tasks = Array.from({ length: 10 }, (_, i) =>
-      async () => i
-    )
+    const tasks = Array.from({length: 10}, (_, i) => async () => i)
 
     tasks.forEach(task => queue.enqueue(task))
 
-    const [results, duration] = await measureExecutionTime(() =>
-      queue.processAll()
-    )
+    const [results, duration] = await measureExecutionTime(() => queue.processAll())
 
     // 10 tasks at 40 TPS = 250ms minimum
     expect(duration).toBeGreaterThan(250)
@@ -367,15 +381,13 @@ describe('RateLimitedQueue Integration', () => {
     let concurrent = 0
     let maxConcurrent = 0
 
-    const tasks = Array.from({ length: 10 }, () =>
-      async () => {
-        concurrent++
-        maxConcurrent = Math.max(maxConcurrent, concurrent)
-        await waitForMs(50)
-        concurrent--
-        return 1
-      }
-    )
+    const tasks = Array.from({length: 10}, () => async () => {
+      concurrent++
+      maxConcurrent = Math.max(maxConcurrent, concurrent)
+      await waitForMs(50)
+      concurrent--
+      return 1
+    })
 
     tasks.forEach(task => queue.enqueue(task))
     await queue.processAll()
@@ -405,9 +417,7 @@ it('AudioEnrichmentService respects rate limit', async () => {
   const service = new AudioEnrichmentService(mockKv)
 
   const tracks = createTestTracks(10)
-  const [results, duration] = await measureExecutionTime(() =>
-    service.batchEnrichTracks(tracks)
-  )
+  const [results, duration] = await measureExecutionTime(() => service.batchEnrichTracks(tracks))
 
   // Service uses RateLimitedQueue internally
   expect(duration).toBeGreaterThan(250) // 40 TPS validation
@@ -419,19 +429,23 @@ it('AudioEnrichmentService respects rate limit', async () => {
 ## Related Issues
 
 ### 1. Timer Cleanup
+
 **Question:** Do we need to track timer IDs at all in tests?
 
 **Answer:** No. In test environments:
+
 - Timers clean up automatically when process ends
 - We don't manually call `clearTimeout()`
 - Timer tracking is defensive coding, not functional requirement
 
 ### 2. Production Implications
+
 **Question:** Does this affect production?
 
 **Answer:** No. Cloudflare Workers always returns `number` from `setTimeout()`, so production is unaffected.
 
 ### 3. Type Safety
+
 **Question:** How do we maintain type safety across environments?
 
 **Answer:** Use union type `number | NodeJS.Timeout` with runtime type checking.
@@ -441,11 +455,13 @@ it('AudioEnrichmentService respects rate limit', async () => {
 ## Next Steps
 
 ### Immediate (Optional):
+
 1. Apply Option 1 fix to `RateLimitedQueue.ts`
 2. Verify unit tests still pass
 3. Add integration tests for RateLimitedQueue
 
 ### Future (Phase 3):
+
 1. Add E2E tests that exercise RateLimitedQueue via user workflows
 2. Monitor for similar cross-environment issues
 3. Document environment-specific quirks

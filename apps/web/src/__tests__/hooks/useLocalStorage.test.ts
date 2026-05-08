@@ -75,9 +75,9 @@ describe('storage utilities', () => {
 
   describe('clearAll', () => {
     it('removes every key listed in STORAGE_KEYS', () => {
-      Object.values(STORAGE_KEYS).forEach((key) => localStorage.setItem(key, 'x'))
+      Object.values(STORAGE_KEYS).forEach(key => localStorage.setItem(key, 'x'))
       storage.clearAll()
-      Object.values(STORAGE_KEYS).forEach((key) => {
+      Object.values(STORAGE_KEYS).forEach(key => {
         expect(localStorage.getItem(key)).toBeNull()
       })
     })
@@ -113,9 +113,7 @@ describe('useLocalStorage', () => {
   })
 
   it('persists object updates and round-trips them', () => {
-    const {result} = renderHook(() =>
-      useLocalStorage<null | {n: number}>(STORAGE_KEYS.CURRENT_PLAYLIST, null),
-    )
+    const {result} = renderHook(() => useLocalStorage<null | {n: number}>(STORAGE_KEYS.CURRENT_PLAYLIST, null))
     act(() => {
       result.current[1]({n: 42})
     })

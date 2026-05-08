@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config'
+import {defineConfig} from 'vitest/config'
 
 /**
  * Vitest configuration for @dj/api-worker
@@ -12,23 +12,13 @@ export default defineConfig({
 
     // API-specific include patterns (exclude contract and integration tests)
     include: ['src/**/*.test.ts', 'src/**/*.spec.ts'],
-    exclude: [
-      '**/node_modules/**',
-      '**/dist/**',
-      'src/**/*.contract.test.ts',
-      'src/**/*.integration.test.ts',
-    ],
+    exclude: ['**/node_modules/**', '**/dist/**', 'src/**/*.contract.test.ts', 'src/**/*.integration.test.ts'],
 
     // API-specific coverage
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],
-      exclude: [
-        'src/**/*.{test,spec}.ts',
-        'src/**/__tests__/**',
-        'src/index.ts',
-        'src/test-setup.ts',
-      ],
+      exclude: ['src/**/*.{test,spec}.ts', 'src/**/__tests__/**', 'src/index.ts', 'src/test-setup.ts'],
     },
   },
   resolve: {

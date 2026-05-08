@@ -26,11 +26,11 @@ interface NavigationState {
 
 export const useNavigationStore = create<NavigationState>()(
   subscribeWithSelector((set, get) => ({
-    navigate: (route) => {
+    navigate: route => {
       if (get().route === route) return
       set({route})
     },
 
     route: 'chat',
-  }))
+  })),
 )

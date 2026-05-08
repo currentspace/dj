@@ -16,12 +16,17 @@ export function SpotifyAuth({error, isLoading, onClearError, onLogin}: SpotifyAu
       <div className="text-center">
         <div className="text-4xl mb-4">🎵</div>
         <h2 className="text-xl font-bold mb-2">Connect to Spotify</h2>
-        <p className="text-text-secondary mb-4">Login with your Spotify account to create AI-powered playlists and save them directly to your library.</p>
+        <p className="text-text-secondary mb-4">
+          Login with your Spotify account to create AI-powered playlists and save them directly to your library.
+        </p>
 
         {error && (
           <div className="text-error mb-4">
             {error}
-            <button className="bg-transparent border-none text-error ml-2 cursor-pointer underline hover:opacity-80" onClick={onClearError} type="button">
+            <button
+              className="bg-transparent border-none text-error ml-2 cursor-pointer underline hover:opacity-80"
+              onClick={onClearError}
+              type="button">
               Dismiss
             </button>
           </div>

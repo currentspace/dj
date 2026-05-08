@@ -34,11 +34,11 @@ interface MixSession {
 }
 
 interface VibeProfile {
-  mood: string[]              // ["upbeat", "energetic"]
-  genres: string[]            // ["indie rock", "alt pop"]
-  era: { start: number; end: number }
-  bpmRange: { min: number; max: number }
-  energyLevel: number         // 1-10
+  mood: string[] // ["upbeat", "energetic"]
+  genres: string[] // ["indie rock", "alt pop"]
+  era: {start: number; end: number}
+  bpmRange: {min: number; max: number}
+  energyLevel: number // 1-10
   energyDirection: 'building' | 'steady' | 'winding_down'
 }
 
@@ -58,16 +58,16 @@ interface QueuedTrack {
   name: string
   artist: string
   addedBy: 'user' | 'ai'
-  vibeScore: number           // 0-100, how well it fits
-  reason?: string             // Why AI suggested it
+  vibeScore: number // 0-100, how well it fits
+  reason?: string // Why AI suggested it
   position: number
 }
 
 interface SessionPreferences {
   avoidGenres: string[]
   favoriteArtists: string[]
-  bpmLock?: { min: number; max: number }
-  autoFill: boolean           // Auto-add tracks when queue low
+  bpmLock?: {min: number; max: number}
+  autoFill: boolean // Auto-add tracks when queue low
 }
 ```
 
@@ -151,14 +151,17 @@ POST   /api/mix/save            → Save current mix as Spotify playlist
 ### Agent 1: Shared Types & Schemas
 
 **Files to create/modify**:
+
 - `packages/shared-types/src/mix-session.ts` (NEW)
 - `packages/shared-types/src/index.ts` (UPDATE)
 - `workers/api/src/schemas/mix-session.schema.ts` (NEW)
 
 **Tests to write first**:
+
 - `packages/shared-types/src/__tests__/mix-session.test.ts`
 
 **Tasks**:
+
 1. Define MixSession, VibeProfile, QueuedTrack, PlayedTrack interfaces
 2. Create Zod schemas with validation
 3. Export from shared-types package
@@ -174,7 +177,7 @@ describe('MixSession Schema', () => {
   })
 
   it('should enforce energy level bounds', () => {
-    const session = { ...createTestSession(), vibe: { energyLevel: 15 } }
+    const session = {...createTestSession(), vibe: {energyLevel: 15}}
     const result = MixSessionSchema.safeParse(session)
     expect(result.success).toBe(false)
   })
@@ -186,16 +189,19 @@ describe('MixSession Schema', () => {
 ### Agent 2: Mix Session Service (Backend)
 
 **Files to create/modify**:
+
 - `workers/api/src/services/MixSessionService.ts` (NEW)
 - `workers/api/src/services/MixSessionService.test.ts` (NEW)
 
 **Tests to write first**:
+
 - Unit tests with mocked KV
 - Test session CRUD operations
 - Test vibe calculation logic
 - Test queue management
 
 **Tasks**:
+
 1. Implement MixSessionService class
 2. KV storage for sessions (key: `mix:${userId}`)
 3. Vibe blending algorithm
@@ -229,14 +235,17 @@ export class MixSessionService {
 ### Agent 3: Mix API Routes (Backend)
 
 **Files to create/modify**:
+
 - `workers/api/src/routes/mix-openapi.ts` (NEW)
 - `workers/api/src/index.ts` (UPDATE - add route)
 
 **Tests to write first**:
+
 - `workers/api/src/__tests__/routes/mix.test.ts`
 - Test each endpoint with mocked service
 
 **Tasks**:
+
 1. Define OpenAPI routes with Zod schemas
 2. Implement handlers calling MixSessionService
 3. Add authentication middleware
@@ -244,10 +253,10 @@ export class MixSessionService {
 
 ```typescript
 // mix-openapi.ts
-export const mixRouter = new OpenAPIHono<{ Bindings: Env }>()
+export const mixRouter = new OpenAPIHono<{Bindings: Env}>()
 
 // POST /api/mix/start
-mixRouter.openapi(startMixRoute, async (c) => {
+mixRouter.openapi(startMixRoute, async c => {
   const userId = getUserFromToken(c)
   const service = new MixSessionService(c.env.MIX_SESSIONS)
   const session = await service.createSession(userId)
@@ -265,15 +274,18 @@ mixRouter.openapi(startMixRoute, async (c) => {
 ### Agent 4: Suggestion Engine (Backend)
 
 **Files to create/modify**:
+
 - `workers/api/src/services/SuggestionEngine.ts` (NEW)
 - `workers/api/src/services/SuggestionEngine.test.ts` (NEW)
 
 **Tests to write first**:
+
 - Test suggestion generation based on vibe
 - Test deduplication (don't suggest played tracks)
 - Test integration with existing enrichment services
 
 **Tasks**:
+
 1. Generate suggestions based on current vibe profile
 2. Use existing Last.fm similar tracks
 3. Use existing Deezer BPM data for transition scoring
@@ -286,23 +298,14 @@ export class SuggestionEngine {
   constructor(
     private lastFmService: LastFmService,
     private audioService: AudioEnrichmentService,
-    private spotifyToken: string
+    private spotifyToken: string,
   ) {}
 
-  async generateSuggestions(
-    session: MixSession,
-    count: number = 5
-  ): Promise<Suggestion[]>
+  async generateSuggestions(session: MixSession, count: number = 5): Promise<Suggestion[]>
 
-  async scoreSuggestion(
-    track: SpotifyTrack,
-    vibe: VibeProfile
-  ): Promise<number>
+  async scoreSuggestion(track: SpotifyTrack, vibe: VibeProfile): Promise<number>
 
-  async findTransitionCandidates(
-    fromTrack: PlayedTrack,
-    vibe: VibeProfile
-  ): Promise<SpotifyTrack[]>
+  async findTransitionCandidates(fromTrack: PlayedTrack, vibe: VibeProfile): Promise<SpotifyTrack[]>
 }
 ```
 
@@ -311,6 +314,7 @@ export class SuggestionEngine {
 ### Agent 5: Mix UI Components (Frontend)
 
 **Files to create/modify**:
+
 - `apps/web/src/features/mix/MixInterface.tsx` (NEW)
 - `apps/web/src/features/mix/NowPlayingHero.tsx` (NEW)
 - `apps/web/src/features/mix/QueuePanel.tsx` (NEW)
@@ -319,11 +323,13 @@ export class SuggestionEngine {
 - `apps/web/src/features/mix/mix.module.css` (NEW)
 
 **Tests to write first**:
+
 - Component render tests
 - User interaction tests (add to queue, remove, reorder)
 - Vibe control interactions
 
 **Tasks**:
+
 1. Create MixInterface as main container
 2. NowPlayingHero with large album art and controls
 3. QueuePanel with drag-drop reordering
@@ -361,16 +367,19 @@ export function MixInterface() {
 ### Agent 6: Mix Hooks & State (Frontend)
 
 **Files to create/modify**:
+
 - `apps/web/src/hooks/useMixSession.ts` (NEW)
 - `apps/web/src/hooks/useMixSession.test.ts` (NEW)
 - `apps/web/src/lib/mix-api-client.ts` (NEW)
 
 **Tests to write first**:
+
 - Hook state management tests
 - API client mock tests
 - Polling behavior tests
 
 **Tasks**:
+
 1. Create useMixSession hook with polling
 2. Create useSuggestions hook
 3. Create useVibeControls hook
@@ -400,24 +409,32 @@ export function useMixSession() {
 
   const addToQueue = useCallback(async (track: QueuedTrack) => {
     // Optimistic update
-    setSession(prev => prev ? {
-      ...prev,
-      queue: [...prev.queue, track]
-    } : null)
+    setSession(prev =>
+      prev
+        ? {
+            ...prev,
+            queue: [...prev.queue, track],
+          }
+        : null,
+    )
 
     try {
       await mixApiClient.addToQueue(track)
     } catch (err) {
       // Revert on error
-      setSession(prev => prev ? {
-        ...prev,
-        queue: prev.queue.filter(t => t.trackId !== track.trackId)
-      } : null)
+      setSession(prev =>
+        prev
+          ? {
+              ...prev,
+              queue: prev.queue.filter(t => t.trackId !== track.trackId),
+            }
+          : null,
+      )
       throw err
     }
   }, [])
 
-  return { session, isLoading, error, addToQueue, /* ... */ }
+  return {session, isLoading, error, addToQueue /* ... */}
 }
 ```
 
@@ -426,15 +443,18 @@ export function useMixSession() {
 ### Agent 7: Vibe Steering AI (Backend)
 
 **Files to create/modify**:
+
 - `workers/api/src/lib/vibe-steering.ts` (NEW)
 - `workers/api/src/lib/vibe-steering.test.ts` (NEW)
 
 **Tests to write first**:
+
 - Test vibe profile updates from natural language
 - Test preset button mappings
 - Test Claude integration for complex steering
 
 **Tasks**:
+
 1. Parse natural language vibe requests
 2. Map preset buttons to vibe changes
 3. Use Claude Haiku for complex requests
@@ -445,7 +465,7 @@ export function useMixSession() {
 export async function steerVibe(
   currentVibe: VibeProfile,
   direction: string,
-  anthropicKey: string
+  anthropicKey: string,
 ): Promise<VibeProfile> {
   // Try preset mappings first
   const preset = PRESET_MAPPINGS[direction.toLowerCase()]
@@ -454,24 +474,26 @@ export async function steerVibe(
   }
 
   // Use AI for complex requests
-  const anthropic = new Anthropic({ apiKey: anthropicKey })
+  const anthropic = new Anthropic({apiKey: anthropicKey})
   const response = await anthropic.messages.create({
     model: 'claude-haiku-4-20250929',
     max_tokens: 500,
-    messages: [{
-      role: 'user',
-      content: buildVibeSteeringPrompt(currentVibe, direction)
-    }]
+    messages: [
+      {
+        role: 'user',
+        content: buildVibeSteeringPrompt(currentVibe, direction),
+      },
+    ],
   })
 
   return parseVibeResponse(response)
 }
 
 const PRESET_MAPPINGS = {
-  'more energy': { energyLevel: +2, energyDirection: 'building' },
-  'chill out': { energyLevel: -2, energyDirection: 'winding_down' },
-  'go retro': { era: { start: 1970, end: 1995 } },
-  'something fresh': { era: { start: 2020, end: 2025 } },
+  'more energy': {energyLevel: +2, energyDirection: 'building'},
+  'chill out': {energyLevel: -2, energyDirection: 'winding_down'},
+  'go retro': {era: {start: 1970, end: 1995}},
+  'something fresh': {era: {start: 2020, end: 2025}},
 }
 ```
 
@@ -480,15 +502,18 @@ const PRESET_MAPPINGS = {
 ### Agent 8: Integration & Polish
 
 **Files to create/modify**:
+
 - `apps/web/src/App.tsx` (UPDATE - add Mix route)
 - `apps/web/src/features/mix/index.ts` (NEW - exports)
 - `workers/api/wrangler.jsonc` (UPDATE - add KV binding)
 
 **Tests to write first**:
+
 - E2E flow test (start session → add tracks → steer vibe)
 - Integration test for full API flow
 
 **Tasks**:
+
 1. Add `/mix` route to frontend
 2. Add navigation to mix mode
 3. Add MIX_SESSIONS KV namespace
@@ -608,15 +633,16 @@ Add to `wrangler.jsonc`:
 {
   "kv_namespaces": [
     // Existing
-    { "binding": "SESSIONS", "id": "..." },
-    { "binding": "AUDIO_FEATURES_CACHE", "id": "..." },
+    {"binding": "SESSIONS", "id": "..."},
+    {"binding": "AUDIO_FEATURES_CACHE", "id": "..."},
     // New
-    { "binding": "MIX_SESSIONS", "id": "TO_BE_CREATED" }
-  ]
+    {"binding": "MIX_SESSIONS", "id": "TO_BE_CREATED"},
+  ],
 }
 ```
 
 Create namespace:
+
 ```bash
 wrangler kv:namespace create "MIX_SESSIONS"
 wrangler kv:namespace create "MIX_SESSIONS" --preview
@@ -660,6 +686,7 @@ wrangler kv:namespace create "MIX_SESSIONS" --preview
 ### Preserve Existing Features
 
 The current chat interface remains fully functional:
+
 - `/chat` route keeps existing behavior
 - All existing tools work unchanged
 - Analyze/Create/Edit modes unchanged

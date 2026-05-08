@@ -3,14 +3,14 @@
  * Tests for Last.fm crowd-sourced taste signals service
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {beforeEach, describe, expect, it, vi} from 'vitest'
 
 // Vitest 4: Create hoisted fetch mock BEFORE imports are evaluated
 const fetchMock = vi.hoisted(() => vi.fn())
 vi.stubGlobal('fetch', fetchMock)
 
-import { LastFmService, type LastFmSignals } from '../../services/LastFmService'
-import { MockKVNamespace } from '../fixtures/cloudflare-mocks'
+import {LastFmService, type LastFmSignals} from '../../services/LastFmService'
+import {MockKVNamespace} from '../fixtures/cloudflare-mocks'
 import {
   buildLastFmArtistInfo,
   buildLastFmCorrection,
@@ -46,7 +46,7 @@ describe('LastFmService', () => {
 
   beforeEach(() => {
     mockCache = new MockKVNamespace()
-     
+
     service = new LastFmService('test-api-key', mockCache as any)
     // Reset the hoisted fetch mock for each test
     fetchMock.mockReset()
@@ -64,8 +64,7 @@ describe('LastFmService', () => {
         })
         // Track info
         .mockResolvedValueOnce({
-          json: () =>
-            Promise.resolve(buildLastFmTrackInfo({ listeners: 10000, playcount: 50000 })),
+          json: () => Promise.resolve(buildLastFmTrackInfo({listeners: 10000, playcount: 50000})),
           ok: true,
         })
         // Top tags
@@ -78,8 +77,8 @@ describe('LastFmService', () => {
           json: () =>
             Promise.resolve(
               buildLastFmSimilarTracks([
-                { artist: 'Artist 1', match: 0.9, name: 'Track 1' },
-                { artist: 'Artist 2', match: 0.8, name: 'Track 2' },
+                {artist: 'Artist 1', match: 0.9, name: 'Track 1'},
+                {artist: 'Artist 2', match: 0.8, name: 'Track 2'},
               ]),
             ),
           ok: true,
@@ -97,7 +96,7 @@ describe('LastFmService', () => {
     })
 
     it('should call track correction API first', async () => {
-      const track = buildLastFmTrack({ artist: 'test artist', name: 'test track' })
+      const track = buildLastFmTrack({artist: 'test artist', name: 'test track'})
 
       fetchMock.mockResolvedValue({
         json: () => Promise.resolve(buildLastFmCorrection(null)),
@@ -106,25 +105,18 @@ describe('LastFmService', () => {
 
       await service.getTrackSignals(track, true)
 
-      expect(fetchMock).toHaveBeenCalledWith(
-        expect.stringContaining('method=track.getCorrection'),
-      )
-      expect(fetchMock).toHaveBeenCalledWith(
-        expect.stringContaining('artist=test+artist'),
-      )
-      expect(fetchMock).toHaveBeenCalledWith(
-        expect.stringContaining('track=test+track'),
-      )
+      expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('method=track.getCorrection'))
+      expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('artist=test+artist'))
+      expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('track=test+track'))
     })
 
     it('should use corrected track name in subsequent calls', async () => {
-      const track = buildLastFmTrack({ artist: 'Wrong Artist', name: 'Wrong Track' })
+      const track = buildLastFmTrack({artist: 'Wrong Artist', name: 'Wrong Track'})
 
       fetchMock
         // Correction returns corrected names
         .mockResolvedValueOnce({
-          json: () =>
-            Promise.resolve(buildLastFmCorrection({ artist: 'Correct Artist', track: 'Correct Track' })),
+          json: () => Promise.resolve(buildLastFmCorrection({artist: 'Correct Artist', track: 'Correct Track'})),
           ok: true,
         })
         // Track info should use corrected names
@@ -211,8 +203,8 @@ describe('LastFmService', () => {
           json: () =>
             Promise.resolve(
               buildLastFmSimilarTracks([
-                { artist: 'Similar Artist 1', match: 0.95, name: 'Similar Track 1' },
-                { artist: 'Similar Artist 2', match: 0.85, name: 'Similar Track 2' },
+                {artist: 'Similar Artist 1', match: 0.95, name: 'Similar Track 1'},
+                {artist: 'Similar Artist 2', match: 0.85, name: 'Similar Track 2'},
               ]),
             ),
           ok: true,
@@ -237,8 +229,7 @@ describe('LastFmService', () => {
           ok: true,
         })
         .mockResolvedValueOnce({
-          json: () =>
-            Promise.resolve(buildLastFmTrackInfo({ listeners: 25000, playcount: 100000 })),
+          json: () => Promise.resolve(buildLastFmTrackInfo({listeners: 25000, playcount: 100000})),
           ok: true,
         })
         .mockResolvedValueOnce({
@@ -301,7 +292,7 @@ describe('LastFmService', () => {
           ok: true,
         })
         .mockResolvedValueOnce({
-          json: () => Promise.resolve(buildLastFmTrackInfo({ wiki: wikiData })),
+          json: () => Promise.resolve(buildLastFmTrackInfo({wiki: wikiData})),
           ok: true,
         })
         .mockResolvedValueOnce({
@@ -363,7 +354,7 @@ describe('LastFmService', () => {
     })
 
     it('should return cached signal on cache hit', async () => {
-      const track = buildLastFmTrack({ artist: 'Cached Artist', name: 'Cached Track' })
+      const track = buildLastFmTrack({artist: 'Cached Artist', name: 'Cached Track'})
 
       const cachedSignals: LastFmSignals = {
         album: null,
@@ -406,8 +397,7 @@ describe('LastFmService', () => {
           ok: true,
         })
         .mockResolvedValueOnce({
-          json: () =>
-            Promise.resolve(buildLastFmTrackInfo({ listeners: 10000, playcount: 50000 })),
+          json: () => Promise.resolve(buildLastFmTrackInfo({listeners: 10000, playcount: 50000})),
           ok: true,
         })
         .mockResolvedValueOnce({
@@ -425,7 +415,7 @@ describe('LastFmService', () => {
       const cached = await mockCache.get(`lastfm:${cacheKey}`, 'json')
 
       expect(cached).toBeTruthy()
-      expect((cached as { ttl: number }).ttl).toBe(7 * 24 * 60 * 60)
+      expect((cached as {ttl: number}).ttl).toBe(7 * 24 * 60 * 60)
     })
   })
 
@@ -602,7 +592,7 @@ describe('LastFmService', () => {
     })
 
     it('should limit to top 15 tags', () => {
-      const manyTags = Array.from({ length: 20 }, (_, i) => `tag${i}`)
+      const manyTags = Array.from({length: 20}, (_, i) => `tag${i}`)
       const signalsMap = new Map<string, LastFmSignals>([
         [
           'track1',
@@ -829,7 +819,7 @@ describe('LastFmService', () => {
         ],
       ])
 
-      const { avgListeners } = LastFmService.calculateAveragePopularity(signalsMap)
+      const {avgListeners} = LastFmService.calculateAveragePopularity(signalsMap)
 
       expect(avgListeners).toBe(20000)
     })
@@ -872,7 +862,7 @@ describe('LastFmService', () => {
         ],
       ])
 
-      const { avgPlaycount } = LastFmService.calculateAveragePopularity(signalsMap)
+      const {avgPlaycount} = LastFmService.calculateAveragePopularity(signalsMap)
 
       expect(avgPlaycount).toBe(75000)
     })
@@ -880,7 +870,7 @@ describe('LastFmService', () => {
     it('should return 0 for zero tracks', () => {
       const signalsMap = new Map<string, LastFmSignals>()
 
-      const { avgListeners, avgPlaycount } = LastFmService.calculateAveragePopularity(signalsMap)
+      const {avgListeners, avgPlaycount} = LastFmService.calculateAveragePopularity(signalsMap)
 
       expect(avgListeners).toBe(0)
       expect(avgPlaycount).toBe(0)
@@ -924,7 +914,7 @@ describe('LastFmService', () => {
         ],
       ])
 
-      const { avgListeners, avgPlaycount } = LastFmService.calculateAveragePopularity(signalsMap)
+      const {avgListeners, avgPlaycount} = LastFmService.calculateAveragePopularity(signalsMap)
 
       expect(Number.isInteger(avgListeners)).toBe(true)
       expect(Number.isInteger(avgPlaycount)).toBe(true)
@@ -968,7 +958,7 @@ describe('LastFmService', () => {
         ],
       ])
 
-      const { avgListeners, avgPlaycount } = LastFmService.calculateAveragePopularity(signalsMap)
+      const {avgListeners, avgPlaycount} = LastFmService.calculateAveragePopularity(signalsMap)
 
       // Includes all tracks (even zeros)
       expect(avgListeners).toBe(5000)
@@ -1009,7 +999,7 @@ describe('LastFmService', () => {
 
       // Pre-populate cache with valid artist info
       const artistInfo = {
-        bio: { content: 'Full bio', summary: 'Test bio' },
+        bio: {content: 'Full bio', summary: 'Test bio'},
         images: {
           large: 'http://example.com/large.jpg',
           medium: 'http://example.com/medium.jpg',
@@ -1018,8 +1008,8 @@ describe('LastFmService', () => {
         listeners: 100000,
         playcount: 500000,
         similar: [
-          { name: 'Similar Artist 1', url: 'https://last.fm/similar1' },
-          { name: 'Similar Artist 2', url: 'https://last.fm/similar2' },
+          {name: 'Similar Artist 1', url: 'https://last.fm/similar1'},
+          {name: 'Similar Artist 2', url: 'https://last.fm/similar2'},
         ],
         tags: ['rock', 'indie'],
       }
@@ -1052,8 +1042,8 @@ describe('LastFmService', () => {
       const artists = ['Cached Artist']
 
       const cachedInfo = {
-        bio: { content: 'Cached content', summary: 'Cached bio' },
-        images: { large: null, medium: null, small: null },
+        bio: {content: 'Cached content', summary: 'Cached bio'},
+        images: {large: null, medium: null, small: null},
         listeners: 10000,
         playcount: 50000,
         similar: [],
@@ -1071,27 +1061,27 @@ describe('LastFmService', () => {
     })
 
     it('should report progress via callback', async () => {
-      const artists = Array.from({ length: 25 }, (_, i) => `Artist ${i}`)
+      const artists = Array.from({length: 25}, (_, i) => `Artist ${i}`)
 
       fetchMock.mockResolvedValue({
         json: () => Promise.resolve(buildLastFmArtistInfo()),
         ok: true,
       })
 
-      const progressCalls: { current: number; total: number }[] = []
+      const progressCalls: {current: number; total: number}[] = []
       await service.batchGetArtistInfo(artists, (current, total) => {
-        progressCalls.push({ current, total })
+        progressCalls.push({current, total})
       })
 
       // Should report progress at intervals
       expect(progressCalls.length).toBeGreaterThan(0)
-      expect(progressCalls[progressCalls.length - 1]).toEqual({ current: 25, total: 25 })
+      expect(progressCalls[progressCalls.length - 1]).toEqual({current: 25, total: 25})
     })
   })
 
   describe('Cache Lifecycle', () => {
     it('should return cached data on hit (7-day fresh)', async () => {
-      const track = buildLastFmTrack({ artist: 'Cached Artist', name: 'Cached Track' })
+      const track = buildLastFmTrack({artist: 'Cached Artist', name: 'Cached Track'})
 
       const cachedSignals: LastFmSignals = {
         album: null,
@@ -1227,7 +1217,7 @@ describe('LastFmService', () => {
           ok: true,
         })
         .mockResolvedValueOnce({
-          json: () => Promise.resolve(buildLastFmTrackInfo({ listeners: 1000 })),
+          json: () => Promise.resolve(buildLastFmTrackInfo({listeners: 1000})),
           ok: true,
         })
         .mockResolvedValueOnce({

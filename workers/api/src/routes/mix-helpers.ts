@@ -67,7 +67,7 @@ export async function autoFillQueue(
     let timeoutId: ReturnType<typeof setTimeout> | undefined
     const suggestions = await Promise.race([
       suggestionEngine.generateSuggestions(session, tracksNeeded + 3),
-      new Promise<Suggestion[]>((resolve) => {
+      new Promise<Suggestion[]>(resolve => {
         timeoutId = setTimeout(() => {
           getLogger()?.warn('[autoFillQueue] Suggestion generation timed out after 8s, using fallbacks')
           resolve([])
@@ -87,12 +87,9 @@ export async function autoFillQueue(
       return 0
     }
 
-    const existingUris = new Set([
-      ...session.history.map((t) => t.trackUri),
-      ...session.queue.map((t) => t.trackUri),
-    ])
+    const existingUris = new Set([...session.history.map(t => t.trackUri), ...session.queue.map(t => t.trackUri)])
 
-    const availableSuggestions = suggestions.filter((s) => !existingUris.has(s.trackUri))
+    const availableSuggestions = suggestions.filter(s => !existingUris.has(s.trackUri))
     if (availableSuggestions.length === 0) {
       getLogger()?.info('All suggestions are duplicates, skipping auto-fill')
       return 0
@@ -146,10 +143,10 @@ export async function autoFillQueue(
           addedCount++
 
           try {
-            await fetch(
-              `https://api.spotify.com/v1/me/player/queue?uri=${encodeURIComponent(fallbackUri)}`,
-              {headers: {Authorization: `Bearer ${token}`}, method: 'POST'},
-            )
+            await fetch(`https://api.spotify.com/v1/me/player/queue?uri=${encodeURIComponent(fallbackUri)}`, {
+              headers: {Authorization: `Bearer ${token}`},
+              method: 'POST',
+            })
           } catch {
             // Non-fatal
           }
@@ -177,11 +174,7 @@ export function clampBpm(bpm: null | number): null | number {
 }
 
 /** Build a PlayedTrack from a Spotify track + enrichment. */
-export function createPlayedTrack(
-  track: SpotifyTrackFull,
-  bpm: null | number,
-  energy: null | number,
-): PlayedTrack {
+export function createPlayedTrack(track: SpotifyTrackFull, bpm: null | number, energy: null | number): PlayedTrack {
   return {
     albumArt: track.album?.images?.[0]?.url,
     artist: track.artists?.[0]?.name || 'Unknown Artist',
@@ -227,7 +220,7 @@ export async function extractQuickVibe(
 ): Promise<{fallbackPool: string[]; vibe: Partial<VibeProfile>}> {
   const logger = getLogger()
   const allGenres: string[] = []
-  const uniqueArtistNames = [...new Set(tracks.flatMap((t) => t.artists.map((a) => a.name)))]
+  const uniqueArtistNames = [...new Set(tracks.flatMap(t => t.artists.map(a => a.name)))]
 
   for (const artistName of uniqueArtistNames.slice(0, 10)) {
     try {
@@ -262,19 +255,17 @@ export async function extractQuickVibe(
     .slice(0, 5)
     .map(([g]) => g)
 
-  const popularities = tracks.filter((t) => t.popularity != null).map((t) => t.popularity!)
-  const avgPopularity =
-    popularities.length > 0 ? popularities.reduce((sum, p) => sum + p, 0) / popularities.length : 50
+  const popularities = tracks.filter(t => t.popularity != null).map(t => t.popularity!)
+  const avgPopularity = popularities.length > 0 ? popularities.reduce((sum, p) => sum + p, 0) / popularities.length : 50
   const energyLevel = Math.max(1, Math.min(10, Math.round(avgPopularity / 10)))
 
   const years = tracks
-    .map((t) => t.album?.release_date)
+    .map(t => t.album?.release_date)
     .filter(Boolean)
-    .map((d) => parseInt(d!.slice(0, 4)))
-    .filter((y) => y >= 1900 && y <= 2100)
+    .map(d => parseInt(d!.slice(0, 4)))
+    .filter(y => y >= 1900 && y <= 2100)
 
-  const era =
-    years.length > 0 ? {end: Math.max(...years), start: Math.min(...years)} : {end: 2025, start: 2000}
+  const era = years.length > 0 ? {end: Math.max(...years), start: Math.min(...years)} : {end: 2025, start: 2000}
 
   let bpmRange = {max: 140, min: 80}
   if (env.AUDIO_FEATURES_CACHE) {
@@ -304,7 +295,7 @@ export async function extractQuickVibe(
   const fallbackPool = tracks
     .sort((a, b) => (b.popularity ?? 0) - (a.popularity ?? 0))
     .slice(0, 10)
-    .map((t) => t.uri)
+    .map(t => t.uri)
 
   logger?.info('[extractQuickVibe] Extracted vibe from seed tracks', {
     bpmRange,
@@ -362,9 +353,9 @@ export async function fetchSeedPlaylistTracks(token: string, playlistId: string)
     const parsed = PlaylistTracksSchema.safeParse(await response.json())
     if (!parsed.success) return []
     return (parsed.data.items ?? [])
-      .map((item) => item.track)
+      .map(item => item.track)
       .filter((t): t is NonNullable<typeof t> => t != null)
-      .map((t) => ({
+      .map(t => ({
         album: t.album,
         artists: t.artists,
         duration_ms: t.duration_ms,
@@ -380,10 +371,7 @@ export async function fetchSeedPlaylistTracks(token: string, playlistId: string)
 }
 
 /** Fetch a single Spotify track's full details by URI. */
-export async function fetchTrackDetails(
-  trackUri: string,
-  token: string,
-): Promise<null | SpotifyTrackFull> {
+export async function fetchTrackDetails(trackUri: string, token: string): Promise<null | SpotifyTrackFull> {
   try {
     const trackId = trackUri.split(':')[2]
     if (!trackId) {
@@ -433,10 +421,9 @@ export async function fetchUserSeedTracks(token: string): Promise<SeedTrack[]> {
     .passthrough()
 
   try {
-    const topResp = await fetch(
-      'https://api.spotify.com/v1/me/top/tracks?time_range=short_term&limit=50',
-      {headers: {Authorization: `Bearer ${token}`}},
-    )
+    const topResp = await fetch('https://api.spotify.com/v1/me/top/tracks?time_range=short_term&limit=50', {
+      headers: {Authorization: `Bearer ${token}`},
+    })
     if (topResp.ok) {
       const TopTracksSchema = z.object({items: z.array(SeedTrackSchema).optional()}).passthrough()
       const parsed = TopTracksSchema.safeParse(await topResp.json())
@@ -454,10 +441,9 @@ export async function fetchUserSeedTracks(token: string): Promise<SeedTrack[]> {
   }
 
   try {
-    const recentResp = await fetch(
-      'https://api.spotify.com/v1/me/player/recently-played?limit=50',
-      {headers: {Authorization: `Bearer ${token}`}},
-    )
+    const recentResp = await fetch('https://api.spotify.com/v1/me/player/recently-played?limit=50', {
+      headers: {Authorization: `Bearer ${token}`},
+    })
     if (recentResp.ok) {
       const RecentlyPlayedSchema = z
         .object({items: z.array(z.object({track: SeedTrackSchema})).optional()})

@@ -37,7 +37,7 @@ export interface SteerStreamEvent {
     queue?: QueuedTrack[]
     queueSize?: number
     stage?: string
-    track?: { artist: string; name: string; trackId: string; trackUri: string }
+    track?: {artist: string; name: string; trackId: string; trackUri: string}
     vibe?: VibeProfile
   }
   type: 'ack' | 'done' | 'error' | 'progress' | 'queue_update' | 'suggestions' | 'thinking' | 'vibe_update'
@@ -66,10 +66,7 @@ import {emitDebug} from '../stores/debugStore'
  * Get Spotify token from centralized storage
  */
 function getSpotifyToken(): null | string {
-  const tokenData = storage.get<null | {expiresAt: null | number; token: string}>(
-    STORAGE_KEYS.SPOTIFY_TOKEN_DATA,
-    null,
-  )
+  const tokenData = storage.get<null | {expiresAt: null | number; token: string}>(STORAGE_KEYS.SPOTIFY_TOKEN_DATA, null)
   return tokenData?.token ?? null
 }
 
@@ -203,10 +200,7 @@ export const mixApiClient = {
    * Save the current mix as a Spotify playlist
    * Route: POST /api/mix/save (from saveMix contract)
    */
-  async saveMixAsPlaylist(
-    name: string,
-    description?: string,
-  ): Promise<{playlistId: string; playlistUrl: string}> {
+  async saveMixAsPlaylist(name: string, description?: string): Promise<{playlistId: string; playlistUrl: string}> {
     const response = await api(saveMix)({
       body: {description, includeQueue: true, name},
     })
@@ -253,10 +247,7 @@ export const mixApiClient = {
    * @param onEvent - Callback for each SSE event
    * @returns Promise that resolves when stream is complete
    */
-  async steerVibeStream(
-    direction: string,
-    onEvent: (event: SteerStreamEvent) => void,
-  ): Promise<void> {
+  async steerVibeStream(direction: string, onEvent: (event: SteerStreamEvent) => void): Promise<void> {
     const token = getSpotifyToken()
     if (!token) {
       throw new Error('No Spotify token')
@@ -266,19 +257,24 @@ export const mixApiClient = {
     emitDebug('api', 'POST', `POST /api/mix/vibe/steer-stream`, {direction}, {url: '/api/mix/vibe/steer-stream'})
 
     const response = await fetch('/api/mix/vibe/steer-stream', {
-      body: JSON.stringify({ direction }),
+      body: JSON.stringify({direction}),
       headers: {
-        'Authorization': `Bearer ${token}`,
+        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       method: 'POST',
     })
 
     if (!response.ok) {
-      const error: unknown = await response.json().catch(() => ({ error: 'Request failed' }))
-      const errorMsg = (error && typeof error === 'object' && !Array.isArray(error) && 'error' in error && typeof (error as Record<string, unknown>).error === 'string')
-        ? (error as Record<string, unknown>).error as string
-        : 'Failed to start steer stream'
+      const error: unknown = await response.json().catch(() => ({error: 'Request failed'}))
+      const errorMsg =
+        error &&
+        typeof error === 'object' &&
+        !Array.isArray(error) &&
+        'error' in error &&
+        typeof (error as Record<string, unknown>).error === 'string'
+          ? ((error as Record<string, unknown>).error as string)
+          : 'Failed to start steer stream'
       throw new Error(errorMsg)
     }
 
@@ -292,10 +288,10 @@ export const mixApiClient = {
 
     try {
       while (true) {
-        const { done, value } = await reader.read()
+        const {done, value} = await reader.read()
         if (done) break
 
-        buffer += decoder.decode(value, { stream: true })
+        buffer += decoder.decode(value, {stream: true})
 
         // Process complete SSE messages
         const lines = buffer.split('\n\n')
@@ -316,7 +312,10 @@ export const mixApiClient = {
       }
     } finally {
       reader.releaseLock()
-      emitDebug('api', 'POST', `POST /api/mix/vibe/steer-stream complete`, undefined, {durationMs: Date.now() - t0, url: '/api/mix/vibe/steer-stream'})
+      emitDebug('api', 'POST', `POST /api/mix/vibe/steer-stream complete`, undefined, {
+        durationMs: Date.now() - t0,
+        url: '/api/mix/vibe/steer-stream',
+      })
     }
   },
 

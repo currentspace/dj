@@ -33,7 +33,7 @@ interface UsePlaybackStreamReturn {
 
 export function usePlaybackStream(
   token: null | string,
-  options: UsePlaybackStreamOptions = {}
+  options: UsePlaybackStreamOptions = {},
 ): UsePlaybackStreamReturn {
   const {autoConnect = true, onTrackChange} = options
 
@@ -48,13 +48,13 @@ export function usePlaybackStream(
   tokenRef.current = token
 
   // Atomic selectors for state
-  const status = usePlaybackStore((s) => s.status)
-  const error = usePlaybackStore((s) => s.error)
-  const playbackCore = usePlaybackStore((s) => s.playbackCore)
-  const progress = usePlaybackStore((s) => s.progress)
-  const storeConnect = usePlaybackStore((s) => s.connect)
-  const storeDisconnect = usePlaybackStore((s) => s.disconnect)
-  const subscribeToTrackChange = usePlaybackStore((s) => s.subscribeToTrackChange)
+  const status = usePlaybackStore(s => s.status)
+  const error = usePlaybackStore(s => s.error)
+  const playbackCore = usePlaybackStore(s => s.playbackCore)
+  const progress = usePlaybackStore(s => s.progress)
+  const storeConnect = usePlaybackStore(s => s.connect)
+  const storeDisconnect = usePlaybackStore(s => s.disconnect)
+  const subscribeToTrackChange = usePlaybackStore(s => s.subscribeToTrackChange)
 
   // Subscribe to track changes (component body, no useEffect)
   if (onTrackChange && !trackChangeUnsubRef.current) {

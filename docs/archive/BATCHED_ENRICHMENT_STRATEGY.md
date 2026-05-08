@@ -43,6 +43,7 @@ Phase 3: Progressive Results
 ### Example Scenarios
 
 #### Scenario 1: First Analysis (Cold Cache)
+
 ```
 Playlist: 100 tracks
 Cache status: 0% hit rate
@@ -56,6 +57,7 @@ Result: Limited enrichment, but all results cached
 ```
 
 #### Scenario 2: Repeat Analysis (Warm Cache)
+
 ```
 Playlist: Same 100 tracks
 Cache status: 95% hit rate (Deezer), 80% hit rate (Last.fm)
@@ -72,6 +74,7 @@ Result: 10 Last.fm + 100 Deezer tracks enriched!
 ```
 
 #### Scenario 3: Popular Playlist (90%+ Cache)
+
 ```
 Playlist: 200 tracks
 Cache status: 90%+ hit rate
@@ -170,11 +173,13 @@ for (const batch of batches) {
 ## Benefits
 
 ### Immediate
+
 1. **More Data on Repeat Analyses**: 3x-10x more tracks enriched on cached playlists
 2. **Smarter Resource Usage**: Use full subrequest budget efficiently
 3. **No Limit Errors**: Stay safely under 50 subrequest cap
 
 ### Long-Term
+
 4. **Compound Effect**: Each analysis improves cache coverage
 5. **Popular Track Advantage**: Well-known tracks cached across playlists
 6. **User Experience**: More data = better recommendations
@@ -182,16 +187,19 @@ for (const batch of batches) {
 ## Migration Path
 
 ### Phase 1: Add Tracking (No Behavior Change)
+
 - Add SubrequestTracker
 - Log actual vs estimated subrequests
 - Verify accuracy
 
 ### Phase 2: Cache-Aware Batching
+
 - Check KV before enrichment
 - Calculate dynamic batch sizes
 - Still conservative limits
 
 ### Phase 3: Progressive Enrichment (Future)
+
 - Multiple batches per request
 - Background continuation (Durable Objects?)
 - Real-time result streaming

@@ -10,15 +10,15 @@ Transform DJ from a **playlist creation tool** into a **live music curation assi
 
 ## Current State vs. Target State
 
-| Aspect | Current | Target |
-|--------|---------|--------|
-| **Primary Use** | Create/analyze playlists | Control live music flow |
-| **Interaction** | Chat → create playlist → listen elsewhere | Chat while music plays → shape the vibe |
-| **Playback** | None | Full control (play/pause/skip/queue) |
-| **Time Horizon** | Plan ahead | React in real-time |
-| **Feedback Loop** | None | "Skip this" / "More like this" |
-| **Session** | Ephemeral (resets on refresh) | Persistent (resume where you left off) |
-| **Users** | Single user, single session | Single user first, then collaborative |
+| Aspect            | Current                                   | Target                                  |
+| ----------------- | ----------------------------------------- | --------------------------------------- |
+| **Primary Use**   | Create/analyze playlists                  | Control live music flow                 |
+| **Interaction**   | Chat → create playlist → listen elsewhere | Chat while music plays → shape the vibe |
+| **Playback**      | None                                      | Full control (play/pause/skip/queue)    |
+| **Time Horizon**  | Plan ahead                                | React in real-time                      |
+| **Feedback Loop** | None                                      | "Skip this" / "More like this"          |
+| **Session**       | Ephemeral (resets on refresh)             | Persistent (resume where you left off)  |
+| **Users**         | Single user, single session               | Single user first, then collaborative   |
 
 ---
 
@@ -27,6 +27,7 @@ Transform DJ from a **playlist creation tool** into a **live music curation assi
 ### What Is a Live Mix?
 
 A **Live Mix** is an evolving queue of tracks that:
+
 1. Has a **current playing track** (the "now")
 2. Has an **upcoming queue** (the next 5-20 tracks)
 3. Has a **vibe trajectory** (where the energy is heading)
@@ -63,6 +64,7 @@ A **Live Mix** is an evolving queue of tracks that:
 **Goal:** See what's playing, control it, have a queue.
 
 #### 1.1 OAuth Scope Addition
+
 ```diff
 // Current scopes + new ones needed
 + user-modify-playback-state   // CRITICAL: Control playback
@@ -70,26 +72,28 @@ A **Live Mix** is an evolving queue of tracks that:
 ```
 
 #### 1.2 New API Routes (`workers/api/src/routes/player.ts`)
+
 ```typescript
 // Player state
-GET  /api/player/state        // Current track, progress, device
-GET  /api/player/devices      // Available devices
-GET  /api/player/queue        // Current queue
+GET / api / player / state // Current track, progress, device
+GET / api / player / devices // Available devices
+GET / api / player / queue // Current queue
 
 // Playback control
-POST /api/player/play         // Play/resume (optional: specific track/context)
-POST /api/player/pause        // Pause
-POST /api/player/next         // Skip to next
-POST /api/player/previous     // Previous track
-POST /api/player/seek         // Seek to position
-PUT  /api/player/device       // Transfer playback to device
+POST / api / player / play // Play/resume (optional: specific track/context)
+POST / api / player / pause // Pause
+POST / api / player / next // Skip to next
+POST / api / player / previous // Previous track
+POST / api / player / seek // Seek to position
+PUT / api / player / device // Transfer playback to device
 
 // Queue management
-POST /api/player/queue/add    // Add track to queue
-POST /api/player/queue/clear  // Clear upcoming queue
+POST / api / player / queue / add // Add track to queue
+POST / api / player / queue / clear // Clear upcoming queue
 ```
 
 #### 1.3 New Frontend Component (`apps/web/src/features/player/NowPlaying.tsx`)
+
 ```
 ┌─────────────────────────────────────────────────────────┐
 │  🎵 Now Playing                              🔊 Device  │
@@ -108,6 +112,7 @@ POST /api/player/queue/clear  // Clear upcoming queue
 ```
 
 #### 1.4 Playback State Polling
+
 - Poll `/api/player/state` every 1-3 seconds
 - Update progress bar, current track display
 - Detect track changes for "what just played" history
@@ -121,19 +126,21 @@ POST /api/player/queue/clear  // Clear upcoming queue
 **Goal:** Claude can add tracks to the queue and shape the mix.
 
 #### 2.1 New Tools for Claude (`spotify-tools.ts`)
+
 ```typescript
 // Queue tools
-add_to_queue          // Add single track to Spotify queue
+add_to_queue // Add single track to Spotify queue
 add_multiple_to_queue // Add multiple tracks (batch)
-get_current_queue     // See what's coming up
-clear_queue           // Clear upcoming tracks
+get_current_queue // See what's coming up
+clear_queue // Clear upcoming tracks
 
 // Playback awareness
-get_now_playing       // What's playing right now
-get_recent_plays      // What played in this session
+get_now_playing // What's playing right now
+get_recent_plays // What played in this session
 ```
 
 #### 2.2 System Prompt Update (DJ Mode)
+
 ```xml
 <role>
 You are a live DJ assistant. Music is playing RIGHT NOW. Your job is to:
@@ -160,6 +167,7 @@ Tracks Skipped: {skip_count}
 ```
 
 #### 2.3 Queue Depth Monitor (Backend)
+
 ```typescript
 // SSE event when queue gets low
 type: 'queue_low'
@@ -183,6 +191,7 @@ Should I add these, or would you like different suggestions?"
 **Goal:** The mix evolves intelligently, session has memory.
 
 #### 3.1 Session Persistence (KV Storage)
+
 ```typescript
 interface DJSession {
   id: string
@@ -191,11 +200,11 @@ interface DJSession {
 
   // What's happened
   tracksPlayed: PlayedTrack[]
-  tracksSkipped: string[]  // Track IDs user skipped
+  tracksSkipped: string[] // Track IDs user skipped
 
   // Current state
   currentVibe: VibeProfile
-  vibeHistory: VibeSnapshot[]  // Vibe at 15-min intervals
+  vibeHistory: VibeSnapshot[] // Vibe at 15-min intervals
 
   // User preferences learned
   preferredGenres: string[]
@@ -203,22 +212,24 @@ interface DJSession {
   energyPreference: 'low' | 'medium' | 'high' | 'dynamic'
 
   // Active state
-  queueSnapshot: string[]  // Track IDs in queue
+  queueSnapshot: string[] // Track IDs in queue
   lastUpdated: Date
 }
 ```
 
 #### 3.2 Vibe Trajectory Planning
+
 ```typescript
 interface VibeTrajectory {
-  current: VibePoint       // Energy 0.7, Valence 0.6
-  target: VibePoint        // Energy 0.4, Valence 0.7 (user said "wind down")
+  current: VibePoint // Energy 0.7, Valence 0.6
+  target: VibePoint // Energy 0.4, Valence 0.7 (user said "wind down")
   transitionTracks: number // 5 tracks to get there
-  strategy: string         // "Gradual tempo decrease, maintain positivity"
+  strategy: string // "Gradual tempo decrease, maintain positivity"
 }
 ```
 
 #### 3.3 Skip Learning
+
 ```typescript
 // When user skips a track
 onSkip(trackId) {
@@ -235,6 +246,7 @@ onSkip(trackId) {
 ```
 
 #### 3.4 Time-Aware Suggestions
+
 ```typescript
 // Morning (6am-10am): Gentle wake-up energy
 // Midday (10am-2pm): Productive focus
@@ -258,11 +270,13 @@ function getTimeContext(): TimeContext {
 **Goal:** Multiple people can influence the mix.
 
 #### 4.1 Session Sharing
+
 - Generate shareable link: `dj.current.space/session/abc123`
 - QR code for party guests to scan
 - Mobile-optimized request interface
 
 #### 4.2 Request System
+
 ```
 ┌─────────────────────────────────────────────────────────┐
 │  🎉 Party Mode: Brian's Saturday Mix                    │
@@ -281,12 +295,14 @@ function getTimeContext(): TimeContext {
 ```
 
 #### 4.3 DJ (Host) Controls
+
 - Approve/reject requests
 - Set vibe boundaries ("no heavy metal tonight")
 - Auto-approve from trusted guests
 - Rate limit requests per guest
 
 #### 4.4 AI Moderation
+
 ```
 Guest requests "Death Metal Scream Track"
 AI: "That doesn't quite fit the current chill dinner vibe.
@@ -303,6 +319,7 @@ AI: "That doesn't quite fit the current chill dinner vibe.
 ## UI Evolution
 
 ### Current Layout
+
 ```
 ┌────────────────┬─────────────────────────────────────────┐
 │                │                                         │
@@ -313,6 +330,7 @@ AI: "That doesn't quite fit the current chill dinner vibe.
 ```
 
 ### Phase 1: Add Player
+
 ```
 ┌────────────────┬─────────────────────────────────────────┐
 │                │                                         │
@@ -325,6 +343,7 @@ AI: "That doesn't quite fit the current chill dinner vibe.
 ```
 
 ### Phase 2: DJ Mode Layout
+
 ```
 ┌──────────────────────────────────────────────────────────┐
 │  🎵 Now Playing                                          │
@@ -345,6 +364,7 @@ AI: "That doesn't quite fit the current chill dinner vibe.
 ```
 
 ### Phase 4: Party Mode
+
 ```
 ┌──────────────────────────────────────────────────────────┐
 │  🎉 PARTY MODE: Saturday Night                   👥 12   │
@@ -370,6 +390,7 @@ AI: "That doesn't quite fit the current chill dinner vibe.
 ## Technical Requirements by Phase
 
 ### Phase 1 Requirements
+
 - [ ] Add `user-modify-playback-state` OAuth scope
 - [ ] Create `/api/player/*` routes (8 endpoints)
 - [ ] Build `NowPlaying` component with controls
@@ -378,6 +399,7 @@ AI: "That doesn't quite fit the current chill dinner vibe.
 - [ ] Create queue preview component
 
 ### Phase 2 Requirements
+
 - [ ] Add queue management tools for Claude
 - [ ] Update system prompt for DJ mode
 - [ ] Implement queue depth monitoring
@@ -385,6 +407,7 @@ AI: "That doesn't quite fit the current chill dinner vibe.
 - [ ] Create "DJ Mode" conversation context
 
 ### Phase 3 Requirements
+
 - [ ] Design session schema for KV storage
 - [ ] Implement session persistence/recovery
 - [ ] Build skip tracking and preference learning
@@ -392,6 +415,7 @@ AI: "That doesn't quite fit the current chill dinner vibe.
 - [ ] Add time-of-day awareness
 
 ### Phase 4 Requirements
+
 - [ ] WebSocket server for real-time multi-user
 - [ ] Session sharing with QR codes
 - [ ] Request/voting system
@@ -402,34 +426,38 @@ AI: "That doesn't quite fit the current chill dinner vibe.
 
 ## Risk Assessment
 
-| Risk | Likelihood | Impact | Mitigation |
-|------|------------|--------|------------|
-| Spotify Premium required for WebPlayback | High | Medium | Use Player API (works with any account playing elsewhere) |
-| Rate limits on Player API | Medium | High | Cache state, debounce controls, batch operations |
-| Queue API limitations | Medium | Medium | Spotify queue is limited; may need shadow queue |
-| Session state complexity | Medium | Medium | Start simple, iterate |
-| Multi-user sync issues | High | High | Start single-user, add collab later |
+| Risk                                     | Likelihood | Impact | Mitigation                                                |
+| ---------------------------------------- | ---------- | ------ | --------------------------------------------------------- |
+| Spotify Premium required for WebPlayback | High       | Medium | Use Player API (works with any account playing elsewhere) |
+| Rate limits on Player API                | Medium     | High   | Cache state, debounce controls, batch operations          |
+| Queue API limitations                    | Medium     | Medium | Spotify queue is limited; may need shadow queue           |
+| Session state complexity                 | Medium     | Medium | Start simple, iterate                                     |
+| Multi-user sync issues                   | High       | High   | Start single-user, add collab later                       |
 
 ---
 
 ## Success Metrics
 
 ### Phase 1
+
 - User can control playback without leaving app
 - Queue visibility > 5 tracks ahead
 - Device switching works reliably
 
 ### Phase 2
+
 - Claude maintains queue depth automatically
 - Vibe shift requests result in appropriate track additions
 - < 5 seconds from request to queue update
 
 ### Phase 3
+
 - Sessions survive page refresh
 - Skip patterns influence future suggestions
 - Vibe evolution feels natural (not jarring transitions)
 
 ### Phase 4
+
 - Party guests can request songs easily
 - Host approval workflow is fast (< 3 taps)
 - AI moderation catches obvious misfits
@@ -450,6 +478,7 @@ AI: "That doesn't quite fit the current chill dinner vibe.
 ## Appendix: Spotify API Reference
 
 ### Player Endpoints Needed
+
 ```
 GET  /v1/me/player                    # Playback state
 GET  /v1/me/player/devices            # Available devices
@@ -464,6 +493,7 @@ GET  /v1/me/player/queue              # Get queue (recently added)
 ```
 
 ### Web Playback SDK (Premium Only)
+
 - Allows playing directly in browser
 - No external device needed
 - Full control over playback

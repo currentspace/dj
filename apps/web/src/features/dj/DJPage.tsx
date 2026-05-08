@@ -48,7 +48,12 @@ export function DJPage({token}: DJPageProps) {
   } = useMixSession()
 
   // Suggestions from react-query
-  const {data: suggestions = [], error: suggestionsQueryError, isLoading: suggestionsLoading, refetch: refetchSuggestions} = useMixSuggestionsQuery(!!session)
+  const {
+    data: suggestions = [],
+    error: suggestionsQueryError,
+    isLoading: suggestionsLoading,
+    refetch: refetchSuggestions,
+  } = useMixSuggestionsQuery(!!session)
   const suggestionsError = suggestionsQueryError?.message ?? null
 
   const refreshSuggestions = useCallback(() => {
@@ -60,9 +65,9 @@ export function DJPage({token}: DJPageProps) {
   const energyDebounceRef = useRef<null | ReturnType<typeof setTimeout>>(null)
 
   // Steer from store (SSE streaming state)
-  const vibeError = useMixSteerStore((s) => s.vibeError)
-  const steerVibeStream = useMixSteerStore((s) => s.steerVibeStream)
-  const steerInProgress = useMixSteerStore((s) => s.steerInProgress)
+  const vibeError = useMixSteerStore(s => s.vibeError)
+  const steerVibeStream = useMixSteerStore(s => s.steerVibeStream)
+  const steerInProgress = useMixSteerStore(s => s.steerInProgress)
 
   // Local state
   const [selectedPlaylist, setSelectedPlaylist] = useState<null | SpotifyPlaylist>(null)
@@ -79,7 +84,7 @@ export function DJPage({token}: DJPageProps) {
       timestamp: Date.now(),
       type,
     }
-    setLogEntries((prev) => {
+    setLogEntries(prev => {
       const next = [...prev, entry]
       return next.length > MAX_LOG_ENTRIES ? next.slice(-MAX_LOG_ENTRIES) : next
     })
@@ -153,32 +158,44 @@ export function DJPage({token}: DJPageProps) {
     }
   }, [endSession, addLogEntry])
 
-  const handleSteer = useCallback(async (direction: string) => {
-    addLogEntry('user', direction)
-    addLogEntry('steer', `Processing: "${direction}"`)
-    try {
-      await steerVibeStream(direction)
-      await refetchSuggestions()
-      addLogEntry('dj', 'Vibe updated, queue refreshed')
-    } catch {
-      addLogEntry('info', 'Steer failed')
-    }
-  }, [steerVibeStream, refetchSuggestions, addLogEntry])
+  const handleSteer = useCallback(
+    async (direction: string) => {
+      addLogEntry('user', direction)
+      addLogEntry('steer', `Processing: "${direction}"`)
+      try {
+        await steerVibeStream(direction)
+        await refetchSuggestions()
+        addLogEntry('dj', 'Vibe updated, queue refreshed')
+      } catch {
+        addLogEntry('info', 'Steer failed')
+      }
+    },
+    [steerVibeStream, refetchSuggestions, addLogEntry],
+  )
 
-  const handleRemove = useCallback((position: number) => {
-    removeFromQueue(position)
-  }, [removeFromQueue])
+  const handleRemove = useCallback(
+    (position: number) => {
+      removeFromQueue(position)
+    },
+    [removeFromQueue],
+  )
 
-  const handleReorder = useCallback((from: number, to: number) => {
-    reorderQueue(from, to)
-  }, [reorderQueue])
+  const handleReorder = useCallback(
+    (from: number, to: number) => {
+      reorderQueue(from, to)
+    },
+    [reorderQueue],
+  )
 
-  const handleEnergyChange = useCallback((level: number) => {
-    if (energyDebounceRef.current) clearTimeout(energyDebounceRef.current)
-    energyDebounceRef.current = setTimeout(() => {
-      energyLevelMutation.mutate(level)
-    }, 300)
-  }, [energyLevelMutation])
+  const handleEnergyChange = useCallback(
+    (level: number) => {
+      if (energyDebounceRef.current) clearTimeout(energyDebounceRef.current)
+      energyDebounceRef.current = setTimeout(() => {
+        energyLevelMutation.mutate(level)
+      }, 300)
+    },
+    [energyLevelMutation],
+  )
 
   // Combined errors
   const combinedError = sessionError ?? suggestionsError ?? vibeError
@@ -194,14 +211,8 @@ export function DJPage({token}: DJPageProps) {
         <PlaylistPicker onSelect={setSelectedPlaylist} selected={selectedPlaylist} />
 
         <div className={styles.startSection}>
-          {combinedError && (
-            <ErrorDisplay error={combinedError} onDismiss={clearAllErrors} variant="inline" />
-          )}
-          <button
-            className={styles.startButton}
-            disabled={isLoading}
-            onClick={handleStartSession}
-          >
+          {combinedError && <ErrorDisplay error={combinedError} onDismiss={clearAllErrors} variant="inline" />}
+          <button className={styles.startButton} disabled={isLoading} onClick={handleStartSession}>
             {isLoading ? 'Starting...' : 'Start DJ'}
           </button>
           <p className={styles.startHint}>
@@ -220,18 +231,10 @@ export function DJPage({token}: DJPageProps) {
       <CompactNowPlaying playback={playback} />
 
       <div className={styles.sessionHeader}>
-        <button
-          className={styles.endSessionBtn}
-          disabled={isLoading}
-          onClick={handleEndSession}
-        >
+        <button className={styles.endSessionBtn} disabled={isLoading} onClick={handleEndSession}>
           End Session
         </button>
-        <button
-          className={styles.settingsBtn}
-          onClick={() => setShowSettings(true)}
-          type="button"
-        >
+        <button className={styles.settingsBtn} onClick={() => setShowSettings(true)} type="button">
           Settings
         </button>
       </div>
@@ -243,24 +246,14 @@ export function DJPage({token}: DJPageProps) {
           onReorder={handleReorder}
           queue={queue}
         />
-        <SuggestionsPanel
-          isLoading={suggestionsLoading}
-          onRefresh={refreshSuggestions}
-          suggestions={suggestions}
-        />
+        <SuggestionsPanel isLoading={suggestionsLoading} onRefresh={refreshSuggestions} suggestions={suggestions} />
       </div>
 
       <DJLog entries={logEntries} />
 
-      <SteerInput
-        disabled={!session}
-        isLoading={steerInProgress}
-        onSteer={handleSteer}
-      />
+      <SteerInput disabled={!session} isLoading={steerInProgress} onSteer={handleSteer} />
 
-      {combinedError && (
-        <ErrorDisplay error={combinedError} onDismiss={clearAllErrors} variant="toast" />
-      )}
+      {combinedError && <ErrorDisplay error={combinedError} onDismiss={clearAllErrors} variant="toast" />}
 
       {showSettings && (
         <SettingsDrawer

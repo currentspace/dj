@@ -12,11 +12,11 @@
  *   4. LLM analysis with suggestions support
  */
 
-import type { PermissionRequestHookInput, SyncHookJSONOutput } from "../sdk-types.js";
+import type {PermissionRequestHookInput, SyncHookJSONOutput} from '../sdk-types.js'
 
-import { evaluateBashCommand } from "../lib/bash-security-gate.js";
-import { buildHookContext } from "../lib/logger.js";
-import { allow, askUser, deny } from "../lib/security-llm.js";
+import {evaluateBashCommand} from '../lib/bash-security-gate.js'
+import {buildHookContext} from '../lib/logger.js'
+import {allow, askUser, deny} from '../lib/security-llm.js'
 
 /**
  * Handle a permission request from Claude Code.
@@ -41,33 +41,31 @@ import { allow, askUser, deny } from "../lib/security-llm.js";
  *   }
  * }
  */
-export async function handlePermissionRequest(
-  input: PermissionRequestHookInput
-): Promise<SyncHookJSONOutput> {
+export async function handlePermissionRequest(input: PermissionRequestHookInput): Promise<SyncHookJSONOutput> {
   // Only handle Bash commands
-  if (input.tool_name !== "Bash") {
+  if (input.tool_name !== 'Bash') {
     // Non-Bash tools: let user decide
-    return askUser();
+    return askUser()
   }
 
-  const toolInput = input.tool_input as Record<string, unknown> | undefined;
-  const command = toolInput?.command as string | undefined;
+  const toolInput = input.tool_input as Record<string, unknown> | undefined
+  const command = toolInput?.command as string | undefined
   if (!command) {
-    return askUser("No command provided");
+    return askUser('No command provided')
   }
 
-  const description = toolInput?.description as string | undefined;
-  const context = buildHookContext("permission-request", input);
+  const description = toolInput?.description as string | undefined
+  const context = buildHookContext('permission-request', input)
 
-  const result = await evaluateBashCommand(command, description, context);
+  const result = await evaluateBashCommand(command, description, context)
 
   switch (result.decision) {
-    case "allow":
-      return allow();
-    case "deny":
-      return deny(result.reason);
-    case "ask":
+    case 'allow':
+      return allow()
+    case 'deny':
+      return deny(result.reason)
+    case 'ask':
     default:
-      return askUser(result.reason);
+      return askUser(result.reason)
   }
 }

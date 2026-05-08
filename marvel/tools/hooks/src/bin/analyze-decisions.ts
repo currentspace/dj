@@ -9,96 +9,92 @@
  *   pnpm analyze-decisions [--since=YYYY-MM-DD] [--json]
  */
 
-import * as fs from "fs";
-import * as path from "path";
-import * as readline from "readline";
+import * as fs from 'fs'
+import * as path from 'path'
+import * as readline from 'readline'
 
-import { getSecurityDir } from "../lib/paths.js";
+import {getSecurityDir} from '../lib/paths.js'
 
 interface AnalysisResult {
   byDecision: {
-    allow: Decision[];
-    ask: Decision[];
-    deny: Decision[];
-  };
+    allow: Decision[]
+    ask: Decision[]
+    deny: Decision[]
+  }
   patterns: {
-    command: string;
-    count: number;
-    decisions: Record<string, number>;
-  }[];
-  period: { end: string; start: string; };
-  slowest: Decision[];
+    command: string
+    count: number
+    decisions: Record<string, number>
+  }[]
+  period: {end: string; start: string}
+  slowest: Decision[]
   summary: {
-    allowed: number;
-    asked: number;
-    avgDurationMs: number;
-    denied: number;
-    total: number;
-  };
+    allowed: number
+    asked: number
+    avgDurationMs: number
+    denied: number
+    total: number
+  }
 }
 
 interface Decision {
-  command: string;
-  decision: "allow" | "ask" | "deny";
-  description: null | string;
-  durationMs: number;
-  model: string;
-  reasoning: string;
-  timestamp: string;
+  command: string
+  decision: 'allow' | 'ask' | 'deny'
+  description: null | string
+  durationMs: number
+  model: string
+  reasoning: string
+  timestamp: string
 }
 
 function analyzeDecisions(decisions: Decision[]): AnalysisResult {
   if (decisions.length === 0) {
     return {
-      byDecision: { allow: [], ask: [], deny: [] },
+      byDecision: {allow: [], ask: [], deny: []},
       patterns: [],
-      period: { end: "", start: "" },
+      period: {end: '', start: ''},
       slowest: [],
-      summary: { allowed: 0, asked: 0, avgDurationMs: 0, denied: 0, total: 0 },
-    };
+      summary: {allowed: 0, asked: 0, avgDurationMs: 0, denied: 0, total: 0},
+    }
   }
 
   // Sort by timestamp
-  decisions.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+  decisions.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
 
   const summary = {
-    allowed: decisions.filter((d) => d.decision === "allow").length,
-    asked: decisions.filter((d) => d.decision === "ask").length,
-    avgDurationMs: Math.round(
-      decisions.reduce((sum, d) => sum + d.durationMs, 0) / decisions.length
-    ),
-    denied: decisions.filter((d) => d.decision === "deny").length,
+    allowed: decisions.filter(d => d.decision === 'allow').length,
+    asked: decisions.filter(d => d.decision === 'ask').length,
+    avgDurationMs: Math.round(decisions.reduce((sum, d) => sum + d.durationMs, 0) / decisions.length),
+    denied: decisions.filter(d => d.decision === 'deny').length,
     total: decisions.length,
-  };
+  }
 
   // Find slowest decisions
-  const slowest = [...decisions]
-    .sort((a, b) => b.durationMs - a.durationMs)
-    .slice(0, 5);
+  const slowest = [...decisions].sort((a, b) => b.durationMs - a.durationMs).slice(0, 5)
 
   // Group by decision type
   const byDecision = {
-    allow: decisions.filter((d) => d.decision === "allow"),
-    ask: decisions.filter((d) => d.decision === "ask"),
-    deny: decisions.filter((d) => d.decision === "deny"),
-  };
+    allow: decisions.filter(d => d.decision === 'allow'),
+    ask: decisions.filter(d => d.decision === 'ask'),
+    deny: decisions.filter(d => d.decision === 'deny'),
+  }
 
   // Find command patterns
-  const patternMap = new Map<string, { count: number; decisions: Record<string, number> }>();
+  const patternMap = new Map<string, {count: number; decisions: Record<string, number>}>()
   for (const d of decisions) {
-    const prefix = extractCommandPrefix(d.command);
-    const existing = patternMap.get(prefix) || { count: 0, decisions: {} };
-    existing.count++;
-    existing.decisions[d.decision] = (existing.decisions[d.decision] || 0) + 1;
-    patternMap.set(prefix, existing);
+    const prefix = extractCommandPrefix(d.command)
+    const existing = patternMap.get(prefix) || {count: 0, decisions: {}}
+    existing.count++
+    existing.decisions[d.decision] = (existing.decisions[d.decision] || 0) + 1
+    patternMap.set(prefix, existing)
   }
 
   // Convert to array and filter for patterns with multiple decisions types (rule candidates)
   const patterns = Array.from(patternMap.entries())
-    .map(([command, data]) => ({ command, ...data }))
-    .filter((p) => Object.keys(p.decisions).length > 1 || p.count >= 3)
+    .map(([command, data]) => ({command, ...data}))
+    .filter(p => Object.keys(p.decisions).length > 1 || p.count >= 3)
     .sort((a, b) => b.count - a.count)
-    .slice(0, 10);
+    .slice(0, 10)
 
   return {
     byDecision,
@@ -109,166 +105,172 @@ function analyzeDecisions(decisions: Decision[]): AnalysisResult {
     },
     slowest,
     summary,
-  };
+  }
 }
 
 function extractCommandPrefix(command: string): string {
   // Extract the base command for pattern grouping
-  const parts = command.trim().split(/\s+/);
-  const base = parts[0];
+  const parts = command.trim().split(/\s+/)
+  const base = parts[0]
 
   // For common tools, include subcommand
-  if (["docker", "git", "kubectl", "npm", "pnpm", "yarn"].includes(base) && parts.length > 1) {
-    return `${base} ${parts[1]}`;
+  if (['docker', 'git', 'kubectl', 'npm', 'pnpm', 'yarn'].includes(base) && parts.length > 1) {
+    return `${base} ${parts[1]}`
   }
 
-  return base;
+  return base
 }
 
 function formatReport(analysis: AnalysisResult): string {
-  const lines: string[] = [];
+  const lines: string[] = []
 
-  lines.push("═══════════════════════════════════════════════════════════════");
-  lines.push("                   SECURITY DECISION ANALYSIS                   ");
-  lines.push("═══════════════════════════════════════════════════════════════");
-  lines.push("");
+  lines.push('═══════════════════════════════════════════════════════════════')
+  lines.push('                   SECURITY DECISION ANALYSIS                   ')
+  lines.push('═══════════════════════════════════════════════════════════════')
+  lines.push('')
 
   if (analysis.summary.total === 0) {
-    lines.push("No decisions found for the specified period.");
-    return lines.join("\n");
+    lines.push('No decisions found for the specified period.')
+    return lines.join('\n')
   }
 
   // Period
-  lines.push(`Period: ${analysis.period.start.slice(0, 10)} to ${analysis.period.end.slice(0, 10)}`);
-  lines.push("");
+  lines.push(`Period: ${analysis.period.start.slice(0, 10)} to ${analysis.period.end.slice(0, 10)}`)
+  lines.push('')
 
   // Summary
-  lines.push("SUMMARY");
-  lines.push("───────────────────────────────────────────────────────────────");
-  lines.push(`Total decisions:    ${analysis.summary.total}`);
-  lines.push(`  ✓ Allowed:        ${analysis.summary.allowed} (${Math.round((analysis.summary.allowed / analysis.summary.total) * 100)}%)`);
-  lines.push(`  ✗ Denied:         ${analysis.summary.denied} (${Math.round((analysis.summary.denied / analysis.summary.total) * 100)}%)`);
-  lines.push(`  ? Asked user:     ${analysis.summary.asked} (${Math.round((analysis.summary.asked / analysis.summary.total) * 100)}%)`);
-  lines.push(`  Avg latency:      ${analysis.summary.avgDurationMs}ms`);
-  lines.push("");
+  lines.push('SUMMARY')
+  lines.push('───────────────────────────────────────────────────────────────')
+  lines.push(`Total decisions:    ${analysis.summary.total}`)
+  lines.push(
+    `  ✓ Allowed:        ${analysis.summary.allowed} (${Math.round((analysis.summary.allowed / analysis.summary.total) * 100)}%)`,
+  )
+  lines.push(
+    `  ✗ Denied:         ${analysis.summary.denied} (${Math.round((analysis.summary.denied / analysis.summary.total) * 100)}%)`,
+  )
+  lines.push(
+    `  ? Asked user:     ${analysis.summary.asked} (${Math.round((analysis.summary.asked / analysis.summary.total) * 100)}%)`,
+  )
+  lines.push(`  Avg latency:      ${analysis.summary.avgDurationMs}ms`)
+  lines.push('')
 
   // Slowest decisions
   if (analysis.slowest.length > 0) {
-    lines.push("SLOWEST DECISIONS (optimization targets)");
-    lines.push("───────────────────────────────────────────────────────────────");
+    lines.push('SLOWEST DECISIONS (optimization targets)')
+    lines.push('───────────────────────────────────────────────────────────────')
     for (const d of analysis.slowest) {
-      lines.push(`  ${d.durationMs}ms | ${d.decision.padEnd(5)} | ${d.command.slice(0, 50)}`);
+      lines.push(`  ${d.durationMs}ms | ${d.decision.padEnd(5)} | ${d.command.slice(0, 50)}`)
     }
-    lines.push("");
+    lines.push('')
   }
 
   // Patterns needing rules
   if (analysis.patterns.length > 0) {
-    lines.push("COMMAND PATTERNS (rule candidates)");
-    lines.push("───────────────────────────────────────────────────────────────");
+    lines.push('COMMAND PATTERNS (rule candidates)')
+    lines.push('───────────────────────────────────────────────────────────────')
     for (const p of analysis.patterns) {
       const decisionStr = Object.entries(p.decisions)
         .map(([k, v]) => `${k}:${v}`)
-        .join(", ");
-      lines.push(`  ${p.count.toString().padStart(3)}x | ${p.command.padEnd(20)} | ${decisionStr}`);
+        .join(', ')
+      lines.push(`  ${p.count.toString().padStart(3)}x | ${p.command.padEnd(20)} | ${decisionStr}`)
     }
-    lines.push("");
+    lines.push('')
   }
 
   // Denied commands (review for false positives)
   if (analysis.byDecision.deny.length > 0) {
-    lines.push("DENIED COMMANDS (review for false positives)");
-    lines.push("───────────────────────────────────────────────────────────────");
+    lines.push('DENIED COMMANDS (review for false positives)')
+    lines.push('───────────────────────────────────────────────────────────────')
     for (const d of analysis.byDecision.deny.slice(0, 10)) {
-      lines.push(`  ${d.command.slice(0, 60)}`);
-      lines.push(`    Reason: ${d.reasoning.slice(0, 50)}`);
+      lines.push(`  ${d.command.slice(0, 60)}`)
+      lines.push(`    Reason: ${d.reasoning.slice(0, 50)}`)
     }
-    lines.push("");
+    lines.push('')
   }
 
   // Asked commands (candidates for rules)
   if (analysis.byDecision.ask.length > 0) {
-    lines.push("ASKED USER (candidates for allow/deny rules)");
-    lines.push("───────────────────────────────────────────────────────────────");
+    lines.push('ASKED USER (candidates for allow/deny rules)')
+    lines.push('───────────────────────────────────────────────────────────────')
     for (const d of analysis.byDecision.ask.slice(0, 10)) {
-      lines.push(`  ${d.command.slice(0, 60)}`);
-      lines.push(`    Reason: ${d.reasoning.slice(0, 50)}`);
+      lines.push(`  ${d.command.slice(0, 60)}`)
+      lines.push(`    Reason: ${d.reasoning.slice(0, 50)}`)
     }
-    lines.push("");
+    lines.push('')
   }
 
-  lines.push("═══════════════════════════════════════════════════════════════");
+  lines.push('═══════════════════════════════════════════════════════════════')
 
-  return lines.join("\n");
+  return lines.join('\n')
 }
 
 async function loadDecisions(filePath: string, since: Date | null): Promise<Decision[]> {
-  const decisions: Decision[] = [];
+  const decisions: Decision[] = []
 
   if (!fs.existsSync(filePath)) {
-    return decisions;
+    return decisions
   }
 
-  const fileStream = fs.createReadStream(filePath);
+  const fileStream = fs.createReadStream(filePath)
   const rl = readline.createInterface({
     crlfDelay: Infinity,
     input: fileStream,
-  });
+  })
 
   for await (const line of rl) {
-    if (!line.trim()) continue;
+    if (!line.trim()) continue
     try {
-      const decision = JSON.parse(line) as Decision;
+      const decision = JSON.parse(line) as Decision
       if (since && new Date(decision.timestamp) < since) {
-        continue;
+        continue
       }
-      decisions.push(decision);
+      decisions.push(decision)
     } catch {
       // Skip malformed lines
     }
   }
 
-  return decisions;
+  return decisions
 }
 
 async function main(): Promise<void> {
-  const { help, json, since } = parseArgs();
+  const {help, json, since} = parseArgs()
 
   if (help) {
-    printHelp();
-    process.exit(0);
+    printHelp()
+    process.exit(0)
   }
 
   // Find decisions file
-  const decisionsPath = path.join(getSecurityDir(), "decisions.jsonl");
+  const decisionsPath = path.join(getSecurityDir(), 'decisions.jsonl')
 
-  const decisions = await loadDecisions(decisionsPath, since);
-  const analysis = analyzeDecisions(decisions);
+  const decisions = await loadDecisions(decisionsPath, since)
+  const analysis = analyzeDecisions(decisions)
 
   if (json) {
-    console.log(JSON.stringify(analysis, null, 2));
+    console.log(JSON.stringify(analysis, null, 2))
   } else {
-    console.log(formatReport(analysis));
+    console.log(formatReport(analysis))
   }
 }
 
-function parseArgs(): { help: boolean; json: boolean; since: Date | null; } {
-  const args = process.argv.slice(2);
-  let since: Date | null = null;
-  let json = false;
-  let help = false;
+function parseArgs(): {help: boolean; json: boolean; since: Date | null} {
+  const args = process.argv.slice(2)
+  let since: Date | null = null
+  let json = false
+  let help = false
 
   for (const arg of args) {
-    if (arg.startsWith("--since=")) {
-      since = new Date(arg.slice(8));
-    } else if (arg === "--json") {
-      json = true;
-    } else if (arg === "--help" || arg === "-h") {
-      help = true;
+    if (arg.startsWith('--since=')) {
+      since = new Date(arg.slice(8))
+    } else if (arg === '--json') {
+      json = true
+    } else if (arg === '--help' || arg === '-h') {
+      help = true
     }
   }
 
-  return { help, json, since };
+  return {help, json, since}
 }
 
 function printHelp(): void {
@@ -294,10 +296,10 @@ Output:
 
 Files:
   Reads from: marvel/security/decisions.jsonl
-`);
+`)
 }
 
-main().catch((err) => {
-  console.error("Error:", err.message);
-  process.exit(1);
-});
+main().catch(err => {
+  console.error('Error:', err.message)
+  process.exit(1)
+})

@@ -36,14 +36,14 @@ Users chat with an AI DJ that can:
 
 #### What Claude Can Analyze
 
-| Data Point | Source | Description |
-|------------|--------|-------------|
-| Genre/Mood Tags | Last.fm | Crowd-sourced genre and mood labels |
-| BPM (Tempo) | Deezer | Beats per minute (45-220 range) |
-| Popularity | Spotify + Last.fm | Track popularity scores and play counts |
-| Release Era | Spotify + Deezer | Year range and average release date |
-| Similar Tracks | Last.fm | Recommendations for transitions |
-| Artist Info | Last.fm | Bio, similar artists, genre tags |
+| Data Point      | Source            | Description                             |
+| --------------- | ----------------- | --------------------------------------- |
+| Genre/Mood Tags | Last.fm           | Crowd-sourced genre and mood labels     |
+| BPM (Tempo)     | Deezer            | Beats per minute (45-220 range)         |
+| Popularity      | Spotify + Last.fm | Track popularity scores and play counts |
+| Release Era     | Spotify + Deezer  | Year range and average release date     |
+| Similar Tracks  | Last.fm           | Recommendations for transitions         |
+| Artist Info     | Last.fm           | Bio, similar artists, genre tags        |
 
 #### Vibe-Driven Discovery (AI-Powered)
 
@@ -60,16 +60,16 @@ A multi-step intelligent discovery system:
 
 #### Available Controls
 
-| Action | Description |
-|--------|-------------|
-| Play/Pause | Start or pause current playback |
-| Next/Previous | Skip forward or back |
-| Add to Queue | Queue a specific track next |
-| Seek | Jump to position in current track |
-| Transfer Device | Move playback to different device |
-| Shuffle | Toggle shuffle mode on/off |
-| Repeat | Set repeat mode (off/track/context) |
-| Volume | Adjust volume (0-100%) |
+| Action          | Description                         |
+| --------------- | ----------------------------------- |
+| Play/Pause      | Start or pause current playback     |
+| Next/Previous   | Skip forward or back                |
+| Add to Queue    | Queue a specific track next         |
+| Seek            | Jump to position in current track   |
+| Transfer Device | Move playback to different device   |
+| Shuffle         | Toggle shuffle mode on/off          |
+| Repeat          | Set repeat mode (off/track/context) |
+| Volume          | Adjust volume (0-100%)              |
 
 #### What Claude Can See
 
@@ -85,6 +85,7 @@ A multi-step intelligent discovery system:
 #### Create New Playlists
 
 Claude can create playlists from natural language:
+
 - "Make me a chill Sunday morning playlist"
 - "Create a high-energy workout mix with 90s hip hop"
 - "Build a dinner party playlist that flows well"
@@ -101,6 +102,7 @@ Claude can create playlists from natural language:
 ### 5. Music Search
 
 Claude can search Spotify for:
+
 - Tracks by name, artist, or album
 - Specific song requests
 - Genre or mood-based queries
@@ -114,12 +116,14 @@ Search results include: track name, artists, album, popularity, duration, Spotif
 ### Available Tools (18 Total)
 
 **Discovery & Analysis**:
+
 - `analyze_playlist` - Full playlist analysis with enrichment
 - `get_playlist_tracks` - Paginated track fetching (1-50 per call)
 - `get_track_details` - Complete metadata for specific tracks
 - `search_spotify_tracks` - Search Spotify catalog
 
 **Vibe Discovery**:
+
 - `extract_playlist_vibe` - AI vibe analysis
 - `plan_discovery_strategy` - AI discovery planning
 - `recommend_from_similar` - Last.fm → Spotify track matching
@@ -127,10 +131,12 @@ Search results include: track name, artists, album, popularity, duration, Spotif
 - `curate_recommendations` - AI-powered track curation
 
 **Playlist Management**:
+
 - `create_playlist` - Create new playlist
 - `modify_playlist` - Add/remove/reorder tracks
 
 **Playback Control**:
+
 - `get_now_playing` - Current track info
 - `get_queue` - Playback queue
 - `get_playback_state` - Full playback details
@@ -141,10 +147,10 @@ Search results include: track name, artists, album, popularity, duration, Spotif
 
 ### Data Enrichment
 
-| Service | Data Provided | Rate Limit | Cache TTL |
-|---------|--------------|------------|-----------|
-| Deezer | BPM, rank, gain, release date | 40/sec | 90 days |
-| Last.fm | Tags, listeners, similar tracks, artist info | 40/sec | 7 days |
+| Service | Data Provided                                | Rate Limit | Cache TTL |
+| ------- | -------------------------------------------- | ---------- | --------- |
+| Deezer  | BPM, rank, gain, release date                | 40/sec     | 90 days   |
+| Last.fm | Tags, listeners, similar tracks, artist info | 40/sec     | 7 days    |
 
 ### Constraints
 

@@ -26,7 +26,19 @@ export interface ChatResponse {
 export type ContextType = 'album' | 'artist' | 'collection' | 'playlist' | 'show'
 
 /** Device type from Spotify */
-export type DeviceType = 'audio_dongle' | 'automobile' | 'avr' | 'cast_audio' | 'cast_video' | 'computer' | 'game_console' | 'smartphone' | 'speaker' | 'stb' | 'tv' | 'unknown'
+export type DeviceType =
+  | 'audio_dongle'
+  | 'automobile'
+  | 'avr'
+  | 'cast_audio'
+  | 'cast_video'
+  | 'computer'
+  | 'game_console'
+  | 'smartphone'
+  | 'speaker'
+  | 'stb'
+  | 'tv'
+  | 'unknown'
 
 export interface GeneratePlaylistRequest {
   prompt: string

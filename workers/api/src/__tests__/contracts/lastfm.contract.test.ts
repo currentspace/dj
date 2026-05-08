@@ -18,7 +18,7 @@ import {
 } from '@dj/shared-types'
 import {describe, expect, it} from 'vitest'
 
-import { asRecord } from './helpers'
+import {asRecord} from './helpers'
 
 const LASTFM_API_BASE = 'https://ws.audioscrobbler.com/2.0/'
 const RATE_LIMIT_DELAY_MS = 200 // Last.fm allows 5 req/s, we use 200ms = 5 req/s

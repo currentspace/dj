@@ -12,12 +12,7 @@ import {type Mock, vi} from 'vitest'
 
 import {createTestQueryClient} from './query-wrapper'
 import {buildPlaylist, mockUserProfile} from './spotify-mocks'
-import {
-  createMockSSEResponse,
-  mockContentEvent,
-  mockDoneEvent,
-  mockThinkingEvent,
-} from './sse-events'
+import {createMockSSEResponse, mockContentEvent, mockDoneEvent, mockThinkingEvent} from './sse-events'
 import {clearAllStorage, setupMockStorage} from './storage-mocks'
 
 // ============================================================================
@@ -321,11 +316,7 @@ export function renderWithAuth(ui: ReactElement, options?: RenderWithAuthOptions
 
   // Create wrapper with QueryClientProvider
   function Wrapper({children}: TestWrapperProps) {
-    return (
-      <QueryClientProvider client={testQueryClient}>
-        {children}
-      </QueryClientProvider>
-    )
+    return <QueryClientProvider client={testQueryClient}>{children}</QueryClientProvider>
   }
 
   return render(ui, {wrapper: Wrapper, ...renderOptions})
@@ -363,11 +354,7 @@ export function renderWithProviders(ui: ReactElement, options?: Omit<RenderOptio
   const testQueryClient = createTestQueryClient()
 
   function Wrapper({children}: TestWrapperProps) {
-    return (
-      <QueryClientProvider client={testQueryClient}>
-        {children}
-      </QueryClientProvider>
-    )
+    return <QueryClientProvider client={testQueryClient}>{children}</QueryClientProvider>
   }
 
   return render(ui, {wrapper: Wrapper, ...options})

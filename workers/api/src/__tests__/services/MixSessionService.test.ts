@@ -3,18 +3,12 @@
  * Tests for Live DJ Mode mix session management
  */
 
-import type {
-  MixSession,
-  PlayedTrack,
-  QueuedTrack,
-  SessionPreferences,
-  VibeProfile,
-} from '@dj/shared-types'
+import type {MixSession, PlayedTrack, QueuedTrack, SessionPreferences, VibeProfile} from '@dj/shared-types'
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {beforeEach, describe, expect, it, vi} from 'vitest'
 
-import { MixSessionService } from '../../services/MixSessionService'
-import { MockKVNamespace } from '../fixtures/cloudflare-mocks'
+import {MixSessionService} from '../../services/MixSessionService'
+import {MockKVNamespace} from '../fixtures/cloudflare-mocks'
 
 // Mock logger
 vi.mock('../../utils/LoggerContext', () => ({
@@ -68,7 +62,7 @@ describe('MixSessionService', () => {
 
   beforeEach(() => {
     mockKV = new MockKVNamespace()
-     
+
     service = new MixSessionService(mockKV as any)
   })
 
@@ -82,10 +76,10 @@ describe('MixSessionService', () => {
       expect(session.createdAt).toBeDefined()
       expect(session.updatedAt).toBeDefined()
       expect(session.vibe).toEqual({
-        bpmRange: { max: 140, min: 80 },
+        bpmRange: {max: 140, min: 80},
         energyDirection: 'steady',
         energyLevel: 5,
-        era: { end: 2025, start: 2000 },
+        era: {end: 2025, start: 2000},
         genres: [],
         mood: [],
       })
@@ -104,7 +98,7 @@ describe('MixSessionService', () => {
       const preferences: SessionPreferences = {
         autoFill: false,
         avoidGenres: ['country', 'metal'],
-        bpmLock: { max: 130, min: 120 },
+        bpmLock: {max: 130, min: 120},
         favoriteArtists: ['Daft Punk', 'Caribou'],
       }
 
@@ -264,10 +258,10 @@ describe('MixSessionService', () => {
           },
         ],
         vibe: {
-          bpmRange: { max: 140, min: 100 },
+          bpmRange: {max: 140, min: 100},
           energyDirection: 'steady',
           energyLevel: 5,
-          era: { end: 2025, start: 2000 },
+          era: {end: 2025, start: 2000},
           genres: [],
           mood: [],
         },
@@ -311,10 +305,10 @@ describe('MixSessionService', () => {
           },
         ],
         vibe: {
-          bpmRange: { max: 140, min: 100 },
+          bpmRange: {max: 140, min: 100},
           energyDirection: 'steady',
           energyLevel: 8,
-          era: { end: 2025, start: 2000 },
+          era: {end: 2025, start: 2000},
           genres: [],
           mood: [],
         },
@@ -337,10 +331,10 @@ describe('MixSessionService', () => {
 
     it('should blend vibes using weighted average (70% current, 30% new)', () => {
       const currentVibe: VibeProfile = {
-        bpmRange: { max: 130, min: 120 },
+        bpmRange: {max: 130, min: 120},
         energyDirection: 'steady',
         energyLevel: 6,
-        era: { end: 2025, start: 2000 },
+        era: {end: 2025, start: 2000},
         genres: ['house'],
         mood: ['energetic'],
       }
@@ -358,10 +352,10 @@ describe('MixSessionService', () => {
 
     it('should use custom weight in vibe blending', () => {
       const currentVibe: VibeProfile = {
-        bpmRange: { max: 130, min: 120 },
+        bpmRange: {max: 130, min: 120},
         energyDirection: 'steady',
         energyLevel: 5,
-        era: { end: 2025, start: 2000 },
+        era: {end: 2025, start: 2000},
         genres: [],
         mood: [],
       }
@@ -379,10 +373,10 @@ describe('MixSessionService', () => {
 
     it('should add new moods up to 5 total', () => {
       const currentVibe: VibeProfile = {
-        bpmRange: { max: 130, min: 120 },
+        bpmRange: {max: 130, min: 120},
         energyDirection: 'steady',
         energyLevel: 7,
-        era: { end: 2025, start: 2000 },
+        era: {end: 2025, start: 2000},
         genres: [],
         mood: ['energetic', 'uplifting'],
       }
@@ -402,10 +396,10 @@ describe('MixSessionService', () => {
 
     it('should limit moods to 5', () => {
       const currentVibe: VibeProfile = {
-        bpmRange: { max: 130, min: 120 },
+        bpmRange: {max: 130, min: 120},
         energyDirection: 'steady',
         energyLevel: 7,
-        era: { end: 2025, start: 2000 },
+        era: {end: 2025, start: 2000},
         genres: [],
         mood: ['energetic', 'uplifting', 'happy', 'groovy'],
       }
@@ -421,10 +415,10 @@ describe('MixSessionService', () => {
 
     it('should add new genres up to 5 total', () => {
       const currentVibe: VibeProfile = {
-        bpmRange: { max: 130, min: 120 },
+        bpmRange: {max: 130, min: 120},
         energyDirection: 'steady',
         energyLevel: 7,
-        era: { end: 2025, start: 2000 },
+        era: {end: 2025, start: 2000},
         genres: ['house', 'techno'],
         mood: [],
       }
@@ -464,7 +458,7 @@ describe('MixSessionService', () => {
       service.addToQueue(session, track)
 
       expect(session.queue).toHaveLength(1)
-      expect(session.queue[0]).toEqual({ ...track, position: 0 })
+      expect(session.queue[0]).toEqual({...track, position: 0})
     })
 
     it('should maintain position order when adding tracks', () => {

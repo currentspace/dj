@@ -1,5 +1,5 @@
-import { defineConfig } from 'vitest/config'
-import { sharedConfig } from '../../vitest.shared'
+import {defineConfig} from 'vitest/config'
+import {sharedConfig} from '../../vitest.shared'
 
 /**
  * Vitest configuration for @dj/shared-types

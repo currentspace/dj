@@ -7,9 +7,9 @@
  * Key Principle: Create realistic test data that matches production patterns
  */
 
-import type { SpotifyTrack } from '@dj/shared-types'
+import type {SpotifyTrack} from '@dj/shared-types'
 
-import { MockKVNamespace } from '../integration/setup'
+import {MockKVNamespace} from '../integration/setup'
 
 /**
  * Create mock environment for integration tests
@@ -54,14 +54,14 @@ export const KNOWN_TEST_TRACKS = {
   BOHEMIAN_RHAPSODY: {
     album: {
       id: '6X9k3hgEYJP706jMJ8L8FG',
-      images: [{ height: 640, url: 'https://i.scdn.co/image/ab67616d0000b273e319baafd16e84f0408af2a0', width: 640 }],
+      images: [{height: 640, url: 'https://i.scdn.co/image/ab67616d0000b273e319baafd16e84f0408af2a0', width: 640}],
       name: 'A Night At The Opera (2011 Remaster)',
     },
-    artists: [{ id: '1dfeR4HaWDbWqFHLkxsg1d', name: 'Queen' }],
+    artists: [{id: '1dfeR4HaWDbWqFHLkxsg1d', name: 'Queen'}],
     duration_ms: 354320,
     explicit: false,
-    external_ids: { isrc: 'GBUM71029604' },
-    external_urls: { spotify: 'https://open.spotify.com/track/6rqhFgbbKwnb9MLmUQDhG6' },
+    external_ids: {isrc: 'GBUM71029604'},
+    external_urls: {spotify: 'https://open.spotify.com/track/6rqhFgbbKwnb9MLmUQDhG6'},
     id: '6rqhFgbbKwnb9MLmUQDhG6',
     name: 'Bohemian Rhapsody - Remastered 2011',
     popularity: 88,
@@ -73,14 +73,14 @@ export const KNOWN_TEST_TRACKS = {
   MR_BRIGHTSIDE: {
     album: {
       id: '4OHNH3sDzIxnmUADXzv2kT',
-      images: [{ height: 640, url: 'https://i.scdn.co/image/ab67616d0000b2734ae1c4c5c45aabe565499163', width: 640 }],
+      images: [{height: 640, url: 'https://i.scdn.co/image/ab67616d0000b2734ae1c4c5c45aabe565499163', width: 640}],
       name: 'Hot Fuss',
     },
-    artists: [{ id: '0C0XlULifJtAgn6ZNCW2eu', name: 'The Killers' }],
+    artists: [{id: '0C0XlULifJtAgn6ZNCW2eu', name: 'The Killers'}],
     duration_ms: 222973,
     explicit: false,
-    external_ids: { isrc: 'USIR20400274' },
-    external_urls: { spotify: 'https://open.spotify.com/track/003vvx7Niy0yvhvHt4a68B' },
+    external_ids: {isrc: 'USIR20400274'},
+    external_urls: {spotify: 'https://open.spotify.com/track/003vvx7Niy0yvhvHt4a68B'},
     id: '003vvx7Niy0yvhvHt4a68B',
     name: 'Mr. Brightside',
     popularity: 90,
@@ -92,14 +92,14 @@ export const KNOWN_TEST_TRACKS = {
   STAIRWAY_TO_HEAVEN: {
     album: {
       id: '44Ig8dzqOkvkGDzaUof9lK',
-      images: [{ height: 640, url: 'https://i.scdn.co/image/ab67616d0000b273c8a11e48c91a982d086afc69', width: 640 }],
+      images: [{height: 640, url: 'https://i.scdn.co/image/ab67616d0000b273c8a11e48c91a982d086afc69', width: 640}],
       name: 'Led Zeppelin IV (Deluxe Edition; Remaster)',
     },
-    artists: [{ id: '36QJpDe2go2KgaRleHCDTp', name: 'Led Zeppelin' }],
+    artists: [{id: '36QJpDe2go2KgaRleHCDTp', name: 'Led Zeppelin'}],
     duration_ms: 482830,
     explicit: false,
-    external_ids: { isrc: 'USAT21100321' },
-    external_urls: { spotify: 'https://open.spotify.com/track/5CQ30WqJwcep0pYcV4AMNc' },
+    external_ids: {isrc: 'USAT21100321'},
+    external_urls: {spotify: 'https://open.spotify.com/track/5CQ30WqJwcep0pYcV4AMNc'},
     id: '5CQ30WqJwcep0pYcV4AMNc',
     name: 'Stairway to Heaven - Remaster',
     popularity: 82,
@@ -125,7 +125,7 @@ export function createTestTrack(options?: {
   isrc?: string
   name?: string
   popularity?: number
-}): SpotifyTrack & { duration_ms?: number; explicit?: boolean; external_ids?: { isrc: string }; popularity?: number } {
+}): SpotifyTrack & {duration_ms?: number; explicit?: boolean; external_ids?: {isrc: string}; popularity?: number} {
   const trackId = options?.id ?? 'test-track-id'
   const trackName = options?.name ?? 'Test Track'
   const artistName = options?.artistName ?? 'Test Artist'
@@ -133,14 +133,14 @@ export function createTestTrack(options?: {
   return {
     album: {
       id: 'test-album-id',
-      images: [{ height: 640, url: 'https://i.scdn.co/image/test-image', width: 640 }],
+      images: [{height: 640, url: 'https://i.scdn.co/image/test-image', width: 640}],
       name: 'Test Album',
     },
-    artists: [{ id: 'test-artist-id', name: artistName }],
+    artists: [{id: 'test-artist-id', name: artistName}],
     duration_ms: options?.duration_ms ?? 180000,
     explicit: options?.explicit ?? false,
-    external_ids: { isrc: options?.isrc ?? 'TEST12345678' },
-    external_urls: { spotify: `https://open.spotify.com/track/${trackId}` },
+    external_ids: {isrc: options?.isrc ?? 'TEST12345678'},
+    external_urls: {spotify: `https://open.spotify.com/track/${trackId}`},
     id: trackId,
     name: trackName,
     popularity: options?.popularity ?? 50,
@@ -156,8 +156,8 @@ export function createTestTrack(options?: {
  * to ensure tracks exist in all external services.
  */
 export function createTestTracks(
-  count: number
-): (SpotifyTrack & { duration_ms?: number; explicit?: boolean; external_ids?: { isrc: string }; popularity?: number })[] {
+  count: number,
+): (SpotifyTrack & {duration_ms?: number; explicit?: boolean; external_ids?: {isrc: string}; popularity?: number})[] {
   const knownTracks = Object.values(KNOWN_TEST_TRACKS)
 
   // If requesting fewer tracks than known tracks, return subset
@@ -177,7 +177,7 @@ export function createTestTracks(
         isrc: `TEST${String(i + 1).padStart(8, '0')}`,
         name: `Test Track ${i + 1}`,
         popularity: 40 + (i % 50),
-      })
+      }),
     )
   }
 

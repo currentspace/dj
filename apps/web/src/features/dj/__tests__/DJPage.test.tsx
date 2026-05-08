@@ -60,8 +60,6 @@ describe('DJPage', () => {
 
   it('renders the start hint when no playlist is selected', () => {
     renderDJPage()
-    expect(
-      screen.getByText(/just hit Start/i),
-    ).toBeInTheDocument()
+    expect(screen.getByText(/just hit Start/i)).toBeInTheDocument()
   })
 })

@@ -10,7 +10,7 @@ These guidelines represent modern async Cloudflare Workers patterns for November
 
 ```typescript
 export async function handleRequest(c: Context) {
-  const { readable, writable } = new TransformStream()
+  const {readable, writable} = new TransformStream()
   const writer = writable.getWriter()
   const sseWriter = new SSEWriter(writer)
 
@@ -21,7 +21,7 @@ export async function handleRequest(c: Context) {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache, no-transform',
       'Content-Encoding': 'identity',
-      'Connection': 'keep-alive',
+      Connection: 'keep-alive',
     },
     status: 200,
   })
@@ -36,6 +36,7 @@ export async function handleRequest(c: Context) {
 ```
 
 **Why This Works**:
+
 - Cloudflare Workers have a request timeout (~30s)
 - TransformStream decouples response from processing
 - Client receives stream immediately, events arrive as generated
@@ -124,7 +125,7 @@ const heartbeatInterval = setInterval(() => {
     return
   }
   void sseWriter.writeHeartbeat()
-}, 15000)  // Every 15 seconds
+}, 15000) // Every 15 seconds
 
 // Cleanup on request completion
 try {
@@ -157,9 +158,9 @@ class RateLimitedQueue<T> {
   private lastRefill: number = performance.now()
 
   constructor(
-    private rate: number = 40,      // 40 requests per second
-    private burst: number = 40,     // Allow burst up to limit
-    private concurrency: number = 10
+    private rate: number = 40, // 40 requests per second
+    private burst: number = 40, // Allow burst up to limit
+    private concurrency: number = 10,
   ) {
     this.tokens = burst
   }
@@ -169,10 +170,7 @@ class RateLimitedQueue<T> {
     const elapsed = now - this.lastRefill
 
     // Refill tokens based on elapsed time (precise, no setInterval jitter)
-    this.tokens = Math.min(
-      this.burst,
-      this.tokens + (elapsed * this.rate) / 1000
-    )
+    this.tokens = Math.min(this.burst, this.tokens + (elapsed * this.rate) / 1000)
     this.lastRefill = now
 
     // Launch tasks while tokens and concurrency allow
@@ -186,7 +184,7 @@ class RateLimitedQueue<T> {
 
   async enqueue<R>(task: () => Promise<R>): Promise<R> {
     return new Promise((resolve, reject) => {
-      this.queue.push({ task, resolve, reject })
+      this.queue.push({task, resolve, reject})
       this.tick()
     })
   }
@@ -199,10 +197,10 @@ class RateLimitedQueue<T> {
 
 ```typescript
 const LANE_LIMITS: Record<LaneKey, number> = {
-  anthropic: 2,   // Anthropic SDK limitation in Workers
-  spotify: 5,     // Spotify API concurrency
-  deezer: 10,     // Deezer API concurrency
-  lastfm: 10,     // Last.fm API concurrency
+  anthropic: 2, // Anthropic SDK limitation in Workers
+  spotify: 5, // Spotify API concurrency
+  deezer: 10, // Deezer API concurrency
+  lastfm: 10, // Last.fm API concurrency
   default: 3,
 }
 
@@ -262,8 +260,8 @@ class SubrequestTracker {
   private count = 0
   private readonly maxSubrequests: number
 
-  constructor(options: { maxSubrequests?: number } = {}) {
-    this.maxSubrequests = options.maxSubrequests ?? 950  // Safety margin below 1000
+  constructor(options: {maxSubrequests?: number} = {}) {
+    this.maxSubrequests = options.maxSubrequests ?? 950 // Safety margin below 1000
   }
 
   record(count = 1): boolean {
@@ -287,13 +285,14 @@ class SubrequestTracker {
 ```
 
 **Usage in chat-stream**:
+
 ```typescript
-const tracker = new SubrequestTracker({ maxSubrequests: 950 })
+const tracker = new SubrequestTracker({maxSubrequests: 950})
 
 await runWithSubrequestTracker(tracker, async () => {
   // Budget allocation for enrichment
   const remaining = tracker.remaining()
-  const availableBudget = Math.max(0, remaining - 10)  // Reserve 10 for overhead
+  const availableBudget = Math.max(0, remaining - 10) // Reserve 10 for overhead
 
   const deezerBudget = Math.floor(availableBudget * 0.5)
   const lastfmBudget = Math.floor(availableBudget * 0.5)
@@ -310,7 +309,7 @@ await runWithSubrequestTracker(tracker, async () => {
 ### Logger Context (Per-Request Isolation)
 
 ```typescript
-import { AsyncLocalStorage } from 'node:async_hooks'
+import {AsyncLocalStorage} from 'node:async_hooks'
 
 interface LoggerContext {
   logger: ServiceLogger
@@ -318,11 +317,8 @@ interface LoggerContext {
 
 const loggerStorage = new AsyncLocalStorage<LoggerContext>()
 
-export async function runWithLogger<T>(
-  logger: ServiceLogger,
-  fn: () => Promise<T>
-): Promise<T> {
-  return loggerStorage.run({ logger }, fn)
+export async function runWithLogger<T>(logger: ServiceLogger, fn: () => Promise<T>): Promise<T> {
+  return loggerStorage.run({logger}, fn)
 }
 
 export function getLogger(): ServiceLogger | undefined {
@@ -331,6 +327,7 @@ export function getLogger(): ServiceLogger | undefined {
 ```
 
 **Usage**:
+
 ```typescript
 const logger = new ServiceLogger({
   requestId: crypto.randomUUID(),
@@ -351,10 +348,7 @@ await runWithLogger(logger, async () => {
 ```typescript
 const subrequestStorage = new AsyncLocalStorage<SubrequestTracker>()
 
-export async function runWithSubrequestTracker<T>(
-  tracker: SubrequestTracker,
-  fn: () => Promise<T>
-): Promise<T> {
+export async function runWithSubrequestTracker<T>(tracker: SubrequestTracker, fn: () => Promise<T>): Promise<T> {
   return subrequestStorage.run(tracker, fn)
 }
 
@@ -371,21 +365,18 @@ export function getSubrequestTracker(): SubrequestTracker | undefined {
 
 ```typescript
 // Cache hits: Long TTL (data is valid)
-const HIT_TTL = 90 * 24 * 60 * 60  // 90 days
+const HIT_TTL = 90 * 24 * 60 * 60 // 90 days
 
 // Cache misses: Short TTL (retry soon)
-const MISS_TTL = 5 * 60  // 5 minutes
+const MISS_TTL = 5 * 60 // 5 minutes
 
 async function cacheResult(key: string, value: unknown, isHit: boolean): Promise<void> {
-  await env.CACHE.put(
-    key,
-    JSON.stringify(value),
-    { expirationTtl: isHit ? HIT_TTL : MISS_TTL }
-  )
+  await env.CACHE.put(key, JSON.stringify(value), {expirationTtl: isHit ? HIT_TTL : MISS_TTL})
 }
 ```
 
 **Why**:
+
 - Hits stay cached (data won't change)
 - Misses retry quickly (API might have data later)
 - Prevents repeated lookups for known-null data
@@ -411,11 +402,7 @@ const artistKey = `${ARTIST_PREFIX}${hashKey(artistName)}`
 // 4-hour TTL for OAuth sessions
 const SESSION_TTL = 4 * 60 * 60
 
-await env.SESSIONS.put(
-  sessionToken,
-  spotifyAccessToken,
-  { expirationTtl: SESSION_TTL }
-)
+await env.SESSIONS.put(sessionToken, spotifyAccessToken, {expirationTtl: SESSION_TTL})
 
 // Retrieve session
 const spotifyToken = await env.SESSIONS.get(sessionToken)
@@ -436,7 +423,7 @@ export interface Env {
   ANTHROPIC_API_KEY: string
   SPOTIFY_CLIENT_ID: string
   SPOTIFY_CLIENT_SECRET: string
-  LASTFM_API_KEY?: string  // Optional
+  LASTFM_API_KEY?: string // Optional
   FRONTEND_URL?: string
   ENVIRONMENT: string
   ASSETS: Fetcher
@@ -445,12 +432,12 @@ export interface Env {
 }
 
 // Use in Hono app
-const app = new OpenAPIHono<{ Bindings: Env }>()
+const app = new OpenAPIHono<{Bindings: Env}>()
 
 // All routes get typed access
-app.get('/api/status', (c) => {
-  const env = c.env.ENVIRONMENT  // TypeScript knows this is string
-  const cache = c.env.AUDIO_FEATURES_CACHE  // TypeScript knows this is KVNamespace | undefined
+app.get('/api/status', c => {
+  const env = c.env.ENVIRONMENT // TypeScript knows this is string
+  const cache = c.env.AUDIO_FEATURES_CACHE // TypeScript knows this is KVNamespace | undefined
 })
 ```
 
@@ -459,32 +446,34 @@ app.get('/api/status', (c) => {
 ### OpenAPI Integration
 
 ```typescript
-import { OpenAPIHono } from '@hono/zod-openapi'
-import { z } from 'zod'
+import {OpenAPIHono} from '@hono/zod-openapi'
+import {z} from 'zod'
 
-const app = new OpenAPIHono<{ Bindings: Env }>()
+const app = new OpenAPIHono<{Bindings: Env}>()
 
 // Define schema
 const ChatRequestSchema = z.object({
   message: z.string().min(1).max(2000),
-  conversationHistory: z.array(z.object({
-    role: z.enum(['user', 'assistant']),
-    content: z.string(),
-  })),
+  conversationHistory: z.array(
+    z.object({
+      role: z.enum(['user', 'assistant']),
+      content: z.string(),
+    }),
+  ),
   mode: z.enum(['analyze', 'create', 'edit']).default('analyze'),
 })
 
 // Route with validation
-app.post('/api/chat-stream/message', async (c) => {
+app.post('/api/chat-stream/message', async c => {
   const body = await c.req.json()
-  const request = ChatRequestSchema.parse(body)  // Throws on invalid
+  const request = ChatRequestSchema.parse(body) // Throws on invalid
   // ...
 })
 
 // OpenAPI docs
 app.doc('/api/openapi.json', {
   openapi: '3.0.0',
-  info: { title: 'DJ API', version: '1.0.0' },
+  info: {title: 'DJ API', version: '1.0.0'},
 })
 ```
 
@@ -493,20 +482,23 @@ app.doc('/api/openapi.json', {
 ### Global CORS Middleware
 
 ```typescript
-import { cors } from 'hono/cors'
+import {cors} from 'hono/cors'
 
 // Allow all origins (for public API)
 app.use('*', cors())
 
 // Or restrict to specific origin
-app.use('*', cors({
-  origin: (origin) => {
-    if (origin === process.env.FRONTEND_URL) return origin
-    return null
-  },
-  allowMethods: ['GET', 'POST', 'OPTIONS'],
-  allowHeaders: ['Content-Type', 'Authorization'],
-}))
+app.use(
+  '*',
+  cors({
+    origin: origin => {
+      if (origin === process.env.FRONTEND_URL) return origin
+      return null
+    },
+    allowMethods: ['GET', 'POST', 'OPTIONS'],
+    allowHeaders: ['Content-Type', 'Authorization'],
+  }),
+)
 ```
 
 **Reference**: `workers/api/src/index.ts:23`
@@ -516,7 +508,7 @@ app.use('*', cors({
 ### Type-Safe Error Extraction
 
 ```typescript
-import { z } from 'zod'
+import {z} from 'zod'
 
 const ErrorDetailsSchema = z.object({
   code: z.number().optional(),
@@ -528,7 +520,7 @@ const ErrorDetailsSchema = z.object({
 type ErrorDetails = z.infer<typeof ErrorDetailsSchema>
 
 function buildErrorDetails(error: unknown, context?: string): ErrorDetails {
-  const details: ErrorDetails = { context }
+  const details: ErrorDetails = {context}
 
   if (error instanceof Error) {
     details.message = error.message
@@ -564,11 +556,11 @@ try {
   // Graceful degradation
   if (fullResponse.length > 0) {
     // Have some content, send what we have
-    await sseWriter.write({ type: 'content', data: fullResponse })
-    await sseWriter.write({ type: 'done', data: null })
+    await sseWriter.write({type: 'content', data: fullResponse})
+    await sseWriter.write({type: 'done', data: null})
   } else {
     // No content yet, send error
-    await sseWriter.write({ type: 'error', data: 'Stream processing failed' })
+    await sseWriter.write({type: 'error', data: 'Stream processing failed'})
   }
 }
 ```
@@ -583,18 +575,18 @@ try {
 export class AudioEnrichmentService {
   constructor(
     private cache?: KVNamespace,
-    private rateLimiter?: RateLimitedQueue
+    private rateLimiter?: RateLimitedQueue,
   ) {}
 
   async enrichTrack(track: SpotifyTrack): Promise<BPMEnrichment> {
-    const logger = getLogger()  // From AsyncLocalStorage
+    const logger = getLogger() // From AsyncLocalStorage
 
     // Check cache first
     const cached = await this.cache?.get(track.id)
     if (cached) {
       const data = JSON.parse(cached)
       if (data.enrichment.bpm !== null) {
-        logger?.debug('Cache hit', { trackId: track.id })
+        logger?.debug('Cache hit', {trackId: track.id})
         return data.enrichment
       }
     }
@@ -619,7 +611,7 @@ export class AudioEnrichmentService {
 export async function rateLimitedSpotifyCall<T>(
   call: () => Promise<T>,
   logger?: ServiceLogger,
-  context?: string
+  context?: string,
 ): Promise<T> {
   return globalOrchestrator.execute(
     async () => {
@@ -632,11 +624,11 @@ export async function rateLimitedSpotifyCall<T>(
         })
         return result
       } catch (error) {
-        logger?.error('Spotify call failed', error, { context })
+        logger?.error('Spotify call failed', error, {context})
         throw error
       }
     },
-    'spotify'  // Lane key
+    'spotify', // Lane key
   )
 }
 
@@ -688,26 +680,19 @@ for (const toolCall of toolCalls) {
 }
 
 // CORRECT - Parallel (respects rate limits)
-const results = await Promise.all(
-  toolCalls.map(toolCall => executeTool(toolCall))
-)
+const results = await Promise.all(toolCalls.map(toolCall => executeTool(toolCall)))
 ```
 
 ### Batch Enrichment
 
 ```typescript
 // Process tracks in parallel batches
-async function batchEnrichTracks(
-  tracks: SpotifyTrack[],
-  batchSize: number = 10
-): Promise<Map<string, Enrichment>> {
+async function batchEnrichTracks(tracks: SpotifyTrack[], batchSize: number = 10): Promise<Map<string, Enrichment>> {
   const results = new Map<string, Enrichment>()
 
   for (let i = 0; i < tracks.length; i += batchSize) {
     const batch = tracks.slice(i, i + batchSize)
-    const batchResults = await Promise.all(
-      batch.map(track => enrichTrack(track))
-    )
+    const batchResults = await Promise.all(batch.map(track => enrichTrack(track)))
 
     batchResults.forEach((result, index) => {
       results.set(batch[index].id, result)
@@ -721,11 +706,7 @@ async function batchEnrichTracks(
 ### Cache-First Pattern
 
 ```typescript
-async function getWithCache<T>(
-  key: string,
-  fetcher: () => Promise<T>,
-  options: { ttl: number }
-): Promise<T> {
+async function getWithCache<T>(key: string, fetcher: () => Promise<T>, options: {ttl: number}): Promise<T> {
   // Try cache first
   const cached = await env.CACHE.get(key)
   if (cached) {
@@ -752,34 +733,34 @@ async function getWithCache<T>(
   "name": "dj-api",
   "main": "dist/index.js",
   "compatibility_date": "2024-01-01",
-  "compatibility_flags": ["nodejs_compat"],  // Required for AsyncLocalStorage
+  "compatibility_flags": ["nodejs_compat"], // Required for AsyncLocalStorage
 
   "vars": {
     "ENVIRONMENT": "production",
-    "FRONTEND_URL": "https://dj.current.space"
+    "FRONTEND_URL": "https://dj.current.space",
   },
 
   "kv_namespaces": [
     {
       "binding": "SESSIONS",
-      "id": "c81455430c6d4aa2a5da4bf2c1fcd3a2"
+      "id": "c81455430c6d4aa2a5da4bf2c1fcd3a2",
     },
     {
       "binding": "AUDIO_FEATURES_CACHE",
-      "id": "eb3657a3d4f045edb31efba6567eca0f"
-    }
+      "id": "eb3657a3d4f045edb31efba6567eca0f",
+    },
   ],
 
   "assets": {
     "directory": "../apps/web/dist",
-    "binding": "ASSETS"
+    "binding": "ASSETS",
   },
 
   // SPA routing
   "not_found_handling": "single-page-application",
 
   // API routes take priority
-  "run_worker_first": ["/api/*"]
+  "run_worker_first": ["/api/*"],
 }
 ```
 
@@ -795,9 +776,9 @@ const result = await longOperation()
 return new Response(JSON.stringify(result))
 
 // CORRECT - Return stream immediately
-const { readable, writable } = new TransformStream()
+const {readable, writable} = new TransformStream()
 const response = new Response(readable)
-processAsync(writable)  // Don't await
+processAsync(writable) // Don't await
 return response
 ```
 
@@ -806,7 +787,7 @@ return response
 ```typescript
 // WRONG - No budget tracking
 for (const track of allTracks) {
-  await enrichTrack(track)  // Could exceed 1000 subrequests
+  await enrichTrack(track) // Could exceed 1000 subrequests
 }
 
 // CORRECT - Budget-aware
@@ -830,12 +811,12 @@ await new Promise(r => setTimeout(r, 25))
 // WRONG - Context escapes scope
 const logger = getLogger()
 setTimeout(() => {
-  logger?.info('Delayed log')  // May be undefined
+  logger?.info('Delayed log') // May be undefined
 }, 1000)
 
 // CORRECT - Capture in closure
 const loggerInstance = getLogger()
 setTimeout(() => {
-  loggerInstance?.info('Delayed log')  // Uses captured instance
+  loggerInstance?.info('Delayed log') // Uses captured instance
 }, 1000)
 ```

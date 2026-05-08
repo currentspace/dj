@@ -17,7 +17,6 @@ export type {
 
   // Discriminated union of all hook inputs
   HookInput,
-
   NotificationHookInput,
   PermissionRequestHookInput,
   PermissionRequestHookSpecificOutput,
@@ -34,9 +33,7 @@ export type {
   SessionStartHookInput,
   SessionStartHookSpecificOutput,
   StopHookInput,
-
   SubagentStartHookInput,
-
   SubagentStopHookInput,
   // Sync hook output (the shape we return from handlers)
   SyncHookJSONOutput,
@@ -44,4 +41,4 @@ export type {
   TeammateIdleHookInput,
   UserPromptSubmitHookInput,
   UserPromptSubmitHookSpecificOutput,
-} from "@anthropic-ai/claude-agent-sdk";
+} from '@anthropic-ai/claude-agent-sdk'

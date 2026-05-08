@@ -58,12 +58,10 @@ export function DJLog({entries}: DJLogProps) {
 
   return (
     <div className={styles.djLog} ref={listRef}>
-      {entries.map((entry) => (
+      {entries.map(entry => (
         <div className={`${styles.djLogEntry} ${styles[`djLogEntry_${entry.type}`]}`} key={entry.id}>
           <span className={styles.djLogTime}>{formatTime(entry.timestamp)}</span>
-          {TYPE_PREFIX[entry.type] && (
-            <span className={styles.djLogPrefix}>{TYPE_PREFIX[entry.type]}</span>
-          )}
+          {TYPE_PREFIX[entry.type] && <span className={styles.djLogPrefix}>{TYPE_PREFIX[entry.type]}</span>}
           <span className={styles.djLogMessage}>{entry.message}</span>
         </div>
       ))}

@@ -1,6 +1,6 @@
 import react from '@vitejs/plugin-react'
-import { defineConfig } from 'vitest/config'
-import { sharedConfig } from '../../vitest.shared'
+import {defineConfig} from 'vitest/config'
+import {sharedConfig} from '../../vitest.shared'
 
 /**
  * Vitest configuration for @dj/web (React frontend)

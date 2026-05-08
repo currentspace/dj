@@ -15,13 +15,14 @@ DJ is an **AI-powered conversational playlist assistant** that helps users disco
 
 ### 1. Playlist Analysis
 
-| Tool | What It Does | Returns |
-|------|--------------|---------|
-| `analyze_playlist` | Comprehensive single-call analysis | ~2-5KB summary with audio stats, genres, enrichment data |
-| `get_playlist_tracks` | Paginated track fetching | Compact track info (name, artists, duration, popularity) |
-| `get_track_details` | Full metadata for specific tracks | Complete track objects with album art, release dates |
+| Tool                  | What It Does                       | Returns                                                  |
+| --------------------- | ---------------------------------- | -------------------------------------------------------- |
+| `analyze_playlist`    | Comprehensive single-call analysis | ~2-5KB summary with audio stats, genres, enrichment data |
+| `get_playlist_tracks` | Paginated track fetching           | Compact track info (name, artists, duration, popularity) |
+| `get_track_details`   | Full metadata for specific tracks  | Complete track objects with album art, release dates     |
 
 **Enrichment Data (Automatic):**
+
 - **Deezer**: BPM (45-220 range), popularity rank, gain normalization
 - **Last.fm**: Crowd-sourced tags, listener counts, similar tracks, artist bios
 
@@ -34,11 +35,13 @@ extract_playlist_vibe → plan_discovery_strategy → curate_recommendations
 ```
 
 **Vibe Extraction** analyzes 9 dimensions:
+
 - Emotional arc, production aesthetic, vocal characteristics
 - Instrumentation, temporal context, mixing philosophy
 - Mood trajectory, structural patterns, cultural resonance
 
 **Discovery Strategy** creates multi-pronged search plan:
+
 - Last.fm similar track selection
 - Creative tag combinations
 - Spotify search queries (era + mood + style)
@@ -46,35 +49,36 @@ extract_playlist_vibe → plan_discovery_strategy → curate_recommendations
 
 ### 3. Spotify Catalog Access
 
-| Tool | Purpose |
-|------|---------|
-| `search_spotify_tracks` | Full-text search with audio feature filters |
-| `get_recommendations` | Algorithmic recommendations with seed tuning |
-| `get_artist_info` | Artist metadata and genres |
-| `get_artist_top_tracks` | Artist's popular tracks |
-| `get_related_artists` | Artist network discovery |
-| `get_album_info` | Album details with audio features |
-| `get_available_genres` | Spotify genre seeds list |
+| Tool                    | Purpose                                      |
+| ----------------------- | -------------------------------------------- |
+| `search_spotify_tracks` | Full-text search with audio feature filters  |
+| `get_recommendations`   | Algorithmic recommendations with seed tuning |
+| `get_artist_info`       | Artist metadata and genres                   |
+| `get_artist_top_tracks` | Artist's popular tracks                      |
+| `get_related_artists`   | Artist network discovery                     |
+| `get_album_info`        | Album details with audio features            |
+| `get_available_genres`  | Spotify genre seeds list                     |
 
 ### 4. Playlist Creation & Modification
 
-| Tool | Capabilities |
-|------|-------------|
+| Tool              | Capabilities                              |
+| ----------------- | ----------------------------------------- |
 | `create_playlist` | Create new playlist, add up to 100 tracks |
-| `modify_playlist` | Add, remove, or reorder tracks |
+| `modify_playlist` | Add, remove, or reorder tracks            |
 
 ### 5. Live DJ Mode (NEW)
 
 Real-time playback control and queue management through conversational AI:
 
-| Tool | Purpose |
-|------|---------|
-| `get_now_playing` | Get current track with progress |
-| `get_queue` | View upcoming tracks in queue |
-| `add_to_queue` | Add tracks to playback queue |
-| `control_playback` | Play, pause, skip, or previous |
+| Tool               | Purpose                         |
+| ------------------ | ------------------------------- |
+| `get_now_playing`  | Get current track with progress |
+| `get_queue`        | View upcoming tracks in queue   |
+| `add_to_queue`     | Add tracks to playback queue    |
+| `control_playback` | Play, pause, skip, or previous  |
 
 **DJ Mode Features:**
+
 - NowPlaying bar with real-time track display and controls
 - Context-aware DJ assistant that knows what's playing
 - Proactive queue management (suggests additions when queue low)
@@ -83,6 +87,7 @@ Real-time playback control and queue management through conversational AI:
 ### 6. Real-Time Streaming
 
 **SSE Event Types:**
+
 - `thinking` - Claude's reasoning with enrichment progress
 - `content` - Text response chunks
 - `tool_start` / `tool_end` - Tool execution lifecycle
@@ -95,12 +100,12 @@ Real-time playback control and queue management through conversational AI:
 
 ## Conversation Modes
 
-| Mode | Purpose | Auto-Injected Context |
-|------|---------|----------------------|
-| **Analyze** | Question-focused analysis | Playlist ID |
-| **Create** | Generate new playlists | None |
-| **DJ** | Live playback control & queue management | Playlist ID + Current playback state |
-| **Edit** | Modify existing playlists | Playlist ID |
+| Mode        | Purpose                                  | Auto-Injected Context                |
+| ----------- | ---------------------------------------- | ------------------------------------ |
+| **Analyze** | Question-focused analysis                | Playlist ID                          |
+| **Create**  | Generate new playlists                   | None                                 |
+| **DJ**      | Live playback control & queue management | Playlist ID + Current playback state |
+| **Edit**    | Modify existing playlists                | Playlist ID                          |
 
 ---
 
@@ -108,16 +113,16 @@ Real-time playback control and queue management through conversational AI:
 
 ### Implementation Status
 
-| Feature | Status |
-|---------|--------|
-| Playback control (play/pause/skip) | ✅ Implemented (DJ Mode) |
-| Queue management | ✅ Implemented (DJ Mode) |
-| Device selection (Spotify Connect) | ⚠️ Partial (via Player API) |
-| Real-time playback monitoring | ✅ Implemented (NowPlaying bar) |
-| Multi-user collaboration | ❌ Not implemented |
-| Session persistence | ❌ Not implemented (in-memory only) |
-| Cross-playlist comparison | ❌ Not implemented |
-| Feedback/learning system | ❌ Not implemented |
+| Feature                            | Status                              |
+| ---------------------------------- | ----------------------------------- |
+| Playback control (play/pause/skip) | ✅ Implemented (DJ Mode)            |
+| Queue management                   | ✅ Implemented (DJ Mode)            |
+| Device selection (Spotify Connect) | ⚠️ Partial (via Player API)         |
+| Real-time playback monitoring      | ✅ Implemented (NowPlaying bar)     |
+| Multi-user collaboration           | ❌ Not implemented                  |
+| Session persistence                | ❌ Not implemented (in-memory only) |
+| Cross-playlist comparison          | ❌ Not implemented                  |
+| Feedback/learning system           | ❌ Not implemented                  |
 
 ### Constraints
 
@@ -209,19 +214,19 @@ User: "Analyze this playlist"
 
 ## File Reference
 
-| Component | Path |
-|-----------|------|
-| Main App | `apps/web/src/App.tsx` |
-| Chat Interface | `apps/web/src/features/chat/ChatInterface.tsx` |
-| NowPlaying Bar | `apps/web/src/features/playback/NowPlaying.tsx` |
-| SSE Client | `apps/web/src/lib/streaming-client.ts` |
-| Auth Hook | `apps/web/src/hooks/useSpotifyAuth.ts` |
-| Spotify Tools | `workers/api/src/lib/spotify-tools.ts` |
-| Chat Stream | `workers/api/src/routes/chat-stream.ts` |
-| Player Routes | `workers/api/src/routes/player-openapi.ts` |
+| Component        | Path                                                 |
+| ---------------- | ---------------------------------------------------- |
+| Main App         | `apps/web/src/App.tsx`                               |
+| Chat Interface   | `apps/web/src/features/chat/ChatInterface.tsx`       |
+| NowPlaying Bar   | `apps/web/src/features/playback/NowPlaying.tsx`      |
+| SSE Client       | `apps/web/src/lib/streaming-client.ts`               |
+| Auth Hook        | `apps/web/src/hooks/useSpotifyAuth.ts`               |
+| Spotify Tools    | `workers/api/src/lib/spotify-tools.ts`               |
+| Chat Stream      | `workers/api/src/routes/chat-stream.ts`              |
+| Player Routes    | `workers/api/src/routes/player-openapi.ts`           |
 | Audio Enrichment | `workers/api/src/services/AudioEnrichmentService.ts` |
-| Last.fm Service | `workers/api/src/services/LastFmService.ts` |
-| Guidelines | `.claude/guidelines/*.md` |
+| Last.fm Service  | `workers/api/src/services/LastFmService.ts`          |
+| Guidelines       | `.claude/guidelines/*.md`                            |
 
 ---
 

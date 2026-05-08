@@ -57,9 +57,7 @@ export async function processAgenticLoop({
     if (recentToolCalls.length >= 3) {
       const lastThree = recentToolCalls.slice(-3)
       if (lastThree[0] === lastThree[1] && lastThree[1] === lastThree[2]) {
-        getLogger()?.warn(
-          `[Stream:${requestId}] Loop detected: identical tool calls 3 times in a row. Breaking.`,
-        )
+        getLogger()?.warn(`[Stream:${requestId}] Loop detected: identical tool calls 3 times in a row. Breaking.`)
         sseWriter.writeAsync({
           data: 'Detected repetitive tool calls, wrapping up...',
           type: 'thinking',
@@ -95,7 +93,7 @@ export async function processAgenticLoop({
           const validatedArgs = parseResult.success ? parseResult.data : toolCall.args
           if (!parseResult.success) {
             getLogger()?.warn(`[Stream:${requestId}] Tool ${toolCall.name} input validation failed, using raw args`, {
-              errors: parseResult.error.issues.map((i) => `${String(i.path.join('.'))}: ${i.message}`),
+              errors: parseResult.error.issues.map(i => `${String(i.path.join('.'))}: ${i.message}`),
             })
           }
 
@@ -217,9 +215,7 @@ export async function processAgenticLoop({
           const blockCopy = {...event.content_block}
           if (event.content_block.type === 'tool_use') {
             ;(blockCopy as Anthropic.ToolUseBlock).input = ''
-            getLogger()?.info(
-              `[Stream:${requestId}] Turn ${turnCount} tool use started: ${event.content_block.name}`,
-            )
+            getLogger()?.info(`[Stream:${requestId}] Turn ${turnCount} tool use started: ${event.content_block.name}`)
           }
           // eslint-disable-next-line security/detect-object-injection
           nextContentBlocks[nextCurrentBlockIndex] = blockCopy
@@ -287,14 +283,11 @@ export async function processAgenticLoop({
 
   // Check if we hit the max turns limit
   if (turnCount >= MAX_TURNS || currentResponse.length === 0) {
-    getLogger()?.warn(
-      `[Stream:${requestId}] Hit limit (${turnCount} turns). Requesting final response from Claude...`,
-    )
+    getLogger()?.warn(`[Stream:${requestId}] Hit limit (${turnCount} turns). Requesting final response from Claude...`)
 
     // Ask Claude to provide a response based on what it has learned
     conversationMessages.push({
-      content:
-        "Please provide your response based on the information you've gathered from the tools you've used.",
+      content: "Please provide your response based on the information you've gathered from the tools you've used.",
       role: 'user',
     })
 

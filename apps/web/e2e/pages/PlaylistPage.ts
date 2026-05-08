@@ -149,9 +149,7 @@ export class PlaylistPage extends BasePage {
    */
   async assertPlaylistSelected(name: string) {
     await expect(this.page.locator(this.selectedPlaylist)).toBeVisible()
-    await expect(
-      this.page.locator(this.selectedPlaylist).locator(this.playlistName),
-    ).toHaveText(name)
+    await expect(this.page.locator(this.selectedPlaylist).locator(this.playlistName)).toHaveText(name)
   }
 
   /**

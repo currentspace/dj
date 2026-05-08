@@ -18,12 +18,7 @@ interface DevicePickerProps {
   token: null | string
 }
 
-export function DevicePicker({
-  currentDeviceId,
-  currentDeviceName,
-  onDeviceSelect,
-  token,
-}: DevicePickerProps) {
+export function DevicePicker({currentDeviceId, currentDeviceName, onDeviceSelect, token}: DevicePickerProps) {
   const [isOpen, setIsOpen] = useState(false)
 
   const {data: devices = [], error, isLoading} = useDevicesQuery(token, isOpen)
@@ -43,7 +38,7 @@ export function DevicePicker({
         console.error('[DevicePicker] Transfer error:', err)
       }
     },
-    [transferMutation, onDeviceSelect]
+    [transferMutation, onDeviceSelect],
   )
 
   const getDeviceIcon = (type: string): string => {
@@ -84,12 +79,9 @@ export function DevicePicker({
         disabled={!token}
         onClick={handleToggle}
         title="Select playback device"
-        type="button"
-      >
+        type="button">
         <span className={styles.deviceIcon}>🔊</span>
-        <span className={styles.deviceCurrentName}>
-          {currentDeviceName ?? 'Select device'}
-        </span>
+        <span className={styles.deviceCurrentName}>{currentDeviceName ?? 'Select device'}</span>
         <span className={styles.deviceDropdownArrow}>{isOpen ? '▲' : '▼'}</span>
       </button>
 
@@ -109,23 +101,16 @@ export function DevicePicker({
               {devices.map(device => (
                 <li key={device.id}>
                   <button
-                    className={`${styles.deviceItem} ${
-                      device.id === currentDeviceId ? styles.deviceItemActive : ''
-                    }`}
+                    className={`${styles.deviceItem} ${device.id === currentDeviceId ? styles.deviceItemActive : ''}`}
                     disabled={device.is_restricted}
                     onClick={() => handleDeviceSelect(device.id)}
-                    type="button"
-                  >
-                    <span className={styles.deviceItemIcon}>
-                      {getDeviceIcon(device.type)}
-                    </span>
+                    type="button">
+                    <span className={styles.deviceItemIcon}>{getDeviceIcon(device.type)}</span>
                     <span className={styles.deviceItemInfo}>
                       <span className={styles.deviceItemName}>{device.name}</span>
                       <span className={styles.deviceItemType}>{device.type}</span>
                     </span>
-                    {device.is_active && (
-                      <span className={styles.deviceItemActive}>●</span>
-                    )}
+                    {device.is_active && <span className={styles.deviceItemActive}>●</span>}
                   </button>
                 </li>
               ))}

@@ -37,7 +37,13 @@ export interface MockStreamEvent {
       output_tokens: number
     }
   }
-  type: 'content_block_delta' | 'content_block_start' | 'content_block_stop' | 'message_delta' | 'message_start' | 'message_stop'
+  type:
+    | 'content_block_delta'
+    | 'content_block_start'
+    | 'content_block_stop'
+    | 'message_delta'
+    | 'message_start'
+    | 'message_stop'
 }
 
 /**
@@ -56,9 +62,7 @@ export class MockAnthropicClient {
     return {
       stream: (params: Anthropic.MessageCreateParams) => {
         // Find matching response based on last user message
-        const lastUserMessage = params.messages
-          .filter(m => m.role === 'user')
-          .pop()
+        const lastUserMessage = params.messages.filter(m => m.role === 'user').pop()
 
         let events: MockStreamEvent[] = []
         if (lastUserMessage && typeof lastUserMessage.content === 'string') {
@@ -99,10 +103,7 @@ export class MockAnthropicClient {
                 const lastBlock = content[content.length - 1]
                 if (event.delta.type === 'text_delta' && lastBlock?.type === 'text') {
                   lastBlock.text += event.delta.text ?? ''
-                } else if (
-                  event.delta.type === 'input_json_delta' &&
-                  lastBlock?.type === 'tool_use'
-                ) {
+                } else if (event.delta.type === 'input_json_delta' && lastBlock?.type === 'tool_use') {
                   // Accumulate JSON and parse at the end
                   try {
                     lastBlock.input = JSON.parse(event.delta.partial_json ?? '{}')
@@ -180,10 +181,7 @@ export function buildMessageDeltaEvent(stopReason: null | string = null): MockSt
 /**
  * Build a message_start event
  */
-export function buildMessageStartEvent(overrides?: {
-  id?: string
-  model?: string
-}): MockStreamEvent {
+export function buildMessageStartEvent(overrides?: {id?: string; model?: string}): MockStreamEvent {
   return {
     message: {
       content: [],
@@ -268,20 +266,13 @@ export function buildTextDeltaEvent(index: number, text: string): MockStreamEven
  */
 export function buildTextResponseStream(text: string): MockStreamEvent[] {
   const chunks = text.match(/.{1,10}/g) ?? [text] // Split into ~10 char chunks
-  const events: MockStreamEvent[] = [
-    buildMessageStartEvent(),
-    buildTextBlockStartEvent(0),
-  ]
+  const events: MockStreamEvent[] = [buildMessageStartEvent(), buildTextBlockStartEvent(0)]
 
   for (const chunk of chunks) {
     events.push(buildTextDeltaEvent(0, chunk))
   }
 
-  events.push(
-    buildContentBlockStopEvent(0),
-    buildMessageDeltaEvent('end_turn'),
-    buildMessageStopEvent(),
-  )
+  events.push(buildContentBlockStopEvent(0), buildMessageDeltaEvent('end_turn'), buildMessageStopEvent())
 
   return events
 }
@@ -289,28 +280,18 @@ export function buildTextResponseStream(text: string): MockStreamEvent[] {
 /**
  * Build a tool call response stream
  */
-export function buildToolCallResponseStream(
-  toolName: string,
-  toolInput: Record<string, unknown>,
-): MockStreamEvent[] {
+export function buildToolCallResponseStream(toolName: string, toolInput: Record<string, unknown>): MockStreamEvent[] {
   const toolId = `toolu_${Math.random().toString(36).substring(7)}`
   const inputJson = JSON.stringify(toolInput)
   const chunks = inputJson.match(/.{1,20}/g) ?? [inputJson] // Split into ~20 char chunks
 
-  const events: MockStreamEvent[] = [
-    buildMessageStartEvent(),
-    buildToolUseBlockStartEvent(0, toolId, toolName),
-  ]
+  const events: MockStreamEvent[] = [buildMessageStartEvent(), buildToolUseBlockStartEvent(0, toolId, toolName)]
 
   for (const chunk of chunks) {
     events.push(buildToolInputDeltaEvent(0, chunk))
   }
 
-  events.push(
-    buildContentBlockStopEvent(0),
-    buildMessageDeltaEvent('tool_use'),
-    buildMessageStopEvent(),
-  )
+  events.push(buildContentBlockStopEvent(0), buildMessageDeltaEvent('tool_use'), buildMessageStopEvent())
 
   return events
 }
@@ -332,11 +313,7 @@ export function buildToolInputDeltaEvent(index: number, partialJson: string): Mo
 /**
  * Build a content_block_start event for tool use
  */
-export function buildToolUseBlockStartEvent(
-  index: number,
-  toolId: string,
-  toolName: string,
-): MockStreamEvent {
+export function buildToolUseBlockStartEvent(index: number, toolId: string, toolName: string): MockStreamEvent {
   return {
     content_block: {
       id: toolId,
@@ -352,9 +329,7 @@ export function buildToolUseBlockStartEvent(
 /**
  * Create a mock Anthropic client with preset responses
  */
-export function createMockAnthropicClient(
-  responses?: Record<string, MockStreamEvent[]>,
-): MockAnthropicClient {
+export function createMockAnthropicClient(responses?: Record<string, MockStreamEvent[]>): MockAnthropicClient {
   const client = new MockAnthropicClient()
 
   if (responses) {
@@ -383,7 +358,7 @@ export function createMockStream(events: MockStreamEvent[]): AsyncIterable<MockS
  * Mock simple non-streaming message creation
  */
 export function mockMessageCreate(
-  content: string | {id?: string; input?: unknown; name?: string; text?: string; type: 'text' | 'tool_use';}[],
+  content: string | {id?: string; input?: unknown; name?: string; text?: string; type: 'text' | 'tool_use'}[],
 ): Anthropic.Message {
   const contentBlocks: Anthropic.ContentBlock[] = []
 

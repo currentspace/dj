@@ -61,10 +61,7 @@ describe('QueuePanel', () => {
   it('invokes onReorder(index, index-1) when "Move up" is clicked', async () => {
     const user = userEvent.setup()
     const onReorder = vi.fn()
-    const queue = [
-      track({position: 0, trackId: 'a'}),
-      track({position: 1, trackId: 'b'}),
-    ]
+    const queue = [track({position: 0, trackId: 'a'}), track({position: 1, trackId: 'b'})]
     render(<QueuePanel onRemove={vi.fn()} onReorder={onReorder} queue={queue} />)
     const upButtons = screen.getAllByTitle('Move up')
     await user.click(upButtons[1]) // second row
@@ -72,10 +69,7 @@ describe('QueuePanel', () => {
   })
 
   it('disables "Move up" on the first row and "Move down" on the last row', () => {
-    const queue = [
-      track({position: 0, trackId: 'a'}),
-      track({position: 1, trackId: 'b'}),
-    ]
+    const queue = [track({position: 0, trackId: 'a'}), track({position: 1, trackId: 'b'})]
     render(<QueuePanel onRemove={vi.fn()} onReorder={vi.fn()} queue={queue} />)
     const upButtons = screen.getAllByTitle('Move up')
     const downButtons = screen.getAllByTitle('Move down')
@@ -89,9 +83,7 @@ describe('QueuePanel', () => {
   })
 
   it('renders BPM badge when bpm is provided', () => {
-    const queue = [
-      track({position: 0, trackId: 'a'}) as QueuedTrack & {bpm?: number},
-    ]
+    const queue = [track({position: 0, trackId: 'a'}) as QueuedTrack & {bpm?: number}]
     queue[0].bpm = 128.4
     render(<QueuePanel onRemove={vi.fn()} onReorder={vi.fn()} queue={queue} />)
     expect(screen.getByText('128 BPM')).toBeInTheDocument()

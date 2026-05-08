@@ -1,4 +1,5 @@
-const shimmerClass = 'bg-gradient-to-r from-surface-4 via-surface-5 to-surface-4 bg-[length:200%_100%] animate-shimmer rounded-sm'
+const shimmerClass =
+  'bg-gradient-to-r from-surface-4 via-surface-5 to-surface-4 bg-[length:200%_100%] animate-shimmer rounded-sm'
 
 export function PlaylistSkeleton() {
   return (

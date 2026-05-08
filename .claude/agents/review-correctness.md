@@ -63,11 +63,13 @@ Review code for correctness issues that could cause runtime errors, data corrupt
 ## Correctness Review
 
 ### Summary
+
 <1-2 sentence overview of findings>
 
 ### Bugs Found
 
 #### [BUG] <descriptive title>
+
 - **File**: <absolute path>:<line number>
 - **Severity**: critical / high / medium / low
 - **Pattern**: <which pattern category>
@@ -76,9 +78,11 @@ Review code for correctness issues that could cause runtime errors, data corrupt
 - **Fix**: <specific code change to resolve>
 
 ### Suspicious Patterns (not confirmed bugs)
+
 - <pattern description with file location>
 
 ### Verified Safe
+
 - <areas reviewed that appear correct, with reasoning>
 ```
 

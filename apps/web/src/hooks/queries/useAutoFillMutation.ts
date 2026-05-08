@@ -19,24 +19,25 @@ export function useAutoFillMutation(onToggle?: (enabled: boolean) => void) {
 
       if (!response.ok) {
         const error: unknown = await response.json().catch(() => ({error: 'Request failed'}))
-        const msg = error && typeof error === 'object' && 'error' in error && typeof (error as Record<string, unknown>).error === 'string'
-          ? (error as Record<string, unknown>).error as string
-          : 'Failed to update preferences'
+        const msg =
+          error &&
+          typeof error === 'object' &&
+          'error' in error &&
+          typeof (error as Record<string, unknown>).error === 'string'
+            ? ((error as Record<string, unknown>).error as string)
+            : 'Failed to update preferences'
         throw new Error(msg)
       }
 
       return newValue
     },
-    onSuccess: (newValue) => {
+    onSuccess: newValue => {
       onToggle?.(newValue)
     },
   })
 }
 
 function getToken(): null | string {
-  const tokenData = storage.get<null | {expiresAt: null | number; token: string}>(
-    STORAGE_KEYS.SPOTIFY_TOKEN_DATA,
-    null,
-  )
+  const tokenData = storage.get<null | {expiresAt: null | number; token: string}>(STORAGE_KEYS.SPOTIFY_TOKEN_DATA, null)
   return tokenData?.token ?? null
 }

@@ -2,7 +2,7 @@
  * SteerProgress - Shows real-time feedback during vibe steering
  */
 
-import { useRef } from 'react'
+import {useRef} from 'react'
 
 import styles from './steer-progress.module.css'
 
@@ -15,7 +15,7 @@ export interface SteerProgressEvent {
     queue?: unknown[]
     queueSize?: number
     stage?: string
-    track?: { artist: string; name: string; }
+    track?: {artist: string; name: string}
     vibe?: unknown
   }
   type: 'ack' | 'done' | 'error' | 'progress' | 'queue_update' | 'suggestions' | 'thinking' | 'vibe_update'
@@ -28,7 +28,7 @@ interface SteerProgressProps {
   onClose: () => void
 }
 
-export function SteerProgress({ direction, events, isComplete, onClose }: SteerProgressProps) {
+export function SteerProgress({direction, events, isComplete, onClose}: SteerProgressProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const prevEventsLengthRef = useRef(0)
 
@@ -38,7 +38,7 @@ export function SteerProgress({ direction, events, isComplete, onClose }: SteerP
     prevEventsLengthRef.current = events.length
     // Schedule scroll after render via microtask
     Promise.resolve().then(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+      messagesEndRef.current?.scrollIntoView({behavior: 'smooth'})
     })
   }
   /* eslint-enable react-hooks/refs */
@@ -76,14 +76,9 @@ export function SteerProgress({ direction, events, isComplete, onClose }: SteerP
             {progressMessages.map((msg, i) => (
               <div
                 className={`${styles.progressMessage} ${i === progressMessages.length - 1 ? styles.active : styles.completed}`}
-                key={i}
-              >
+                key={i}>
                 <span className={styles.progressDot}>
-                  {i === progressMessages.length - 1 && !isComplete ? (
-                    <span className={styles.spinner} />
-                  ) : (
-                    '✓'
-                  )}
+                  {i === progressMessages.length - 1 && !isComplete ? <span className={styles.spinner} /> : '✓'}
                 </span>
                 <span className={styles.progressText}>{msg}</span>
               </div>
@@ -96,7 +91,9 @@ export function SteerProgress({ direction, events, isComplete, onClose }: SteerP
               <h4 className={styles.changesTitle}>Vibe Adjustments</h4>
               <ul className={styles.changesList}>
                 {changes.map((change, i) => (
-                  <li className={styles.changeItem} key={i}>{change}</li>
+                  <li className={styles.changeItem} key={i}>
+                    {change}
+                  </li>
                 ))}
               </ul>
             </div>
@@ -118,11 +115,7 @@ export function SteerProgress({ direction, events, isComplete, onClose }: SteerP
           )}
 
           {/* Error */}
-          {errorEvent && (
-            <div className={styles.error}>
-              {errorEvent.data.message ?? 'Something went wrong'}
-            </div>
-          )}
+          {errorEvent && <div className={styles.error}>{errorEvent.data.message ?? 'Something went wrong'}</div>}
 
           {/* Done */}
           {doneEvent && (
@@ -143,7 +136,9 @@ export function SteerProgress({ direction, events, isComplete, onClose }: SteerP
           ) : (
             <div className={styles.loadingText}>
               <span className={styles.loadingDots}>
-                <span>.</span><span>.</span><span>.</span>
+                <span>.</span>
+                <span>.</span>
+                <span>.</span>
               </span>
             </div>
           )}

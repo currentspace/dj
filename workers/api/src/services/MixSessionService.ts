@@ -12,10 +12,10 @@ import type {
   VibeProfile,
 } from '@dj/shared-types'
 
-import { MixSessionSchema } from '@dj/shared-types'
-import { randomUUID } from 'node:crypto'
+import {MixSessionSchema} from '@dj/shared-types'
+import {randomUUID} from 'node:crypto'
 
-import { getLogger } from '../utils/LoggerContext'
+import {getLogger} from '../utils/LoggerContext'
 
 const logger = getLogger()
 
@@ -47,7 +47,7 @@ export class MixSessionService {
    */
   addToQueue(session: MixSession, track: QueuedTrack): void {
     if (session.queue.length >= this.MAX_QUEUE) {
-      logger?.debug('Queue is full, cannot add more tracks', { userId: session.userId })
+      logger?.debug('Queue is full, cannot add more tracks', {userId: session.userId})
       return
     }
 
@@ -63,18 +63,12 @@ export class MixSessionService {
    * @param trackVibe New track vibe (partial)
    * @param weight Weight for new vibe (0-1), defaults to 0.3 (30%)
    */
-  blendVibes(
-    current: VibeProfile,
-    trackVibe: Partial<VibeProfile>,
-    weight = 0.3,
-  ): VibeProfile {
-    const blended: VibeProfile = { ...current }
+  blendVibes(current: VibeProfile, trackVibe: Partial<VibeProfile>, weight = 0.3): VibeProfile {
+    const blended: VibeProfile = {...current}
 
     // Blend energy level if provided
     if (trackVibe.energyLevel !== undefined) {
-      blended.energyLevel = Math.round(
-        current.energyLevel * (1 - weight) + trackVibe.energyLevel * weight,
-      )
+      blended.energyLevel = Math.round(current.energyLevel * (1 - weight) + trackVibe.energyLevel * weight)
       blended.energyLevel = Math.max(1, Math.min(10, blended.energyLevel))
     }
 
@@ -123,16 +117,13 @@ export class MixSessionService {
    */
   clearQueue(session: MixSession): void {
     session.queue = []
-    logger?.debug('Cleared queue', { userId: session.userId })
+    logger?.debug('Cleared queue', {userId: session.userId})
   }
 
   /**
    * Create a new mix session for a user
    */
-  async createSession(
-    userId: string,
-    preferences?: SessionPreferences,
-  ): Promise<MixSession> {
+  async createSession(userId: string, preferences?: SessionPreferences): Promise<MixSession> {
     const now = new Date().toISOString()
 
     const session: MixSession = {
@@ -154,10 +145,10 @@ export class MixSessionService {
       updatedAt: now,
       userId,
       vibe: {
-        bpmRange: { max: 140, min: 80 },
+        bpmRange: {max: 140, min: 80},
         energyDirection: 'steady',
         energyLevel: 5,
-        era: { end: 2025, start: 2000 },
+        era: {end: 2025, start: 2000},
         genres: [],
         mood: [],
       },
@@ -171,7 +162,7 @@ export class MixSessionService {
       expirationTtl: this.SESSION_TTL,
     })
 
-    logger?.info(`Created mix session for user ${userId}`, { sessionId: session.id })
+    logger?.info(`Created mix session for user ${userId}`, {sessionId: session.id})
 
     return validated
   }
@@ -179,11 +170,11 @@ export class MixSessionService {
   /**
    * End session and return stats
    */
-  async endSession(userId: string): Promise<{ sessionDuration: number; tracksPlayed: number; }> {
+  async endSession(userId: string): Promise<{sessionDuration: number; tracksPlayed: number}> {
     const session = await this.getSession(userId)
 
     if (!session) {
-      return { sessionDuration: 0, tracksPlayed: 0 }
+      return {sessionDuration: 0, tracksPlayed: 0}
     }
 
     const tracksPlayed = session.history.length
@@ -200,7 +191,7 @@ export class MixSessionService {
       tracksPlayed,
     })
 
-    return { sessionDuration, tracksPlayed }
+    return {sessionDuration, tracksPlayed}
   }
 
   /**
@@ -217,7 +208,7 @@ export class MixSessionService {
       const parsed = JSON.parse(stored)
       return MixSessionSchema.parse(parsed)
     } catch (error) {
-      logger?.error('Failed to parse session from KV', { error, userId })
+      logger?.error('Failed to parse session from KV', {error, userId})
       return null
     }
   }
@@ -227,7 +218,7 @@ export class MixSessionService {
    */
   removeFromQueue(session: MixSession, position: number): void {
     if (position < 0 || position >= session.queue.length) {
-      logger?.debug('Invalid queue position', { position, queueLength: session.queue.length })
+      logger?.debug('Invalid queue position', {position, queueLength: session.queue.length})
       return
     }
 
@@ -243,7 +234,7 @@ export class MixSessionService {
    */
   reorderQueue(session: MixSession, from: number, to: number): void {
     if (from < 0 || from >= session.queue.length || to < 0 || to >= session.queue.length) {
-      logger?.debug('Invalid reorder positions', { from, queueLength: session.queue.length, to })
+      logger?.debug('Invalid reorder positions', {from, queueLength: session.queue.length, to})
       return
     }
 
@@ -338,7 +329,7 @@ export class MixSessionService {
     // 20 BPM allows for slow classical/ambient (Grave tempo is 20-40 BPM)
     const BPM_MIN = 20
     const BPM_MAX = 220
-    let bpmRange = { ...currentVibe.bpmRange }
+    let bpmRange = {...currentVibe.bpmRange}
     if (track.bpm !== null) {
       const clampedBpm = Math.max(BPM_MIN, Math.min(BPM_MAX, track.bpm))
       bpmRange = {
@@ -364,10 +355,7 @@ export class MixSessionService {
    * Detect energy direction from recent history
    * @private
    */
-  private detectEnergyDirection(
-    session: MixSession,
-    newTrack: PlayedTrack,
-  ): 'building' | 'steady' | 'winding_down' {
+  private detectEnergyDirection(session: MixSession, newTrack: PlayedTrack): 'building' | 'steady' | 'winding_down' {
     // Need at least 2 previous tracks to detect trend
     if (session.history.length < 2) {
       return 'steady'
@@ -377,9 +365,7 @@ export class MixSessionService {
     const recentTracks = [newTrack, ...session.history.slice(0, 2)]
 
     // Extract energy values (filter out nulls)
-    const energyValues = recentTracks
-      .map(t => t.energy)
-      .filter((e): e is number => e !== null)
+    const energyValues = recentTracks.map(t => t.energy).filter((e): e is number => e !== null)
 
     if (energyValues.length < 3) {
       return 'steady'

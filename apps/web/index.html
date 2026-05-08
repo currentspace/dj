@@ -30,14 +30,15 @@
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js')
-            .then((registration) => {
-              console.log('[App] Service worker registered:', registration.scope);
+          navigator.serviceWorker
+            .register('/sw.js')
+            .then(registration => {
+              console.log('[App] Service worker registered:', registration.scope)
             })
-            .catch((error) => {
-              console.error('[App] Service worker registration failed:', error);
-            });
-        });
+            .catch(error => {
+              console.error('[App] Service worker registration failed:', error)
+            })
+        })
       }
     </script>
   </body>

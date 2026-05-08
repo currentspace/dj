@@ -35,37 +35,46 @@ import {formatZodError, safeParse} from './guards'
 /** Schema for now playing response */
 const NowPlayingResponseSchema = z.object({
   is_playing: z.boolean(),
-  item: z.object({
-    album: z.object({name: z.string()}).optional(),
-    artists: z.array(z.object({name: z.string()})).optional(),
-    duration_ms: z.number(),
-    name: z.string(),
-    uri: z.string(),
-  }).nullable().optional(),
+  item: z
+    .object({
+      album: z.object({name: z.string()}).optional(),
+      artists: z.array(z.object({name: z.string()})).optional(),
+      duration_ms: z.number(),
+      name: z.string(),
+      uri: z.string(),
+    })
+    .nullable()
+    .optional(),
   progress_ms: z.number().nullable().optional(),
 })
 
 /** Schema for queue response */
 const QueueResponseSchema = z.object({
-  currently_playing: z.object({
-    artists: z.array(z.object({name: z.string()})).optional(),
-    name: z.string(),
-    uri: z.string(),
-  }).nullable(),
-  queue: z.array(z.object({
-    artists: z.array(z.object({name: z.string()})).optional(),
-    name: z.string(),
-    uri: z.string(),
-  })),
+  currently_playing: z
+    .object({
+      artists: z.array(z.object({name: z.string()})).optional(),
+      name: z.string(),
+      uri: z.string(),
+    })
+    .nullable(),
+  queue: z.array(
+    z.object({
+      artists: z.array(z.object({name: z.string()})).optional(),
+      name: z.string(),
+      uri: z.string(),
+    }),
+  ),
 })
 
 /** Schema for playback state response */
 const PlaybackStateResponseSchema = z.object({
-  context: z.object({
-    href: z.string(),
-    type: z.string(),
-    uri: z.string(),
-  }).nullable(),
+  context: z
+    .object({
+      href: z.string(),
+      type: z.string(),
+      uri: z.string(),
+    })
+    .nullable(),
   currently_playing_type: z.string(),
   device: z.object({
     id: z.string().nullable(),
@@ -78,16 +87,20 @@ const PlaybackStateResponseSchema = z.object({
     volume_percent: z.number().nullable(),
   }),
   is_playing: z.boolean(),
-  item: z.object({
-    album: z.object({
-      images: z.array(z.object({url: z.string()})).optional(),
+  item: z
+    .object({
+      album: z
+        .object({
+          images: z.array(z.object({url: z.string()})).optional(),
+          name: z.string(),
+        })
+        .optional(),
+      artists: z.array(z.object({name: z.string()})).optional(),
+      duration_ms: z.number(),
       name: z.string(),
-    }).optional(),
-    artists: z.array(z.object({name: z.string()})).optional(),
-    duration_ms: z.number(),
-    name: z.string(),
-    uri: z.string(),
-  }).nullable(),
+      uri: z.string(),
+    })
+    .nullable(),
   progress_ms: z.number().nullable(),
   repeat_state: z.enum(['off', 'track', 'context']),
   shuffle_state: z.boolean(),
@@ -96,24 +109,28 @@ const PlaybackStateResponseSchema = z.object({
 
 /** Schema for related artists response */
 const RelatedArtistsResponseSchema = z.object({
-  artists: z.array(z.object({
-    genres: z.array(z.string()).optional(),
-    id: z.string(),
-    images: z.array(z.object({url: z.string()})).optional(),
-    name: z.string(),
-    popularity: z.number().optional(),
-  })),
+  artists: z.array(
+    z.object({
+      genres: z.array(z.string()).optional(),
+      id: z.string(),
+      images: z.array(z.object({url: z.string()})).optional(),
+      name: z.string(),
+      popularity: z.number().optional(),
+    }),
+  ),
 })
 
 /** Schema for artist search response */
 const ArtistSearchResponseSchema = z.object({
-  artists: SpotifyPagingSchema(z.object({
-    genres: z.array(z.string()).optional(),
-    id: z.string(),
-    images: z.array(z.object({url: z.string()})).optional(),
-    name: z.string(),
-    popularity: z.number().optional(),
-  })),
+  artists: SpotifyPagingSchema(
+    z.object({
+      genres: z.array(z.string()).optional(),
+      id: z.string(),
+      images: z.array(z.object({url: z.string()})).optional(),
+      name: z.string(),
+      popularity: z.number().optional(),
+    }),
+  ),
 })
 
 function isString(value: unknown): value is string {
@@ -278,7 +295,7 @@ export const spotifyTools = [
   },
   {
     description:
-      "Get full playback state including device info, shuffle/repeat status, and what playlist/album is playing from. More detailed than get_now_playing.",
+      'Get full playback state including device info, shuffle/repeat status, and what playlist/album is playing from. More detailed than get_now_playing.',
     input_schema: {
       properties: {},
       required: [],
@@ -305,7 +322,8 @@ export const spotifyTools = [
     input_schema: {
       properties: {
         state: {
-          description: 'Repeat mode: "off" (no repeat), "track" (repeat current track), "context" (repeat playlist/album)',
+          description:
+            'Repeat mode: "off" (no repeat), "track" (repeat current track), "context" (repeat playlist/album)',
           enum: ['off', 'track', 'context'],
           type: 'string',
         },
@@ -333,7 +351,7 @@ export const spotifyTools = [
   },
   {
     description:
-      "Transfer playback to a different device (e.g., from phone to computer). Use get_playback_state first to see available devices.",
+      'Transfer playback to a different device (e.g., from phone to computer). Use get_playback_state first to see available devices.',
     input_schema: {
       properties: {
         device_id: {
@@ -351,7 +369,8 @@ export const spotifyTools = [
     name: 'transfer_playback',
   },
   {
-    description: 'Analyze an existing playlist to understand its characteristics (track metadata, artist frequency, genres)',
+    description:
+      'Analyze an existing playlist to understand its characteristics (track metadata, artist frequency, genres)',
     input_schema: {
       properties: {
         playlist_id: {
@@ -371,7 +390,7 @@ export async function executeSpotifyTool(
   toolName: string,
   args: Record<string, unknown>,
   token: string,
-  _cache?: KVNamespace,  
+  _cache?: KVNamespace,
 ): Promise<unknown> {
   getLogger()?.info(`[Tool] Executing ${toolName} with args:`, {args: JSON.stringify(args).substring(0, 200)})
   const startTime = Date.now()
@@ -467,7 +486,7 @@ async function addToQueue(args: Record<string, unknown>, token: string) {
         method: 'POST',
       }),
     undefined,
-    'player:queue'
+    'player:queue',
   )
 
   if (response.status === 204) {
@@ -522,7 +541,9 @@ async function analyzePlaylist(args: Record<string, unknown>, token: string) {
   }
 
   const playlist = playlistResult.data
-  getLogger()?.info(`[analyzePlaylist] Successfully got playlist: "${playlist.name}" (${playlist.tracks?.total} tracks)`)
+  getLogger()?.info(
+    `[analyzePlaylist] Successfully got playlist: "${playlist.name}" (${playlist.tracks?.total} tracks)`,
+  )
 
   // Get tracks
   getLogger()?.info(`[analyzePlaylist] Fetching playlist tracks...`)
@@ -568,21 +589,24 @@ async function analyzePlaylist(args: Record<string, unknown>, token: string) {
     // Note: Artist genres may not be available in all responses
     genres: Array.from(
       new Set(
-        tracks.flatMap((t) =>
-          t.artists?.flatMap((a) => {
-            // Artists may have genres property depending on the endpoint
-            const artistObj = a as Record<string, unknown>
-            const genres = Array.isArray(artistObj.genres) ? artistObj.genres.filter((g): g is string => typeof g === 'string') : []
-            return genres
-          }) ?? []
-        )
-      )
+        tracks.flatMap(
+          t =>
+            t.artists?.flatMap(a => {
+              // Artists may have genres property depending on the endpoint
+              const artistObj = a as Record<string, unknown>
+              const genres = Array.isArray(artistObj.genres)
+                ? artistObj.genres.filter((g): g is string => typeof g === 'string')
+                : []
+              return genres
+            }) ?? [],
+        ),
+      ),
     ).slice(0, 5),
     playlist_description: playlist.description ?? 'No description',
     playlist_name: playlist.name,
     // Only include a sample of tracks with minimal data (not full track objects)
-    sample_tracks: tracks.slice(0, 5).map((track) => ({
-      artists: track.artists?.map((a) => a.name).join(', ') ?? 'Unknown',
+    sample_tracks: tracks.slice(0, 5).map(track => ({
+      artists: track.artists?.map(a => a.name).join(', ') ?? 'Unknown',
       duration_ms: track.duration_ms,
       name: track.name,
       popularity: track.popularity,
@@ -590,7 +614,7 @@ async function analyzePlaylist(args: Record<string, unknown>, token: string) {
     // Include artist frequency analysis
     top_artists: Object.entries(
       tracks.reduce<Record<string, number>>((acc, track) => {
-        track.artists?.forEach((artist) => {
+        track.artists?.forEach(artist => {
           acc[artist.name] = (acc[artist.name] ?? 0) + 1
         })
         return acc
@@ -639,7 +663,7 @@ async function controlPlayback(args: Record<string, unknown>, token: string) {
         method,
       }),
     undefined,
-    `player:${action}`
+    `player:${action}`,
   )
 
   if (response.status === 204 || response.ok) {
@@ -831,10 +855,12 @@ async function getArtistTopTracks(args: Record<string, unknown>, token: string) 
 
   // Return compact track format to reduce payload size
   return (result.data.items ?? []).map(track => ({
-    album: track.album ? {
-      name: track.album.name,
-      release_date: track.album.release_date,
-    } : undefined,
+    album: track.album
+      ? {
+          name: track.album.name,
+          release_date: track.album.release_date,
+        }
+      : undefined,
     artists: track.artists?.map(a => a.name).join(', '),
     id: track.id,
     name: track.name,
@@ -852,7 +878,7 @@ async function getNowPlaying(token: string) {
         headers: {Authorization: `Bearer ${token}`},
       }),
     undefined,
-    'player:current'
+    'player:current',
   )
 
   if (response.status === 204) {
@@ -893,7 +919,7 @@ async function getPlaybackState(token: string) {
         headers: {Authorization: `Bearer ${token}`},
       }),
     undefined,
-    'player:state'
+    'player:state',
   )
 
   if (response.status === 204) {
@@ -919,10 +945,12 @@ async function getPlaybackState(token: string) {
 
   return {
     // Context (playlist/album being played)
-    context: data.context ? {
-      type: data.context.type,
-      uri: data.context.uri,
-    } : null,
+    context: data.context
+      ? {
+          type: data.context.type,
+          uri: data.context.uri,
+        }
+      : null,
     currently_playing_type: data.currently_playing_type,
     // Device info
     device: {
@@ -939,13 +967,15 @@ async function getPlaybackState(token: string) {
     repeat_state: data.repeat_state,
     // Playback settings
     shuffle_state: data.shuffle_state,
-    track: data.item ? {
-      album: data.item.album?.name,
-      artists: data.item.artists?.map(a => a.name).join(', '),
-      duration_ms: data.item.duration_ms,
-      name: data.item.name,
-      uri: data.item.uri,
-    } : null,
+    track: data.item
+      ? {
+          album: data.item.album?.name,
+          artists: data.item.artists?.map(a => a.name).join(', '),
+          duration_ms: data.item.duration_ms,
+          name: data.item.name,
+          uri: data.item.uri,
+        }
+      : null,
   }
 }
 
@@ -958,7 +988,7 @@ async function getQueue(token: string) {
         headers: {Authorization: `Bearer ${token}`},
       }),
     undefined,
-    'player:queue'
+    'player:queue',
   )
 
   if (!response.ok) {
@@ -1200,7 +1230,7 @@ async function setRepeat(args: Record<string, unknown>, token: string) {
         method: 'PUT',
       }),
     undefined,
-    'player:repeat'
+    'player:repeat',
   )
 
   if (response.status === 204 || response.ok) {
@@ -1232,7 +1262,7 @@ async function setShuffle(args: Record<string, unknown>, token: string) {
         method: 'PUT',
       }),
     undefined,
-    'player:shuffle'
+    'player:shuffle',
   )
 
   if (response.status === 204 || response.ok) {
@@ -1258,7 +1288,7 @@ async function setVolume(args: Record<string, unknown>, token: string) {
         method: 'PUT',
       }),
     undefined,
-    'player:volume'
+    'player:volume',
   )
 
   if (response.status === 204 || response.ok) {
@@ -1293,7 +1323,7 @@ async function transferPlayback(args: Record<string, unknown>, token: string) {
         method: 'PUT',
       }),
     undefined,
-    'player:transfer'
+    'player:transfer',
   )
 
   if (response.status === 204 || response.ok) {

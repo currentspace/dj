@@ -46,9 +46,8 @@ export class AuthPage extends BasePage {
    */
   async waitForOAuthRedirect(): Promise<string> {
     const [request] = await Promise.all([
-      this.page.waitForRequest(request =>
-        request.url().includes('/api/spotify/auth-url') ||
-        request.url().includes('accounts.spotify.com'),
+      this.page.waitForRequest(
+        request => request.url().includes('/api/spotify/auth-url') || request.url().includes('accounts.spotify.com'),
       ),
       this.clickLogin(),
     ])

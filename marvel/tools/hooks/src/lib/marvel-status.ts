@@ -8,161 +8,158 @@
  * Returns HookOutput with additionalContext wrapped in <marvel-status> XML.
  */
 
-import * as fs from "fs";
-import * as path from "path";
+import * as fs from 'fs'
+import * as path from 'path'
 
-import type { SyncHookJSONOutput, UserPromptSubmitHookSpecificOutput } from "../sdk-types.js";
-import type { RunState } from "../types.js";
-import type { LogContext } from "./logger.js";
+import type {SyncHookJSONOutput, UserPromptSubmitHookSpecificOutput} from '../sdk-types.js'
+import type {RunState} from '../types.js'
+import type {LogContext} from './logger.js'
 
-import { VALID_HOOK_EVENTS } from "../schema/settings-types.js";
-import { safeReadJson } from "./file-ops.js";
-import { findRunDir, getTempDir } from "./paths.js";
+import {VALID_HOOK_EVENTS} from '../schema/settings-types.js'
+import {safeReadJson} from './file-ops.js'
+import {findRunDir, getTempDir} from './paths.js'
 
 interface SettingsJson {
-  hooks?: Record<string, unknown>;
-  permissions?: Record<string, unknown>;
+  hooks?: Record<string, unknown>
+  permissions?: Record<string, unknown>
 }
 
 export function compileMarvelStatus(context: LogContext): SyncHookJSONOutput {
   try {
-    const runDir = findRunDir();
-    const daemonId = process.env.MARVEL_DAEMON_ID;
+    const runDir = findRunDir()
+    const daemonId = process.env.MARVEL_DAEMON_ID
 
-    const lines: string[] = [];
-    lines.push("MARVEL Session Status");
-    lines.push("─".repeat(40));
+    const lines: string[] = []
+    lines.push('MARVEL Session Status')
+    lines.push('─'.repeat(40))
 
     if (runDir) {
-      const runState = safeReadJson<RunState>(
-        path.join(runDir, "run.json"),
-        context
-      );
+      const runState = safeReadJson<RunState>(path.join(runDir, 'run.json'), context)
 
       if (runState) {
-        lines.push(`Run ID: ${runState.runId}`);
-        lines.push(`Started: ${runState.startedAt}`);
-        lines.push(`Duration: ${formatDuration(runState.startedAt)}`);
-        lines.push(`Active packs: ${runState.activePacks?.length ?? 0}`);
+        lines.push(`Run ID: ${runState.runId}`)
+        lines.push(`Started: ${runState.startedAt}`)
+        lines.push(`Duration: ${formatDuration(runState.startedAt)}`)
+        lines.push(`Active packs: ${runState.activePacks?.length ?? 0}`)
         if (runState.activePacks?.length) {
           for (const pack of runState.activePacks) {
-            lines.push(`  - ${pack}`);
+            lines.push(`  - ${pack}`)
           }
         }
-        lines.push(`Tool calls: ${runState.toolCallCount ?? 0}`);
-        lines.push(`Corrections: ${runState.correctionCount ?? 0}`);
+        lines.push(`Tool calls: ${runState.toolCallCount ?? 0}`)
+        lines.push(`Corrections: ${runState.correctionCount ?? 0}`)
 
         if (runState.pendingLessons) {
-          lines.push(`Pending lessons: ${runState.pendingLessons}`);
+          lines.push(`Pending lessons: ${runState.pendingLessons}`)
         }
 
         // Hot packs (most injected this session)
         if (runState.packInjectionCounts) {
           const packCounts = Object.entries(runState.packInjectionCounts)
-            .sort(([, a], [, b]) => (b) - (a))
-            .slice(0, 5);
+            .sort(([, a], [, b]) => b - a)
+            .slice(0, 5)
           if (packCounts.length > 0) {
-            lines.push("");
-            lines.push("Hot packs:");
+            lines.push('')
+            lines.push('Hot packs:')
             for (const [pack, count] of packCounts) {
-              lines.push(`  ${pack}: ${count} injections`);
+              lines.push(`  ${pack}: ${count} injections`)
             }
           }
         }
 
         if (runState.recentActivity?.length) {
-          lines.push("");
-          lines.push(`Recent activity: ${runState.recentActivity.length} events`);
-          const last5 = runState.recentActivity.slice(-5);
+          lines.push('')
+          lines.push(`Recent activity: ${runState.recentActivity.length} events`)
+          const last5 = runState.recentActivity.slice(-5)
           for (const event of last5) {
-            lines.push(`  - [${event.type}] ${event.timestamp}`);
+            lines.push(`  - [${event.type}] ${event.timestamp}`)
           }
         }
       } else {
-        lines.push("Run state: not found");
+        lines.push('Run state: not found')
       }
     } else {
-      lines.push("Run directory: not found");
+      lines.push('Run directory: not found')
     }
 
-    lines.push("");
-    lines.push(`Daemon: ${checkDaemonHealth(daemonId)}`);
+    lines.push('')
+    lines.push(`Daemon: ${checkDaemonHealth(daemonId)}`)
 
-    const { configured, missing } = getConfiguredHooks();
-    lines.push(`Hooks configured: ${configured.length}/${VALID_HOOK_EVENTS.length}`);
+    const {configured, missing} = getConfiguredHooks()
+    lines.push(`Hooks configured: ${configured.length}/${VALID_HOOK_EVENTS.length}`)
     if (missing.length > 0) {
-      lines.push(`Missing hooks: ${missing.join(", ")}`);
+      lines.push(`Missing hooks: ${missing.join(', ')}`)
     }
 
-    const statusText = `<marvel-status>\n${lines.join("\n")}\n</marvel-status>`;
+    const statusText = `<marvel-status>\n${lines.join('\n')}\n</marvel-status>`
     const hookSpecificOutput: UserPromptSubmitHookSpecificOutput = {
       additionalContext: statusText,
-      hookEventName: "UserPromptSubmit",
-    };
-    return { hookSpecificOutput };
+      hookEventName: 'UserPromptSubmit',
+    }
+    return {hookSpecificOutput}
   } catch {
-    return {};
+    return {}
   }
 }
 
 function checkDaemonHealth(daemonId: string | undefined): string {
-  if (!daemonId) return "unknown (no daemon ID)";
+  if (!daemonId) return 'unknown (no daemon ID)'
 
-  const tempDir = getTempDir();
-  const pidPath = `${tempDir}/p-${daemonId}.pid`;
-  const socketPath = `${tempDir}/p-${daemonId}.sock`;
+  const tempDir = getTempDir()
+  const pidPath = `${tempDir}/p-${daemonId}.pid`
+  const socketPath = `${tempDir}/p-${daemonId}.sock`
 
-  const pidExists = fs.existsSync(pidPath);
-  const socketExists = fs.existsSync(socketPath);
+  const pidExists = fs.existsSync(pidPath)
+  const socketExists = fs.existsSync(socketPath)
 
   if (pidExists && socketExists) {
     try {
-      const pid = parseInt(fs.readFileSync(pidPath, "utf-8").trim(), 10);
-      process.kill(pid, 0);
-      return `running (pid: ${pid})`;
+      const pid = parseInt(fs.readFileSync(pidPath, 'utf-8').trim(), 10)
+      process.kill(pid, 0)
+      return `running (pid: ${pid})`
     } catch {
-      return "stale (process not found)";
+      return 'stale (process not found)'
     }
   }
 
-  if (pidExists) return "degraded (socket missing)";
-  if (socketExists) return "degraded (pid file missing)";
-  return "not running";
+  if (pidExists) return 'degraded (socket missing)'
+  if (socketExists) return 'degraded (pid file missing)'
+  return 'not running'
 }
 
 function formatDuration(startedAt: string): string {
-  const startMs = new Date(startedAt).getTime();
-  const nowMs = Date.now();
-  const diffSec = Math.floor((nowMs - startMs) / 1000);
+  const startMs = new Date(startedAt).getTime()
+  const nowMs = Date.now()
+  const diffSec = Math.floor((nowMs - startMs) / 1000)
 
-  if (diffSec < 0) return "0s";
+  if (diffSec < 0) return '0s'
 
-  const hours = Math.floor(diffSec / 3600);
-  const minutes = Math.floor((diffSec % 3600) / 60);
-  const seconds = diffSec % 60;
+  const hours = Math.floor(diffSec / 3600)
+  const minutes = Math.floor((diffSec % 3600) / 60)
+  const seconds = diffSec % 60
 
-  const parts: string[] = [];
-  if (hours > 0) parts.push(`${hours}h`);
-  if (minutes > 0) parts.push(`${minutes}m`);
-  parts.push(`${seconds}s`);
+  const parts: string[] = []
+  if (hours > 0) parts.push(`${hours}h`)
+  if (minutes > 0) parts.push(`${minutes}m`)
+  parts.push(`${seconds}s`)
 
-  return parts.join(" ");
+  return parts.join(' ')
 }
 
-function getConfiguredHooks(): { configured: string[]; missing: string[] } {
-  const projectDir = process.env.CLAUDE_PROJECT_DIR;
+function getConfiguredHooks(): {configured: string[]; missing: string[]} {
+  const projectDir = process.env.CLAUDE_PROJECT_DIR
   if (!projectDir) {
-    return { configured: [], missing: [...VALID_HOOK_EVENTS] };
+    return {configured: [], missing: [...VALID_HOOK_EVENTS]}
   }
 
-  const settingsPath = path.join(projectDir, ".claude", "settings.json");
-  const settings = safeReadJson<SettingsJson>(settingsPath, { hookType: "marvel-status" });
+  const settingsPath = path.join(projectDir, '.claude', 'settings.json')
+  const settings = safeReadJson<SettingsJson>(settingsPath, {hookType: 'marvel-status'})
 
   if (!settings?.hooks) {
-    return { configured: [], missing: [...VALID_HOOK_EVENTS] };
+    return {configured: [], missing: [...VALID_HOOK_EVENTS]}
   }
 
-  const configured = Object.keys(settings.hooks);
-  const missing = VALID_HOOK_EVENTS.filter((e) => !configured.includes(e));
-  return { configured, missing };
+  const configured = Object.keys(settings.hooks)
+  const missing = VALID_HOOK_EVENTS.filter(e => !configured.includes(e))
+  return {configured, missing}
 }

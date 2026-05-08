@@ -19,7 +19,7 @@ ctx.waitUntil(doBackgroundWork())
 ctx.waitUntil(tracker.track(doBackgroundWork()))
 
 // At end of request handler
-ctx.waitUntil(tracker.flush())  // ensure all background work completes
+ctx.waitUntil(tracker.flush()) // ensure all background work completes
 ```
 
 - Spotify queue add: `tracker.track(queueToSpotify(token, uri))` — not bare `fetch()`

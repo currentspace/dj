@@ -73,6 +73,7 @@ Output a structured implementation plan:
 ### 5. Wait for Approval
 
 After presenting the plan, wait for the user to:
+
 - Approve the plan (proceed to `/marvel-build`)
 - Request modifications
 - Ask questions about specific steps

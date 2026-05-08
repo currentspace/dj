@@ -16,10 +16,7 @@ import {AuthPage, ChatPage, PlaylistPage} from './pages'
 /**
  * Helper to set up authenticated state
  */
-async function setupAuthenticated(
-  page: Page,
-  playlists = MOCK_PLAYLISTS,
-) {
+async function setupAuthenticated(page: Page, playlists = MOCK_PLAYLISTS) {
   const authPage = new AuthPage(page)
   const playlistPage = new PlaylistPage(page)
 
@@ -196,7 +193,11 @@ test.describe('Playlist Management', () => {
 
       await playlistPage.waitForPlaylistsLoaded()
 
-      const meta = await page.locator(playlistPage.playlistCard).first().locator(playlistPage.playlistMeta).textContent()
+      const meta = await page
+        .locator(playlistPage.playlistCard)
+        .first()
+        .locator(playlistPage.playlistMeta)
+        .textContent()
       expect(meta).toContain('50 tracks')
     })
 
@@ -233,10 +234,7 @@ test.describe('Playlist Management', () => {
 
       await playlistPage.waitForPlaylistsLoaded()
 
-      const spotifyLink = page
-        .locator(playlistPage.playlistCard)
-        .first()
-        .locator(playlistPage.openSpotifyButton)
+      const spotifyLink = page.locator(playlistPage.playlistCard).first().locator(playlistPage.openSpotifyButton)
 
       await expect(spotifyLink).toBeVisible()
       await expect(spotifyLink).toHaveAttribute('href', /open\.spotify\.com\/playlist/)

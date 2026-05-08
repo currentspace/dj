@@ -32,7 +32,7 @@ vi.mock('../../utils/LoggerContext', () => ({
 function createAuthRequest(method: string, path: string, body?: unknown) {
   const init: RequestInit = {
     headers: {
-      'Authorization': 'Bearer mock-spotify-token',
+      Authorization: 'Bearer mock-spotify-token',
       'Content-Type': 'application/json',
     },
     method,
@@ -110,7 +110,7 @@ describe('Mix API Routes - Authentication', () => {
   it('should reject requests with invalid bearer token format', async () => {
     const req = new Request('http://localhost:8787/api/mix/current', {
       headers: {
-        'Authorization': 'InvalidFormat',
+        Authorization: 'InvalidFormat',
       },
       method: 'GET',
     })
@@ -299,11 +299,7 @@ describe('Mix API Routes - Queue Management', () => {
 
   describe('DELETE /api/mix/queue/:position', () => {
     beforeEach(() => {
-      mockSession.queue = [
-        createMockQueuedTrack(0),
-        createMockQueuedTrack(1),
-        createMockQueuedTrack(2),
-      ]
+      mockSession.queue = [createMockQueuedTrack(0), createMockQueuedTrack(1), createMockQueuedTrack(2)]
     })
 
     it('should remove track from queue', async () => {
@@ -318,9 +314,7 @@ describe('Mix API Routes - Queue Management', () => {
     it('should reindex positions after removal', async () => {
       // Test reindexing contract
       const positionToRemove = 0
-      const newQueue = mockSession.queue
-        .filter((_, i) => i !== positionToRemove)
-        .map((t, i) => ({...t, position: i}))
+      const newQueue = mockSession.queue.filter((_, i) => i !== positionToRemove).map((t, i) => ({...t, position: i}))
 
       expect(newQueue[0].position).toBe(0)
       expect(newQueue[1].position).toBe(1)
@@ -350,11 +344,7 @@ describe('Mix API Routes - Queue Management', () => {
 
   describe('PUT /api/mix/queue/reorder', () => {
     beforeEach(() => {
-      mockSession.queue = [
-        createMockQueuedTrack(0),
-        createMockQueuedTrack(1),
-        createMockQueuedTrack(2),
-      ]
+      mockSession.queue = [createMockQueuedTrack(0), createMockQueuedTrack(1), createMockQueuedTrack(2)]
     })
 
     it('should reorder tracks in queue', async () => {
@@ -488,11 +478,7 @@ describe('Mix API Routes - Suggestions', () => {
     const mockAudioService = {} as any
     const mockToken = 'mock-spotify-token'
 
-    mockSuggestionEngine = new SuggestionEngine(
-      mockLastFmService,
-      mockAudioService,
-      mockToken
-    )
+    mockSuggestionEngine = new SuggestionEngine(mockLastFmService, mockAudioService, mockToken)
     mockSession = createMockSession()
   })
 
@@ -528,16 +514,18 @@ describe('Mix API Routes - Suggestions', () => {
     })
 
     it('should respect count parameter', async () => {
-      const mockSuggestions = Array(3).fill(null).map((_, i) => ({
-        albumArt: 'https://example.com/art.jpg',
-        artist: `Artist ${i}`,
-        bpm: 128,
-        name: `Suggestion ${i}`,
-        reason: 'Good match',
-        trackId: `track-${i}`,
-        trackUri: `spotify:track:${i}`,
-        vibeScore: 85,
-      }))
+      const mockSuggestions = Array(3)
+        .fill(null)
+        .map((_, i) => ({
+          albumArt: 'https://example.com/art.jpg',
+          artist: `Artist ${i}`,
+          bpm: 128,
+          name: `Suggestion ${i}`,
+          reason: 'Good match',
+          trackId: `track-${i}`,
+          trackUri: `spotify:track:${i}`,
+          vibeScore: 85,
+        }))
 
       vi.spyOn(mockSuggestionEngine, 'generateSuggestions').mockResolvedValue(mockSuggestions)
 

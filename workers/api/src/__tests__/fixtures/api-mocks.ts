@@ -169,9 +169,7 @@ export function buildSpotifyPlaylist(overrides?: Partial<SpotifyPlaylistFull>): 
     },
     href: 'https://api.spotify.com/v1/playlists/playlist123',
     id: 'playlist123',
-    images: [
-      {height: 640, url: 'https://mosaic.scdn.co/640/test.jpg', width: 640},
-    ],
+    images: [{height: 640, url: 'https://mosaic.scdn.co/640/test.jpg', width: 640}],
     name: 'Test Playlist',
     owner: {
       display_name: 'Test User',
@@ -318,8 +316,8 @@ export function mockLastFmAPI(responses: {
   'artist.getInfo'?: Record<string, LastFmArtistInfo | null>
   'track.getCorrection'?: Record<string, null | {artist: string; name: string}>
   'track.getInfo'?: Record<string, LastFmTrackInfo | null>
-  'track.getSimilar'?: Record<string, {artist: string; match: number; name: string;}[]>
-  'track.getTopTags'?: Record<string, {count: number; name: string;}[]>
+  'track.getSimilar'?: Record<string, {artist: string; match: number; name: string}[]>
+  'track.getTopTags'?: Record<string, {count: number; name: string}[]>
 }): () => void {
   const originalFetch = global.fetch
 
@@ -401,7 +399,7 @@ export function mockLastFmAPI(responses: {
  * Mock global fetch for MusicBrainz API calls
  */
 export function mockMusicBrainzAPI(
-  responses: Record<string, null | {id: string; isrcs: string[]; score: number; title: string;}>,
+  responses: Record<string, null | {id: string; isrcs: string[]; score: number; title: string}>,
 ): () => void {
   const originalFetch = global.fetch
 

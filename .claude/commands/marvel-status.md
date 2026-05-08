@@ -23,11 +23,13 @@ node marvel/tools/hooks/dist/cli.bundle.js query status
 If `cli.bundle.js` does not exist or the command fails:
 
 1. Check if the hooks need to be built:
+
    ```bash
    ls marvel/tools/hooks/dist/cli.bundle.js
    ```
 
 2. If the file is missing, inform the user:
+
    ```
    MARVEL CLI not built. Run: cd marvel/tools/hooks && pnpm build
    ```
@@ -40,6 +42,7 @@ If `cli.bundle.js` does not exist or the command fails:
 ### Output
 
 Display the CLI output directly to the user. The output includes:
+
 - Run ID and duration
 - Active packs and their injection counts
 - Tool call and correction counts

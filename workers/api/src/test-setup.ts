@@ -3,7 +3,7 @@
  * Configures node environment with Cloudflare Workers polyfills
  */
 
-import { beforeEach, vi } from 'vitest'
+import {beforeEach, vi} from 'vitest'
 
 // Store native globals BEFORE mocking (for contract tests that need real network access)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -52,7 +52,7 @@ global.setTimeout = function (callback: (...args: any[]) => void, ms?: number, .
   }, ms)
   timerMap.set(id, timeout)
   return id
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
 } as any
 
 global.clearTimeout = function (id: null | number | undefined): void {
@@ -62,5 +62,5 @@ global.clearTimeout = function (id: null | number | undefined): void {
     originalClearTimeout(timeout)
     timerMap.delete(id)
   }
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
 } as any

@@ -20,18 +20,18 @@ import {
   SpotifyTrackFullSchema,
   SpotifyUserSchema,
 } from '@dj/shared-types'
-import { config } from 'dotenv'
+import {config} from 'dotenv'
 
 // Import setup to restore native fetch and load env vars for contract tests
 import './setup'
-import { resolve } from 'path'
-import { afterEach, beforeAll, describe, expect, it } from 'vitest'
+import {resolve} from 'path'
+import {afterEach, beforeAll, describe, expect, it} from 'vitest'
 
-import { asRecord, getSpotifyAccessToken } from './helpers'
+import {asRecord, getSpotifyAccessToken} from './helpers'
 
 // Load environment variables synchronously for skipIf evaluation
-config({ path: resolve(__dirname, '../../../../.dev.vars') })
-config({ path: resolve(__dirname, '../../../../../.env') })
+config({path: resolve(__dirname, '../../../../.dev.vars')})
+config({path: resolve(__dirname, '../../../../../.env')})
 
 // ===== Test Configuration =====
 
@@ -77,8 +77,8 @@ const spotifyRequest = async (endpoint: string): Promise<Response> => {
   if (!response.ok) {
     throw new Error(
       `Spotify API request failed: ${response.status} ${response.statusText}\n` +
-      `Endpoint: ${endpoint}\n` +
-      `Response: ${await response.text()}`
+        `Endpoint: ${endpoint}\n` +
+        `Response: ${await response.text()}`,
     )
   }
 
@@ -89,7 +89,7 @@ const spotifyRequest = async (endpoint: string): Promise<Response> => {
  * Rate limiting delay between tests
  */
 const rateLimit = async (): Promise<void> => {
-  await new Promise((resolve) => setTimeout(resolve, RATE_LIMIT_DELAY))
+  await new Promise(resolve => setTimeout(resolve, RATE_LIMIT_DELAY))
 }
 
 // ===== Contract Tests =====
@@ -102,7 +102,7 @@ describe('Spotify API Contracts', () => {
     if (!spotifyToken) {
       console.warn(
         '\n⚠️  Skipping Spotify contract tests: Could not obtain access token\n' +
-        'Ensure SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET are set in .dev.vars\n'
+          'Ensure SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET are set in .dev.vars\n',
       )
     }
   })
@@ -341,9 +341,7 @@ describe('Spotify API Contracts', () => {
     it.skip('matches SpotifyRecommendationsResponseSchema (DEPRECATED - requires user auth since Nov 2024)', async () => {
       // Get recommendations based on seed tracks
       const seedTracks = TEST_TRACK_IDS.slice(0, 2).join(',')
-      const response = await spotifyRequest(
-        `/recommendations?seed_tracks=${seedTracks}&limit=10`
-      )
+      const response = await spotifyRequest(`/recommendations?seed_tracks=${seedTracks}&limit=10`)
       const data = await response.json()
 
       // Validate against schema
@@ -378,8 +376,7 @@ describe('Spotify API Contracts', () => {
     it.skip('supports audio feature parameters (DEPRECATED - requires user auth since Nov 2024)', async () => {
       // Test recommendations with tunable audio features
       const response = await spotifyRequest(
-        `/recommendations?seed_artists=${TEST_ARTIST_ID}&` +
-        `target_energy=0.8&target_danceability=0.7&limit=5`
+        `/recommendations?seed_artists=${TEST_ARTIST_ID}&` + `target_energy=0.8&target_danceability=0.7&limit=5`,
       )
       const data = await response.json()
 

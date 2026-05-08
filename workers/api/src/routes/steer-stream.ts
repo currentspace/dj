@@ -3,18 +3,18 @@
  * Provides real-time progress feedback during vibe steering
  */
 
-import type { Env } from '../index'
-import type { MixSession, QueuedTrack, Suggestion, VibeProfile } from '@dj/shared-types'
+import type {Env} from '../index'
+import type {MixSession, QueuedTrack, Suggestion, VibeProfile} from '@dj/shared-types'
 
 import Anthropic from '@anthropic-ai/sdk'
-import { Hono } from 'hono'
-import { z } from 'zod'
+import {Hono} from 'hono'
+import {z} from 'zod'
 
-import { LLM } from '../constants'
-import { buildSteeringSuggestionsPrompt, buildVibeDescription, SYSTEM_PROMPTS } from '../lib/ai-prompts'
-import { createAIService } from '../lib/ai-service'
-import { MixSessionService } from '../services/MixSessionService'
-import { getLogger } from '../utils/LoggerContext'
+import {LLM} from '../constants'
+import {buildSteeringSuggestionsPrompt, buildVibeDescription, SYSTEM_PROMPTS} from '../lib/ai-prompts'
+import {createAIService} from '../lib/ai-service'
+import {MixSessionService} from '../services/MixSessionService'
+import {getLogger} from '../utils/LoggerContext'
 
 // =============================================================================
 // TYPES
@@ -26,10 +26,10 @@ interface SteerEvent {
 }
 
 interface VibeAdjustments {
-  bpmRange?: { max: number; min: number; }
+  bpmRange?: {max: number; min: number}
   energyDirection?: 'building' | 'steady' | 'winding_down'
   energyLevel?: number
-  era?: { end: number; start: number; }
+  era?: {end: number; start: number}
   genres?: string[]
   mood?: string[]
 }
@@ -42,21 +42,9 @@ const TARGET_QUEUE_SIZE = 5
 
 // DJ-style progress messages for different stages
 const PROGRESS_TEMPLATES = {
-  adjusting: [
-    'Dialing in the sound...',
-    'Mixing in the new direction...',
-    'Blending the vibes...',
-  ],
-  analyzing: [
-    'Reading the room...',
-    'Feeling out the vibe...',
-    'Tuning into the energy...',
-  ],
-  building: [
-    'Building the perfect set...',
-    'Curating fresh tracks...',
-    'Finding the right groove...',
-  ],
+  adjusting: ['Dialing in the sound...', 'Mixing in the new direction...', 'Blending the vibes...'],
+  analyzing: ['Reading the room...', 'Feeling out the vibe...', 'Tuning into the energy...'],
+  building: ['Building the perfect set...', 'Curating fresh tracks...', 'Finding the right groove...'],
 } as const
 
 // =============================================================================
@@ -103,7 +91,7 @@ class SteerSSEWriter {
 // =============================================================================
 
 function applyVibeAdjustments(currentVibe: VibeProfile, adjustments: VibeAdjustments): VibeProfile {
-  const updated: VibeProfile = { ...currentVibe }
+  const updated: VibeProfile = {...currentVibe}
 
   if (typeof adjustments.energyLevel === 'number') {
     updated.energyLevel = Math.max(1, Math.min(10, Math.round(adjustments.energyLevel)))
@@ -114,11 +102,11 @@ function applyVibeAdjustments(currentVibe: VibeProfile, adjustments: VibeAdjustm
   }
 
   if (adjustments.era) {
-    updated.era = { ...adjustments.era }
+    updated.era = {...adjustments.era}
   }
 
   if (adjustments.bpmRange) {
-    updated.bpmRange = { ...adjustments.bpmRange }
+    updated.bpmRange = {...adjustments.bpmRange}
   }
 
   if (adjustments.genres && adjustments.genres.length > 0) {
@@ -187,7 +175,9 @@ function calculateChanges(oldVibe: VibeProfile, newVibe: VibeProfile): string[] 
     changes.push(`Era: ${oldVibe.era.start}-${oldVibe.era.end} → ${newVibe.era.start}-${newVibe.era.end}`)
   }
   if (JSON.stringify(newVibe.bpmRange) !== JSON.stringify(oldVibe.bpmRange)) {
-    changes.push(`BPM: ${oldVibe.bpmRange.min}-${oldVibe.bpmRange.max} → ${newVibe.bpmRange.min}-${newVibe.bpmRange.max}`)
+    changes.push(
+      `BPM: ${oldVibe.bpmRange.min}-${oldVibe.bpmRange.max} → ${newVibe.bpmRange.min}-${newVibe.bpmRange.max}`,
+    )
   }
   if (JSON.stringify(newVibe.genres) !== JSON.stringify(oldVibe.genres)) {
     changes.push(`Genres: ${newVibe.genres.join(', ')}`)
@@ -208,7 +198,7 @@ async function generateSteeringSuggestions(
   token: string,
   session: MixSession,
   direction: string,
-  count: number
+  count: number,
 ): Promise<Suggestion[]> {
   const logger = getLogger()
 
@@ -217,11 +207,11 @@ async function generateSteeringSuggestions(
     return []
   }
 
-  const aiService = createAIService({ apiKey: env.ANTHROPIC_API_KEY })
+  const aiService = createAIService({apiKey: env.ANTHROPIC_API_KEY})
 
   // Build the steering prompt with the new vibe and recent history context
   const vibeDescription = buildVibeDescription(session.vibe)
-  const recentTracks = session.history.slice(-5).map(t => ({ artist: t.artist, name: t.name }))
+  const recentTracks = session.history.slice(-5).map(t => ({artist: t.artist, name: t.name}))
   const prompt = buildSteeringSuggestionsPrompt(vibeDescription, direction, recentTracks, count)
 
   logger?.info('[steer-stream] Asking AI for steering suggestions...', {
@@ -230,11 +220,13 @@ async function generateSteeringSuggestions(
   })
 
   const AITrackSuggestionsSchema = z.object({
-    tracks: z.array(z.object({
-      artist: z.string(),
-      name: z.string(),
-      reason: z.string(),
-    })),
+    tracks: z.array(
+      z.object({
+        artist: z.string(),
+        name: z.string(),
+        reason: z.string(),
+      }),
+    ),
   })
 
   const response = await aiService.promptForJSON(prompt, {
@@ -304,7 +296,7 @@ async function rebuildQueue(
   session: MixSession,
   direction: string,
   sessionService: MixSessionService,
-  sseWriter: SteerSSEWriter
+  sseWriter: SteerSSEWriter,
 ): Promise<QueuedTrack[]> {
   const logger = getLogger()
 
@@ -315,14 +307,8 @@ async function rebuildQueue(
 
   try {
     // Generate steering-specific suggestions using AI
-    logger?.info('[steer-stream] Generating steering suggestions towards:', { direction })
-    const suggestions = await generateSteeringSuggestions(
-      env,
-      token,
-      session,
-      direction,
-      tracksNeeded + 3
-    )
+    logger?.info('[steer-stream] Generating steering suggestions towards:', {direction})
+    const suggestions = await generateSteeringSuggestions(env, token, session, direction, tracksNeeded + 3)
 
     if (suggestions.length === 0) {
       logger?.info('[steer-stream] No suggestions generated')
@@ -330,10 +316,7 @@ async function rebuildQueue(
     }
 
     // Filter duplicates
-    const existingUris = new Set([
-      ...session.history.map(t => t.trackUri),
-      ...session.queue.map(t => t.trackUri),
-    ])
+    const existingUris = new Set([...session.history.map(t => t.trackUri), ...session.queue.map(t => t.trackUri)])
     const available = suggestions.filter(s => !existingUris.has(s.trackUri))
     const toAdd = available.slice(0, tracksNeeded)
 
@@ -354,8 +337,8 @@ async function rebuildQueue(
 
       // Stream each track addition
       await sseWriter.write({
-        data: { queueSize: session.queue.length, track: queuedTrack },
-        type: 'queue_update'
+        data: {queueSize: session.queue.length, track: queuedTrack},
+        type: 'queue_update',
       })
     }
 
@@ -379,14 +362,20 @@ async function rebuildQueue(
 async function searchSpotifyTrack(
   token: string,
   artist: string,
-  track: string
-): Promise<null | { album: { images: { url: string }[] }; artists: { name: string }[]; id: string; name: string; uri: string; }> {
+  track: string,
+): Promise<null | {
+  album: {images: {url: string}[]}
+  artists: {name: string}[]
+  id: string
+  name: string
+  uri: string
+}> {
   try {
     const query = `artist:${artist} track:${track}`
     const url = `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=track&limit=1`
 
     const response = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: {Authorization: `Bearer ${token}`},
     })
 
     if (!response.ok) {
@@ -394,15 +383,19 @@ async function searchSpotifyTrack(
     }
 
     const SpotifySearchHitSchema = z.object({
-      tracks: z.object({
-        items: z.array(z.object({
-          album: z.object({ images: z.array(z.object({ url: z.string() })) }),
-          artists: z.array(z.object({ name: z.string() })),
-          id: z.string(),
-          name: z.string(),
-          uri: z.string(),
-        })),
-      }).optional(),
+      tracks: z
+        .object({
+          items: z.array(
+            z.object({
+              album: z.object({images: z.array(z.object({url: z.string()}))}),
+              artists: z.array(z.object({name: z.string()})),
+              id: z.string(),
+              name: z.string(),
+              uri: z.string(),
+            }),
+          ),
+        })
+        .optional(),
     })
     const json: unknown = await response.json()
     const parsed = SpotifySearchHitSchema.safeParse(json)
@@ -417,10 +410,7 @@ async function searchSpotifyTrack(
  * Start playback with ALL tracks as the context
  * This creates a proper playback context that Spotify will play through
  */
-async function startPlaybackWithTracks(
-  token: string,
-  trackUris: string[]
-): Promise<boolean> {
+async function startPlaybackWithTracks(token: string, trackUris: string[]): Promise<boolean> {
   const logger = getLogger()
 
   if (trackUris.length === 0) {
@@ -431,7 +421,7 @@ async function startPlaybackWithTracks(
   try {
     logger?.info('[steer-stream] Starting playback with context:', {
       trackCount: trackUris.length,
-      uris: trackUris
+      uris: trackUris,
     })
 
     // Play ALL tracks at once - this creates a proper context that Spotify will play through
@@ -448,7 +438,7 @@ async function startPlaybackWithTracks(
 
     if (!playResponse.ok) {
       const text = await playResponse.text()
-      logger?.warn('[steer-stream] Failed to start playback:', { status: playResponse.status, text })
+      logger?.warn('[steer-stream] Failed to start playback:', {status: playResponse.status, text})
       return false
     }
 
@@ -468,8 +458,8 @@ async function steerVibeWithThinking(
   anthropic: Anthropic,
   currentVibe: VibeProfile,
   direction: string,
-  sseWriter: SteerSSEWriter
-): Promise<{ changes: string[]; vibe: VibeProfile; }> {
+  sseWriter: SteerSSEWriter,
+): Promise<{changes: string[]; vibe: VibeProfile}> {
   const logger = getLogger()
 
   // Use Sonnet with extended thinking for deeper reasoning
@@ -479,15 +469,17 @@ async function steerVibeWithThinking(
 
   const response = await anthropic.messages.create({
     max_tokens: 16000,
-    messages: [{
-      content: prompt,
-      role: 'user'
-    }],
+    messages: [
+      {
+        content: prompt,
+        role: 'user',
+      },
+    ],
     model: LLM.MODEL,
     thinking: {
       budget_tokens: 4000,
-      type: 'enabled'
-    }
+      type: 'enabled',
+    },
   })
 
   // Extract text response. Thinking blocks are streamed for UI preview only —
@@ -498,8 +490,8 @@ async function steerVibeWithThinking(
     if (block.type === 'thinking') {
       const thinking = block.thinking
       await sseWriter.write({
-        data: { preview: thinking.slice(0, 500) + (thinking.length > 500 ? '...' : '') },
-        type: 'thinking'
+        data: {preview: thinking.slice(0, 500) + (thinking.length > 500 ? '...' : '')},
+        type: 'thinking',
       })
     } else if (block.type === 'text') {
       adjustmentsJson = block.text
@@ -515,7 +507,7 @@ async function steerVibeWithThinking(
   // Calculate changes
   const changes = calculateChanges(currentVibe, updatedVibe)
 
-  return { changes, vibe: updatedVibe }
+  return {changes, vibe: updatedVibe}
 }
 
 // =============================================================================
@@ -526,13 +518,14 @@ async function summarizeThinkingWithHaiku(
   anthropic: Anthropic,
   thinking: string,
   direction: string,
-  stage: 'adjusting' | 'analyzing' | 'building'
+  stage: 'adjusting' | 'analyzing' | 'building',
 ): Promise<string> {
   try {
     const response = await anthropic.messages.create({
       max_tokens: 100,
-      messages: [{
-        content: `You're a friendly DJ assistant. Write ONE short (5-10 words), conversational progress message about steering towards "${direction}".
+      messages: [
+        {
+          content: `You're a friendly DJ assistant. Write ONE short (5-10 words), conversational progress message about steering towards "${direction}".
 
 Stage: ${stage}
 ${thinking ? `Context: ${thinking.slice(0, 200)}` : ''}
@@ -543,10 +536,11 @@ Be warm and DJ-like. No emojis. Examples:
 - "Bringing in some vintage soul flavor..."
 
 Just the message, no quotes or extra formatting.`,
-        role: 'user'
-      }],
+          role: 'user',
+        },
+      ],
       model: LLM.MODEL_HAIKU,
-      temperature: 0.7
+      temperature: 0.7,
     })
 
     const textBlock = response.content.find(b => b.type === 'text')
@@ -564,7 +558,7 @@ const SteerRequestSchema = z.object({
   direction: z.string().min(1).max(500),
 })
 
-export const steerStreamRouter = new Hono<{ Bindings: Env }>()
+export const steerStreamRouter = new Hono<{Bindings: Env}>()
 
 steerStreamRouter.post('/steer-stream', async c => {
   const logger = getLogger()
@@ -572,53 +566,53 @@ steerStreamRouter.post('/steer-stream', async c => {
   logger?.info(`[steer-stream:${requestId}] New streaming steer request`)
 
   // Parse request
-  let body: { direction: string }
+  let body: {direction: string}
   try {
     body = SteerRequestSchema.parse(await c.req.json())
   } catch {
-    return c.json({ error: 'Invalid request' }, 400)
+    return c.json({error: 'Invalid request'}, 400)
   }
 
-  const { direction } = body
+  const {direction} = body
   logger?.info(`[steer-stream:${requestId}] Direction: "${direction}"`)
 
   // Get auth
   const token = c.req.header('authorization')?.replace('Bearer ', '')
   if (!token) {
-    return c.json({ error: 'No authorization token' }, 401)
+    return c.json({error: 'No authorization token'}, 401)
   }
 
   // Get user ID
   const userResponse = await fetch('https://api.spotify.com/v1/me', {
-    headers: { Authorization: `Bearer ${token}` }
+    headers: {Authorization: `Bearer ${token}`},
   })
   if (!userResponse.ok) {
-    return c.json({ error: 'Invalid authorization token' }, 401)
+    return c.json({error: 'Invalid authorization token'}, 401)
   }
   const userJson: unknown = await userResponse.json()
-  const userParsed = z.object({ id: z.string() }).safeParse(userJson)
+  const userParsed = z.object({id: z.string()}).safeParse(userJson)
   if (!userParsed.success) {
-    return c.json({ error: 'Failed to parse user data' }, 500)
+    return c.json({error: 'Failed to parse user data'}, 500)
   }
   const userId = userParsed.data.id
 
   // Check requirements
   if (!c.env.MIX_SESSIONS) {
-    return c.json({ error: 'Mix sessions not available' }, 500)
+    return c.json({error: 'Mix sessions not available'}, 500)
   }
   if (!c.env.ANTHROPIC_API_KEY) {
-    return c.json({ error: 'AI not available' }, 500)
+    return c.json({error: 'AI not available'}, 500)
   }
 
   // Get session
   const sessionService = new MixSessionService(c.env.MIX_SESSIONS)
   const session = await sessionService.getSession(userId)
   if (!session) {
-    return c.json({ error: 'No active session' }, 404)
+    return c.json({error: 'No active session'}, 404)
   }
 
   // Create SSE stream
-  const { readable, writable } = new TransformStream(undefined, { highWaterMark: 10 })
+  const {readable, writable} = new TransformStream(undefined, {highWaterMark: 10})
   const writer = writable.getWriter()
   const sseWriter = new SteerSSEWriter(writer)
 
@@ -632,33 +626,28 @@ steerStreamRouter.post('/steer-stream', async c => {
 
   // Process async
   const processSteer = async () => {
-    const anthropic = new Anthropic({ apiKey: c.env.ANTHROPIC_API_KEY })
+    const anthropic = new Anthropic({apiKey: c.env.ANTHROPIC_API_KEY})
 
     try {
       // 1. Acknowledge
       await sseWriter.write({
-        data: { direction, message: `Got it! Steering towards "${direction}"...` },
-        type: 'ack'
+        data: {direction, message: `Got it! Steering towards "${direction}"...`},
+        type: 'ack',
       })
 
       // 2. First progress message
       await sseWriter.write({
-        data: { message: getRandomTemplate('analyzing'), stage: 'analyzing' },
-        type: 'progress'
+        data: {message: getRandomTemplate('analyzing'), stage: 'analyzing'},
+        type: 'progress',
       })
 
       // 3. Steer vibe with thinking
-      const { changes, vibe: updatedVibe } = await steerVibeWithThinking(
-        anthropic,
-        session.vibe,
-        direction,
-        sseWriter
-      )
+      const {changes, vibe: updatedVibe} = await steerVibeWithThinking(anthropic, session.vibe, direction, sseWriter)
 
       // 4. Send vibe update
       await sseWriter.write({
-        data: { changes, vibe: updatedVibe },
-        type: 'vibe_update'
+        data: {changes, vibe: updatedVibe},
+        type: 'vibe_update',
       })
 
       // Update session
@@ -667,15 +656,15 @@ steerStreamRouter.post('/steer-stream', async c => {
       // 5. Progress: adjusting
       const adjustingMsg = await summarizeThinkingWithHaiku(anthropic, '', direction, 'adjusting')
       await sseWriter.write({
-        data: { message: adjustingMsg, stage: 'adjusting' },
-        type: 'progress'
+        data: {message: adjustingMsg, stage: 'adjusting'},
+        type: 'progress',
       })
 
       // 6. Progress: building queue
       const buildingMsg = await summarizeThinkingWithHaiku(anthropic, '', direction, 'building')
       await sseWriter.write({
-        data: { message: buildingMsg, stage: 'building' },
-        type: 'progress'
+        data: {message: buildingMsg, stage: 'building'},
+        type: 'progress',
       })
 
       // 7. Rebuild queue with steering-aware suggestions
@@ -687,16 +676,16 @@ steerStreamRouter.post('/steer-stream', async c => {
         const playbackStarted = await startPlaybackWithTracks(token, trackUris)
         if (playbackStarted) {
           await sseWriter.write({
-            data: { message: 'Starting your new mix...', stage: 'playing' },
-            type: 'progress'
+            data: {message: 'Starting your new mix...', stage: 'playing'},
+            type: 'progress',
           })
         }
       }
 
       // 8. Send suggestions
       await sseWriter.write({
-        data: { count: queue.length },
-        type: 'suggestions'
+        data: {count: queue.length},
+        type: 'suggestions',
       })
 
       // 9. Done
@@ -705,17 +694,17 @@ steerStreamRouter.post('/steer-stream', async c => {
           changes,
           message: `Vibes adjusted! ${queue.length} new tracks in your queue.`,
           queue,
-          vibe: updatedVibe
+          vibe: updatedVibe,
         },
-        type: 'done'
+        type: 'done',
       })
 
       logger?.info(`[steer-stream:${requestId}] Complete - ${changes.length} changes, ${queue.length} tracks`)
     } catch (error) {
       logger?.error(`[steer-stream:${requestId}] Error:`, error)
       await sseWriter.write({
-        data: { message: error instanceof Error ? error.message : 'Failed to steer vibe' },
-        type: 'error'
+        data: {message: error instanceof Error ? error.message : 'Failed to steer vibe'},
+        type: 'error',
       })
     } finally {
       await sseWriter.close()
@@ -725,7 +714,7 @@ steerStreamRouter.post('/steer-stream', async c => {
   // Start processing without awaiting
   c.executionCtx.waitUntil(processSteer())
 
-  return new Response(readable, { headers })
+  return new Response(readable, {headers})
 })
 
 export default steerStreamRouter

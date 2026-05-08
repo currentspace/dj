@@ -3,19 +3,19 @@
  * Tests for Deezer + MusicBrainz BPM enrichment service
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {beforeEach, describe, expect, it, vi} from 'vitest'
 
 // Vitest 4: Create hoisted fetch mock BEFORE imports are evaluated
 const fetchMock = vi.hoisted(() => vi.fn())
 vi.stubGlobal('fetch', fetchMock)
 
-import { AudioEnrichmentService, type BPMEnrichment } from '../../services/AudioEnrichmentService'
-import { MockKVNamespace } from '../fixtures/cloudflare-mocks'
+import {AudioEnrichmentService, type BPMEnrichment} from '../../services/AudioEnrichmentService'
+import {MockKVNamespace} from '../fixtures/cloudflare-mocks'
 import {
   buildDeezerTrack,
   buildMusicBrainzRecording,
   buildMusicBrainzSearchResponse,
-  buildSpotifyTrack
+  buildSpotifyTrack,
 } from '../fixtures/test-builders'
 
 // Mock the rate-limited API clients
@@ -41,7 +41,7 @@ describe('AudioEnrichmentService', () => {
 
   beforeEach(() => {
     mockCache = new MockKVNamespace()
-     
+
     service = new AudioEnrichmentService(mockCache as any)
     // Reset the hoisted fetch mock for each test
     fetchMock.mockReset()
@@ -50,10 +50,10 @@ describe('AudioEnrichmentService', () => {
   describe('Direct ISRC Enrichment', () => {
     it('should query Deezer with ISRC when track has ISRC', async () => {
       const track = buildSpotifyTrack({
-        external_ids: { isrc: 'USRC12345678' },
+        external_ids: {isrc: 'USRC12345678'},
       })
 
-      const deezerTrack = buildDeezerTrack({ bpm: 120 })
+      const deezerTrack = buildDeezerTrack({bpm: 120})
 
       fetchMock.mockResolvedValue({
         json: () => Promise.resolve(deezerTrack),
@@ -62,20 +62,18 @@ describe('AudioEnrichmentService', () => {
 
       const result = await service.enrichTrack(track)
 
-      expect(fetchMock).toHaveBeenCalledWith(
-        expect.stringContaining('api.deezer.com/track/isrc:USRC12345678'),
-      )
+      expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('api.deezer.com/track/isrc:USRC12345678'))
       expect(result.bpm).toBe(120)
       expect(result.source).toBe('deezer')
     })
 
     it('should store valid BPM in result', async () => {
       const track = buildSpotifyTrack({
-        external_ids: { isrc: 'USRC12345678' },
+        external_ids: {isrc: 'USRC12345678'},
       })
 
       fetchMock.mockResolvedValue({
-        json: () => Promise.resolve(buildDeezerTrack({ bpm: 140 })),
+        json: () => Promise.resolve(buildDeezerTrack({bpm: 140})),
         ok: true,
       })
 
@@ -86,11 +84,11 @@ describe('AudioEnrichmentService', () => {
 
     it('should filter invalid BPM (null) to null', async () => {
       const track = buildSpotifyTrack({
-        external_ids: { isrc: 'USRC12345678' },
+        external_ids: {isrc: 'USRC12345678'},
       })
 
       fetchMock.mockResolvedValue({
-        json: () => Promise.resolve(buildDeezerTrack({ bpm: null })),
+        json: () => Promise.resolve(buildDeezerTrack({bpm: null})),
         ok: true,
       })
 
@@ -104,11 +102,11 @@ describe('AudioEnrichmentService', () => {
     // This test verifies current behavior (BPM=0 is passed through unchanged).
     it('should pass through BPM of 0 from Deezer', async () => {
       const track = buildSpotifyTrack({
-        external_ids: { isrc: 'USRC12345678' },
+        external_ids: {isrc: 'USRC12345678'},
       })
 
       fetchMock.mockResolvedValue({
-        json: () => Promise.resolve(buildDeezerTrack({ bpm: 0 })),
+        json: () => Promise.resolve(buildDeezerTrack({bpm: 0})),
         ok: true,
       })
 
@@ -120,7 +118,7 @@ describe('AudioEnrichmentService', () => {
 
     it('should handle network error gracefully', async () => {
       const track = buildSpotifyTrack({
-        external_ids: { isrc: 'USRC12345678' },
+        external_ids: {isrc: 'USRC12345678'},
       })
 
       fetchMock.mockRejectedValue(new Error('Network error'))
@@ -138,7 +136,7 @@ describe('AudioEnrichmentService', () => {
 
     it('should handle Deezer 404 gracefully', async () => {
       const track = buildSpotifyTrack({
-        external_ids: { isrc: 'USRC12345678' },
+        external_ids: {isrc: 'USRC12345678'},
       })
 
       fetchMock.mockResolvedValue({
@@ -159,11 +157,11 @@ describe('AudioEnrichmentService', () => {
 
     it('should track source as deezer', async () => {
       const track = buildSpotifyTrack({
-        external_ids: { isrc: 'USRC12345678' },
+        external_ids: {isrc: 'USRC12345678'},
       })
 
       fetchMock.mockResolvedValue({
-        json: () => Promise.resolve(buildDeezerTrack({ bpm: 120 })),
+        json: () => Promise.resolve(buildDeezerTrack({bpm: 120})),
         ok: true,
       })
 
@@ -174,7 +172,7 @@ describe('AudioEnrichmentService', () => {
 
     it('should validate enrichment structure', async () => {
       const track = buildSpotifyTrack({
-        external_ids: { isrc: 'USRC12345678' },
+        external_ids: {isrc: 'USRC12345678'},
       })
 
       fetchMock.mockResolvedValue({
@@ -205,14 +203,12 @@ describe('AudioEnrichmentService', () => {
   describe('ISRC Fallback via MusicBrainz', () => {
     it('should query MusicBrainz when track has no ISRC', async () => {
       const track = buildSpotifyTrack({
-        artists: [{ name: 'Queen' }],
+        artists: [{name: 'Queen'}],
         duration_ms: 354000,
         name: 'Bohemian Rhapsody',
       })
 
-      const mbResponse = buildMusicBrainzSearchResponse([
-        buildMusicBrainzRecording({ isrcs: ['GBUM71029604'] })
-      ])
+      const mbResponse = buildMusicBrainzSearchResponse([buildMusicBrainzRecording({isrcs: ['GBUM71029604']})])
 
       fetchMock
         // MusicBrainz call
@@ -222,7 +218,7 @@ describe('AudioEnrichmentService', () => {
         })
         // Deezer call with found ISRC
         .mockResolvedValueOnce({
-          json: () => Promise.resolve(buildDeezerTrack({ bpm: 72 })),
+          json: () => Promise.resolve(buildDeezerTrack({bpm: 72})),
           ok: true,
         })
 
@@ -240,14 +236,12 @@ describe('AudioEnrichmentService', () => {
 
     it('should query Deezer with ISRC found from MusicBrainz', async () => {
       const track = buildSpotifyTrack({
-        artists: [{ name: 'Queen' }],
+        artists: [{name: 'Queen'}],
         duration_ms: 354000,
         name: 'Bohemian Rhapsody',
       })
 
-      const mbResponse = buildMusicBrainzSearchResponse([
-        buildMusicBrainzRecording({ isrcs: ['GBUM71029604'] })
-      ])
+      const mbResponse = buildMusicBrainzSearchResponse([buildMusicBrainzRecording({isrcs: ['GBUM71029604']})])
 
       fetchMock
         .mockResolvedValueOnce({
@@ -255,28 +249,23 @@ describe('AudioEnrichmentService', () => {
           ok: true,
         })
         .mockResolvedValueOnce({
-          json: () => Promise.resolve(buildDeezerTrack({ bpm: 72 })),
+          json: () => Promise.resolve(buildDeezerTrack({bpm: 72})),
           ok: true,
         })
 
       const result = await service.enrichTrack(track)
 
-      expect(fetchMock).toHaveBeenNthCalledWith(
-        2,
-        expect.stringContaining('api.deezer.com/track/isrc:GBUM71029604'),
-      )
+      expect(fetchMock).toHaveBeenNthCalledWith(2, expect.stringContaining('api.deezer.com/track/isrc:GBUM71029604'))
       expect(result.bpm).toBe(72)
     })
 
     it('should track source as deezer-via-musicbrainz', async () => {
       const track = buildSpotifyTrack({
-        artists: [{ name: 'Queen' }],
+        artists: [{name: 'Queen'}],
         name: 'Bohemian Rhapsody',
       })
 
-      const mbResponse = buildMusicBrainzSearchResponse([
-        buildMusicBrainzRecording({ isrcs: ['GBUM71029604'] })
-      ])
+      const mbResponse = buildMusicBrainzSearchResponse([buildMusicBrainzRecording({isrcs: ['GBUM71029604']})])
 
       fetchMock
         .mockResolvedValueOnce({
@@ -284,7 +273,7 @@ describe('AudioEnrichmentService', () => {
           ok: true,
         })
         .mockResolvedValueOnce({
-          json: () => Promise.resolve(buildDeezerTrack({ bpm: 72 })),
+          json: () => Promise.resolve(buildDeezerTrack({bpm: 72})),
           ok: true,
         })
 
@@ -295,7 +284,7 @@ describe('AudioEnrichmentService', () => {
 
     it('should handle MusicBrainz no result gracefully', async () => {
       const track = buildSpotifyTrack({
-        artists: [{ name: 'Unknown Artist' }],
+        artists: [{name: 'Unknown Artist'}],
         name: 'Unknown Track',
       })
 
@@ -317,7 +306,7 @@ describe('AudioEnrichmentService', () => {
 
     it('should handle MusicBrainz error gracefully', async () => {
       const track = buildSpotifyTrack({
-        artists: [{ name: 'Test Artist' }],
+        artists: [{name: 'Test Artist'}],
         name: 'Test Track',
       })
 
@@ -339,12 +328,12 @@ describe('AudioEnrichmentService', () => {
 
     it('should use first ISRC when MusicBrainz returns multiple', async () => {
       const track = buildSpotifyTrack({
-        artists: [{ name: 'Test Artist' }],
+        artists: [{name: 'Test Artist'}],
         name: 'Test Track',
       })
 
       const mbResponse = buildMusicBrainzSearchResponse([
-        buildMusicBrainzRecording({ isrcs: ['ISRC1', 'ISRC2', 'ISRC3'] }),
+        buildMusicBrainzRecording({isrcs: ['ISRC1', 'ISRC2', 'ISRC3']}),
       ])
 
       fetchMock
@@ -353,27 +342,24 @@ describe('AudioEnrichmentService', () => {
           ok: true,
         })
         .mockResolvedValueOnce({
-          json: () => Promise.resolve(buildDeezerTrack({ bpm: 120 })),
+          json: () => Promise.resolve(buildDeezerTrack({bpm: 120})),
           ok: true,
         })
 
       await service.enrichTrack(track)
 
-      expect(fetchMock).toHaveBeenNthCalledWith(
-        2,
-        expect.stringContaining('api.deezer.com/track/isrc:ISRC1'),
-      )
+      expect(fetchMock).toHaveBeenNthCalledWith(2, expect.stringContaining('api.deezer.com/track/isrc:ISRC1'))
     })
   })
 
   describe('Cache Hit/Miss Logic', () => {
     it('should return cached result immediately on fresh hit', async () => {
-      const track = buildSpotifyTrack({ id: 'cached-track' })
+      const track = buildSpotifyTrack({id: 'cached-track'})
 
       await mockCache.put(
         'bpm:cached-track',
         JSON.stringify({
-          enrichment: { bpm: 120, gain: -8, rank: 500000, release_date: '2023-01-01', source: 'deezer' },
+          enrichment: {bpm: 120, gain: -8, rank: 500000, release_date: '2023-01-01', source: 'deezer'},
           fetched_at: new Date().toISOString(),
           is_miss: false,
           ttl: 90 * 24 * 60 * 60,
@@ -387,12 +373,12 @@ describe('AudioEnrichmentService', () => {
     })
 
     it('should return null without retry on recent miss (< 5min)', async () => {
-      const track = buildSpotifyTrack({ id: 'recent-miss' })
+      const track = buildSpotifyTrack({id: 'recent-miss'})
 
       await mockCache.put(
         'bpm:recent-miss',
         JSON.stringify({
-          enrichment: { bpm: null, gain: null, rank: null, release_date: null, source: null },
+          enrichment: {bpm: null, gain: null, rank: null, release_date: null, source: null},
           fetched_at: new Date(Date.now() - 2 * 60 * 1000).toISOString(), // 2 minutes ago
           is_miss: true,
           ttl: 5 * 60,
@@ -407,14 +393,14 @@ describe('AudioEnrichmentService', () => {
 
     it('should retry Deezer on old miss (> 5min)', async () => {
       const track = buildSpotifyTrack({
-        external_ids: { isrc: 'USRC12345678' },
+        external_ids: {isrc: 'USRC12345678'},
         id: 'old-miss',
       })
 
       await mockCache.put(
         'bpm:old-miss',
         JSON.stringify({
-          enrichment: { bpm: null, gain: null, rank: null, release_date: null, source: null },
+          enrichment: {bpm: null, gain: null, rank: null, release_date: null, source: null},
           fetched_at: new Date(Date.now() - 10 * 60 * 1000).toISOString(), // 10 minutes ago
           is_miss: true,
           ttl: 5 * 60,
@@ -422,7 +408,7 @@ describe('AudioEnrichmentService', () => {
       )
 
       fetchMock.mockResolvedValue({
-        json: () => Promise.resolve(buildDeezerTrack({ bpm: 128 })),
+        json: () => Promise.resolve(buildDeezerTrack({bpm: 128})),
         ok: true,
       })
 
@@ -434,12 +420,12 @@ describe('AudioEnrichmentService', () => {
 
     it('should query API on cache miss', async () => {
       const track = buildSpotifyTrack({
-        external_ids: { isrc: 'USRC12345678' },
+        external_ids: {isrc: 'USRC12345678'},
         id: 'new-track',
       })
 
       fetchMock.mockResolvedValue({
-        json: () => Promise.resolve(buildDeezerTrack({ bpm: 130 })),
+        json: () => Promise.resolve(buildDeezerTrack({bpm: 130})),
         ok: true,
       })
 
@@ -451,12 +437,12 @@ describe('AudioEnrichmentService', () => {
 
     it('should cache successful result with 90-day TTL', async () => {
       const track = buildSpotifyTrack({
-        external_ids: { isrc: 'USRC12345678' },
+        external_ids: {isrc: 'USRC12345678'},
         id: 'success-track',
       })
 
       fetchMock.mockResolvedValue({
-        json: () => Promise.resolve(buildDeezerTrack({ bpm: 140 })),
+        json: () => Promise.resolve(buildDeezerTrack({bpm: 140})),
         ok: true,
       })
 
@@ -464,13 +450,13 @@ describe('AudioEnrichmentService', () => {
 
       const cached = await mockCache.get('bpm:success-track', 'json')
       expect(cached).toBeTruthy()
-      expect((cached as { enrichment: BPMEnrichment }).enrichment.bpm).toBe(140)
-      expect((cached as { ttl: number }).ttl).toBe(90 * 24 * 60 * 60)
+      expect((cached as {enrichment: BPMEnrichment}).enrichment.bpm).toBe(140)
+      expect((cached as {ttl: number}).ttl).toBe(90 * 24 * 60 * 60)
     })
 
     it('should cache miss with 5-min TTL', async () => {
       const track = buildSpotifyTrack({
-        external_ids: { isrc: 'USRC12345678' },
+        external_ids: {isrc: 'USRC12345678'},
         id: 'miss-track',
       })
 
@@ -483,19 +469,19 @@ describe('AudioEnrichmentService', () => {
 
       const cached = await mockCache.get('bpm:miss-track', 'json')
       expect(cached).toBeTruthy()
-      expect((cached as { enrichment: BPMEnrichment }).enrichment.bpm).toBe(null)
-      expect((cached as { is_miss: boolean }).is_miss).toBe(true)
-      expect((cached as { ttl: number }).ttl).toBe(5 * 60)
+      expect((cached as {enrichment: BPMEnrichment}).enrichment.bpm).toBe(null)
+      expect((cached as {is_miss: boolean}).is_miss).toBe(true)
+      expect((cached as {ttl: number}).ttl).toBe(5 * 60)
     })
 
     it('should use cache key format bpm:{track_id}', async () => {
       const track = buildSpotifyTrack({
-        external_ids: { isrc: 'USRC12345678' },
+        external_ids: {isrc: 'USRC12345678'},
         id: 'specific-id',
       })
 
       fetchMock.mockResolvedValue({
-        json: () => Promise.resolve(buildDeezerTrack({ bpm: 120 })),
+        json: () => Promise.resolve(buildDeezerTrack({bpm: 120})),
         ok: true,
       })
 
@@ -507,12 +493,12 @@ describe('AudioEnrichmentService', () => {
 
     it('should handle concurrent requests for same track (cache)', async () => {
       const track = buildSpotifyTrack({
-        external_ids: { isrc: 'USRC12345678' },
+        external_ids: {isrc: 'USRC12345678'},
         id: 'concurrent-track',
       })
 
       fetchMock.mockResolvedValue({
-        json: () => Promise.resolve(buildDeezerTrack({ bpm: 120 })),
+        json: () => Promise.resolve(buildDeezerTrack({bpm: 120})),
         ok: true,
       })
 
@@ -530,13 +516,13 @@ describe('AudioEnrichmentService', () => {
   describe('Batch Processing', () => {
     it('should process multiple tracks in parallel', async () => {
       const tracks = [
-        buildSpotifyTrack({ external_ids: { isrc: 'ISRC1' }, id: 'track1' }),
-        buildSpotifyTrack({ external_ids: { isrc: 'ISRC2' }, id: 'track2' }),
-        buildSpotifyTrack({ external_ids: { isrc: 'ISRC3' }, id: 'track3' }),
+        buildSpotifyTrack({external_ids: {isrc: 'ISRC1'}, id: 'track1'}),
+        buildSpotifyTrack({external_ids: {isrc: 'ISRC2'}, id: 'track2'}),
+        buildSpotifyTrack({external_ids: {isrc: 'ISRC3'}, id: 'track3'}),
       ]
 
       fetchMock.mockResolvedValue({
-        json: () => Promise.resolve(buildDeezerTrack({ bpm: 120 })),
+        json: () => Promise.resolve(buildDeezerTrack({bpm: 120})),
         ok: true,
       })
 
@@ -550,12 +536,12 @@ describe('AudioEnrichmentService', () => {
 
     it('should key results by track ID', async () => {
       const tracks = [
-        buildSpotifyTrack({ external_ids: { isrc: 'ISRC1' }, id: 'unique-id-1' }),
-        buildSpotifyTrack({ external_ids: { isrc: 'ISRC2' }, id: 'unique-id-2' }),
+        buildSpotifyTrack({external_ids: {isrc: 'ISRC1'}, id: 'unique-id-1'}),
+        buildSpotifyTrack({external_ids: {isrc: 'ISRC2'}, id: 'unique-id-2'}),
       ]
 
       fetchMock.mockResolvedValue({
-        json: () => Promise.resolve(buildDeezerTrack({ bpm: 125 })),
+        json: () => Promise.resolve(buildDeezerTrack({bpm: 125})),
         ok: true,
       })
 
@@ -567,13 +553,13 @@ describe('AudioEnrichmentService', () => {
 
     it('should complete all tracks before return', async () => {
       const tracks = [
-        buildSpotifyTrack({ external_ids: { isrc: 'ISRC1' }, id: 'track1' }),
-        buildSpotifyTrack({ external_ids: { isrc: 'ISRC2' }, id: 'track2' }),
+        buildSpotifyTrack({external_ids: {isrc: 'ISRC1'}, id: 'track1'}),
+        buildSpotifyTrack({external_ids: {isrc: 'ISRC2'}, id: 'track2'}),
       ]
 
       fetchMock.mockImplementation(() =>
         Promise.resolve({
-          json: () => Promise.resolve(buildDeezerTrack({ bpm: 120 })),
+          json: () => Promise.resolve(buildDeezerTrack({bpm: 120})),
           ok: true,
         } as Response),
       )
@@ -587,9 +573,9 @@ describe('AudioEnrichmentService', () => {
 
     it('should not block other tracks on error', async () => {
       const tracks = [
-        buildSpotifyTrack({ external_ids: { isrc: 'ISRC1' }, id: 'track1' }),
-        buildSpotifyTrack({ external_ids: { isrc: 'ISRC2' }, id: 'track2' }),
-        buildSpotifyTrack({ external_ids: { isrc: 'ISRC3' }, id: 'track3' }),
+        buildSpotifyTrack({external_ids: {isrc: 'ISRC1'}, id: 'track1'}),
+        buildSpotifyTrack({external_ids: {isrc: 'ISRC2'}, id: 'track2'}),
+        buildSpotifyTrack({external_ids: {isrc: 'ISRC3'}, id: 'track3'}),
       ]
 
       let callCount = 0
@@ -603,7 +589,7 @@ describe('AudioEnrichmentService', () => {
           } as Response)
         }
         return Promise.resolve({
-          json: () => Promise.resolve(buildDeezerTrack({ bpm: 120 })),
+          json: () => Promise.resolve(buildDeezerTrack({bpm: 120})),
           ok: true,
         } as Response)
       })
@@ -631,12 +617,12 @@ describe('AudioEnrichmentService', () => {
     it('should track source accurately', async () => {
       // Direct Deezer
       const track1 = buildSpotifyTrack({
-        external_ids: { isrc: 'ISRC1' },
+        external_ids: {isrc: 'ISRC1'},
         id: 'track1',
       })
 
       fetchMock.mockResolvedValueOnce({
-        json: () => Promise.resolve(buildDeezerTrack({ bpm: 120 })),
+        json: () => Promise.resolve(buildDeezerTrack({bpm: 120})),
         ok: true,
       })
 
@@ -645,21 +631,18 @@ describe('AudioEnrichmentService', () => {
 
       // Via MusicBrainz
       const track2 = buildSpotifyTrack({
-        artists: [{ name: 'Test' }],
+        artists: [{name: 'Test'}],
         id: 'track2',
         name: 'Test',
       })
 
       fetchMock
         .mockResolvedValueOnce({
-          json: () =>
-            Promise.resolve(buildMusicBrainzSearchResponse([
-              buildMusicBrainzRecording({ isrcs: ['ISRC2'] })
-            ])),
+          json: () => Promise.resolve(buildMusicBrainzSearchResponse([buildMusicBrainzRecording({isrcs: ['ISRC2']})])),
           ok: true,
         })
         .mockResolvedValueOnce({
-          json: () => Promise.resolve(buildDeezerTrack({ bpm: 130 })),
+          json: () => Promise.resolve(buildDeezerTrack({bpm: 130})),
           ok: true,
         })
 
@@ -668,7 +651,7 @@ describe('AudioEnrichmentService', () => {
 
       // No source (miss)
       const track3 = buildSpotifyTrack({
-        external_ids: { isrc: 'ISRC3' },
+        external_ids: {isrc: 'ISRC3'},
         id: 'track3',
       })
 

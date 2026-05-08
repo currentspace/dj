@@ -52,10 +52,10 @@ const DECADE_ADJACENT_BONUS = 0.5
 /** Score weights for the composite score */
 const WEIGHTS = {
   artistDiversity: 0.15,
-  bpm: 0.30,
+  bpm: 0.3,
   energy: 0.25,
-  era: 0.10,
-  genre: 0.20,
+  era: 0.1,
+  genre: 0.2,
 } as const
 
 // ===== Scoring Functions =====
@@ -147,10 +147,7 @@ export function orderByTransition(
  * Score artist diversity — penalize repeating the same artist within a window.
  * Returns 0 if same artist in recent history, 1.0 otherwise.
  */
-export function scoreArtistDiversity(
-  artist: string,
-  recentArtists: string[],
-): number {
+export function scoreArtistDiversity(artist: string, recentArtists: string[]): number {
   const normalized = artist.toLowerCase().trim()
   const window = recentArtists.slice(-ARTIST_DIVERSITY_WINDOW)
 
@@ -185,10 +182,7 @@ export function scoreEnergyFlow(trackEnergy: number, arcTarget: number): number 
 /**
  * Score era proximity — bonus for tracks from the same or adjacent decades.
  */
-export function scoreEraProximity(
-  fromYear: null | number,
-  toYear: null | number,
-): number {
+export function scoreEraProximity(fromYear: null | number, toYear: null | number): number {
   if (fromYear === null || toYear === null) return 0.5 // neutral when unknown
 
   const fromDecade = Math.floor(fromYear / 10)

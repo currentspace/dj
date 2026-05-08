@@ -37,6 +37,7 @@ When a `<pack-name>` is provided:
 
 1. Verify the pack exists in `marvel/packs/<pack-name>/`.
 2. Read `pack.json` and display pack metadata:
+
    ```
    ## Pack: <name>
    Version: <version>
@@ -47,6 +48,7 @@ When a `<pack-name>` is provided:
    ```
 
 3. Read `lessons.jsonl` and display each lesson:
+
    ```
    ### Lesson 1: <title>
    - Category: <category>

@@ -59,32 +59,22 @@ export const UpdateBanner = memo(function UpdateBanner() {
             <button
               className="update-banner__btn update-banner__btn--dismiss"
               onClick={() => setShowForceOption(false)}
-              type="button"
-            >
+              type="button">
               Cancel
             </button>
-            <button
-              className="update-banner__btn update-banner__btn--force"
-              onClick={handleForceUpdate}
-              type="button"
-            >
+            <button className="update-banner__btn update-banner__btn--force" onClick={handleForceUpdate} type="button">
               Update Now (stops music)
             </button>
           </>
         ) : (
           <>
-            <button
-              className="update-banner__btn update-banner__btn--dismiss"
-              onClick={dismissUpdate}
-              type="button"
-            >
+            <button className="update-banner__btn update-banner__btn--dismiss" onClick={dismissUpdate} type="button">
               Later
             </button>
             <button
               className={`update-banner__btn update-banner__btn--update ${waitingForPlaybackStop ? 'update-banner__btn--waiting' : ''}`}
               onClick={handleUpdateClick}
-              type="button"
-            >
+              type="button">
               {updateButtonText}
             </button>
           </>

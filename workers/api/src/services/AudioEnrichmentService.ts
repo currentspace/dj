@@ -133,7 +133,9 @@ export class AudioEnrichmentService {
         // If this is a recent miss (less than 5 minutes old), return the miss
         const age = Date.now() - new Date(cached.fetched_at).getTime()
         if (cached.is_miss && age < this.missCacheTTL * 1000) {
-          getLogger()?.info(`[DeezerEnrichment] 🔄 Recent miss cached for ${track.id}, age: ${Math.round(age / 1000 / 60)}m`)
+          getLogger()?.info(
+            `[DeezerEnrichment] 🔄 Recent miss cached for ${track.id}, age: ${Math.round(age / 1000 / 60)}m`,
+          )
           return cached.enrichment
         }
 

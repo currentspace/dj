@@ -35,7 +35,7 @@ export function usePWAUpdate(): UsePWAUpdateReturn {
     waitingWorker: null,
   })
 
-  const isPlaying = usePlaybackStore((s) => s.playbackCore?.isPlaying ?? false)
+  const isPlaying = usePlaybackStore(s => s.playbackCore?.isPlaying ?? false)
 
   const registrationRef = useRef<null | ServiceWorkerRegistration>(null)
   const intervalRef = useRef<null | number>(null)
@@ -108,30 +108,33 @@ export function usePWAUpdate(): UsePWAUpdateReturn {
     waitingWorker.postMessage({type: 'SKIP_WAITING'})
   }, [])
 
-  const applyUpdate = useCallback((force = false) => {
-    const {waitingWorker} = state
-    if (!waitingWorker) {
-      console.warn('[PWA] No waiting worker to activate')
-      return
-    }
+  const applyUpdate = useCallback(
+    (force = false) => {
+      const {waitingWorker} = state
+      if (!waitingWorker) {
+        console.warn('[PWA] No waiting worker to activate')
+        return
+      }
 
-    if (force) {
-      console.log('[PWA] Force update requested')
-      performUpdate(waitingWorker)
-      return
-    }
+      if (force) {
+        console.log('[PWA] Force update requested')
+        performUpdate(waitingWorker)
+        return
+      }
 
-    const currentlyPlaying = usePlaybackStore.getState().playbackCore?.isPlaying ?? false
+      const currentlyPlaying = usePlaybackStore.getState().playbackCore?.isPlaying ?? false
 
-    if (currentlyPlaying) {
-      console.log('[PWA] Music is playing, will update when playback stops')
-      pendingUpdateRef.current = true
-      setState(prev => ({...prev, waitingForPlaybackStop: true}))
-    } else {
-      console.log('[PWA] No playback active, updating now')
-      performUpdate(waitingWorker)
-    }
-  }, [state, performUpdate])
+      if (currentlyPlaying) {
+        console.log('[PWA] Music is playing, will update when playback stops')
+        pendingUpdateRef.current = true
+        setState(prev => ({...prev, waitingForPlaybackStop: true}))
+      } else {
+        console.log('[PWA] No playback active, updating now')
+        performUpdate(waitingWorker)
+      }
+    },
+    [state, performUpdate],
+  )
 
   const dismissUpdate = useCallback(() => {
     dismissedRef.current = true

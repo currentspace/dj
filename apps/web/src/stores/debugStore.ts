@@ -45,14 +45,14 @@ const MAX_EVENTS = 500
 
 export const useDebugStore = create<DebugStoreState>()(
   subscribeWithSelector((set, get) => ({
-    addEvent: (event) => {
+    addEvent: event => {
       const fullEvent: DebugEvent = {
         ...event,
         id: crypto.randomUUID(),
         timestamp: Date.now(),
       }
 
-      set((state) => {
+      set(state => {
         const events = [...state.events, fullEvent]
         // Circular buffer: trim from front if over limit
         if (events.length > MAX_EVENTS) {
@@ -78,14 +78,14 @@ export const useDebugStore = create<DebugStoreState>()(
 
     isOpen: false,
 
-    setFilter: (filter) => {
+    setFilter: filter => {
       // Avoid unnecessary re-renders
       if (get().filter === filter) return
       set({filter})
     },
 
-    toggle: () => set((s) => ({isOpen: !s.isOpen})),
-  }))
+    toggle: () => set(s => ({isOpen: !s.isOpen})),
+  })),
 )
 
 // =============================================================================

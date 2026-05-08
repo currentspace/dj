@@ -39,7 +39,7 @@ export function useSpotifyAuth(): UseSpotifyAuthReturn {
 
   // Use useShallow for the object selection
   const state = useAuthStore(
-    useShallow((s) => ({
+    useShallow(s => ({
       clearError: s.clearError,
       error: s.error,
       isAuthenticated: s.isAuthenticated,
@@ -49,7 +49,7 @@ export function useSpotifyAuth(): UseSpotifyAuthReturn {
       logout: s.logout,
       token: s.token,
       validateToken: s.validateToken,
-    }))
+    })),
   )
 
   // Direct state sync: Process OAuth callback on first render (React 19 pattern)
@@ -63,7 +63,9 @@ export function useSpotifyAuth(): UseSpotifyAuthReturn {
     // into the store by validateToken itself.
     const {isValidating: currentIsValidating, token: currentToken, validateToken} = useAuthStore.getState()
     if (currentToken && !currentIsValidating) {
-      queueMicrotask(() => { void validateToken() })
+      queueMicrotask(() => {
+        void validateToken()
+      })
     }
   }
 

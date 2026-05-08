@@ -245,9 +245,7 @@ export class ChatPage extends BasePage {
    * Assert assistant message contains text
    */
   async assertAssistantMessageContains(text: string) {
-    await expect(
-      this.page.locator(this.assistantMessage).last().locator(this.messageContent),
-    ).toContainText(text)
+    await expect(this.page.locator(this.assistantMessage).last().locator(this.messageContent)).toContainText(text)
   }
 
   /**

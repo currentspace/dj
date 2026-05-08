@@ -5,6 +5,7 @@
 **Created:** 2026-02-27
 
 **Packs Required:**
+
 - pack:dj-cloudflare-workers@1.0.0
 - pack:dj-spotify-integration@1.0.0
 - pack:dj-llm-tools@1.0.0
@@ -28,6 +29,7 @@ Make the DJ app autonomously keep music playing with smooth transitions, startin
 ## 3. Current State (Code-Verified)
 
 ### What works
+
 - 45 endpoints, all fully implemented and deployed
 - Player-stream SSE delta protocol: 1Hz polling, ~20-byte ticks, track change detection
 - SuggestionEngine: Claude Sonnet 4.6 generates track names → Spotify search resolves URIs
@@ -38,30 +40,36 @@ Make the DJ app autonomously keep music playing with smooth transitions, startin
 ### What's broken (with evidence)
 
 **1. autoFillQueue is always `await`ed — never background**
+
 - `mix-openapi.ts:339`: `await autoFillQueue(c.env, token, session, sessionService)` in start handler
 - `mix-openapi.ts:1085`: `await autoFillQueue(...)` in track-played handler
 - Every request hangs 8-15s while Claude thinks + Spotify searches per track
 
 **2. No server-side track completion detection**
+
 - `player-stream.ts:326-331`: sends `track` SSE event when trackChanged() is true, but does nothing else
 - `NowPlaying.tsx:76-99`: frontend must call `mixApiClient.notifyTrackPlayed()` — if tab is closed, queue stops refilling
 
 **3. seedPlaylistId is accepted but ignored**
+
 - `mix-openapi.ts:315`: `// Note: seedPlaylistId will be used in future versions`
 - Session starts with default vibe (energy 5, BPM 80-140, no genres, no mood)
 - SuggestionEngine has no context about what music the user actually likes
 
 **4. TransitionScorer exists but is not wired in**
+
 - `TransitionScorer.ts`: 33 passing tests, full BPM/energy/genre/artist/era scoring
 - `SuggestionEngine.ts:189`: still uses basic `scoreTransition()` method that only checks BPM diff
 - Track ordering in autoFillQueue is insertion-order, not transition-optimized
 
 **5. Spotify queue drift — no reconciliation**
+
 - `mix-openapi.ts:266-280`: Spotify queue add is fire-and-forget in try/catch
 - `player-stream.ts`: never checks Spotify queue depth
 - If user skips via Spotify app, DJ backend doesn't know
 
 **6. MixSession placeholder fields are never written**
+
 - `conversation: []` — initialized, never populated by any code path
 - `signals: []` — initialized, never populated
 - `plan: null` — initialized, never populated
@@ -100,6 +108,7 @@ if (trackChanged(prev.track, curr.track) && prev.track) {
 ```
 
 New function `handleTrackTransition()`:
+
 1. Get session from `MIX_SESSIONS` KV
 2. If no session, skip (user isn't in DJ mode)
 3. Find previous track in queue, move to history
@@ -120,27 +129,26 @@ New function `handleTrackTransition()`:
 **File:** `workers/api/src/routes/mix-openapi.ts`
 
 **Change:** Split autoFillQueue into two modes:
+
 - **Blocking mode** (existing): Used only on session start where user expects to see tracks
 - **Background mode** (new): Used for all other refills — returns immediately, processes via `waitUntil()`
 
 ```typescript
-async function autoFillQueueBackground(
-  ctx: ExecutionContext,
-  env: Env,
-  token: string,
-  userId: string,
-): Promise<void> {
-  ctx.waitUntil((async () => {
-    const sessionService = new MixSessionService(env.MIX_SESSIONS)
-    const session = await sessionService.getSession(userId)
-    if (!session) return
-    if (session.queue.length >= TARGET_QUEUE_SIZE) return
-    await autoFillQueue(env, token, session, sessionService)
-  })())
+async function autoFillQueueBackground(ctx: ExecutionContext, env: Env, token: string, userId: string): Promise<void> {
+  ctx.waitUntil(
+    (async () => {
+      const sessionService = new MixSessionService(env.MIX_SESSIONS)
+      const session = await sessionService.getSession(userId)
+      if (!session) return
+      if (session.queue.length >= TARGET_QUEUE_SIZE) return
+      await autoFillQueue(env, token, session, sessionService)
+    })(),
+  )
 }
 ```
 
 **Update callers:**
+
 - `track-played` handler (line 1085): change from `await autoFillQueue(...)` to `autoFillQueueBackground(c.executionCtx, ...)`
 - `getCurrentMix` handler (line 375-384): same change
 - `preferences` handler (line 1202): same change
@@ -157,7 +165,7 @@ async function autoFillQueueBackground(
 if (pollCount % 10 === 0 && env.MIX_SESSIONS) {
   const session = await sessionService.getSession(userId)
   if (session && session.queue.length < 3) {
-    writeSSE(writer, 'queue_low', { depth: session.queue.length, seq: seq++ })
+    writeSSE(writer, 'queue_low', {depth: session.queue.length, seq: seq++})
     ctx.waitUntil(autoFillQueueBackground(ctx, env, token, userId))
   }
 }
@@ -182,12 +190,13 @@ This is the "belt and suspenders" — even if the track-played handler failed, t
 5. Pass seed context to SuggestionEngine for initial fill
 
 New helper function:
+
 ```typescript
 async function extractQuickVibe(
   token: string,
   playlistId: string,
   env: Env,
-): Promise<{ vibe: Partial<VibeProfile>, fallbackPool: string[] }>
+): Promise<{vibe: Partial<VibeProfile>; fallbackPool: string[]}>
 ```
 
 This uses ONLY cached enrichment data (no new Deezer/Last.fm API calls on session start). If cache is cold, uses Spotify-only data (genres from artists, popularity).
@@ -219,6 +228,7 @@ async generateSuggestions(
 ```
 
 When seedTracks are provided and history is empty, include them in the AI prompt:
+
 ```
 "The user's playlist contains tracks like: [seed tracks]. Suggest tracks that would flow well with this collection."
 ```
@@ -236,14 +246,17 @@ This replaces the current cold-start where AI has only the default vibe (energy 
 **Change:** Replace the basic `scoreTransition()` method (lines ~350-360) with the real TransitionScorer:
 
 ```typescript
-import { scoreBpmCompatibility, scoreEnergyFlow, scoreGenreBridge } from './TransitionScorer'
+import {scoreBpmCompatibility, scoreEnergyFlow, scoreGenreBridge} from './TransitionScorer'
 ```
 
 In `generateContextAwareSuggestions()` (line 189), replace:
+
 ```typescript
-const transitionScore = lastTrack ? this.scoreTransition(lastTrack, { bpm: enrichment.bpm, energy: null }) : 50
+const transitionScore = lastTrack ? this.scoreTransition(lastTrack, {bpm: enrichment.bpm, energy: null}) : 50
 ```
+
 With:
+
 ```typescript
 const bpmScore = lastTrack ? scoreBpmCompatibility(lastTrack.bpm, enrichment.bpm) : 0.5
 const energyScore = scoreEnergyFlow(enrichment.energy ?? 0.5, session.vibe.energyLevel / 10)
@@ -262,6 +275,7 @@ Current: `generateSuggestions(session, 8)` → 1 Claude call → 8 track names �
 New: Same, but cache the plan. When `generateSuggestions()` is called again and the vibe hasn't changed, return from cache instead of calling Claude again.
 
 Add to SuggestionEngine:
+
 ```typescript
 private cachedPlan: { vibeHash: string, suggestions: Suggestion[], usedCount: number } | null = null
 ```
@@ -279,7 +293,7 @@ This reduces Claude API calls from ~1 per refill to ~1 per vibe change.
 ```typescript
 // If AI failed or returned no tracks, use fallback pool
 if (addedCount === 0 && session.fallbackPool.length > 0) {
-  const fallbackUri = session.fallbackPool.shift()!  // pop first
+  const fallbackUri = session.fallbackPool.shift()! // pop first
   // Fetch track details from Spotify
   const trackDetails = await fetchTrackDetails(token, fallbackUri)
   if (trackDetails) {
@@ -294,10 +308,11 @@ if (addedCount === 0 && session.fallbackPool.length > 0) {
 ```
 
 Also add a timeout wrapper around the SuggestionEngine call:
+
 ```typescript
 const suggestions = await Promise.race([
   suggestionEngine.generateSuggestions(session, tracksNeeded + 3),
-  new Promise<Suggestion[]>(resolve => setTimeout(() => resolve([]), 8000))  // 8s timeout
+  new Promise<Suggestion[]>(resolve => setTimeout(() => resolve([]), 8000)), // 8s timeout
 ])
 ```
 
@@ -312,6 +327,7 @@ If Claude takes longer than 8 seconds, fall back to the seed playlist tracks.
 Already handled by Phase 1a — `handleTrackTransition()` classifies signals and stores them in `session.signals`.
 
 Signal classification:
+
 ```typescript
 function classifySignal(listenDurationMs: number, trackDurationMs: number): 'completed' | 'skipped' | 'partial' {
   const ratio = listenDurationMs / trackDurationMs
@@ -326,6 +342,7 @@ function classifySignal(listenDurationMs: number, trackDurationMs: number): 'com
 **File:** `workers/api/src/services/MixSessionService.ts`
 
 New method:
+
 ```typescript
 updateTasteFromSignal(session: MixSession, signal: ListenerSignal, trackTags: string[], trackArtist: string): void {
   if (!session.tasteModel) {
@@ -362,7 +379,7 @@ In `handleTrackTransition()`, after updating taste model:
 const recentSignals = session.signals.slice(-5)
 const consecutiveSkips = recentSignals.reduceRight((count, s) => {
   if (s.type === 'skipped') return count + 1
-  return -1  // break
+  return -1 // break
 }, 0)
 
 if (consecutiveSkips >= 3) {
@@ -381,9 +398,11 @@ When building the AI prompt, include taste signals:
 ```typescript
 if (session.tasteModel) {
   const likedGenres = Object.entries(session.tasteModel.genreWeights)
-    .filter(([_, w]) => w > 0.2).map(([g]) => g)
+    .filter(([_, w]) => w > 0.2)
+    .map(([g]) => g)
   const dislikedGenres = Object.entries(session.tasteModel.genreWeights)
-    .filter(([_, w]) => w < -0.2).map(([g]) => g)
+    .filter(([_, w]) => w < -0.2)
+    .map(([g]) => g)
 
   if (likedGenres.length > 0) prompt += `\nThe listener has been enjoying: ${likedGenres.join(', ')}`
   if (dislikedGenres.length > 0) prompt += `\nAvoid tracks with these vibes: ${dislikedGenres.join(', ')}`
@@ -395,19 +414,21 @@ This is a lightweight change — just appending to the existing prompt, no new A
 ## 6. Files Changed
 
 ### New Files
+
 None — all changes are to existing files.
 
 ### Modified Files
 
-| File | Change | Complexity |
-|------|--------|------------|
-| `workers/api/src/routes/player-stream.ts` | Add handleTrackTransition(), queue_low monitoring, trackStartTimestamp | High |
-| `workers/api/src/routes/mix-openapi.ts` | Wire seedPlaylistId, add extractQuickVibe(), autoFillQueueBackground(), fallback pool usage, timeout wrapper | High |
-| `workers/api/src/services/SuggestionEngine.ts` | Wire TransitionScorer, add seedTracks param, add suggestion caching, add taste model context to prompt | Medium |
-| `workers/api/src/services/MixSessionService.ts` | Add updateTasteFromSignal() | Low |
-| `workers/api/src/lib/ai-prompts.ts` | Update prompts for seed context and taste signals | Low |
+| File                                            | Change                                                                                                       | Complexity |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ---------- |
+| `workers/api/src/routes/player-stream.ts`       | Add handleTrackTransition(), queue_low monitoring, trackStartTimestamp                                       | High       |
+| `workers/api/src/routes/mix-openapi.ts`         | Wire seedPlaylistId, add extractQuickVibe(), autoFillQueueBackground(), fallback pool usage, timeout wrapper | High       |
+| `workers/api/src/services/SuggestionEngine.ts`  | Wire TransitionScorer, add seedTracks param, add suggestion caching, add taste model context to prompt       | Medium     |
+| `workers/api/src/services/MixSessionService.ts` | Add updateTasteFromSignal()                                                                                  | Low        |
+| `workers/api/src/lib/ai-prompts.ts`             | Update prompts for seed context and taste signals                                                            | Low        |
 
 ### Files NOT Changed
+
 - `TransitionScorer.ts` — already built and tested
 - All frontend files — changes are backend-only
 - Enrichment services — work fine as-is
@@ -416,6 +437,7 @@ None — all changes are to existing files.
 ## 7. Acceptance Criteria
 
 ### Phase 1: Server-Side DJ Brain
+
 - [ ] Player-stream processes track transitions without frontend cooperation
 - [ ] Closing the browser tab does NOT stop queue refilling (server handles it)
 - [ ] `queue_low` event emitted when queue drops below 3
@@ -424,12 +446,14 @@ None — all changes are to existing files.
 - [ ] No double-processing when both frontend and server detect same track change
 
 ### Phase 2: Seed Playlist Wiring
+
 - [ ] `seedPlaylistId` is read and used to set initial vibe (genres, energy, BPM range)
 - [ ] `fallbackPool` populated with top 10 seed playlist tracks
 - [ ] Without seedPlaylistId: vibe extracted from user's top tracks + recent plays
 - [ ] Initial suggestions reflect seed playlist style, not default vibe
 
 ### Phase 3: Better Suggestions
+
 - [ ] TransitionScorer used for suggestion ordering (BPM + energy)
 - [ ] Suggestion cache prevents redundant Claude calls when vibe unchanged
 - [ ] 8-second timeout on Claude → fallback pool used if slow
@@ -437,6 +461,7 @@ None — all changes are to existing files.
 - [ ] Music does not stop during a 30-minute unattended session
 
 ### Phase 4: Skip Detection
+
 - [ ] `session.signals` populated with completed/skipped/partial for each track
 - [ ] `session.tasteModel` weights updated on each signal
 - [ ] 3 consecutive skips triggers queue clear + refill
@@ -452,6 +477,7 @@ pnpm build
 ```
 
 Manual tests:
+
 1. Start session with seed playlist → verify vibe matches playlist style
 2. Start session without seed → verify vibe from user's top tracks
 3. Play 3 tracks → close browser tab → reopen after 5 minutes → queue should be full
@@ -462,6 +488,7 @@ Manual tests:
 ## 9. Rollback Plan
 
 Each phase is independently revertable:
+
 - **Phase 1:** `handleTrackTransition()` has an early-return guard for missing session. Remove the call in `sendDeltas()` to revert.
 - **Phase 2:** `extractQuickVibe()` returns default vibe on any error. Remove the call to revert to default vibe.
 - **Phase 3:** TransitionScorer import can be replaced with the original `scoreTransition()` method. Cache has TTL, clears naturally.

@@ -301,19 +301,11 @@ describe('Claude Integration', () => {
 
 ```typescript
 import {describe, it, expect} from 'vitest'
-import {
-  EnrichmentResultBuilder,
-  LastFmSignalsBuilder,
-  buildPlaylistAnalysis,
-} from './fixtures/test-builders'
+import {EnrichmentResultBuilder, LastFmSignalsBuilder, buildPlaylistAnalysis} from './fixtures/test-builders'
 
 describe('Data Builders', () => {
   it('should build enrichment result', () => {
-    const result = new EnrichmentResultBuilder()
-      .withBPM(140)
-      .withGain(-10)
-      .withSource('deezer')
-      .build()
+    const result = new EnrichmentResultBuilder().withBPM(140).withGain(-10).withSource('deezer').build()
 
     expect(result.bpm).toBe(140)
     expect(result.gain).toBe(-10)
@@ -459,10 +451,7 @@ describe('Faker Utilities', () => {
 
 ```typescript
 // Good - flexible and maintainable
-const result = new EnrichmentResultBuilder()
-  .withBPM(120)
-  .withGain(-8.5)
-  .build()
+const result = new EnrichmentResultBuilder().withBPM(120).withGain(-8.5).build()
 
 // Less good - harder to maintain
 const result = {
@@ -630,10 +619,10 @@ expect(queue.verifyRateLimit(0.2)).toBe(true) // 20% tolerance
 
 ```typescript
 // Correct
-const data = await kv.get('key', 'json') as MyType
+const data = (await kv.get('key', 'json')) as MyType
 
 // Incorrect
-const data = await kv.get('key') as MyType
+const data = (await kv.get('key')) as MyType
 ```
 
 ## Contributing

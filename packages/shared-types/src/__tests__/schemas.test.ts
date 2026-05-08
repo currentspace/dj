@@ -6,12 +6,7 @@
 import {describe, expect, it} from 'vitest'
 import {z} from 'zod'
 
-import {
-  ChatRequestSchema,
-  PlaylistSchema,
-  SavePlaylistResponseSchema,
-  TrackSchema,
-} from '../schemas/api-schemas'
+import {ChatRequestSchema, PlaylistSchema, SavePlaylistResponseSchema, TrackSchema} from '../schemas/api-schemas'
 import {
   DeezerTrackSchema,
   EnrichedTrackDataSchema,

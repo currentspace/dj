@@ -128,7 +128,7 @@ export class MockRateLimitedQueue<T> {
  */
 export class MockRequestOrchestrator {
   readonly rate: number
-  private requests: {timestamp: number; url: string;}[] = []
+  private requests: {timestamp: number; url: string}[] = []
 
   constructor(rate = 40) {
     this.rate = rate
@@ -173,7 +173,7 @@ export class MockRequestOrchestrator {
   /**
    * Get request history (for testing)
    */
-  getRequests(): {timestamp: number; url: string;}[] {
+  getRequests(): {timestamp: number; url: string}[] {
     return [...this.requests]
   }
 
@@ -201,19 +201,14 @@ export function createDelayedTask<T>(value: T, delayMs = 10): () => Promise<T> {
 /**
  * Create a batch of delayed tasks
  */
-export function createDelayedTaskBatch<T>(
-  values: T[],
-  delayMs = 10,
-): (() => Promise<T>)[] {
+export function createDelayedTaskBatch<T>(values: T[], delayMs = 10): (() => Promise<T>)[] {
   return values.map(value => createDelayedTask(value, delayMs))
 }
 
 /**
  * Create a mock RateLimitedQueue with preset options
  */
-export function createMockRateLimitedQueue<T>(
-  options?: QueueOptions,
-): MockRateLimitedQueue<T> {
+export function createMockRateLimitedQueue<T>(options?: QueueOptions): MockRateLimitedQueue<T> {
   return new MockRateLimitedQueue<T>(options)
 }
 

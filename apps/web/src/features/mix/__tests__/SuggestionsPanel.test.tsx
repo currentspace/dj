@@ -70,10 +70,7 @@ describe('SuggestionsPanel', () => {
 
   it('optimistically removes a suggestion after add-to-queue succeeds', async () => {
     const user = userEvent.setup()
-    const suggestions = [
-      suggestion({name: 'Track A', trackId: 'a'}),
-      suggestion({name: 'Track B', trackId: 'b'}),
-    ]
+    const suggestions = [suggestion({name: 'Track A', trackId: 'a'}), suggestion({name: 'Track B', trackId: 'b'})]
     renderWithQueryClient(<SuggestionsPanel isLoading={false} suggestions={suggestions} />)
     expect(screen.getByText('Track A')).toBeInTheDocument()
 

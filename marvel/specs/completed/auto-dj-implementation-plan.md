@@ -6,19 +6,19 @@ Modernize the DJ app into an autonomous DJ through 5 steps: dependency/model upg
 
 ## Decisions (from interactive review)
 
-| Decision | Choice | Rationale |
-|----------|--------|-----------|
-| ESLint upgrade | **Pin to ESLint 9**, upgrade later | Avoid config churn; defer major lint migration |
-| Model strategy | **Sonnet 4.6 everywhere** | Maximum capability; Haiku 4.5 is already latest Haiku |
-| Arc selection | **User picks from menu** | Visual cards with energy curves at session start |
-| Fallback pool | **Aggressive (10 tracks)** | Belt and suspenders; Spotify queue API unreliable |
-| MCP documentation | **Remove entirely** | No MCP code exists; clean break |
-| Chat-only mode | **Remove entirely** | All interaction through DJ page |
-| "Surprise me" | **User's top tracks + recent listens** | Personalized via Spotify /me/top/tracks + /me/player/recently-played |
-| Debug page | **Keep behind ?debug=true** | Zero prod cost, useful for debugging |
-| Zod upgrade | **Upgrade to 4.3.6** | Latest minor across all 7 packages |
-| Arc UX | **Visual cards with energy curves** | Mini SVG graphs showing energy shape per arc |
-| PR strategy | **Single mega PR** | Everything in one PR; fastest to merge |
+| Decision          | Choice                                 | Rationale                                                            |
+| ----------------- | -------------------------------------- | -------------------------------------------------------------------- |
+| ESLint upgrade    | **Pin to ESLint 9**, upgrade later     | Avoid config churn; defer major lint migration                       |
+| Model strategy    | **Sonnet 4.6 everywhere**              | Maximum capability; Haiku 4.5 is already latest Haiku                |
+| Arc selection     | **User picks from menu**               | Visual cards with energy curves at session start                     |
+| Fallback pool     | **Aggressive (10 tracks)**             | Belt and suspenders; Spotify queue API unreliable                    |
+| MCP documentation | **Remove entirely**                    | No MCP code exists; clean break                                      |
+| Chat-only mode    | **Remove entirely**                    | All interaction through DJ page                                      |
+| "Surprise me"     | **User's top tracks + recent listens** | Personalized via Spotify /me/top/tracks + /me/player/recently-played |
+| Debug page        | **Keep behind ?debug=true**            | Zero prod cost, useful for debugging                                 |
+| Zod upgrade       | **Upgrade to 4.3.6**                   | Latest minor across all 7 packages                                   |
+| Arc UX            | **Visual cards with energy curves**    | Mini SVG graphs showing energy shape per arc                         |
+| PR strategy       | **Single mega PR**                     | Everything in one PR; fastest to merge                               |
 
 ## Risk Assessment
 
@@ -40,36 +40,37 @@ Update packages staying within the same major version.
 
 **Files:** All `package.json` files across the monorepo
 
-| Package | From | To | Scope |
-|---------|------|----|-------|
-| react | 19.2.0 | 19.2.4 | @dj/web |
-| react-dom | 19.2.0 | 19.2.4 | @dj/web |
-| @types/react | 19.2.7 | 19.2.14 | @dj/web (dev) |
-| @types/react-dom | 19.2.3 | latest | @dj/web (dev) |
-| @ark-ui/react | 5.29.1 | 5.34.0 | @dj/web |
-| zustand | 5.0.8 | ^5.0.11 | @dj/web (**fix missing `^`**) |
-| hono | 4.10.7 | 4.12.3 | api-client, api-contracts, api-worker, webhook-worker |
-| @hono/zod-openapi | 1.1.5 | 1.2.2 | api-contracts, api-worker |
-| @hono/swagger-ui | 0.5.2 | 0.5.3 | api-worker |
-| zod | 4.1.13 | 4.3.6 | ALL 7 packages |
-| @anthropic-ai/sdk | 0.71.0 | 0.78.0 | api-worker |
-| vitest | 4.0.14 | 4.0.18 | ALL (root, shared-types, web, api-worker, webhook-worker) |
-| @vitest/ui | 4.0.14 | 4.0.18 | root (dev) |
-| vite | 7.2.4 | 7.3.1 | @dj/web (dev) |
-| @vitejs/plugin-react | 5.1.1 | 5.1.4 | @dj/web (dev) |
-| wrangler | 4.51.0 | 4.69.0 | api-worker, webhook-worker (dev) |
-| @cloudflare/workers-types | 4.20251126.0 | 4.20260226.1 | api-worker, webhook-worker (dev) |
-| @playwright/test | 1.57.0 | 1.58.2 | @dj/web (dev) |
-| prettier | 3.6.2 | 3.8.1 | root (dev) |
-| typescript-eslint | 8.48.0 | 8.56.1 | root (dev) |
-| @testing-library/react | 16.3.0 | 16.3.2 | root, @dj/web (dev) |
-| dotenv | 17.2.3 | 17.3.1 | api-worker (dev) |
-| happy-dom | 20.0.10 | 20.7.0 | root (dev) |
-| zod-to-json-schema | 3.25.0 | 3.25.1 | api-worker (dev) |
-| nanoid | 5.1.6 | latest 5.x | api-worker |
-| eslint-plugin-react-refresh | 0.4.24 | 0.5.2 | root (dev) |
+| Package                     | From         | To           | Scope                                                     |
+| --------------------------- | ------------ | ------------ | --------------------------------------------------------- |
+| react                       | 19.2.0       | 19.2.4       | @dj/web                                                   |
+| react-dom                   | 19.2.0       | 19.2.4       | @dj/web                                                   |
+| @types/react                | 19.2.7       | 19.2.14      | @dj/web (dev)                                             |
+| @types/react-dom            | 19.2.3       | latest       | @dj/web (dev)                                             |
+| @ark-ui/react               | 5.29.1       | 5.34.0       | @dj/web                                                   |
+| zustand                     | 5.0.8        | ^5.0.11      | @dj/web (**fix missing `^`**)                             |
+| hono                        | 4.10.7       | 4.12.3       | api-client, api-contracts, api-worker, webhook-worker     |
+| @hono/zod-openapi           | 1.1.5        | 1.2.2        | api-contracts, api-worker                                 |
+| @hono/swagger-ui            | 0.5.2        | 0.5.3        | api-worker                                                |
+| zod                         | 4.1.13       | 4.3.6        | ALL 7 packages                                            |
+| @anthropic-ai/sdk           | 0.71.0       | 0.78.0       | api-worker                                                |
+| vitest                      | 4.0.14       | 4.0.18       | ALL (root, shared-types, web, api-worker, webhook-worker) |
+| @vitest/ui                  | 4.0.14       | 4.0.18       | root (dev)                                                |
+| vite                        | 7.2.4        | 7.3.1        | @dj/web (dev)                                             |
+| @vitejs/plugin-react        | 5.1.1        | 5.1.4        | @dj/web (dev)                                             |
+| wrangler                    | 4.51.0       | 4.69.0       | api-worker, webhook-worker (dev)                          |
+| @cloudflare/workers-types   | 4.20251126.0 | 4.20260226.1 | api-worker, webhook-worker (dev)                          |
+| @playwright/test            | 1.57.0       | 1.58.2       | @dj/web (dev)                                             |
+| prettier                    | 3.6.2        | 3.8.1        | root (dev)                                                |
+| typescript-eslint           | 8.48.0       | 8.56.1       | root (dev)                                                |
+| @testing-library/react      | 16.3.0       | 16.3.2       | root, @dj/web (dev)                                       |
+| dotenv                      | 17.2.3       | 17.3.1       | api-worker (dev)                                          |
+| happy-dom                   | 20.0.10      | 20.7.0       | root (dev)                                                |
+| zod-to-json-schema          | 3.25.0       | 3.25.1       | api-worker (dev)                                          |
+| nanoid                      | 5.1.6        | latest 5.x   | api-worker                                                |
+| eslint-plugin-react-refresh | 0.4.24       | 0.5.2        | root (dev)                                                |
 
 **NOT upgrading (ESLint 10 deferred):**
+
 - eslint: stays at ^9.39.1
 - @eslint/js: stays at ^9.39.1
 - eslint-plugin-perfectionist: stays at ^4.15.1
@@ -86,15 +87,16 @@ Upgrade all 14 hardcoded model references. Centralize to `constants.ts`.
 
 **Model mapping (Sonnet 4.6 everywhere):**
 
-| Current | Updated | Count |
-|---------|---------|-------|
-| `claude-sonnet-4-5-20250929` | `claude-sonnet-4-6-20260219` | 6 refs |
-| `claude-sonnet-4-20250514` | `claude-sonnet-4-6-20260219` | 1 ref |
-| `claude-haiku-4-20250929` | `claude-haiku-4-5-20251001` | 2 refs |
-| `claude-haiku-4-5-20251001` | `claude-haiku-4-5-20251001` | 1 ref (no change) |
-| Test fixtures | Updated to match | 4 refs |
+| Current                      | Updated                      | Count             |
+| ---------------------------- | ---------------------------- | ----------------- |
+| `claude-sonnet-4-5-20250929` | `claude-sonnet-4-6-20260219` | 6 refs            |
+| `claude-sonnet-4-20250514`   | `claude-sonnet-4-6-20260219` | 1 ref             |
+| `claude-haiku-4-20250929`    | `claude-haiku-4-5-20251001`  | 2 refs            |
+| `claude-haiku-4-5-20251001`  | `claude-haiku-4-5-20251001`  | 1 ref (no change) |
+| Test fixtures                | Updated to match             | 4 refs            |
 
 **Changes to `workers/api/src/constants.ts`:**
+
 ```typescript
 export const LLM = {
   MODEL: 'claude-sonnet-4-6-20260219',
@@ -105,19 +107,19 @@ export const LLM = {
 
 **Files to modify (14 changes across 8 files):**
 
-| File | Line(s) | Change |
-|------|---------|--------|
-| `constants.ts` | 99 | `LLM.MODEL` → `claude-sonnet-4-6-20260219`, add `MODEL_HAIKU` |
-| `chat-stream/index.ts` | 324 | Hardcoded model → `LLM.MODEL` |
-| `chat-stream/agentic-loop.ts` | 166, 300 | Hardcoded model → `LLM.MODEL` |
-| `chat-stream/tools/discovery-tools.ts` | 69, 268, 397 | Hardcoded model → `LLM.MODEL` |
-| `lib/progress-narrator.ts` | 102 | Already `claude-haiku-4-5-20251001` → use `LLM.MODEL_HAIKU` |
-| `lib/vibe-steering.ts` | 72 | `claude-haiku-4-20250929` → `LLM.MODEL_HAIKU` |
-| `routes/steer-stream.ts` | 111 | `claude-haiku-4-20250929` → `LLM.MODEL_HAIKU` |
-| `routes/steer-stream.ts` | 160 | `claude-sonnet-4-20250514` → `LLM.MODEL` |
-| `__tests__/fixtures/anthropic-mocks.ts` | 70, 344, 411 | Update mock model IDs |
-| `__tests__/routes/chat-stream.test.ts` | 136 | Update test model ID |
-| `lib/__tests__/vibe-steering.test.ts` | 245 | Update test model ID |
+| File                                    | Line(s)      | Change                                                        |
+| --------------------------------------- | ------------ | ------------------------------------------------------------- |
+| `constants.ts`                          | 99           | `LLM.MODEL` → `claude-sonnet-4-6-20260219`, add `MODEL_HAIKU` |
+| `chat-stream/index.ts`                  | 324          | Hardcoded model → `LLM.MODEL`                                 |
+| `chat-stream/agentic-loop.ts`           | 166, 300     | Hardcoded model → `LLM.MODEL`                                 |
+| `chat-stream/tools/discovery-tools.ts`  | 69, 268, 397 | Hardcoded model → `LLM.MODEL`                                 |
+| `lib/progress-narrator.ts`              | 102          | Already `claude-haiku-4-5-20251001` → use `LLM.MODEL_HAIKU`   |
+| `lib/vibe-steering.ts`                  | 72           | `claude-haiku-4-20250929` → `LLM.MODEL_HAIKU`                 |
+| `routes/steer-stream.ts`                | 111          | `claude-haiku-4-20250929` → `LLM.MODEL_HAIKU`                 |
+| `routes/steer-stream.ts`                | 160          | `claude-sonnet-4-20250514` → `LLM.MODEL`                      |
+| `__tests__/fixtures/anthropic-mocks.ts` | 70, 344, 411 | Update mock model IDs                                         |
+| `__tests__/routes/chat-stream.test.ts`  | 136          | Update test model ID                                          |
+| `lib/__tests__/vibe-steering.test.ts`   | 245          | Update test model ID                                          |
 
 **Verify:** `pnpm typecheck && pnpm test`
 
@@ -138,6 +140,7 @@ export const LLM = {
 **Files:** `packages/shared-types/src/schemas/mix-session-schemas.ts`, `packages/shared-types/src/index.ts`
 
 **Add:**
+
 - `ConversationEntry` schema (role, content, timestamp, toolCalls?)
 - `ListenerSignal` schema (trackId, type: completed|skipped|partial, listenDuration, trackDuration, timestamp)
 - `conversation` field on `MixSession` (array of ConversationEntry, max 50, default [])
@@ -150,6 +153,7 @@ All fields optional/defaulted so existing KV sessions remain valid.
 **Files:** `workers/api/src/routes/mix-openapi.ts`, `workers/api/src/services/MixSessionService.ts`
 
 **Changes:**
+
 - New SSE endpoint: `POST /api/mix/chat` — same TransformStream pattern as `chat-stream/index.ts`
 - System prompt auto-injects: current vibe, queue state, last 5 played tracks, listener signals
 - Stores conversation entries in KV session (no client-side history needed)
@@ -160,6 +164,7 @@ All fields optional/defaulted so existing KV sessions remain valid.
 **Files:** `workers/api/src/routes/mix-openapi.ts`
 
 **Changes:**
+
 - When `POST /api/mix/start` receives no seed playlist: call Spotify `/me/top/tracks?time_range=short_term&limit=50` and `/me/player/recently-played?limit=50`
 - Use combined data as seed for vibe extraction and set planning
 - Return session with generated vibe profile
@@ -169,6 +174,7 @@ All fields optional/defaulted so existing KV sessions remain valid.
 **Files:** `apps/web/src/stores/djStore.ts` (new)
 
 **State shape:**
+
 ```typescript
 interface DJState {
   session: MixSession | null
@@ -180,17 +186,19 @@ interface DJState {
   steerInProgress: boolean
   steerEvents: SteerStreamEvent[]
   signals: ListenerSignal[]
-  selectedArc: string | null  // arc template name chosen by user
+  selectedArc: string | null // arc template name chosen by user
 }
 ```
 
 **Actions:** Unified from mixStore + playlistStore + new chat/signal actions.
+
 - Zustand with `subscribeWithSelector` middleware
 - No useEffect for state sync (React 19.2 pattern)
 
 ### Step 1e: Frontend — DJInterface + ChatPanel + ArcSelector
 
 **New files:**
+
 - `apps/web/src/features/dj/DJInterface.tsx` — Main composition layout
 - `apps/web/src/features/dj/ChatPanel.tsx` — Inline chat with SSE streaming
 - `apps/web/src/features/dj/ArcSelector.tsx` — Visual cards with energy curve SVGs
@@ -199,6 +207,7 @@ interface DJState {
 - `apps/web/src/features/dj/ArcSelector.module.css`
 
 **ArcSelector UX:** 3 cards, each showing:
+
 - Mini SVG energy curve (~80x40px)
 - Label: "Build & Peak", "Steady Cruise", "Rollercoaster"
 - Short description below
@@ -211,6 +220,7 @@ interface DJState {
 **Files:** `apps/web/src/App.tsx`, `apps/web/src/stores/navigationStore.ts`
 
 **Changes:**
+
 - Default route `/` renders `<DJInterface />`
 - `?debug=true` query param shows ScopeDebugger overlay
 - Remove route switching for chat/mix/debug
@@ -230,6 +240,7 @@ interface DJState {
 **Files:** `packages/shared-types/src/schemas/mix-session-schemas.ts`
 
 **Add:**
+
 - `ArcPhase` (name, targetEnergy, targetBpmRange: [min, max], durationMinutes, genreHints)
 - `ArcTemplate` (name, phases: ArcPhase[], totalDurationMinutes)
 - `PlannedTrack` (spotifyUri, name, artist, bpm?, energy, arcPhase, transitionScore, reason)
@@ -241,6 +252,7 @@ interface DJState {
 **Files:** `workers/api/src/services/TransitionScorer.ts` (new)
 
 Pure algorithmic scoring — zero AI calls:
+
 - `scoreTransition(from, to, arcPhase)` → `TransitionScore`
   - BPM: gaussian penalty for >10 BPM jump
   - Energy: penalty for >0.2 deviation from arc target
@@ -350,12 +362,14 @@ Pure algorithmic scoring — zero AI calls:
 ### Step 5a: Remove Deprecated Code
 
 **Delete:**
+
 - `apps/web/src/stores/mixStore.ts`
 - `apps/web/src/stores/playlistStore.ts`
 - `apps/web/src/features/chat/ChatInterface.tsx` (and related CSS)
 - Dead imports referencing removed files
 
 **Keep (behind debug flag):**
+
 - `apps/web/src/features/debug/ScopeDebugger.tsx` — accessible via `?debug=true`
 
 ### Step 5b: Remove MCP Documentation
@@ -377,6 +391,7 @@ Pure algorithmic scoring — zero AI calls:
 ### Step 5d: Update Marvel Packs
 
 **Files:**
+
 - `marvel/packs/dj-llm-tools/guardrails.md` — Update model IDs, add SetPlanner patterns
 - `marvel/packs/dj-spotify-integration/guardrails.md` — Add fallback pool and queue monitoring patterns
 - `marvel/packs/dj-react-patterns/guardrails.md` — Update store references (djStore replaces mixStore + playlistStore)
@@ -386,6 +401,7 @@ Pure algorithmic scoring — zero AI calls:
 ## Verification Strategy
 
 After each step within the mega PR:
+
 ```bash
 pnpm typecheck        # Type safety across all packages
 pnpm lint             # Code quality + security rules
@@ -395,6 +411,7 @@ pnpm test:contracts   # API schema validation
 ```
 
 Manual verification checkpoints:
+
 1. After Step 0: All tests pass with new deps and model versions
 2. After Step 1: Single DJ page loads, chat works, queue works, playback works, arc selector shows 3 cards
 3. After Step 2: Session start generates 15-20 track plan, queue draws from plan

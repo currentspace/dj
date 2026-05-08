@@ -15,6 +15,7 @@ Submit knowledge directly to a MARVEL pack without going through the correction/
 
 - If the user provided a `<pack-name>` argument, validate that it exists in `marvel/packs/`.
 - If no argument was provided, list available packs and ask the user to choose:
+
   ```
   Available packs:
   1. <pack-name> - <description>
@@ -23,6 +24,7 @@ Submit knowledge directly to a MARVEL pack without going through the correction/
 
   Which pack should receive this lesson?
   ```
+
 - If the specified pack does not exist, list available packs and ask the user to choose a valid one.
 
 ### 2. Gather the Lesson
@@ -39,6 +41,7 @@ If the user provides a natural language description, extract these fields from i
 ### 3. Check for Duplicates
 
 Read the target pack's `lessons.jsonl` and check if a lesson with similar content already exists. Compare by:
+
 - Exact title match
 - High similarity in the actionable text
 
@@ -65,10 +68,17 @@ Confirm? [yes / edit / cancel]
 On confirmation, append to `marvel/packs/<pack-name>/lessons.jsonl`:
 
 ```json
-{"timestamp":"<ISO-8601>","category":"<category>","title":"<title>","description":"<description>","actionable":"<actionable>"}
+{
+  "timestamp": "<ISO-8601>",
+  "category": "<category>",
+  "title": "<title>",
+  "description": "<description>",
+  "actionable": "<actionable>"
+}
 ```
 
 Confirm success:
+
 ```
 Lesson added to <pack-name>. It will be injected when relevant files are accessed.
 ```

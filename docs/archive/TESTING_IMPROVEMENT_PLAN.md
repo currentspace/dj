@@ -8,6 +8,7 @@
 ### The Uncomfortable Truth
 
 We've built **testing theater** - impressive metrics masking low actual value:
+
 - ✅ Excellent infrastructure (Vitest, fixtures, documentation)
 - 🚨 Testing our own mocks instead of real API integration
 - 🚨 No validation that external APIs match our schemas
@@ -18,31 +19,34 @@ We've built **testing theater** - impressive metrics masking low actual value:
 
 ## Value Assessment by Test Type
 
-| Test File | Pass Rate | Real Logic | Mock Testing | Value |
-|-----------|-----------|------------|--------------|-------|
-| RateLimitedQueue | 100% | 95% | 5% | ⭐⭐⭐⭐⭐ Keep |
-| guards.ts | 100% | 100% | 0% | ⭐⭐⭐⭐ Keep |
-| AudioEnrichmentService | 100% | 20% | 80% | ⭐⭐ Rebuild |
-| LastFmService | 71% | 40% | 60% | ⭐⭐ Rebuild |
-| chat-stream | 100% | 20% | 80% | ⭐⭐ Rebuild |
-| schemas | 100% | 10% | 0% | ⭐⭐ Add contracts |
-| useSpotifyAuth | 24% | 70% | 30% | ⭐⭐⭐ Fix design |
+| Test File              | Pass Rate | Real Logic | Mock Testing | Value              |
+| ---------------------- | --------- | ---------- | ------------ | ------------------ |
+| RateLimitedQueue       | 100%      | 95%        | 5%           | ⭐⭐⭐⭐⭐ Keep    |
+| guards.ts              | 100%      | 100%       | 0%           | ⭐⭐⭐⭐ Keep      |
+| AudioEnrichmentService | 100%      | 20%        | 80%          | ⭐⭐ Rebuild       |
+| LastFmService          | 71%       | 40%        | 60%          | ⭐⭐ Rebuild       |
+| chat-stream            | 100%      | 20%        | 80%          | ⭐⭐ Rebuild       |
+| schemas                | 100%      | 10%        | 0%           | ⭐⭐ Add contracts |
+| useSpotifyAuth         | 24%       | 70%        | 30%          | ⭐⭐⭐ Fix design  |
 
 ---
 
 ## Improvement Strategy: 3-Phase Approach
 
 ### Phase 1: Contract Tests (High Impact, Low Effort)
+
 **Goal:** Validate external APIs match our schemas
 **Duration:** 1 week
 **Impact:** Catch API breaking changes before production
 
 ### Phase 2: Integration Tests (High Impact, Medium Effort)
+
 **Goal:** Test real service interactions with actual APIs
 **Duration:** 2 weeks
 **Impact:** Catch integration bugs, validate data flows
 
 ### Phase 3: Golden Path E2E (Very High Impact, High Effort)
+
 **Goal:** Test complete user journeys end-to-end
 **Duration:** 2-3 weeks
 **Impact:** Validate features work from user perspective
@@ -56,11 +60,13 @@ We've built **testing theater** - impressive metrics masking low actual value:
 **Purpose:** Ensure real API responses match our Zod schemas
 
 **Why Critical:**
+
 - APIs change without warning
 - Schema mismatches cause production crashes
 - We currently have ZERO validation against reality
 
 **Test Strategy:**
+
 ```typescript
 // Run against REAL APIs (not mocks)
 // Use test credentials/rate-limited endpoints
@@ -71,10 +77,11 @@ We've built **testing theater** - impressive metrics masking low actual value:
 **Files to Create:**
 
 #### `workers/api/src/__tests__/contracts/spotify.contract.test.ts`
+
 ```typescript
-import { describe, it, expect } from 'vitest'
-import { SpotifyAPI } from '../../lib/spotify-api'
-import { SpotifyTrackFullSchema, SpotifyPlaylistFullSchema } from '@dj/shared-types'
+import {describe, it, expect} from 'vitest'
+import {SpotifyAPI} from '../../lib/spotify-api'
+import {SpotifyTrackFullSchema, SpotifyPlaylistFullSchema} from '@dj/shared-types'
 
 describe('Spotify API Contracts', () => {
   const spotify = new SpotifyAPI(process.env.SPOTIFY_ACCESS_TOKEN!)
@@ -106,6 +113,7 @@ describe('Spotify API Contracts', () => {
 ```
 
 #### `workers/api/src/__tests__/contracts/deezer.contract.test.ts`
+
 ```typescript
 describe('Deezer API Contracts', () => {
   it('GET /track/isrc:{isrc} matches DeezerTrackSchema', async () => {
@@ -126,6 +134,7 @@ describe('Deezer API Contracts', () => {
 ```
 
 #### `workers/api/src/__tests__/contracts/lastfm.contract.test.ts`
+
 ```typescript
 describe('Last.fm API Contracts', () => {
   it('track.getInfo matches LastFmTrackInfoSchema', async () => {
@@ -134,7 +143,7 @@ describe('Last.fm API Contracts', () => {
       api_key: process.env.LASTFM_API_KEY!,
       artist: 'Queen',
       track: 'Bohemian Rhapsody',
-      format: 'json'
+      format: 'json',
     })
 
     const response = await fetch(`https://ws.audioscrobbler.com/2.0/?${params}`)
@@ -152,6 +161,7 @@ describe('Last.fm API Contracts', () => {
 ```
 
 **Expected Results:**
+
 - 15-20 contract tests
 - Run nightly in CI
 - Alert on schema mismatches
@@ -164,7 +174,8 @@ describe('Last.fm API Contracts', () => {
 ### 1.2 Contract Test Infrastructure
 
 **Create:** `workers/api/src/__tests__/contracts/README.md`
-```markdown
+
+````markdown
 # API Contract Tests
 
 These tests validate that external APIs match our schema expectations.
@@ -180,6 +191,7 @@ pnpm test:contracts spotify
 pnpm test:contracts deezer
 pnpm test:contracts lastfm
 ```
+````
 
 ## Environment Variables Required
 
@@ -190,6 +202,7 @@ pnpm test:contracts lastfm
 ## Rate Limiting
 
 Contract tests are rate-limited to respect API quotas:
+
 - Spotify: 1 request/second
 - Deezer: Unlimited (but we self-limit)
 - Last.fm: 5 requests/second
@@ -197,18 +210,21 @@ Contract tests are rate-limited to respect API quotas:
 ## CI/CD Integration
 
 Contract tests run:
+
 - Nightly at 2 AM UTC
-- On schema changes (packages/shared-types/src/schemas/*)
+- On schema changes (packages/shared-types/src/schemas/\*)
 - Manually via GitHub Actions workflow
 
 ## Handling Schema Mismatches
 
 When a test fails:
+
 1. Check if API added new fields (update schema)
 2. Check if API removed fields (breaking change!)
 3. Check if API changed types (breaking change!)
 4. Update schema and redeploy if safe
-```
+
+````
 
 **Files to Create:**
 - `workers/api/vitest.contracts.config.ts` - Separate config for contract tests
@@ -252,11 +268,12 @@ When a test fails:
 // Use REAL KV cache (MockKV for testing) ✅ Implemented
 // Use REAL rate limiting ✅ Validated with timing assertions
 // Run slower (not on every commit) ✅ Sequential execution
-```
+````
 
 **Files to Create:**
 
 #### `workers/api/src/__tests__/integration/enrichment-pipeline.integration.test.ts`
+
 ```typescript
 import { describe, it, expect, beforeAll } from 'vitest'
 import { AudioEnrichmentService } from '../../services/AudioEnrichmentService'
@@ -336,6 +353,7 @@ describe('Enrichment Pipeline Integration', () => {
 ```
 
 #### `workers/api/src/__tests__/integration/full-analysis.integration.test.ts`
+
 ```typescript
 describe('Full Playlist Analysis Integration', () => {
   it('should analyze real playlist end-to-end', async () => {
@@ -350,7 +368,7 @@ describe('Full Playlist Analysis Integration', () => {
       metadata_analysis: calculateMetadataAnalysis(tracks),
       deezer_analysis: null,
       lastfm_analysis: null,
-      track_ids: tracks.map(t => t.uri)
+      track_ids: tracks.map(t => t.uri),
     }
 
     // Real Deezer enrichment
@@ -374,6 +392,7 @@ describe('Full Playlist Analysis Integration', () => {
 ```
 
 **Expected Results:**
+
 - 20-30 integration tests
 - Run on merge to main (slower, ~2-3 min)
 - Test with real API data
@@ -386,14 +405,15 @@ describe('Full Playlist Analysis Integration', () => {
 ### 2.2 Integration Test Infrastructure
 
 **Create:** `workers/api/src/__tests__/helpers/integration-setup.ts`
+
 ```typescript
-import { unstable_dev } from 'wrangler'
+import {unstable_dev} from 'wrangler'
 
 export async function setupIntegrationTest(): Promise<Env> {
   // Start local Wrangler dev server with real KV
   const worker = await unstable_dev('workers/api/src/index.ts', {
-    experimental: { disableExperimentalWarning: true },
-    local: true
+    experimental: {disableExperimentalWarning: true},
+    local: true,
   })
 
   // Use preview KV namespaces (not production!)
@@ -404,7 +424,7 @@ export async function setupIntegrationTest(): Promise<Env> {
     SPOTIFY_CLIENT_ID: process.env.SPOTIFY_CLIENT_ID!,
     SPOTIFY_CLIENT_SECRET: process.env.SPOTIFY_CLIENT_SECRET!,
     LASTFM_API_KEY: process.env.LASTFM_API_KEY!,
-    ENVIRONMENT: 'test'
+    ENVIRONMENT: 'test',
   }
 
   return env
@@ -412,6 +432,7 @@ export async function setupIntegrationTest(): Promise<Env> {
 ```
 
 **Files to Create:**
+
 - `workers/api/vitest.integration.config.ts` - Separate config
 - `workers/api/src/__tests__/helpers/` - Integration test helpers
 - `.github/workflows/integration-tests.yml` - Run on merge
@@ -425,11 +446,13 @@ export async function setupIntegrationTest(): Promise<Env> {
 **Purpose:** Validate complete feature flows work from user perspective
 
 **Why Critical:**
+
 - Features work individually but break together
 - User inputs reveal validation gaps
 - Real workflows expose timing issues
 
 **Test Strategy:**
+
 ```typescript
 // Use REAL frontend + backend
 // Use REAL Spotify OAuth
@@ -440,11 +463,12 @@ export async function setupIntegrationTest(): Promise<Env> {
 **Files to Create:**
 
 #### `apps/web/src/__tests__/e2e/analyze-playlist.e2e.test.ts`
+
 ```typescript
-import { test, expect } from '@playwright/test'
+import {test, expect} from '@playwright/test'
 
 test.describe('Golden Path: Analyze Playlist', () => {
-  test('should complete full analysis workflow', async ({ page, context }) => {
+  test('should complete full analysis workflow', async ({page, context}) => {
     // 1. Navigate to app
     await page.goto('http://localhost:3000')
 
@@ -464,17 +488,17 @@ test.describe('Golden Path: Analyze Playlist', () => {
     await page.click('button[type="submit"]')
 
     // 5. Wait for streaming response
-    await expect(page.getByText(/analyzing/i)).toBeVisible({ timeout: 5000 })
+    await expect(page.getByText(/analyzing/i)).toBeVisible({timeout: 5000})
 
     // 6. Verify tool execution
-    await expect(page.getByText(/analyze_playlist/)).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText(/analyze_playlist/)).toBeVisible({timeout: 10000})
 
     // 7. Verify enrichment progress
-    await expect(page.getByText(/deezer/i)).toBeVisible({ timeout: 15000 })
-    await expect(page.getByText(/last\.fm/i)).toBeVisible({ timeout: 20000 })
+    await expect(page.getByText(/deezer/i)).toBeVisible({timeout: 15000})
+    await expect(page.getByText(/last\.fm/i)).toBeVisible({timeout: 20000})
 
     // 8. Verify final response
-    await expect(page.getByText(/bpm/i)).toBeVisible({ timeout: 30000 })
+    await expect(page.getByText(/bpm/i)).toBeVisible({timeout: 30000})
     await expect(page.getByText(/tags/i)).toBeVisible()
 
     // 9. Verify conversation history persisted
@@ -485,21 +509,22 @@ test.describe('Golden Path: Analyze Playlist', () => {
 ```
 
 #### `apps/web/src/__tests__/e2e/create-playlist.e2e.test.ts`
+
 ```typescript
 test.describe('Golden Path: Create Playlist from Recommendations', () => {
-  test('should create playlist end-to-end', async ({ page }) => {
+  test('should create playlist end-to-end', async ({page}) => {
     // Login, select playlist, analyze (setup)
     await setupAuthenticatedSession(page)
 
     // 1. Request recommendations
     await sendMessage(page, 'Find similar tracks to this playlist')
     await expect(page.getByText(/searching/i)).toBeVisible()
-    await expect(page.getByText(/found.*tracks/i)).toBeVisible({ timeout: 30000 })
+    await expect(page.getByText(/found.*tracks/i)).toBeVisible({timeout: 30000})
 
     // 2. Request playlist creation
     await sendMessage(page, 'Create a new playlist called "AI Generated Mix"')
     await expect(page.getByText(/creating/i)).toBeVisible()
-    await expect(page.getByText(/created.*playlist/i)).toBeVisible({ timeout: 15000 })
+    await expect(page.getByText(/created.*playlist/i)).toBeVisible({timeout: 15000})
 
     // 3. Verify playlist appears in Spotify
     // (Would need Spotify API verification)
@@ -508,6 +533,7 @@ test.describe('Golden Path: Create Playlist from Recommendations', () => {
 ```
 
 **Expected Results:**
+
 - 10-15 E2E tests
 - Run on release candidates
 - Use Playwright for browser automation
@@ -520,12 +546,14 @@ test.describe('Golden Path: Create Playlist from Recommendations', () => {
 ### 3.2 E2E Test Infrastructure
 
 **Install Dependencies:**
+
 ```bash
 pnpm add -D @playwright/test
 npx playwright install
 ```
 
 **Files to Create:**
+
 - `playwright.config.ts` - Playwright configuration
 - `apps/web/src/__tests__/e2e/helpers/` - E2E test helpers
 - `.github/workflows/e2e-tests.yml` - Run on release
@@ -547,6 +575,7 @@ Unit Tests (200)               ← Fast, isolated, many
 ```
 
 **Run Strategy:**
+
 - **Unit**: Every commit (fast, <15s)
 - **Integration**: On merge to main (medium, ~3min)
 - **Contract**: Nightly (slow, uses real APIs)
@@ -557,11 +586,13 @@ Unit Tests (200)               ← Fast, isolated, many
 ## Implementation Roadmap
 
 ### Week 1: Contract Tests
+
 **Days 1-2:** Spotify + Deezer contract tests
 **Days 3-4:** Last.fm + MusicBrainz contract tests
 **Day 5:** CI/CD integration + documentation
 
 **Deliverables:**
+
 - 15-20 contract tests
 - Nightly CI workflow
 - Contract test documentation
@@ -569,12 +600,14 @@ Unit Tests (200)               ← Fast, isolated, many
 ---
 
 ### Week 2-3: Integration Tests
+
 **Days 1-3:** AudioEnrichmentService integration tests
 **Days 4-6:** LastFmService integration tests
 **Days 7-9:** Full pipeline integration tests
 **Day 10:** CI/CD integration
 
 **Deliverables:**
+
 - 20-30 integration tests
 - Integration test helpers
 - Run on merge to main
@@ -582,12 +615,14 @@ Unit Tests (200)               ← Fast, isolated, many
 ---
 
 ### Week 4-6: Golden Path E2E
+
 **Days 1-5:** Playwright setup + auth flow E2E
 **Days 6-10:** Analyze playlist E2E
 **Days 11-15:** Create playlist + recommendations E2E
 **Days 16-20:** Error recovery + edge cases E2E
 
 **Deliverables:**
+
 - 10-15 E2E tests
 - Playwright infrastructure
 - Run on release candidates
@@ -598,14 +633,14 @@ Unit Tests (200)               ← Fast, isolated, many
 
 ### Quantitative
 
-| Metric | Before Phase 1 | After Phase 1 | After Phase 2 | Target |
-|--------|----------------|---------------|---------------|--------|
-| **Tests Testing Real Logic** | 30% | 35% | ~60% | 80% |
-| **Tests Testing Mocks** | 54% | 49% | ~30% | 10% |
-| **API Contract Coverage** | 0% | 100% ✅ | 100% ✅ | 100% |
-| **Integration Test Coverage** | 0% | 0% | 100% ✅ | 60% |
-| **E2E Critical Paths** | 0% | 0% | 0% | 100% |
-| **Integration Tests Created** | 0 | 0 | 40 ✅ | 20-30 |
+| Metric                        | Before Phase 1 | After Phase 1 | After Phase 2 | Target |
+| ----------------------------- | -------------- | ------------- | ------------- | ------ |
+| **Tests Testing Real Logic**  | 30%            | 35%           | ~60%          | 80%    |
+| **Tests Testing Mocks**       | 54%            | 49%           | ~30%          | 10%    |
+| **API Contract Coverage**     | 0%             | 100% ✅       | 100% ✅       | 100%   |
+| **Integration Test Coverage** | 0%             | 0%            | 100% ✅       | 60%    |
+| **E2E Critical Paths**        | 0%             | 0%            | 0%            | 100%   |
+| **Integration Tests Created** | 0              | 0             | 40 ✅         | 20-30  |
 
 ### Qualitative
 
@@ -623,26 +658,29 @@ Unit Tests (200)               ← Fast, isolated, many
 
 ## Estimated Effort
 
-| Phase | Duration | Effort (dev-days) |
-|-------|----------|-------------------|
-| Contract Tests | 1 week | 5 days |
-| Integration Tests | 2 weeks | 10 days |
-| E2E Tests | 3 weeks | 15 days |
-| **TOTAL** | **6 weeks** | **30 days** |
+| Phase             | Duration    | Effort (dev-days) |
+| ----------------- | ----------- | ----------------- |
+| Contract Tests    | 1 week      | 5 days            |
+| Integration Tests | 2 weeks     | 10 days           |
+| E2E Tests         | 3 weeks     | 15 days           |
+| **TOTAL**         | **6 weeks** | **30 days**       |
 
 ---
 
 ## ROI Analysis
 
 ### Current Testing Investment
+
 - **Time Spent:** 6 days (with parallel agents)
 - **Value Delivered:** ⭐⭐⭐ (3/5) - Good infrastructure, low real validation
 
 ### Proposed Additional Investment
+
 - **Time Required:** 6 weeks
 - **Value Delivered:** ⭐⭐⭐⭐⭐ (5/5) - Production-grade testing
 
 ### Return
+
 - **10x reduction** in production API integration bugs
 - **90% reduction** in "works on my machine" issues
 - **Confidence to refactor** without fear
@@ -653,6 +691,7 @@ Unit Tests (200)               ← Fast, isolated, many
 ## Conclusion
 
 We've built excellent testing infrastructure but focused on the wrong things. By adding:
+
 1. **Contract tests** - Validate external API schemas
 2. **Integration tests** - Test with real services
 3. **E2E tests** - Validate user journeys

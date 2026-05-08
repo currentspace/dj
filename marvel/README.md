@@ -63,22 +63,22 @@ MARVEL registers handlers for all Claude Code hook events via `.claude/settings.
 
 ### Hook Events
 
-| Event | When | What MARVEL Does |
-|-------|------|------------------|
-| `SessionStart` | Claude Code session begins | Create run directory, load packs, report active packs |
-| `PreToolUse` | Before Bash, Edit, Write, or Read | Score pack relevance, inject matching lessons and guardrails |
-| `PostToolUse` | After Edit, Write, Bash, Read, Grep, or Glob | Track tool outcomes, learn from approved commands |
-| `PostToolUseFailure` | After Edit, Write, or Bash fails | Record failure for later reflection |
-| `UserPromptSubmit` | User sends a message | Classify guidance type (correction, direction, task boundary) |
-| `PermissionRequest` | Bash command needs approval | Run through 4-layer security gate |
-| `PreCompact` | Before context window compaction | Summarize MARVEL state for the compacted context |
-| `Stop` | Session stopping | Finalize run, persist metrics |
-| `SubagentStart` | Subagent spawned | Track subagent lifecycle |
-| `SubagentStop` | Subagent finished | Record subagent results |
-| `Notification` | System notification | Handle notification events |
-| `TeammateIdle` | Teammate becomes idle | Respond to idle events |
-| `TaskCompleted` | Task marked complete | Record task completion |
-| `SessionEnd` | Session ending | Finalize session, trigger reflection |
+| Event                | When                                         | What MARVEL Does                                              |
+| -------------------- | -------------------------------------------- | ------------------------------------------------------------- |
+| `SessionStart`       | Claude Code session begins                   | Create run directory, load packs, report active packs         |
+| `PreToolUse`         | Before Bash, Edit, Write, or Read            | Score pack relevance, inject matching lessons and guardrails  |
+| `PostToolUse`        | After Edit, Write, Bash, Read, Grep, or Glob | Track tool outcomes, learn from approved commands             |
+| `PostToolUseFailure` | After Edit, Write, or Bash fails             | Record failure for later reflection                           |
+| `UserPromptSubmit`   | User sends a message                         | Classify guidance type (correction, direction, task boundary) |
+| `PermissionRequest`  | Bash command needs approval                  | Run through 4-layer security gate                             |
+| `PreCompact`         | Before context window compaction             | Summarize MARVEL state for the compacted context              |
+| `Stop`               | Session stopping                             | Finalize run, persist metrics                                 |
+| `SubagentStart`      | Subagent spawned                             | Track subagent lifecycle                                      |
+| `SubagentStop`       | Subagent finished                            | Record subagent results                                       |
+| `Notification`       | System notification                          | Handle notification events                                    |
+| `TeammateIdle`       | Teammate becomes idle                        | Respond to idle events                                        |
+| `TaskCompleted`      | Task marked complete                         | Record task completion                                        |
+| `SessionEnd`         | Session ending                               | Finalize session, trigger reflection                          |
 
 ## Relevance Scoring
 
@@ -86,14 +86,14 @@ When a `PreToolUse` hook fires for a file operation, MARVEL scores every loaded 
 
 ### Scoring Weights
 
-| Signal | Weight | Description |
-|--------|--------|-------------|
-| `FILE_PATTERN_MATCH` | 15 | File path matches a pack's `references.code_paths` |
-| `EXTENSION_MATCH` | 5 | File extension matches the pack's `applies_to.extensions` |
-| `SENSITIVE_PATH` | 20 | File matches a pack's `sensitive_paths` glob pattern |
-| `RECENT_CORRECTION` | 20 | User recently corrected something in this pack's category (up to 3x) |
-| `CATEGORY_MATCH` | 8 | Recent guidance matches the pack's categories |
-| `DEPENDENCY_BOOST` | 3 | Pack is a dependency of another relevant pack |
+| Signal               | Weight | Description                                                          |
+| -------------------- | ------ | -------------------------------------------------------------------- |
+| `FILE_PATTERN_MATCH` | 15     | File path matches a pack's `references.code_paths`                   |
+| `EXTENSION_MATCH`    | 5      | File extension matches the pack's `applies_to.extensions`            |
+| `SENSITIVE_PATH`     | 20     | File matches a pack's `sensitive_paths` glob pattern                 |
+| `RECENT_CORRECTION`  | 20     | User recently corrected something in this pack's category (up to 3x) |
+| `CATEGORY_MATCH`     | 8      | Recent guidance matches the pack's categories                        |
+| `DEPENDENCY_BOOST`   | 3      | Pack is a dependency of another relevant pack                        |
 
 ### Thresholds
 
@@ -105,12 +105,12 @@ When a `PreToolUse` hook fires for a file operation, MARVEL scores every loaded 
 
 File paths containing certain keywords boost packs with matching categories:
 
-| Keyword | Boosted Categories |
-|---------|-------------------|
-| `test`, `spec` | testing, test-quality |
-| `auth`, `middleware` | security, auth |
-| `config`, `env` | configuration |
-| `schema`, `migration` | database, schema |
+| Keyword               | Boosted Categories    |
+| --------------------- | --------------------- |
+| `test`, `spec`        | testing, test-quality |
+| `auth`, `middleware`  | security, auth        |
+| `config`, `env`       | configuration         |
+| `schema`, `migration` | database, schema      |
 
 Projects can extend this mapping by modifying `relevance.ts`.
 
@@ -123,11 +123,13 @@ Each pack is a directory under `marvel/packs/` containing three files:
 Metadata that controls when the pack's lessons are injected. Validated against `_pack.schema.json`.
 
 Required fields:
+
 - `name` -- Must match the directory name (lowercase, hyphenated)
 - `version` -- Semantic version string
 - `owner` -- Team or individual responsible
 
 Optional fields:
+
 - `description` -- Brief description of the pack's purpose
 - `categories` -- Knowledge domains (used for relevance scoring)
 - `applies_to.extensions` -- File extensions that trigger this pack
@@ -146,6 +148,7 @@ Human-readable rules and conventions. This file is injected into Claude's contex
 Machine-learned lessons, one JSON object per line. Lessons are appended automatically by the `/marvel-reflect` skill or manually by the user.
 
 Each lesson contains:
+
 - `timestamp` -- When the lesson was created
 - `category` -- Knowledge domain
 - `title` -- Short identifier

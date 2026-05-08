@@ -81,6 +81,7 @@ Present findings in a structured format:
 ### 5. Next Steps
 
 After presenting the investigation report, ask the user:
+
 - Would you like to proceed with a fix? (suggest `/marvel-fixbug`)
 - Do you need more investigation in a specific area?
 - Should this be documented as a known issue?

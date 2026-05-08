@@ -51,12 +51,12 @@ workers/api/
 **CRITICAL**: Vitest 4.x requires `vi.hoisted()` for mock factories:
 
 ```typescript
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import {describe, it, expect, vi, beforeEach} from 'vitest'
 
 // CORRECT - Vitest 4.x pattern with vi.hoisted()
 const mockFetch = vi.hoisted(() => vi.fn())
 
-vi.mock('node:fetch', () => ({ default: mockFetch }))
+vi.mock('node:fetch', () => ({default: mockFetch}))
 
 describe('MyService', () => {
   beforeEach(() => {
@@ -66,11 +66,11 @@ describe('MyService', () => {
   it('should fetch data', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: () => Promise.resolve({ data: 'test' }),
+      json: () => Promise.resolve({data: 'test'}),
     })
 
     const result = await myService.fetchData()
-    expect(result).toEqual({ data: 'test' })
+    expect(result).toEqual({data: 'test'})
   })
 })
 ```
@@ -83,7 +83,7 @@ The test setup mocks globals but stores originals for contract/integration tests
 
 ```typescript
 // test-setup.ts
-import { beforeEach, vi } from 'vitest'
+import {beforeEach, vi} from 'vitest'
 
 // Store native globals BEFORE mocking (for contract tests)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -108,28 +108,28 @@ beforeEach(() => {
 Test Zod schemas handle edge cases correctly:
 
 ```typescript
-import { describe, it, expect } from 'vitest'
-import { MySchema } from '../schemas'
+import {describe, it, expect} from 'vitest'
+import {MySchema} from '../schemas'
 
 describe('MySchema', () => {
   it('should parse valid input', () => {
-    const result = MySchema.safeParse({ name: 'test', value: 42 })
+    const result = MySchema.safeParse({name: 'test', value: 42})
     expect(result.success).toBe(true)
   })
 
   it('should reject invalid input', () => {
-    const result = MySchema.safeParse({ name: '', value: -1 })
+    const result = MySchema.safeParse({name: '', value: -1})
     expect(result.success).toBe(false)
     expect(result.error?.issues).toHaveLength(2)
   })
 
   it('should apply defaults', () => {
-    const result = MySchema.parse({ name: 'test' })
+    const result = MySchema.parse({name: 'test'})
     expect(result.value).toBe(0) // Default value
   })
 
   it('should coerce types when configured', () => {
-    const result = MySchema.parse({ name: 'test', value: '42' })
+    const result = MySchema.parse({name: 'test', value: '42'})
     expect(result.value).toBe(42)
     expect(typeof result.value).toBe('number')
   })
@@ -141,7 +141,7 @@ describe('MySchema', () => {
 ```typescript
 // Mock KV Namespace
 class MockKVNamespace {
-  private store = new Map<string, { value: string; timestamp: number }>()
+  private store = new Map<string, {value: string; timestamp: number}>()
 
   async get(key: string, type?: 'json'): Promise<unknown | null> {
     const entry = this.store.get(key)
@@ -149,8 +149,8 @@ class MockKVNamespace {
     return type === 'json' ? JSON.parse(entry.value) : entry.value
   }
 
-  async put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void> {
-    this.store.set(key, { value, timestamp: Date.now() })
+  async put(key: string, value: string, options?: {expirationTtl?: number}): Promise<void> {
+    this.store.set(key, {value, timestamp: Date.now()})
   }
 
   clear(): void {
@@ -182,7 +182,7 @@ Contract tests validate that **external APIs match our expected schemas**. They 
 
 ```typescript
 // contracts/setup.ts
-import { beforeAll, afterAll } from 'vitest'
+import {beforeAll, afterAll} from 'vitest'
 
 // Restore native globals for real network access
 const nativeFetch = (global as any).__nativeFetch as typeof fetch
@@ -216,7 +216,7 @@ describe('Spotify API Contracts', () => {
   it.skipIf(!hasSpotifyCredentials())('should match TrackSchema', async () => {
     const token = await getSpotifyAccessToken()
     const response = await fetch(`https://api.spotify.com/v1/tracks/${TEST_TRACK_ID}`, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: {Authorization: `Bearer ${token}`},
     })
     const data = await response.json()
 
@@ -231,24 +231,19 @@ describe('Spotify API Contracts', () => {
 ### Schema Validation Helpers
 
 ```typescript
-import type { ZodSchema } from 'zod'
+import type {ZodSchema} from 'zod'
 
-function validateSchema<T>(
-  schema: ZodSchema<T>,
-  data: unknown
-): { success: boolean; errors: string[]; data?: T } {
+function validateSchema<T>(schema: ZodSchema<T>, data: unknown): {success: boolean; errors: string[]; data?: T} {
   const result = schema.safeParse(data)
 
   if (result.success) {
-    return { success: true, errors: [], data: result.data }
+    return {success: true, errors: [], data: result.data}
   }
 
   // Format errors for readability
-  const errors = result.error.errors.map(
-    (e) => `${e.path.join('.')}: ${e.message}`
-  )
+  const errors = result.error.errors.map(e => `${e.path.join('.')}: ${e.message}`)
 
-  return { success: false, errors }
+  return {success: false, errors}
 }
 
 // Usage
@@ -270,23 +265,19 @@ it('should match schema', async () => {
 
 ```typescript
 const RATE_LIMITS = {
-  SPOTIFY: 1000,    // 1 request per second
-  DEEZER: 1000,     // 1 request per second
-  LASTFM: 200,      // 5 requests per second
+  SPOTIFY: 1000, // 1 request per second
+  DEEZER: 1000, // 1 request per second
+  LASTFM: 200, // 5 requests per second
   MUSICBRAINZ: 1000, // 1 request per second (be nice!)
 }
 
-async function rateLimitedFetch(
-  url: string,
-  delay: number,
-  options?: RequestInit
-): Promise<Response> {
+async function rateLimitedFetch(url: string, delay: number, options?: RequestInit): Promise<Response> {
   const domain = new URL(url).hostname
   const lastTime = lastRequestTime.get(domain) || 0
   const timeToWait = Math.max(0, delay - (Date.now() - lastTime))
 
   if (timeToWait > 0) {
-    await new Promise((resolve) => setTimeout(resolve, timeToWait))
+    await new Promise(resolve => setTimeout(resolve, timeToWait))
   }
 
   lastRequestTime.set(domain, Date.now())
@@ -331,7 +322,7 @@ Integration tests validate that **services work together correctly** with real e
 
 ```typescript
 // integration/setup.ts
-import { beforeAll, afterAll } from 'vitest'
+import {beforeAll, afterAll} from 'vitest'
 
 // Same pattern as contract tests
 const nativeFetch = (global as any).__nativeFetch as typeof fetch
@@ -383,18 +374,18 @@ export const KNOWN_TEST_TRACKS = {
   BOHEMIAN_RHAPSODY: {
     id: '6rqhFgbbKwnb9MLmUQDhG6',
     name: 'Bohemian Rhapsody - Remastered 2011',
-    artists: [{ id: '1dfeR4HaWDbWqFHLkxsg1d', name: 'Queen' }],
+    artists: [{id: '1dfeR4HaWDbWqFHLkxsg1d', name: 'Queen'}],
     duration_ms: 354320,
     popularity: 85,
-    external_ids: { isrc: 'GBUM71029604' },
+    external_ids: {isrc: 'GBUM71029604'},
   },
   MR_BRIGHTSIDE: {
     id: '003vvx7Niy0yvhvHt4a68B',
     name: 'Mr. Brightside',
-    artists: [{ id: '0C0XlULifJtAgn6ZNCW2eu', name: 'The Killers' }],
+    artists: [{id: '0C0XlULifJtAgn6ZNCW2eu', name: 'The Killers'}],
     duration_ms: 222973,
     popularity: 88,
-    external_ids: { isrc: 'USIR20400274' },
+    external_ids: {isrc: 'USIR20400274'},
   },
 }
 ```
@@ -408,15 +399,11 @@ it('should be faster on second call (cache hit)', async () => {
   const track = KNOWN_TEST_TRACKS.BOHEMIAN_RHAPSODY
 
   // First call: cache miss (slow)
-  const [result1, duration1] = await measureExecutionTime(() =>
-    service.enrichTrack(track)
-  )
+  const [result1, duration1] = await measureExecutionTime(() => service.enrichTrack(track))
   expect(result1).toBeDefined()
 
   // Second call: cache hit (fast)
-  const [result2, duration2] = await measureExecutionTime(() =>
-    service.enrichTrack(track)
-  )
+  const [result2, duration2] = await measureExecutionTime(() => service.enrichTrack(track))
 
   expect(result2).toBeDefined()
   expect(duration2).toBeLessThan(100) // Cache hits should be <100ms
@@ -429,9 +416,7 @@ it('should be faster on second call (cache hit)', async () => {
 })
 
 // Helper function
-async function measureExecutionTime<T>(
-  fn: () => Promise<T>
-): Promise<[T, number]> {
+async function measureExecutionTime<T>(fn: () => Promise<T>): Promise<[T, number]> {
   const start = performance.now()
   const result = await fn()
   const duration = performance.now() - start
@@ -455,11 +440,7 @@ export default defineConfig({
 
     // Exclude contract and integration tests
     include: ['src/**/*.test.ts', 'src/**/*.spec.ts'],
-    exclude: [
-      '**/node_modules/**',
-      'src/**/*.contract.test.ts',
-      'src/**/*.integration.test.ts',
-    ],
+    exclude: ['**/node_modules/**', 'src/**/*.contract.test.ts', 'src/**/*.integration.test.ts'],
   },
 })
 ```
@@ -476,13 +457,13 @@ export default defineConfig({
 
     include: ['src/**/*.contract.test.ts'],
 
-    testTimeout: 30000,  // 30 seconds for API calls
+    testTimeout: 30000, // 30 seconds for API calls
     hookTimeout: 30000,
 
     // Sequential to respect rate limits
     pool: 'forks',
     poolOptions: {
-      forks: { singleFork: true },
+      forks: {singleFork: true},
     },
   },
 })
@@ -500,13 +481,13 @@ export default defineConfig({
 
     include: ['src/**/*.integration.test.ts'],
 
-    testTimeout: 60000,  // 60 seconds
+    testTimeout: 60000, // 60 seconds
     hookTimeout: 60000,
 
     // Sequential to respect rate limits
     pool: 'forks',
     poolOptions: {
-      forks: { singleFork: true },
+      forks: {singleFork: true},
     },
 
     // Disable watch mode
@@ -594,11 +575,11 @@ if (result.bpm !== null && result.bpm > 0) {
 ```typescript
 // WRONG - Vitest 4.x will fail
 const mockFetch = vi.fn()
-vi.mock('node:fetch', () => ({ default: mockFetch }))
+vi.mock('node:fetch', () => ({default: mockFetch}))
 
 // CORRECT - Vitest 4.x pattern
 const mockFetch = vi.hoisted(() => vi.fn())
-vi.mock('node:fetch', () => ({ default: mockFetch }))
+vi.mock('node:fetch', () => ({default: mockFetch}))
 ```
 
 ### DON'T: Run Real API Tests in CI Without Rate Limiting
@@ -633,11 +614,11 @@ it.skip('requires user OAuth since Nov 2024', () => {})
 
 ```typescript
 export const TEST_DEFAULTS = {
-  TRACK_ID: '6rqhFgbbKwnb9MLmUQDhG6',        // Bohemian Rhapsody
-  TRACK_ISRC: 'GBUM71029604',                // Same track's ISRC
+  TRACK_ID: '6rqhFgbbKwnb9MLmUQDhG6', // Bohemian Rhapsody
+  TRACK_ISRC: 'GBUM71029604', // Same track's ISRC
   ARTIST_NAME: 'Queen',
   TRACK_NAME: 'Bohemian Rhapsody',
-  PLAYLIST_ID: '37i9dQZF1DXcBWIGoYBM5M',     // Today's Top Hits (public)
+  PLAYLIST_ID: '37i9dQZF1DXcBWIGoYBM5M', // Today's Top Hits (public)
 }
 ```
 

@@ -13,11 +13,7 @@ import {isNumber, isObject, isString, isStringArray} from '../streaming/anthropi
 /**
  * Create AI-powered discovery tools (vibe extraction, strategy planning, curation)
  */
-export function createDiscoveryTools(
-  sseWriter: SSEWriter,
-  abortSignal?: AbortSignal,
-  env?: Env,
-): NativeTool[] {
+export function createDiscoveryTools(sseWriter: SSEWriter, abortSignal?: AbortSignal, env?: Env): NativeTool[] {
   return [
     {
       description:
@@ -431,7 +427,9 @@ export function createDiscoveryTools(
           }
           const curationResult = CurationResponseSchema.safeParse(rawCuration)
           const selectedIds = curationResult.success ? (curationResult.data.selected_track_ids ?? []) : []
-          const reasoning = curationResult.success ? (curationResult.data.reasoning ?? 'AI curation complete') : 'AI curation complete'
+          const reasoning = curationResult.success
+            ? (curationResult.data.reasoning ?? 'AI curation complete')
+            : 'AI curation complete'
 
           // Filter candidate tracks to only selected ones
           const curatedTracks = args.candidate_tracks.filter((t: {id: string}) => selectedIds.includes(t.id))

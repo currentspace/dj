@@ -4,7 +4,7 @@
   "owner": "team",
   "description": "Claude three-tier model hierarchy (Opus/Sonnet/Haiku), tool definitions, agentic loop, prompt engineering, and vibe-driven discovery",
   "categories": ["llm", "claude", "anthropic", "tools", "agentic", "prompts"],
-  "applies_to": { "extensions": [".ts"] },
+  "applies_to": {"extensions": [".ts"]},
   "sensitive_paths": [
     "**/chat-stream/**",
     "**/tools/**",

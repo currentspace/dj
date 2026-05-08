@@ -4,13 +4,14 @@ These guidelines represent modern Anthropic Claude patterns for November 2025, o
 
 ## Model Selection (November 2025)
 
-| Model | Use Case | Token Budget |
-|-------|----------|--------------|
+| Model                 | Use Case                             | Token Budget                       |
+| --------------------- | ------------------------------------ | ---------------------------------- |
 | **Claude Sonnet 4.5** | Primary chat, tool calling, analysis | 10,000 (5k thinking + 5k response) |
-| **Claude Opus 4.5** | Complex reasoning, creative tasks | 15,000+ |
-| **Claude Haiku 4.5** | Progress messages, quick summaries | 100-200 |
+| **Claude Opus 4.5**   | Complex reasoning, creative tasks    | 15,000+                            |
+| **Claude Haiku 4.5**  | Progress messages, quick summaries   | 100-200                            |
 
 **Model IDs**:
+
 - `claude-sonnet-4-5-20250929`
 - `claude-opus-4-5-20251001`
 - `claude-haiku-4-5-20251001`
@@ -74,17 +75,19 @@ Use when: User asks about specific track details
 ```typescript
 const response = await anthropic.messages.stream({
   model: 'claude-sonnet-4-5-20250929',
-  max_tokens: 10000,  // 5000 thinking + 5000 response
-  temperature: 1.0,   // Required for extended thinking
+  max_tokens: 10000, // 5000 thinking + 5000 response
+  temperature: 1.0, // Required for extended thinking
   thinking: {
     type: 'enabled',
     budget_tokens: 5000,
   },
-  system: [{
-    type: 'text',
-    text: systemPrompt,
-    cache_control: { type: 'ephemeral' },  // Cache system prompt
-  }],
+  system: [
+    {
+      type: 'text',
+      text: systemPrompt,
+      cache_control: {type: 'ephemeral'}, // Cache system prompt
+    },
+  ],
   messages,
   tools: anthropicTools,
 })
@@ -99,7 +102,7 @@ Extended thinking causes 400 errors when tool results are sent back:
 const nextResponse = await anthropic.messages.stream({
   model: 'claude-sonnet-4-5-20250929',
   max_tokens: 5000,
-  temperature: 0.7,  // Lower for consistency
+  temperature: 0.7, // Lower for consistency
   // NO thinking parameter - disabled for tool result handling
   messages: messagesWithToolResults,
   tools: anthropicTools,
@@ -121,11 +124,12 @@ const tool: NativeTool = {
 Returns aggregated statistics (not individual tracks) to minimize payload size.
 Use this FIRST to understand playlist characteristics before detailed queries.`,
   schema: z.object({
-    playlist_id: z.string().optional().describe(
-      'Spotify playlist ID. Auto-injected from conversation context if not provided.'
-    ),
+    playlist_id: z
+      .string()
+      .optional()
+      .describe('Spotify playlist ID. Auto-injected from conversation context if not provided.'),
   }),
-  func: async (args) => {
+  func: async args => {
     // Implementation
   },
 }
@@ -136,7 +140,7 @@ Use this FIRST to understand playlist characteristics before detailed queries.`,
 ```typescript
 // WRONG - Returns everything
 return {
-  tracks: fullTrackObjects,  // 55KB+
+  tracks: fullTrackObjects, // 55KB+
   audioFeatures: allFeatures,
 }
 
@@ -149,7 +153,7 @@ return {
     avg_duration_minutes: calculateAvg(tracks, 'duration_ms') / 60000,
     top_genres: aggregateGenres(tracks).slice(0, 5),
   },
-  track_ids: tracks.map(t => t.id),  // IDs only, not full objects
+  track_ids: tracks.map(t => t.id), // IDs only, not full objects
 }
 ```
 
@@ -163,25 +167,23 @@ return {
 
 ```typescript
 let fullResponse = ''
-let currentToolInput = ''  // Must initialize as empty string
+let currentToolInput = '' // Must initialize as empty string
 
 for await (const event of stream) {
   if (event.type === 'content_block_delta') {
     if (event.delta.type === 'text_delta') {
       fullResponse += event.delta.text
-      await sseWriter.write({ type: 'content', data: event.delta.text })
-    }
-    else if (event.delta.type === 'input_json_delta') {
+      await sseWriter.write({type: 'content', data: event.delta.text})
+    } else if (event.delta.type === 'input_json_delta') {
       // Accumulate tool input JSON character by character
       currentToolInput += event.delta.partial_json
     }
-  }
-  else if (event.type === 'content_block_stop') {
+  } else if (event.type === 'content_block_stop') {
     // Parse accumulated tool input
     if (currentToolInput) {
       const args = JSON.parse(currentToolInput)
-      toolCalls.push({ name: currentTool, args, id: currentToolId })
-      currentToolInput = ''  // Reset for next tool
+      toolCalls.push({name: currentTool, args, id: currentToolId})
+      currentToolInput = '' // Reset for next tool
     }
   }
 }
@@ -196,7 +198,7 @@ for await (const event of stream) {
 ```typescript
 if (event.delta.type === 'thinking_delta') {
   // Option 1: Surface to user (recommended for transparency)
-  await sseWriter.write({ type: 'thinking', data: event.delta.thinking })
+  await sseWriter.write({type: 'thinking', data: event.delta.thinking})
 
   // Option 2: Collect for analysis
   cumulativeThinking += event.delta.thinking
@@ -241,7 +243,7 @@ Return JSON with vibe_profile and discovery_hints.`
 const response = await anthropic.messages.create({
   model: 'claude-sonnet-4-5-20250929',
   max_tokens: 2000,
-  messages: [{ role: 'user', content: vibePrompt }],
+  messages: [{role: 'user', content: vibePrompt}],
 })
 ```
 
@@ -313,6 +315,7 @@ system: [{
 ```
 
 **Benefits**:
+
 - Faster subsequent requests
 - Reduced token costs
 - Same prompt reused across turns
@@ -323,13 +326,15 @@ system: [{
 const response = await anthropic.messages.create({
   model: 'claude-haiku-4-5-20251001',
   max_tokens: 100,
-  system: [{
-    type: 'text',
-    text: progressNarratorSystemPrompt,
-    cache_control: { type: 'ephemeral' },  // Cache across messages
-  }],
-  messages: [{ role: 'user', content: contextPrompt }],
-  temperature: 0.7,  // Some variation, not random
+  system: [
+    {
+      type: 'text',
+      text: progressNarratorSystemPrompt,
+      cache_control: {type: 'ephemeral'}, // Cache across messages
+    },
+  ],
+  messages: [{role: 'user', content: contextPrompt}],
+  temperature: 0.7, // Some variation, not random
 })
 ```
 
@@ -424,7 +429,7 @@ try {
     type: 'tool_result',
     tool_use_id: toolCall.id,
     content: `Error: ${error.message}`,
-    is_error: true,  // Tells Claude the tool failed
+    is_error: true, // Tells Claude the tool failed
   }
 }
 ```
@@ -445,7 +450,7 @@ ${toolResults.map(r => JSON.stringify(r)).join('\n')}`
   const summary = await anthropic.messages.create({
     model: 'claude-haiku-4-5-20251001',
     max_tokens: 200,
-    messages: [{ role: 'user', content: summaryPrompt }],
+    messages: [{role: 'user', content: summaryPrompt}],
   })
 
   // Replace verbose results with summary
@@ -471,7 +476,7 @@ if (conversationHistory.length > MAX_HISTORY) {
 ```typescript
 // Phase 1: Force analysis first
 const phase1 = await anthropic.messages.create({
-  tool_choice: { type: 'tool', name: 'analyze_playlist' },
+  tool_choice: {type: 'tool', name: 'analyze_playlist'},
   // ...
 })
 
@@ -503,7 +508,7 @@ const phase3 = await anthropic.messages.create({
 
 ```typescript
 // WRONG - 2.5KB per track
-return { tracks: spotifyApiResponse.tracks }
+return {tracks: spotifyApiResponse.tracks}
 
 // CORRECT - 100 bytes per track
 return {
@@ -511,7 +516,7 @@ return {
     id: t.id,
     name: t.name,
     artists: t.artists.map(a => a.name).join(', '),
-  }))
+  })),
 }
 ```
 
@@ -534,7 +539,7 @@ while (toolCalls.length > 0 && turnCount < MAX_TURNS) {
 ```typescript
 // WRONG - Partial JSON
 if (event.delta.type === 'input_json_delta') {
-  const args = JSON.parse(event.delta.partial_json)  // Will fail
+  const args = JSON.parse(event.delta.partial_json) // Will fail
 }
 
 // CORRECT - Wait for block stop

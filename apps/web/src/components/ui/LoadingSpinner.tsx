@@ -27,11 +27,7 @@ const textClasses = {
   sm: 'text-xs',
 }
 
-export const LoadingSpinner = memo(function LoadingSpinner({
-  className = '',
-  size = 'md',
-  text,
-}: LoadingSpinnerProps) {
+export const LoadingSpinner = memo(function LoadingSpinner({className = '', size = 'md', text}: LoadingSpinnerProps) {
   return (
     <div className={`flex flex-col items-center justify-center gap-3 ${className}`}>
       <div className={`${sizeClasses[size]} border-surface-4 border-t-spotify-green rounded-full animate-spin`} />

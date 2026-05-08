@@ -27,6 +27,7 @@ Command
 Known-safe command patterns that are always permitted without user interaction. This is the fast path -- most common developer commands (git, ls, pnpm, etc.) hit the allowlist and execute immediately.
 
 Rules use three match types:
+
 - **prefix** -- Command starts with the pattern (e.g., `"git status"`)
 - **contains** -- Command contains the pattern anywhere
 - **regex** -- Command matches a regular expression
@@ -36,6 +37,7 @@ Rules use three match types:
 Known-dangerous command patterns that are always blocked. The denylist is checked before learned rules to prevent dangerous commands from being allowed by overly broad user-approved patterns.
 
 Examples of denied patterns:
+
 - `rm -rf /` and variants targeting system directories
 - `curl | bash` and other remote code execution patterns
 - `chmod 777` and insecure permission changes
@@ -47,6 +49,7 @@ Examples of denied patterns:
 When the LLM evaluator returns "ask" and the user approves a command, MARVEL extracts a safe pattern and saves it to `learned.jsonl`. Future commands matching that pattern are auto-approved.
 
 Learned rules are:
+
 - Scoped to specific command patterns (not overly broad)
 - Checked against the denylist before being applied (denylist always wins)
 - Persisted across sessions but gitignored (local to each developer)
@@ -62,6 +65,7 @@ Commands that do not match any list are evaluated by a lightweight LLM agent. Th
 4. May suggest new allowlist or denylist rules
 
 Configuration in `config.json`:
+
 ```json
 {
   "marvel_evaluation": {
@@ -70,7 +74,7 @@ Configuration in `config.json`:
       "model": "haiku",
       "evaluation_timeout_ms": 30000,
       "idle_timeout_ms": 3600000,
-      "max_cumulative_cost_usd": 0.50,
+      "max_cumulative_cost_usd": 0.5,
       "confidence_auto_threshold": 0.85
     }
   }
@@ -115,12 +119,12 @@ Add entries to `denylist.json`:
 
 Every rule has four fields:
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | string | Unique identifier (e.g., `allow-git-status`) |
-| `type` | `"prefix"` \| `"contains"` \| `"regex"` | How the pattern is matched |
-| `pattern` | string | The pattern to match against the command |
-| `reason` | string | Human-readable explanation of why this rule exists |
+| Field     | Type                                    | Description                                        |
+| --------- | --------------------------------------- | -------------------------------------------------- |
+| `id`      | string                                  | Unique identifier (e.g., `allow-git-status`)       |
+| `type`    | `"prefix"` \| `"contains"` \| `"regex"` | How the pattern is matched                         |
+| `pattern` | string                                  | The pattern to match against the command           |
+| `reason`  | string                                  | Human-readable explanation of why this rule exists |
 
 ## Metrics
 
@@ -135,12 +139,12 @@ Use `/marvel-health` to review security gate statistics across sessions.
 
 ## Files
 
-| File | Committed | Description |
-|------|-----------|-------------|
-| `config.json` | Yes | Agent evaluator configuration |
-| `allowlist.json` | Yes | Known-safe command patterns |
-| `denylist.json` | Yes | Known-dangerous command patterns |
-| `learned.jsonl` | No | User-approved patterns (gitignored) |
-| `suggestions.jsonl` | No | LLM-suggested rules (gitignored) |
-| `decisions.jsonl` | No | Decision audit log (gitignored) |
-| `agent-evaluations.jsonl` | No | LLM evaluation traces (gitignored) |
+| File                      | Committed | Description                         |
+| ------------------------- | --------- | ----------------------------------- |
+| `config.json`             | Yes       | Agent evaluator configuration       |
+| `allowlist.json`          | Yes       | Known-safe command patterns         |
+| `denylist.json`           | Yes       | Known-dangerous command patterns    |
+| `learned.jsonl`           | No        | User-approved patterns (gitignored) |
+| `suggestions.jsonl`       | No        | LLM-suggested rules (gitignored)    |
+| `decisions.jsonl`         | No        | Decision audit log (gitignored)     |
+| `agent-evaluations.jsonl` | No        | LLM evaluation traces (gitignored)  |

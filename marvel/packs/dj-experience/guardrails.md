@@ -6,11 +6,11 @@ Auto DJ experience design patterns grounded in research from Spotify DJ, Algorid
 
 Route every AI decision to the right model tier:
 
-| Tier | Model | Use For | Never Use For |
-|------|-------|---------|---------------|
-| Strategic (Opus 4.6) | Set planning, skip reasoning, narration, replan | Search, tool execution, progress messages |
-| Execution (Sonnet 4.6) | Tool calling, track search, basic curation | Strategic planning, personality narration |
-| Reactive (Haiku 4.5) | Progress messages, preset matching, acks | Any decision requiring musical judgment |
+| Tier                   | Model                                           | Use For                                   | Never Use For |
+| ---------------------- | ----------------------------------------------- | ----------------------------------------- | ------------- |
+| Strategic (Opus 4.6)   | Set planning, skip reasoning, narration, replan | Search, tool execution, progress messages |
+| Execution (Sonnet 4.6) | Tool calling, track search, basic curation      | Strategic planning, personality narration |
+| Reactive (Haiku 4.5)   | Progress messages, preset matching, acks        | Any decision requiring musical judgment   |
 
 ```typescript
 // CORRECT — Opus for strategic decisions
@@ -72,6 +72,7 @@ const narration = await generateNarration(env, session, event) // blocks 1Hz pol
 - Include session narrative context (what DJ already said) to prevent repetition
 
 Example narrations:
+
 - "Starting from your Chill Vibes playlist. Feeling lo-fi and ambient — let's ease into it."
 - "Noticed you skipped those last two. Steering away from hip-hop, leaning more indie."
 - "Added Snarky Puppy — great BPM bridge from what's playing now."
@@ -100,6 +101,7 @@ Example narrations:
 ## Contrast and Diversity (Critical)
 
 Based on user research (34% negative sentiment on Spotify DJ due to echo chamber):
+
 - Avoid sustained monotony — contrast between styles maintains engagement
 - After 10+ tracks without user steering, inject a mild surprise (different but compatible genre/era)
 - No single genre should dominate more than 40% of a 15-track sequence
@@ -130,6 +132,7 @@ if (analysis.likelyIssue === 'energy') {
 ## Energy Arc Awareness
 
 Based on professional DJ mixing research:
+
 - Avoid sustained peak intensity — contrast between high and low energy maintains engagement
 - A 45-60 minute session should have: warm-up > build > peak (2/3 through) > release > finale
 - Track BPM changes should be gradual: +/-10 BPM between consecutive tracks

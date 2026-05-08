@@ -195,9 +195,8 @@ describe('Enrichment Pipeline Integration', () => {
 
       // Calculate BPM average for tracks that have BPM data
       const tracksWithBPM = Array.from(deezerResults.values()).filter(r => r.bpm !== null)
-      const bpmAvg = tracksWithBPM.length > 0
-        ? tracksWithBPM.reduce((sum, r) => sum + r.bpm!, 0) / tracksWithBPM.length
-        : 0
+      const bpmAvg =
+        tracksWithBPM.length > 0 ? tracksWithBPM.reduce((sum, r) => sum + r.bpm!, 0) / tracksWithBPM.length : 0
 
       const deezerAnalysis = {
         bpm: {
@@ -262,9 +261,7 @@ describe('Enrichment Pipeline Integration', () => {
       const tracks = [KNOWN_TEST_TRACKS.BOHEMIAN_RHAPSODY, KNOWN_TEST_TRACKS.MR_BRIGHTSIDE]
 
       // First run: cache misses (slow)
-      const [deezerResults1, deezerDuration1] = await measureExecutionTime(() =>
-        audioService.batchEnrichTracks(tracks),
-      )
+      const [deezerResults1, deezerDuration1] = await measureExecutionTime(() => audioService.batchEnrichTracks(tracks))
       expect(deezerResults1.size).toBe(2)
 
       if (hasLastFmKey && lastFmService) {
@@ -277,9 +274,7 @@ describe('Enrichment Pipeline Integration', () => {
       }
 
       // Second run: cache hits (fast)
-      const [deezerResults2, deezerDuration2] = await measureExecutionTime(() =>
-        audioService.batchEnrichTracks(tracks),
-      )
+      const [deezerResults2, deezerDuration2] = await measureExecutionTime(() => audioService.batchEnrichTracks(tracks))
 
       expect(deezerResults2.size).toBe(2)
       expect(deezerDuration2).toBeLessThan(100) // Should be much faster (<100ms for cache hits)
@@ -474,9 +469,7 @@ describe('Enrichment Pipeline Integration', () => {
 
       console.log('✓ Cross-service data consistency verified:', {
         deezer: {bpm: deezerResult.bpm, rank: deezerResult.rank},
-        lastfm: lastFmResult
-          ? {listeners: lastFmResult.listeners, tags: lastFmResult.topTags.slice(0, 3)}
-          : 'skipped',
+        lastfm: lastFmResult ? {listeners: lastFmResult.listeners, tags: lastFmResult.topTags.slice(0, 3)} : 'skipped',
       })
     },
     INTEGRATION_TEST_TIMEOUT,

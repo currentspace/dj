@@ -14,6 +14,7 @@ Phase 2 builds on Phase 1's contract test foundation by testing how our services
 > **Current State:** 54% of tests are "testing theater" - validating mocks instead of real behavior
 
 **Key Transformation:**
+
 - AudioEnrichmentService: 20% real logic → 80% real logic tested
 - LastFmService: 40% real logic → 80% real logic tested
 - Full pipeline: 0% integration coverage → 100% integration coverage
@@ -23,6 +24,7 @@ Phase 2 builds on Phase 1's contract test foundation by testing how our services
 ## Phase 2 Objectives
 
 ### Primary Goals:
+
 1. ✅ Test services with **real external APIs** (no mocks)
 2. ✅ Validate **caching behavior** with real KV store
 3. ✅ Verify **rate limiting** under real load
@@ -30,6 +32,7 @@ Phase 2 builds on Phase 1's contract test foundation by testing how our services
 5. ✅ Validate **data flows** through entire pipeline
 
 ### Success Metrics:
+
 - 20-30 integration tests created
 - All tests use real APIs (no mocking external services)
 - Caching verified with real KV operations
@@ -41,10 +44,12 @@ Phase 2 builds on Phase 1's contract test foundation by testing how our services
 ## Work Breakdown
 
 ### Agent 1: Integration Test Infrastructure
+
 **Estimated Time:** 2 hours
 **Priority:** HIGH (blocks other agents)
 
 **Tasks:**
+
 1. Create `workers/api/vitest.integration.config.ts`
    - Extended timeout (60s for API calls)
    - Sequential execution (respect rate limits)
@@ -69,6 +74,7 @@ Phase 2 builds on Phase 1's contract test foundation by testing how our services
    - Add to root package.json
 
 **Deliverables:**
+
 - ✅ Integration test config
 - ✅ Setup utilities
 - ✅ Documentation
@@ -77,14 +83,17 @@ Phase 2 builds on Phase 1's contract test foundation by testing how our services
 ---
 
 ### Agent 2: AudioEnrichmentService Integration Tests
+
 **Estimated Time:** 3 hours
 **Priority:** HIGH
 **Depends On:** Agent 1 (infrastructure)
 
 **Tasks:**
+
 1. Create `workers/api/src/__tests__/integration/AudioEnrichmentService.integration.test.ts`
 
 **Test Scenarios:**
+
 1. **Single Track Enrichment (Deezer ISRC lookup)**
    - Use real track with known ISRC (Bohemian Rhapsody)
    - Verify BPM in valid range (45-220)
@@ -119,6 +128,7 @@ Phase 2 builds on Phase 1's contract test foundation by testing how our services
 **Expected Tests:** 8-10 integration tests
 
 **Key Assertions:**
+
 - Real BPM values from Deezer
 - Rate limiting respected (timing checks)
 - Cache working (KV get/set verified)
@@ -127,14 +137,17 @@ Phase 2 builds on Phase 1's contract test foundation by testing how our services
 ---
 
 ### Agent 3: LastFmService Integration Tests
+
 **Estimated Time:** 3 hours
 **Priority:** HIGH
 **Depends On:** Agent 1 (infrastructure)
 
 **Tasks:**
+
 1. Create `workers/api/src/__tests__/integration/LastFmService.integration.test.ts`
 
 **Test Scenarios:**
+
 1. **Single Track Signals (track.getInfo)**
    - Use real track (Bohemian Rhapsody)
    - Verify listeners > 1,000,000
@@ -182,6 +195,7 @@ Phase 2 builds on Phase 1's contract test foundation by testing how our services
 **Expected Tests:** 10-12 integration tests
 
 **Key Assertions:**
+
 - Real crowd-sourced data from Last.fm
 - Rate limiting (200ms between calls)
 - Artist deduplication working
@@ -191,14 +205,17 @@ Phase 2 builds on Phase 1's contract test foundation by testing how our services
 ---
 
 ### Agent 4: Full Pipeline Integration Tests
+
 **Estimated Time:** 4 hours
 **Priority:** MEDIUM
 **Depends On:** Agent 1, 2, 3
 
 **Tasks:**
+
 1. Create `workers/api/src/__tests__/integration/enrichment-pipeline.integration.test.ts`
 
 **Test Scenarios:**
+
 1. **Single Track End-to-End**
    - Start with Spotify track object
    - Enrich with Deezer (BPM, rank, gain)
@@ -247,6 +264,7 @@ Phase 2 builds on Phase 1's contract test foundation by testing how our services
 **Expected Tests:** 8-10 integration tests
 
 **Key Assertions:**
+
 - Full pipeline completes successfully
 - All rate limits respected
 - Caching reduces API calls on second run
@@ -256,11 +274,13 @@ Phase 2 builds on Phase 1's contract test foundation by testing how our services
 ---
 
 ### Agent 5: Documentation & Scripts
+
 **Estimated Time:** 1 hour
 **Priority:** LOW
 **Depends On:** Agent 1, 2, 3, 4
 
 **Tasks:**
+
 1. Update `TESTING_IMPROVEMENT_PLAN.md`
    - Mark Phase 2 as complete
    - Add actual results
@@ -281,6 +301,7 @@ Phase 2 builds on Phase 1's contract test foundation by testing how our services
    - Fail if tests don't pass
 
 **Deliverables:**
+
 - ✅ Phase 2 completion report
 - ✅ Updated documentation
 - ✅ Optional CI/CD workflow
@@ -292,20 +313,26 @@ Phase 2 builds on Phase 1's contract test foundation by testing how our services
 ### Parallel Execution Plan:
 
 **Wave 1 (Can start immediately):**
+
 - Agent 1: Integration test infrastructure
 
 **Wave 2 (Start after Agent 1 completes infrastructure):**
+
 - Agent 2: AudioEnrichmentService integration tests
 - Agent 3: LastFmService integration tests
 
 **Wave 3 (Start after Wave 2 completes):**
+
 - Agent 4: Full pipeline integration tests
 
 **Wave 4 (Start after Wave 3 completes):**
+
 - Agent 5: Documentation & completion report
 
 ### Why Sequential for Integration Tests:
+
 Unlike contract tests which are independent, integration tests:
+
 1. Need common infrastructure (Agent 1 creates this)
 2. May share test utilities
 3. Build on each other (pipeline tests use service tests' patterns)
@@ -315,6 +342,7 @@ Unlike contract tests which are independent, integration tests:
 ## Required Credentials
 
 Same as contract tests:
+
 - `SPOTIFY_ACCESS_TOKEN` (optional - can use mock Spotify data)
 - `LASTFM_API_KEY` (required for Last.fm integration tests)
 - No Deezer credentials needed (public API)
@@ -326,17 +354,20 @@ Integration tests will skip gracefully if credentials missing.
 ## Test Approach Differences
 
 ### Contract Tests (Phase 1):
+
 - ✅ Validate API response schemas
 - ✅ Detect breaking API changes
 - ✅ Run nightly in CI
 
 ### Integration Tests (Phase 2):
+
 - ✅ Validate services work together
 - ✅ Test caching, rate limiting, error handling
 - ✅ Use real APIs, real KV, real timing
 - ✅ Run on merge to main (slower)
 
 ### Unit Tests (Existing):
+
 - ⚠️ Validate individual function logic
 - ⚠️ Use mocks extensively (testing theater)
 - ⚠️ Run on every commit (fast)
@@ -346,6 +377,7 @@ Integration tests will skip gracefully if credentials missing.
 ## Success Criteria
 
 ### Quantitative:
+
 - [ ] 20-30 integration tests created
 - [ ] All tests pass with real API credentials
 - [ ] Tests skip gracefully without credentials
@@ -353,6 +385,7 @@ Integration tests will skip gracefully if credentials missing.
 - [ ] 0 mocked external APIs (use real Deezer, Last.fm)
 
 ### Qualitative:
+
 - [ ] Tests validate real service interactions
 - [ ] Caching behavior verified with real KV
 - [ ] Rate limiting verified with timing assertions
@@ -360,6 +393,7 @@ Integration tests will skip gracefully if credentials missing.
 - [ ] Pipeline integration validated end-to-end
 
 ### Coverage Goals:
+
 - AudioEnrichmentService: 20% → 80% real logic tested
 - LastFmService: 40% → 80% real logic tested
 - Full pipeline: 0% → 100% integration coverage
@@ -369,25 +403,33 @@ Integration tests will skip gracefully if credentials missing.
 ## Risk Mitigation
 
 ### Risk 1: API Rate Limits
+
 **Mitigation:**
+
 - Use rate limiting in tests
 - Cache aggressively
 - Skip tests if rate limit exceeded
 
 ### Risk 2: Slow Test Execution
+
 **Mitigation:**
+
 - Run integration tests only on merge (not every commit)
 - Use response caching
 - Run subset of tests in CI, full suite manually
 
 ### Risk 3: Flaky Tests (Network Issues)
+
 **Mitigation:**
+
 - Retry failed tests once
 - Use well-known stable test data
 - Set generous timeouts (60s)
 
 ### Risk 4: API Credentials Management
+
 **Mitigation:**
+
 - Use GitHub Secrets in CI
 - Skip tests gracefully when missing
 - Document how to get credentials
@@ -397,11 +439,13 @@ Integration tests will skip gracefully if credentials missing.
 ## Timeline
 
 ### Week 1:
+
 - Day 1-2: Agent 1 (Infrastructure)
 - Day 3-4: Agent 2 & 3 (Service integration tests)
 - Day 5: Agent 4 (Pipeline tests, part 1)
 
 ### Week 2:
+
 - Day 1-2: Agent 4 (Pipeline tests, part 2)
 - Day 3: Agent 5 (Documentation)
 - Day 4-5: Testing, refinement, CI/CD setup
@@ -413,6 +457,7 @@ Integration tests will skip gracefully if credentials missing.
 ## Next Steps After Phase 2
 
 **Phase 3: E2E Tests (Weeks 4-6)**
+
 - Playwright browser automation
 - Golden path: Analyze playlist workflow
 - Golden path: Create playlist workflow
@@ -426,6 +471,7 @@ Integration tests will skip gracefully if credentials missing.
 ## Key Deliverables Summary
 
 ### Files to Create (Minimum):
+
 1. `workers/api/vitest.integration.config.ts` - Config
 2. `workers/api/src/__tests__/helpers/integration-setup.ts` - Utilities
 3. `workers/api/src/__tests__/integration/README.md` - Docs
@@ -444,6 +490,7 @@ Integration tests will skip gracefully if credentials missing.
 **Investment:** 2 weeks (10 work days)
 
 **Return:**
+
 - ✅ Catch integration bugs before production
 - ✅ Validate caching actually works
 - ✅ Verify rate limiting under real load
@@ -464,6 +511,7 @@ From TESTING_GUIDANCE.md:
 ### Core Principle: "Test Real Behavior, Not Mocks" ✅
 
 Integration tests embody this by:
+
 - Using real external APIs (Deezer, Last.fm)
 - Testing with real KV cache
 - Validating real rate limiting behavior
@@ -472,6 +520,7 @@ Integration tests embody this by:
 ### Value Hierarchy: ⭐⭐⭐⭐⭐ (CRITICAL)
 
 Integration tests rated CRITICAL because they:
+
 1. **Catch integration failures** between services
 2. **Validate caching** actually works in practice
 3. **Test rate limiting** under real conditions

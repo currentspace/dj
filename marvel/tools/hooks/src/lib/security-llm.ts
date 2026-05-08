@@ -8,27 +8,27 @@
  * Implements fail-open behavior: on error, returns "allow" to fall back to native permissions.
  */
 
-import * as fs from "fs";
-import * as path from "path";
+import * as fs from 'fs'
+import * as path from 'path'
 
-import type { PermissionRequestHookSpecificOutput, SyncHookJSONOutput } from "../sdk-types.js";
-import type { LogContext } from "./logger.js";
+import type {PermissionRequestHookSpecificOutput, SyncHookJSONOutput} from '../sdk-types.js'
+import type {LogContext} from './logger.js'
 
-import { logDebug, logWarn } from "./logger.js";
-import { getSecurityDir } from "./paths.js";
-import { redactSensitive } from "./redact.js";
+import {logDebug, logWarn} from './logger.js'
+import {getSecurityDir} from './paths.js'
+import {redactSensitive} from './redact.js'
 
-const MODEL = "haiku";
+const MODEL = 'haiku'
 
 // Response type for the analyzeWithLlm function
 export interface LlmAnalysisResult {
-  decision: "allow" | "ask" | "deny";
-  reason: string;
-  suggestedRule?: { pattern: string; reason: string; type: "contains" | "prefix" | "regex"; };
+  decision: 'allow' | 'ask' | 'deny'
+  reason: string
+  suggestedRule?: {pattern: string; reason: string; type: 'contains' | 'prefix' | 'regex'}
   suggestions?: {
-    allow?: { pattern: string; reason: string }[];
-    deny?: { pattern: string; reason: string }[];
-  };
+    allow?: {pattern: string; reason: string}[]
+    deny?: {pattern: string; reason: string}[]
+  }
 }
 
 /**
@@ -38,11 +38,11 @@ export interface LlmAnalysisResult {
 export function allow(): SyncHookJSONOutput {
   const decision: PermissionRequestHookSpecificOutput = {
     decision: {
-      behavior: "allow",
+      behavior: 'allow',
     },
-    hookEventName: "PermissionRequest",
-  };
-  return { hookSpecificOutput: decision };
+    hookEventName: 'PermissionRequest',
+  }
+  return {hookSpecificOutput: decision}
 }
 
 /**
@@ -50,7 +50,7 @@ export function allow(): SyncHookJSONOutput {
  * In the SDK, there is no "ask" behavior — returning {} means no decision was made.
  */
 export function askUser(_message?: string): SyncHookJSONOutput {
-  return {};
+  return {}
 }
 
 /**
@@ -59,12 +59,12 @@ export function askUser(_message?: string): SyncHookJSONOutput {
 export function deny(reason: string): SyncHookJSONOutput {
   const decision: PermissionRequestHookSpecificOutput = {
     decision: {
-      behavior: "deny",
+      behavior: 'deny',
       message: reason,
     },
-    hookEventName: "PermissionRequest",
-  };
-  return { hookSpecificOutput: decision };
+    hookEventName: 'PermissionRequest',
+  }
+  return {hookSpecificOutput: decision}
 }
 
 /**
@@ -73,11 +73,11 @@ export function deny(reason: string): SyncHookJSONOutput {
  */
 export function escapeForPrompt(input: string): string {
   return input
-    .replace(/\\/g, "\\\\")
+    .replace(/\\/g, '\\\\')
     .replace(/"/g, '\\"')
-    .replace(/\n/g, "\\n")
-    .replace(/\r/g, "\\r")
-    .replace(/\t/g, "\\t");
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '\\r')
+    .replace(/\t/g, '\\t')
 }
 
 /**
@@ -87,22 +87,22 @@ export function escapeForPrompt(input: string): string {
 export function logDecision(
   command: string,
   description: string | undefined,
-  decision: "allow" | "ask" | "deny",
+  decision: 'allow' | 'ask' | 'deny',
   reasoning: string,
   durationMs: number,
-  context?: LogContext
+  context?: LogContext,
 ): void {
-  const decisionsPath = path.join(getSecurityDir(), "decisions.jsonl");
+  const decisionsPath = path.join(getSecurityDir(), 'decisions.jsonl')
 
   // Ensure directory exists
-  const dir = path.dirname(decisionsPath);
+  const dir = path.dirname(decisionsPath)
   try {
     if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { mode: 0o700, recursive: true });
+      fs.mkdirSync(dir, {mode: 0o700, recursive: true})
     }
   } catch {
-    logWarn(`Failed to create decisions directory: ${dir}`, context);
-    return;
+    logWarn(`Failed to create decisions directory: ${dir}`, context)
+    return
   }
 
   const entry = {
@@ -113,14 +113,14 @@ export function logDecision(
     model: MODEL,
     reasoning,
     timestamp: new Date().toISOString(),
-  };
+  }
 
   try {
-    fs.appendFileSync(decisionsPath, JSON.stringify(entry) + "\n", { mode: 0o600 });
-    logDebug(`Logged security decision: ${decision}`, context);
+    fs.appendFileSync(decisionsPath, JSON.stringify(entry) + '\n', {mode: 0o600})
+    logDebug(`Logged security decision: ${decision}`, context)
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    logWarn(`Failed to log decision: ${message}`, context);
+    const message = error instanceof Error ? error.message : String(error)
+    logWarn(`Failed to log decision: ${message}`, context)
   }
 }
 
@@ -130,35 +130,35 @@ export function logDecision(
  */
 export function logSuggestion(
   command: string,
-  suggestions: LlmAnalysisResult["suggestions"],
-  context?: LogContext
+  suggestions: LlmAnalysisResult['suggestions'],
+  context?: LogContext,
 ): void {
-  if (!suggestions) return;
+  if (!suggestions) return
 
-  const suggestionsPath = path.join(getSecurityDir(), "suggestions.jsonl");
+  const suggestionsPath = path.join(getSecurityDir(), 'suggestions.jsonl')
 
   // Ensure directory exists
-  const dir = path.dirname(suggestionsPath);
+  const dir = path.dirname(suggestionsPath)
   try {
     if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { mode: 0o700, recursive: true });
+      fs.mkdirSync(dir, {mode: 0o700, recursive: true})
     }
   } catch {
-    logWarn(`Failed to create suggestions directory: ${dir}`, context);
-    return;
+    logWarn(`Failed to create suggestions directory: ${dir}`, context)
+    return
   }
 
   const entry = {
     command: redactSensitive(command),
     suggestions,
     timestamp: new Date().toISOString(),
-  };
+  }
 
   try {
-    fs.appendFileSync(suggestionsPath, JSON.stringify(entry) + "\n", { mode: 0o600 });
-    logDebug("Logged rule suggestion", context);
+    fs.appendFileSync(suggestionsPath, JSON.stringify(entry) + '\n', {mode: 0o600})
+    logDebug('Logged rule suggestion', context)
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    logWarn(`Failed to log suggestion: ${message}`, context);
+    const message = error instanceof Error ? error.message : String(error)
+    logWarn(`Failed to log suggestion: ${message}`, context)
   }
 }

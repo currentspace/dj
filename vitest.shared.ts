@@ -1,4 +1,4 @@
-import type { UserConfig } from 'vitest/config'
+import type {UserConfig} from 'vitest/config'
 
 /**
  * Shared Vitest configuration for all packages in the DJ monorepo

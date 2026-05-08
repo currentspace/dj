@@ -52,26 +52,32 @@ Review code (a diff, a set of files, or a module) for architectural soundness. I
 ## Architecture Review
 
 ### Summary
+
 <1-2 sentence overall assessment>
 
 ### Findings
 
 #### [CRITICAL] <finding title>
+
 - **Location**: <file paths>
 - **Issue**: <description of the architectural problem>
 - **Impact**: <what goes wrong if this is not addressed>
 - **Suggestion**: <specific improvement>
 
 #### [WARNING] <finding title>
+
 - ...
 
 #### [INFO] <finding title>
+
 - ...
 
 ### Positive Patterns
+
 - <things done well worth preserving>
 
 ### Recommendations
+
 1. <prioritized action item>
 2. ...
 ```

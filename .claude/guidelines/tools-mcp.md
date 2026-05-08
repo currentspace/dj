@@ -18,6 +18,7 @@ interface NativeTool {
 ```
 
 **Benefits over Langchain DynamicStructuredTool**:
+
 - No framework overhead
 - Direct Zod validation
 - Composable with streaming callbacks
@@ -35,18 +36,20 @@ Returns aggregated statistics (not individual tracks) to minimize payload size.
 Use this FIRST to understand playlist characteristics before detailed queries.`,
 
   schema: z.object({
-    playlist_id: z.string()
+    playlist_id: z
+      .string()
       .optional()
       .describe('Spotify playlist ID. Auto-injected from conversation context if not provided.'),
   }),
 
-  func: async (args) => {
+  func: async args => {
     // Implementation
   },
 }
 ```
 
 **Schema Guidelines**:
+
 - Use `.describe()` for all parameters (Claude sees this)
 - Set `.min()` / `.max()` / `.default()` constraints
 - Use `.optional()` for auto-injectable parameters
@@ -55,11 +58,11 @@ Use this FIRST to understand playlist characteristics before detailed queries.`,
 ### Converting to Anthropic Format
 
 ```typescript
-import { zodToJsonSchema } from 'zod-to-json-schema'
+import {zodToJsonSchema} from 'zod-to-json-schema'
 
 function convertToAnthropicTools(tools: NativeTool[]): Anthropic.Tool[] {
   return tools.map(tool => {
-    const jsonSchema = zodToJsonSchema(tool.schema, { target: 'openApi3' })
+    const jsonSchema = zodToJsonSchema(tool.schema, {target: 'openApi3'})
 
     // Extract properties safely
     const properties = isObject(jsonSchema.properties) ? jsonSchema.properties : {}
@@ -89,17 +92,17 @@ function convertToAnthropicTools(tools: NativeTool[]): Anthropic.Tool[] {
 
 ### Three-Tier Data Strategy
 
-| Tier | Tool | Data Returned | Size | Use When |
-|------|------|---------------|------|----------|
-| **1** | `analyze_playlist` | Summary stats, track IDs only | ~2-5KB | High-level questions |
-| **2** | `get_playlist_tracks` | Compact track info | ~100 bytes/track | Need track names/artists |
-| **3** | `get_track_details` | Full metadata, album art | ~2.5KB/track | Specific track details |
+| Tier  | Tool                  | Data Returned                 | Size             | Use When                 |
+| ----- | --------------------- | ----------------------------- | ---------------- | ------------------------ |
+| **1** | `analyze_playlist`    | Summary stats, track IDs only | ~2-5KB           | High-level questions     |
+| **2** | `get_playlist_tracks` | Compact track info            | ~100 bytes/track | Need track names/artists |
+| **3** | `get_track_details`   | Full metadata, album art      | ~2.5KB/track     | Specific track details   |
 
 ### Compact Track Format
 
 ```typescript
 // WRONG - Full Spotify track object (~2.5KB each)
-return { tracks: spotifyApiResponse.tracks }
+return {tracks: spotifyApiResponse.tracks}
 
 // CORRECT - Compact format (~100 bytes each)
 const compactTracks = tracks.map(track => ({
@@ -112,7 +115,7 @@ const compactTracks = tracks.map(track => ({
   album: track.album?.name,
 }))
 
-return { tracks: compactTracks }
+return {tracks: compactTracks}
 ```
 
 **Reference**: `workers/api/src/routes/chat-stream.ts:444-453`
@@ -142,7 +145,7 @@ return {
     tracks_found: deezerResults.filter(r => r.bpm !== null).length,
     bpm: {
       avg: calculateAvg(deezerResults, 'bpm'),
-      range: { min: Math.min(...bpms), max: Math.max(...bpms) },
+      range: {min: Math.min(...bpms), max: Math.max(...bpms)},
     },
   },
 
@@ -218,17 +221,13 @@ function createStreamingSpotifyTools(
 
 ```typescript
 interface ProgressCallback {
-  (progress: {
-    current: number
-    total: number
-    message?: string
-  }): void
+  (progress: {current: number; total: number; message?: string}): void
 }
 
 async function batchProcessWithProgress<T>(
   items: T[],
   processor: (item: T) => Promise<unknown>,
-  onProgress: ProgressCallback
+  onProgress: ProgressCallback,
 ): Promise<void> {
   for (let i = 0; i < items.length; i++) {
     await processor(items[i])
@@ -280,12 +279,12 @@ Phase 5: CURATE (AI-Powered)
 
 ```typescript
 // Phase 1: Must run first
-const analysis = await tools.analyze_playlist({ playlist_id })
+const analysis = await tools.analyze_playlist({playlist_id})
 
 // Phase 2: Requires analysis data
 const vibeProfile = await tools.extract_playlist_vibe({
   analysis_data: analysis,
-  sample_tracks: await tools.get_playlist_tracks({ playlist_id, limit: 20 }),
+  sample_tracks: await tools.get_playlist_tracks({playlist_id, limit: 20}),
 })
 
 // Phase 3: Requires vibe profile
@@ -296,10 +295,10 @@ const strategy = await tools.plan_discovery_strategy({
 
 // Phase 4: Can run in parallel
 const [similar, tagBased, searched, algorithmic] = await Promise.all([
-  tools.recommend_from_similar({ similar_tracks: strategy.lastfm_similar_priority }),
-  tools.recommend_from_tags({ tags: strategy.tag_combinations }),
-  tools.search_spotify_tracks({ query: strategy.creative_queries[0] }),
-  tools.get_recommendations({ seeds: strategy.seed_tracks }),
+  tools.recommend_from_similar({similar_tracks: strategy.lastfm_similar_priority}),
+  tools.recommend_from_tags({tags: strategy.tag_combinations}),
+  tools.search_spotify_tracks({query: strategy.creative_queries[0]}),
+  tools.get_recommendations({seeds: strategy.seed_tracks}),
 ])
 
 // Phase 5: Requires all candidates
@@ -328,15 +327,15 @@ Extracts subtle signals beyond genre tags.`,
     sample_tracks: z.array(z.string()).optional().describe('10-20 track names for context'),
   }),
 
-  func: async (args) => {
-    const anthropic = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY })
+  func: async args => {
+    const anthropic = new Anthropic({apiKey: env.ANTHROPIC_API_KEY})
 
     const prompt = buildVibePrompt(args.analysis_data, args.sample_tracks)
 
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-5-20250929',
       max_tokens: 2000,
-      messages: [{ role: 'user', content: prompt }],
+      messages: [{role: 'user', content: prompt}],
     })
 
     const content = response.content[0]
@@ -352,13 +351,13 @@ Extracts subtle signals beyond genre tags.`,
 ### Fallback for AI Failures
 
 ```typescript
-func: async (args) => {
+func: async args => {
   try {
     // Try AI analysis
     const aiResult = await performAIAnalysis(args)
     return aiResult
   } catch (error) {
-    getLogger()?.warn('AI analysis failed, using fallback', { error })
+    getLogger()?.warn('AI analysis failed, using fallback', {error})
 
     // Return basic analysis from available data
     return {
@@ -375,8 +374,8 @@ func: async (args) => {
 ### Context-Aware Parameters
 
 ```typescript
-func: async (args) => {
-  const finalArgs = { ...args }
+func: async args => {
+  const finalArgs = {...args}
 
   // Auto-inject playlist_id from conversation context
   if (!finalArgs.playlist_id && contextPlaylistId) {
@@ -393,6 +392,7 @@ func: async (args) => {
 ```
 
 **Benefits**:
+
 - User doesn't need to specify playlist ID repeatedly
 - Claude doesn't need to ask for it
 - Reduces conversation friction
@@ -404,12 +404,12 @@ func: async (args) => {
 ### Structured Tool Errors
 
 ```typescript
-func: async (args) => {
+func: async args => {
   try {
     const result = await performOperation(args)
     return result
   } catch (error) {
-    getLogger()?.error('Tool execution failed', error, { tool: 'my_tool', args })
+    getLogger()?.error('Tool execution failed', error, {tool: 'my_tool', args})
 
     // Return error in structured format
     return {
@@ -449,7 +449,7 @@ When returning to Claude:
 ### Turn Limits
 
 ```typescript
-const MAX_TURNS = 5  // Balance between capability and cost
+const MAX_TURNS = 5 // Balance between capability and cost
 
 let turnCount = 0
 while (currentToolCalls.length > 0 && turnCount < MAX_TURNS) {
@@ -469,7 +469,7 @@ while (currentToolCalls.length > 0 && turnCount < MAX_TURNS) {
   })
 
   // Get next response
-  const stream = await anthropic.messages.stream({ messages, tools })
+  const stream = await anthropic.messages.stream({messages, tools})
   currentToolCalls = extractToolCalls(stream)
 }
 ```
@@ -485,7 +485,7 @@ for (const toolCall of currentToolCalls) {
   // Detect identical calls repeating
   const repeatCount = toolSignatures.filter(s => s === signature).length
   if (repeatCount >= 3) {
-    getLogger()?.warn('Detected tool loop, breaking', { signature, repeatCount })
+    getLogger()?.warn('Detected tool loop, breaking', {signature, repeatCount})
     break
   }
 
@@ -501,8 +501,8 @@ for (const toolCall of currentToolCalls) {
 
 ```typescript
 class AudioEnrichmentService {
-  private cacheTTLHit = 90 * 24 * 60 * 60   // 90 days for valid data
-  private cacheTTLMiss = 5 * 60             // 5 minutes for null data
+  private cacheTTLHit = 90 * 24 * 60 * 60 // 90 days for valid data
+  private cacheTTLMiss = 5 * 60 // 5 minutes for null data
 
   async enrichTrack(track: SpotifyTrack): Promise<BPMEnrichment> {
     // 1. Check cache
@@ -527,7 +527,7 @@ class AudioEnrichmentService {
       const enrichment = await this.fetchFromDeezer(mbIsrc)
       if (enrichment) {
         await this.cacheResult(track.id, enrichment, true)
-        return { ...enrichment, source: 'deezer-via-musicbrainz' }
+        return {...enrichment, source: 'deezer-via-musicbrainz'}
       }
     }
 
@@ -564,15 +564,10 @@ class LastFmService {
   }
 
   // N+1 prevention: Batch fetch unique artists separately
-  async enrichWithArtistInfo(
-    tracks: Track[],
-    signals: Map<string, LastFmSignals>
-  ): Promise<void> {
+  async enrichWithArtistInfo(tracks: Track[], signals: Map<string, LastFmSignals>): Promise<void> {
     const uniqueArtists = [...new Set(tracks.map(t => t.artist))]
 
-    const artistInfos = await Promise.all(
-      uniqueArtists.map(artist => this.getArtistInfo(artist))
-    )
+    const artistInfos = await Promise.all(uniqueArtists.map(artist => this.getArtistInfo(artist)))
 
     // Attach to signals
     for (const track of tracks) {
@@ -606,15 +601,15 @@ class LastFmService {
 
 ```typescript
 // Action verbs
-analyze_playlist   // not: playlist_analysis
-get_playlist_tracks   // not: playlist_tracks
-create_playlist   // not: new_playlist
-search_spotify_tracks   // not: spotify_search
+analyze_playlist // not: playlist_analysis
+get_playlist_tracks // not: playlist_tracks
+create_playlist // not: new_playlist
+search_spotify_tracks // not: spotify_search
 
 // Prefixes indicate data source
-recommend_from_similar   // Last.fm-based
-recommend_from_tags   // Tag-based
-get_recommendations   // Spotify algorithm
+recommend_from_similar // Last.fm-based
+recommend_from_tags // Tag-based
+get_recommendations // Spotify algorithm
 ```
 
 ### Description Template
@@ -651,7 +646,7 @@ return {
 ```typescript
 // WRONG
 while (hasMoreToCrawl) {
-  await crawlNext()  // Could run forever
+  await crawlNext() // Could run forever
 }
 
 // CORRECT
@@ -680,7 +675,7 @@ return result
 try {
   return await riskyOperation()
 } catch {
-  return null  // Claude has no idea what went wrong
+  return null // Claude has no idea what went wrong
 }
 
 // CORRECT

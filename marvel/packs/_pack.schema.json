@@ -78,11 +78,11 @@
       "properties": {
         "code_paths": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": {"type": "string"}
         },
         "doc_links": {
           "type": "array",
-          "items": { "type": "string", "format": "uri" }
+          "items": {"type": "string", "format": "uri"}
         }
       }
     }

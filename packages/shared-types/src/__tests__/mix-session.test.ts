@@ -339,22 +339,26 @@ describe('MixSession Schema', () => {
   })
 
   it('enforces max 20 tracks in history', () => {
-    const manyTracks = Array(25).fill(null).map((_, i) => ({
-      ...createTestPlayedTrack(),
-      trackId: `track${i}`,
-      trackUri: `spotify:track:track${i}`,
-    }))
+    const manyTracks = Array(25)
+      .fill(null)
+      .map((_, i) => ({
+        ...createTestPlayedTrack(),
+        trackId: `track${i}`,
+        trackUri: `spotify:track:track${i}`,
+      }))
     const invalid = {...createTestSession(), history: manyTracks}
     expectSchemaToFail(MixSessionSchema, invalid)
   })
 
   it('enforces max 10 tracks in queue', () => {
-    const manyTracks = Array(15).fill(null).map((_, i) => ({
-      ...createTestQueuedTrack(),
-      position: i,
-      trackId: `track${i}`,
-      trackUri: `spotify:track:track${i}`,
-    }))
+    const manyTracks = Array(15)
+      .fill(null)
+      .map((_, i) => ({
+        ...createTestQueuedTrack(),
+        position: i,
+        trackId: `track${i}`,
+        trackUri: `spotify:track:track${i}`,
+      }))
     const invalid = {...createTestSession(), queue: manyTracks}
     expectSchemaToFail(MixSessionSchema, invalid)
   })

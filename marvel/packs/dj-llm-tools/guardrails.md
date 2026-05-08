@@ -22,22 +22,24 @@ Claude Sonnet 4.6 / Opus 4.6 integration with Zod-validated structured output an
 
 ```typescript
 import Anthropic from '@anthropic-ai/sdk'
-import { betaZodTool } from '@anthropic-ai/sdk/helpers/beta/zod'
-import { z } from 'zod'
+import {betaZodTool} from '@anthropic-ai/sdk/helpers/beta/zod'
+import {z} from 'zod'
 
 const TrackSuggestionSchema = z.object({
-  tracks: z.array(z.object({
-    artist: z.string(),
-    name: z.string(),
-    reason: z.string(),
-  })),
+  tracks: z.array(
+    z.object({
+      artist: z.string(),
+      name: z.string(),
+      reason: z.string(),
+    }),
+  ),
 })
 
 const suggestTracks = betaZodTool({
   name: 'suggest_tracks',
   description: 'Suggest tracks for the DJ queue',
   inputSchema: TrackSuggestionSchema,
-  run: async (input) => {
+  run: async input => {
     // input is fully typed from Zod schema
     return input.tracks
   },
@@ -47,7 +49,7 @@ const suggestTracks = betaZodTool({
 const result = await client.messages.toolRunner({
   model: LLM.MODEL,
   tools: [suggestTracks],
-  messages: [{ role: 'user', content: prompt }],
+  messages: [{role: 'user', content: prompt}],
 })
 ```
 
@@ -73,9 +75,9 @@ const result = await client.messages.toolRunner({
 - Cache common narrations (session start, skip detection) to reduce API calls
 
 ```typescript
-import { ElevenLabsClient } from '@elevenlabs/elevenlabs-js'
+import {ElevenLabsClient} from '@elevenlabs/elevenlabs-js'
 
-const elevenlabs = new ElevenLabsClient({ apiKey: env.ELEVEN_API_KEY })
+const elevenlabs = new ElevenLabsClient({apiKey: env.ELEVEN_API_KEY})
 
 const audioStream = await elevenlabs.textToSpeech.stream(VOICE_ID, {
   text: narrationText,

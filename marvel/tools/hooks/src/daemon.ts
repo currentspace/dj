@@ -20,45 +20,45 @@
  * leak (discovered during testing: 73 zombie daemons from one session).
  */
 
-import * as fs from "fs";
-import * as net from "net";
-import * as path from "path";
+import * as fs from 'fs'
+import * as net from 'net'
+import * as path from 'path'
 
-import type { SyncHookJSONOutput } from "./sdk-types.js";
+import type {SyncHookJSONOutput} from './sdk-types.js'
 
-import { handleNotification, handleSubagentStart, handleSubagentStop, handleTaskCompleted, handleTeammateIdle } from "./hooks/lifecycle-hooks.js";
-import { handlePermissionRequest } from "./hooks/permission-request.js";
-import { handlePostCompactAgents } from "./hooks/post-compact-agents.js";
-import { handlePostToolUseFailure } from "./hooks/post-tool-use-failure.js";
-import { handlePostToolUse } from "./hooks/post-tool-use.js";
-import { handlePreCompact } from "./hooks/pre-compact.js";
-import { clearInjectionCache, handlePreToolUse } from "./hooks/pre-tool-use.js";
-import { handleSessionStart } from "./hooks/session-start.js";
-import { handleStop } from "./hooks/stop.js";
-import { handleUserPromptSubmit } from "./hooks/user-prompt-submit.js";
-import { shutdownEvalSession, warmupEvalSession } from "./lib/agent-evaluator.js";
-import { clearSession } from "./lib/agent-registry.js";
 import {
-  buildHookContext,
-  generateRequestId,
-  logDebug,
-  logError,
-  logWarn,
-} from "./lib/logger.js";
-import { getTempDir } from "./lib/paths.js";
-import { buildTimeoutResponse } from "./lib/timeout-response.js";
+  handleNotification,
+  handleSubagentStart,
+  handleSubagentStop,
+  handleTaskCompleted,
+  handleTeammateIdle,
+} from './hooks/lifecycle-hooks.js'
+import {handlePermissionRequest} from './hooks/permission-request.js'
+import {handlePostCompactAgents} from './hooks/post-compact-agents.js'
+import {handlePostToolUseFailure} from './hooks/post-tool-use-failure.js'
+import {handlePostToolUse} from './hooks/post-tool-use.js'
+import {handlePreCompact} from './hooks/pre-compact.js'
+import {clearInjectionCache, handlePreToolUse} from './hooks/pre-tool-use.js'
+import {handleSessionStart} from './hooks/session-start.js'
+import {handleStop} from './hooks/stop.js'
+import {handleUserPromptSubmit} from './hooks/user-prompt-submit.js'
+import {shutdownEvalSession, warmupEvalSession} from './lib/agent-evaluator.js'
+import {clearSession} from './lib/agent-registry.js'
+import {buildHookContext, generateRequestId, logDebug, logError, logWarn} from './lib/logger.js'
+import {getTempDir} from './lib/paths.js'
+import {buildTimeoutResponse} from './lib/timeout-response.js'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type HookHandler = (input: any) => Promise<SyncHookJSONOutput> | SyncHookJSONOutput;
+type HookHandler = (input: any) => Promise<SyncHookJSONOutput> | SyncHookJSONOutput
 
 interface HookRequest {
-  hook: string;
-  input: Record<string, unknown>;
-  request_id?: string;
+  hook: string
+  input: Record<string, unknown>
+  request_id?: string
 }
 
 function getPidPath(daemonId: string): string {
-  return path.join(getTempDir(), `p-${daemonId}.pid`);
+  return path.join(getTempDir(), `p-${daemonId}.pid`)
 }
 
 // Per-daemon paths derived from daemon_id (project hash).
@@ -67,7 +67,7 @@ function getPidPath(daemonId: string): string {
 // "marvel-hooks-{uid}/marvel-hooks-project-{hash}" naming pushed paths to
 // 104+ chars on macOS TMPDIR (/var/folders/…/T/) causing EINVAL on connect.
 function getSocketPath(daemonId: string): string {
-  return path.join(getTempDir(), `p-${daemonId}.sock`);
+  return path.join(getTempDir(), `p-${daemonId}.sock`)
 }
 
 // ── Multi-session tracking ──────────────────────────────────────────
@@ -77,372 +77,369 @@ function getSocketPath(daemonId: string): string {
 //   2. Staleness: If activeSessions is empty when a new session-start arrives,
 //      clear the cache and re-initialize (daemon survived a crash)
 //   3. Shutdown: Only shut down eval when the last session leaves
-const activeSessions = new Set<string>();
-let sessionStartPromise: null | Promise<SyncHookJSONOutput> = null;
-let sessionStartResult: null | SyncHookJSONOutput = null;
+const activeSessions = new Set<string>()
+let sessionStartPromise: null | Promise<SyncHookJSONOutput> = null
+let sessionStartResult: null | SyncHookJSONOutput = null
 
 const handlers: Record<string, HookHandler> = {
-  "notification": handleNotification,
-  "permission-request": handlePermissionRequest,
-  "post-compact-agents": handlePostCompactAgents,
-  "post-tool-use": handlePostToolUse,
-  "post-tool-use-failure": handlePostToolUseFailure,
-  "pre-compact": async (input) => {
+  notification: handleNotification,
+  'permission-request': handlePermissionRequest,
+  'post-compact-agents': handlePostCompactAgents,
+  'post-tool-use': handlePostToolUse,
+  'post-tool-use-failure': handlePostToolUseFailure,
+  'pre-compact': async input => {
     // Clear injection cache so lessons re-inject after context compaction
-    clearInjectionCache();
-    return handlePreCompact(input);
+    clearInjectionCache()
+    return handlePreCompact(input)
   },
-  "pre-tool-use": handlePreToolUse,
-  "session-end": async (input) => {
-    const sid = input?.session_id as string | undefined;
+  'pre-tool-use': handlePreToolUse,
+  'session-end': async input => {
+    const sid = input?.session_id as string | undefined
     if (sid) {
-      activeSessions.delete(sid);
-      clearSession(sid);
+      activeSessions.delete(sid)
+      clearSession(sid)
     }
 
     if (activeSessions.size === 0) {
       // Last session leaving — full cleanup + self-terminate
-      logDebug("session-end: last session leaving, shutting down", {
-        hookType: "session-end",
+      logDebug('session-end: last session leaving, shutting down', {
+        hookType: 'session-end',
         sessionId: sid,
-      });
-      await shutdownEvalSession();
-      sessionStartPromise = null;
-      sessionStartResult = null;
+      })
+      await shutdownEvalSession()
+      sessionStartPromise = null
+      sessionStartResult = null
       // Schedule self-termination after response is sent.
       // The 500ms delay ensures the JSON response reaches the caller (nc)
       // before the process exits and cleans up the socket.
       setTimeout(() => {
-        process.kill(process.pid, "SIGTERM");
-      }, 500);
+        process.kill(process.pid, 'SIGTERM')
+      }, 500)
     } else {
-      logDebug("session-end: session leaving, daemon stays alive", {
-        hookType: "session-end",
+      logDebug('session-end: session leaving, daemon stays alive', {
+        hookType: 'session-end',
         sessionId: sid,
-      });
+      })
     }
-    return {};
+    return {}
   },
-  "session-start": async (input) => {
-    const sid = input?.session_id as string | undefined;
-    const wasEmpty = activeSessions.size === 0;
-    if (sid) activeSessions.add(sid);
+  'session-start': async input => {
+    const sid = input?.session_id as string | undefined
+    const wasEmpty = activeSessions.size === 0
+    if (sid) activeSessions.add(sid)
 
     // If the set was empty before this session arrived, the daemon either
     // just started or survived a previous session's crash — clear stale cache.
     if (wasEmpty && sessionStartPromise) {
-      logDebug("session-start: clearing stale cache (crash recovery)", {
-        hookType: "session-start",
+      logDebug('session-start: clearing stale cache (crash recovery)', {
+        hookType: 'session-start',
         sessionId: sid,
-      });
-      sessionStartPromise = null;
-      sessionStartResult = null;
+      })
+      sessionStartPromise = null
+      sessionStartResult = null
     }
 
     if (!sessionStartPromise) {
       // First session-start — run full init. Store the promise so concurrent
       // requests can await the same initialization.
-      clearInjectionCache();
-      sessionStartPromise = handleSessionStart(input);
-      const result = await sessionStartPromise;
-      sessionStartResult = result;
-      logDebug("session-start: full init (first session)", {
-        hookType: "session-start",
+      clearInjectionCache()
+      sessionStartPromise = handleSessionStart(input)
+      const result = await sessionStartPromise
+      sessionStartResult = result
+      logDebug('session-start: full init (first session)', {
+        hookType: 'session-start',
         sessionId: sid,
-      });
+      })
       // Pre-warm agent evaluation session (fire-and-forget)
-      warmupEvalSession();
-      return result;
+      warmupEvalSession()
+      return result
     }
 
     // Concurrent or subsequent request — await the same promise
     // This prevents the race where concurrent requests get {} before init completes.
     if (!sessionStartResult) {
-      logDebug("session-start: awaiting in-flight init", {
-        hookType: "session-start",
+      logDebug('session-start: awaiting in-flight init', {
+        hookType: 'session-start',
         sessionId: sid,
-      });
-      return await sessionStartPromise;
+      })
+      return await sessionStartPromise
     }
 
     // Subsequent session-start (subagent or peer) — return cached result
-    logDebug("session-start: returning cached result (reentry)", {
-      hookType: "session-start",
+    logDebug('session-start: returning cached result (reentry)', {
+      hookType: 'session-start',
       sessionId: sid,
-    });
-    return sessionStartResult;
+    })
+    return sessionStartResult
   },
   stop: handleStop,
-  "subagent-start": handleSubagentStart,
-  "subagent-stop": handleSubagentStop,
-  "task-completed": handleTaskCompleted,
-  "teammate-idle": handleTeammateIdle,
-  "user-prompt-submit": handleUserPromptSubmit,
-};
+  'subagent-start': handleSubagentStart,
+  'subagent-stop': handleSubagentStop,
+  'task-completed': handleTaskCompleted,
+  'teammate-idle': handleTeammateIdle,
+  'user-prompt-submit': handleUserPromptSubmit,
+}
 
 async function handleRequest(data: string): Promise<string> {
-  const fallbackRequestId = generateRequestId();
-  let request: HookRequest | null = null;
+  const fallbackRequestId = generateRequestId()
+  let request: HookRequest | null = null
 
   try {
-    request = JSON.parse(data) as HookRequest;
+    request = JSON.parse(data) as HookRequest
   } catch (error) {
-    logWarn("Failed to parse daemon request JSON", {
+    logWarn('Failed to parse daemon request JSON', {
       requestId: fallbackRequestId,
-    });
-    return JSON.stringify({});
+    })
+    return JSON.stringify({})
   }
 
-  const requestId = request.request_id || fallbackRequestId;
-  if (!request.hook || typeof request.hook !== "string") {
-    logWarn("Daemon request missing hook type", { requestId });
-    return JSON.stringify({});
+  const requestId = request.request_id || fallbackRequestId
+  if (!request.hook || typeof request.hook !== 'string') {
+    logWarn('Daemon request missing hook type', {requestId})
+    return JSON.stringify({})
   }
 
-  const input =
-    request.input && typeof request.input === "object" ? request.input : {};
-  process.env.MARVEL_REQUEST_ID = requestId;
+  const input = request.input && typeof request.input === 'object' ? request.input : {}
+  process.env.MARVEL_REQUEST_ID = requestId
 
   // Session ID is passed via context (built from input.session_id by
   // buildHookContext) rather than mutating process.env, which would be
   // corrupted by concurrent async handlers interleaving.
 
-  const context = buildHookContext(request.hook, input, { requestId });
+  const context = buildHookContext(request.hook, input, {requestId})
 
-  const handler = handlers[request.hook];
+  const handler = handlers[request.hook]
   if (!handler) {
-    logWarn(`Unknown hook type: ${request.hook}`, context);
-    return JSON.stringify({});
+    logWarn(`Unknown hook type: ${request.hook}`, context)
+    return JSON.stringify({})
   }
 
   // Per-hook timeout: security hooks (pre-tool-use, permission-request) need
   // longer because they run agent evaluations (CLI spawn + Haiku thinking).
-  const HANDLER_TIMEOUT_MS_DEFAULT = 9000;
-  const HANDLER_TIMEOUT_MS_SECURITY = 35000; // Must exceed evaluator's 30s timeout
-  const SECURITY_HOOKS = new Set(["permission-request", "pre-tool-use"]);
-  const handlerTimeoutMs = SECURITY_HOOKS.has(request.hook)
-    ? HANDLER_TIMEOUT_MS_SECURITY
-    : HANDLER_TIMEOUT_MS_DEFAULT;
+  const HANDLER_TIMEOUT_MS_DEFAULT = 9000
+  const HANDLER_TIMEOUT_MS_SECURITY = 35000 // Must exceed evaluator's 30s timeout
+  const SECURITY_HOOKS = new Set(['permission-request', 'pre-tool-use'])
+  const handlerTimeoutMs = SECURITY_HOOKS.has(request.hook) ? HANDLER_TIMEOUT_MS_SECURITY : HANDLER_TIMEOUT_MS_DEFAULT
 
-  const startTime = Date.now();
+  const startTime = Date.now()
   try {
-    logDebug("Daemon handling hook request", context);
-    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    logDebug('Daemon handling hook request', context)
+    let timeoutId: ReturnType<typeof setTimeout> | undefined
     const output = await Promise.race([
-      Promise.resolve(handler(input)).then((result) => {
-        clearTimeout(timeoutId);
-        return result;
+      Promise.resolve(handler(input)).then(result => {
+        clearTimeout(timeoutId)
+        return result
       }),
-      new Promise<SyncHookJSONOutput>((resolve) => {
+      new Promise<SyncHookJSONOutput>(resolve => {
         timeoutId = setTimeout(() => {
-          logWarn(`Handler timeout after ${handlerTimeoutMs}ms`, context);
-          resolve(buildTimeoutResponse(request.hook, SECURITY_HOOKS.has(request.hook)));
-        }, handlerTimeoutMs);
+          logWarn(`Handler timeout after ${handlerTimeoutMs}ms`, context)
+          resolve(buildTimeoutResponse(request.hook, SECURITY_HOOKS.has(request.hook)))
+        }, handlerTimeoutMs)
       }),
-    ]);
-    const durationMs = Date.now() - startTime;
-    logDebug("Daemon handled hook request", { ...context, durationMs });
-    return JSON.stringify(output || {});
+    ])
+    const durationMs = Date.now() - startTime
+    logDebug('Daemon handled hook request', {...context, durationMs})
+    return JSON.stringify(output || {})
   } catch (error) {
-    const durationMs = Date.now() - startTime;
-    logError("Hook handler failed in daemon", error, {
+    const durationMs = Date.now() - startTime
+    logError('Hook handler failed in daemon', error, {
       ...context,
       durationMs,
-    });
-    return JSON.stringify({});
+    })
+    return JSON.stringify({})
   }
 }
 
 function startDaemon(daemonId: string): void {
-  const socketPath = getSocketPath(daemonId);
-  const pidPath = getPidPath(daemonId);
+  const socketPath = getSocketPath(daemonId)
+  const pidPath = getPidPath(daemonId)
 
   // Guard: verify socket path fits within macOS sun_path (104 bytes incl. null)
   if (socketPath.length > 103) {
     logError(
       `Socket path too long (${socketPath.length} chars, max 103): ${socketPath}`,
-      new Error("Socket path exceeds macOS sun_path limit"),
-      { daemonId, hookType: "daemon" },
-    );
-    process.exit(1);
+      new Error('Socket path exceeds macOS sun_path limit'),
+      {daemonId, hookType: 'daemon'},
+    )
+    process.exit(1)
   }
 
   // Remove stale socket if exists
   if (fs.existsSync(socketPath)) {
     try {
-      fs.unlinkSync(socketPath);
+      fs.unlinkSync(socketPath)
     } catch (error) {
-      logDebug("Failed to remove stale socket", {
+      logDebug('Failed to remove stale socket', {
         daemonId,
         filePath: socketPath,
-        hookType: "daemon",
-      });
+        hookType: 'daemon',
+      })
     }
   }
 
-  const server = net.createServer({ allowHalfOpen: true }, (socket) => {
-    let buffer = "";
+  const server = net.createServer({allowHalfOpen: true}, socket => {
+    let buffer = ''
 
-    socket.on("data", async (chunk) => {
-      buffer += chunk.toString();
+    socket.on('data', async chunk => {
+      buffer += chunk.toString()
 
       // Newline-delimited JSON protocol
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
 
       for (const line of lines) {
         if (line.trim()) {
-          const response = await handleRequest(line);
-          socket.write(response + "\n");
+          const response = await handleRequest(line)
+          socket.write(response + '\n')
           // Close connection after responding so nc reads the response
           // Each hook invocation opens a new connection
-          socket.end();
+          socket.end()
         }
       }
-    });
+    })
 
-    socket.on("error", () => {
+    socket.on('error', () => {
       // Client disconnected, ignore
-    });
-  });
+    })
+  })
 
   server.listen(socketPath, () => {
-    fs.writeFileSync(pidPath, process.pid.toString(), { mode: 0o600 });
-    fs.chmodSync(socketPath, 0o600);
-    logDebug("Daemon listening", {
+    fs.writeFileSync(pidPath, process.pid.toString(), {mode: 0o600})
+    fs.chmodSync(socketPath, 0o600)
+    logDebug('Daemon listening', {
       daemonId,
-      hookType: "daemon",
-    });
-  });
+      hookType: 'daemon',
+    })
+  })
 
-  server.on("error", (err) => {
-    logError("Daemon server error", err, { daemonId, hookType: "daemon" });
-    process.exit(1);
-  });
+  server.on('error', err => {
+    logError('Daemon server error', err, {daemonId, hookType: 'daemon'})
+    process.exit(1)
+  })
 
   // Graceful shutdown
   const shutdown = () => {
-    server.close();
+    server.close()
     try {
-      if (fs.existsSync(socketPath)) fs.unlinkSync(socketPath);
-      if (fs.existsSync(pidPath)) fs.unlinkSync(pidPath);
+      if (fs.existsSync(socketPath)) fs.unlinkSync(socketPath)
+      if (fs.existsSync(pidPath)) fs.unlinkSync(pidPath)
     } catch (error) {
-      logDebug("Failed to clean up daemon files during shutdown", {
+      logDebug('Failed to clean up daemon files during shutdown', {
         daemonId,
-        hookType: "daemon",
-      });
+        hookType: 'daemon',
+      })
     }
-    logDebug("Daemon shutdown complete", { daemonId, hookType: "daemon" });
-    process.exit(0);
-  };
+    logDebug('Daemon shutdown complete', {daemonId, hookType: 'daemon'})
+    process.exit(0)
+  }
 
-  process.on("SIGTERM", shutdown);
-  process.on("SIGINT", shutdown);
+  process.on('SIGTERM', shutdown)
+  process.on('SIGINT', shutdown)
 }
 
 function statusDaemon(daemonId: string): void {
-  const pidPath = getPidPath(daemonId);
-  const socketPath = getSocketPath(daemonId);
+  const pidPath = getPidPath(daemonId)
+  const socketPath = getSocketPath(daemonId)
 
   if (!fs.existsSync(pidPath)) {
-    console.log(`[marvel-daemon] Not running (daemon: ${daemonId})`);
-    process.exit(1);
+    console.log(`[marvel-daemon] Not running (daemon: ${daemonId})`)
+    process.exit(1)
   }
 
-  const pid = parseInt(fs.readFileSync(pidPath, "utf-8").trim(), 10);
+  const pid = parseInt(fs.readFileSync(pidPath, 'utf-8').trim(), 10)
 
   try {
-    process.kill(pid, 0); // Check if process exists
-    console.log(`[marvel-daemon] Running (pid: ${pid}, daemon: ${daemonId})`);
-    console.log(`[marvel-daemon] Socket: ${socketPath}`);
+    process.kill(pid, 0) // Check if process exists
+    console.log(`[marvel-daemon] Running (pid: ${pid}, daemon: ${daemonId})`)
+    console.log(`[marvel-daemon] Socket: ${socketPath}`)
   } catch {
-    console.log(`[marvel-daemon] Stale PID file (daemon: ${daemonId})`);
-    fs.unlinkSync(pidPath);
-    process.exit(1);
+    console.log(`[marvel-daemon] Stale PID file (daemon: ${daemonId})`)
+    fs.unlinkSync(pidPath)
+    process.exit(1)
   }
 }
 
 function stopDaemon(daemonId: string): void {
-  const pidPath = getPidPath(daemonId);
-  const socketPath = getSocketPath(daemonId);
+  const pidPath = getPidPath(daemonId)
+  const socketPath = getSocketPath(daemonId)
 
   if (fs.existsSync(pidPath)) {
     try {
-      const pid = parseInt(fs.readFileSync(pidPath, "utf-8").trim(), 10);
-      process.kill(pid, "SIGTERM");
+      const pid = parseInt(fs.readFileSync(pidPath, 'utf-8').trim(), 10)
+      process.kill(pid, 'SIGTERM')
     } catch (error) {
-      logDebug("Failed to kill daemon process (may already be dead)", {
+      logDebug('Failed to kill daemon process (may already be dead)', {
         daemonId,
         filePath: pidPath,
-        hookType: "daemon",
-      });
+        hookType: 'daemon',
+      })
     }
     try {
-      fs.unlinkSync(pidPath);
+      fs.unlinkSync(pidPath)
     } catch (error) {
-      logDebug("Failed to remove pid file", {
+      logDebug('Failed to remove pid file', {
         daemonId,
         filePath: pidPath,
-        hookType: "daemon",
-      });
+        hookType: 'daemon',
+      })
     }
   }
 
   if (fs.existsSync(socketPath)) {
     try {
-      fs.unlinkSync(socketPath);
+      fs.unlinkSync(socketPath)
     } catch (error) {
-      logDebug("Failed to remove socket file", {
+      logDebug('Failed to remove socket file', {
         daemonId,
         filePath: socketPath,
-        hookType: "daemon",
-      });
+        hookType: 'daemon',
+      })
     }
   }
 }
 
 // CLI
-const command = process.argv[2];
-const daemonId = process.argv[3];
+const command = process.argv[2]
+const daemonId = process.argv[3]
 
-if (!daemonId && command !== "cleanup") {
-  console.error("Usage: daemon.js <start|stop|status> <daemon_id>");
-  console.error("       daemon.js cleanup");
-  process.exit(1);
+if (!daemonId && command !== 'cleanup') {
+  console.error('Usage: daemon.js <start|stop|status> <daemon_id>')
+  console.error('       daemon.js cleanup')
+  process.exit(1)
 }
 
 switch (command) {
-  case "cleanup": {
+  case 'cleanup': {
     // Clean up all stale daemons from secure temp dir (current + legacy naming)
-    const tempDir = getTempDir();
+    const tempDir = getTempDir()
     const files = fs
       .readdirSync(tempDir)
-      .filter((f) => f.startsWith("p-") || f.startsWith("mhd-") || f.startsWith("marvel-hooks-"));
-    let cleanedCount = 0;
+      .filter(f => f.startsWith('p-') || f.startsWith('mhd-') || f.startsWith('marvel-hooks-'))
+    let cleanedCount = 0
     for (const file of files) {
       try {
-        fs.unlinkSync(path.join(tempDir, file));
-        cleanedCount++;
+        fs.unlinkSync(path.join(tempDir, file))
+        cleanedCount++
       } catch (error) {
-        logDebug("Failed to clean up file during cleanup", {
+        logDebug('Failed to clean up file during cleanup', {
           filePath: path.join(tempDir, file),
-          hookType: "daemon",
-        });
+          hookType: 'daemon',
+        })
       }
     }
-    console.log(`[marvel-daemon] Cleaned up ${cleanedCount}/${files.length} files`);
-    break;
+    console.log(`[marvel-daemon] Cleaned up ${cleanedCount}/${files.length} files`)
+    break
   }
-  case "start":
-    startDaemon(daemonId);
-    break;
-  case "status":
-    statusDaemon(daemonId);
-    break;
-  case "stop":
-    stopDaemon(daemonId);
-    break;
+  case 'start':
+    startDaemon(daemonId)
+    break
+  case 'status':
+    statusDaemon(daemonId)
+    break
+  case 'stop':
+    stopDaemon(daemonId)
+    break
   default:
-    console.error("Usage: daemon.js <start|stop|status|cleanup> [daemon_id]");
-    process.exit(1);
+    console.error('Usage: daemon.js <start|stop|status|cleanup> [daemon_id]')
+    process.exit(1)
 }

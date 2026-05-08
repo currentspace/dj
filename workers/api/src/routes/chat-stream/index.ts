@@ -255,9 +255,7 @@ chatStreamRouter.post('/message', async c => {
 
           // Build system prompt
           const systemPrompt =
-            request.mode === 'dj'
-              ? buildDJSystemPrompt(djContext)
-              : buildStandardSystemPrompt(playlistId)
+            request.mode === 'dj' ? buildDJSystemPrompt(djContext) : buildStandardSystemPrompt(playlistId)
 
           await sseWriter.write({
             data: {
@@ -580,18 +578,24 @@ async function fetchDJContext(
 
     let djContext: null | {nowPlaying?: {artist: string; progress: string; track: string}; queueDepth?: number} = null
 
-    const NowPlayingSchema = z.object({
-      item: z.object({
-        artists: z.array(z.object({name: z.string()})).optional(),
-        duration_ms: z.number().optional(),
-        name: z.string().optional(),
-      }).optional(),
-      progress_ms: z.number().optional(),
-    }).passthrough()
+    const NowPlayingSchema = z
+      .object({
+        item: z
+          .object({
+            artists: z.array(z.object({name: z.string()})).optional(),
+            duration_ms: z.number().optional(),
+            name: z.string().optional(),
+          })
+          .optional(),
+        progress_ms: z.number().optional(),
+      })
+      .passthrough()
 
-    const QueueSchema = z.object({
-      queue: z.array(z.unknown()).optional(),
-    }).passthrough()
+    const QueueSchema = z
+      .object({
+        queue: z.array(z.unknown()).optional(),
+      })
+      .passthrough()
 
     if (nowPlayingRes.ok && nowPlayingRes.status !== 204) {
       const npParsed = NowPlayingSchema.safeParse(await nowPlayingRes.json())
@@ -601,7 +605,7 @@ async function fetchDJContext(
         const duration = npData.item?.duration_ms ?? 0
         djContext = {
           nowPlaying: {
-            artist: npData.item?.artists?.map((a) => a.name).join(', ') ?? 'Unknown',
+            artist: npData.item?.artists?.map(a => a.name).join(', ') ?? 'Unknown',
             progress: `${Math.floor(progress / 1000)}s / ${Math.floor(duration / 1000)}s`,
             track: npData.item?.name ?? 'Unknown',
           },

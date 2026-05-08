@@ -7,56 +7,29 @@
  * Detects correction and direction patterns in user prompts.
  */
 
-import type { GuidanceType } from "../types.js";
+import type {GuidanceType} from '../types.js'
 
 // Category keywords for classification.
 // Projects should customize this map by adding packs with relevant keywords.
 // These are generic starter categories that ship with MARVEL.
 const CATEGORY_KEYWORDS: Record<string, string[]> = {
-  "code-quality": [
-    "typescript",
-    "type",
-    "interface",
-    "async",
-    "await",
-    "promise",
-    "validation",
-    "error",
-    "pattern",
-    "import",
-    "export",
+  'code-quality': [
+    'typescript',
+    'type',
+    'interface',
+    'async',
+    'await',
+    'promise',
+    'validation',
+    'error',
+    'pattern',
+    'import',
+    'export',
   ],
-  "git-workflow": [
-    "git",
-    "commit",
-    "branch",
-    "merge",
-    "rebase",
-    "push",
-    "pull",
-    "worktree",
-  ],
-  "security": [
-    "auth",
-    "security",
-    "cors",
-    "sanitize",
-    "validate",
-    "injection",
-    "xss",
-    "csrf",
-  ],
-  "testing": [
-    "test",
-    "mock",
-    "assert",
-    "coverage",
-    "fixture",
-    "vitest",
-    "jest",
-    "expect",
-  ],
-};
+  'git-workflow': ['git', 'commit', 'branch', 'merge', 'rebase', 'push', 'pull', 'worktree'],
+  security: ['auth', 'security', 'cors', 'sanitize', 'validate', 'injection', 'xss', 'csrf'],
+  testing: ['test', 'mock', 'assert', 'coverage', 'fixture', 'vitest', 'jest', 'expect'],
+}
 
 // Direction patterns (explicit instructions)
 const DIRECTION_PATTERNS = [
@@ -66,68 +39,65 @@ const DIRECTION_PATTERNS = [
   /remember\s+to\s+/i,
   /from\s+now\s+on\s+/i,
   /going\s+forward\s+/i,
-];
+]
 
 /**
  * Detect the category of guidance based on keywords.
  */
 export function detectCategory(prompt: string): string | undefined {
-  const normalizedPrompt = prompt.toLowerCase();
+  const normalizedPrompt = prompt.toLowerCase()
 
-  let bestCategory: string | undefined;
-  let bestScore = 0;
+  let bestCategory: string | undefined
+  let bestScore = 0
 
   for (const [category, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
-    const score = keywords.filter((kw) => normalizedPrompt.includes(kw)).length;
+    const score = keywords.filter(kw => normalizedPrompt.includes(kw)).length
     if (score > bestScore) {
-      bestScore = score;
-      bestCategory = category;
+      bestScore = score
+      bestCategory = category
     }
   }
 
-  return bestCategory;
+  return bestCategory
 }
 
 /**
  * Detect the type of guidance in a user prompt.
  */
-export function detectGuidanceType(
-  prompt: string,
-  correctionPatterns: RegExp[]
-): GuidanceType {
-  const normalizedPrompt = prompt.trim().toLowerCase();
+export function detectGuidanceType(prompt: string, correctionPatterns: RegExp[]): GuidanceType {
+  const normalizedPrompt = prompt.trim().toLowerCase()
 
   // Check for corrections first (highest priority)
   for (const pattern of correctionPatterns) {
     if (pattern.test(prompt)) {
-      return "correction";
+      return 'correction'
     }
   }
 
   // Check for explicit directions
   for (const pattern of DIRECTION_PATTERNS) {
     if (pattern.test(prompt)) {
-      return "direction";
+      return 'direction'
     }
   }
 
   // Check for task boundaries
   if (/^(help|can you|please).*?(add|create|build|fix|implement)/i.test(prompt)) {
-    return "task_start";
+    return 'task_start'
   }
 
   if (/^(thanks|done|perfect|looks good|ship it|lgtm)/i.test(prompt)) {
-    return "task_end";
+    return 'task_end'
   }
 
   // Check for approvals/rejections
   if (/^(yes|yeah|yep|correct|right|exactly)/i.test(prompt)) {
-    return "approval";
+    return 'approval'
   }
 
   if (/^(no|nope|wrong|incorrect)/i.test(prompt)) {
-    return "rejection";
+    return 'rejection'
   }
 
-  return "unknown";
+  return 'unknown'
 }

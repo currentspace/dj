@@ -19,12 +19,14 @@ Phase 1 of the Testing Improvement Plan has been successfully completed. We have
 ### 1. Contract Test Infrastructure (4 files)
 
 #### `workers/api/vitest.contracts.config.ts`
+
 - Separate Vitest configuration for contract tests
 - 30-second timeout for slow API calls
 - Sequential execution to respect rate limits
 - Only matches `**/*.contract.test.ts` files
 
 #### `workers/api/src/__tests__/contracts/setup.ts`
+
 - Global test setup and configuration
 - Environment variable validation
 - In-memory response cache (5-minute TTL)
@@ -35,6 +37,7 @@ Phase 1 of the Testing Improvement Plan has been successfully completed. We have
   - MusicBrainz: 1 req/second
 
 #### `workers/api/src/__tests__/contracts/helpers.ts`
+
 - `rateLimitedFetch()` - Automatic rate limiting per domain
 - `getTestCredentials()` - Load API credentials from environment
 - `skipIfMissingCredentials()` - Gracefully skip when credentials missing
@@ -43,6 +46,7 @@ Phase 1 of the Testing Improvement Plan has been successfully completed. We have
 - `assertSchemaMatches()` - Assertion helper with comprehensive error logging
 
 #### `workers/api/src/__tests__/contracts/README.md`
+
 - 9,600 bytes of comprehensive documentation
 - What contract tests are and why they matter
 - How to run locally and in CI/CD
@@ -60,6 +64,7 @@ Phase 1 of the Testing Improvement Plan has been successfully completed. We have
 **Size:** 492 lines, 17KB
 
 #### Endpoints Tested:
+
 1. ✅ GET /tracks/{id} - Single track retrieval
 2. ✅ GET /tracks?ids={ids} - Bulk track retrieval (3 tracks)
 3. ✅ GET /playlists/{id} - Playlist metadata
@@ -74,6 +79,7 @@ Phase 1 of the Testing Improvement Plan has been successfully completed. We have
 12. ✅ GET /me - Current user profile
 
 #### Schemas Validated:
+
 - `SpotifyTrackFullSchema`
 - `SpotifyPlaylistFullSchema`
 - `SpotifyPlaylistTracksResponseSchema`
@@ -83,6 +89,7 @@ Phase 1 of the Testing Improvement Plan has been successfully completed. We have
 - `SpotifyUserSchema`
 
 **Test Behavior:**
+
 - All tests skip gracefully when `SPOTIFY_ACCESS_TOKEN` not set
 - Uses well-known test data (Bohemian Rhapsody, Today's Top Hits)
 - 1-second rate limiting between tests
@@ -96,6 +103,7 @@ Phase 1 of the Testing Improvement Plan has been successfully completed. We have
 **Status:** ✅ **All 12 tests passing** (runs without credentials)
 
 #### Endpoints Tested:
+
 1. ✅ GET /track/isrc:{isrc} - ISRC lookup (Bohemian Rhapsody)
 2. ✅ GET /track/isrc:{isrc} - ISRC lookup (Billie Jean, graceful skip)
 3. ✅ GET /track/isrc:{isrc} - ISRC lookup (Stairway to Heaven, graceful skip)
@@ -110,9 +118,11 @@ Phase 1 of the Testing Improvement Plan has been successfully completed. We have
 12. ✅ Schema consistency - Multiple tracks
 
 #### Schema Validated:
+
 - `DeezerTrackSchema` (from @dj/shared-types)
 
 **Key Features:**
+
 - No authentication required (public API)
 - 500ms rate limiting between requests
 - Handles missing ISRCs gracefully (not all tracks in Deezer catalog)
@@ -120,6 +130,7 @@ Phase 1 of the Testing Improvement Plan has been successfully completed. We have
 - BPM range validation (45-220 when present)
 
 **Test Results:**
+
 ```
 ✅ 12 tests passing
 ⏱️  12.6 seconds execution time
@@ -135,6 +146,7 @@ Phase 1 of the Testing Improvement Plan has been successfully completed. We have
 **Size:** 407 lines
 
 #### API Methods Tested:
+
 1. ✅ track.getInfo - Track metadata, popularity, tags, album
 2. ✅ track.getSimilar - Similar track recommendations
 3. ✅ artist.getInfo - Artist bio, tags, similar artists
@@ -145,6 +157,7 @@ Phase 1 of the Testing Improvement Plan has been successfully completed. We have
 8. ✅ Response wrapping pattern - API envelope structure
 
 #### Schemas Validated:
+
 - `LastFmTrackInfoResponseSchema`
 - `LastFmTrackSimilarResponseSchema`
 - `LastFmArtistInfoResponseSchema`
@@ -152,12 +165,14 @@ Phase 1 of the Testing Improvement Plan has been successfully completed. We have
 - `LastFmTrackCorrectionResponseSchema`
 
 **Last.fm API Quirks Documented:**
+
 - Response wrapping: All responses wrapped in method-specific envelopes
 - Data types: Returns actual numbers (not strings)
 - Error handling: Returns HTTP 200 even for errors
 - Rate limiting: 5 req/s (200ms delay implemented)
 
 **Test Behavior:**
+
 - All tests skip gracefully when `LASTFM_API_KEY` not set
 - Uses well-known test data (Queen, Radiohead, The Beatles)
 - Validates all nested response structures
@@ -168,6 +183,7 @@ Phase 1 of the Testing Improvement Plan has been successfully completed. We have
 ### 5. Package Scripts
 
 #### Root package.json:
+
 ```json
 "test:contracts": "pnpm --filter @dj/api-worker test:contracts",
 "test:contracts:spotify": "pnpm --filter @dj/api-worker test:contracts -- spotify.contract.test.ts",
@@ -176,11 +192,13 @@ Phase 1 of the Testing Improvement Plan has been successfully completed. We have
 ```
 
 #### Workers/api package.json:
+
 ```json
 "test:contracts": "vitest --config vitest.contracts.config.ts"
 ```
 
 **Usage:**
+
 ```bash
 # Run all contract tests
 pnpm test:contracts
@@ -199,11 +217,13 @@ SPOTIFY_ACCESS_TOKEN=xxx LASTFM_API_KEY=yyy pnpm test:contracts
 ### 6. Documentation Files
 
 #### `.dev.vars.example`
+
 - Documents all required API credentials
 - Shows where to get each credential
 - Includes optional test data configuration
 
 #### `contracts/README.md`
+
 - Comprehensive guide (9,600 bytes)
 - Running tests locally
 - CI/CD integration strategy
@@ -217,6 +237,7 @@ SPOTIFY_ACCESS_TOKEN=xxx LASTFM_API_KEY=yyy pnpm test:contracts
 ## Test Coverage Summary
 
 ### APIs Covered:
+
 - ✅ **Spotify API** - 9 endpoints, 7 schemas (12 tests)
 - ✅ **Deezer API** - 2 endpoints, 1 schema (12 tests)
 - ✅ **Last.fm API** - 5 methods, 5 schemas (8 tests)
@@ -224,6 +245,7 @@ SPOTIFY_ACCESS_TOKEN=xxx LASTFM_API_KEY=yyy pnpm test:contracts
 ### Total Contract Tests: **32 tests**
 
 ### Test Status:
+
 - **13 tests passing** (Deezer - no auth required)
 - **20 tests skipping** (Spotify/Last.fm - credentials not set)
 - **All infrastructure working correctly**
@@ -233,6 +255,7 @@ SPOTIFY_ACCESS_TOKEN=xxx LASTFM_API_KEY=yyy pnpm test:contracts
 ## Value Delivered
 
 ### Before Phase 1:
+
 - ❌ **0% contract validation coverage**
 - ❌ No detection of API schema changes
 - ❌ Production failures when APIs change
@@ -240,6 +263,7 @@ SPOTIFY_ACCESS_TOKEN=xxx LASTFM_API_KEY=yyy pnpm test:contracts
 - ⭐⭐ Testing theater (54% tests mocking, 16% testing libraries)
 
 ### After Phase 1:
+
 - ✅ **100% contract validation coverage** for 3 critical APIs
 - ✅ Automated detection of API schema changes
 - ✅ Catches breaking changes before production
@@ -254,7 +278,9 @@ SPOTIFY_ACCESS_TOKEN=xxx LASTFM_API_KEY=yyy pnpm test:contracts
 ## Key Features Implemented
 
 ### 1. Graceful Credential Handling
+
 Tests skip gracefully when credentials are missing:
+
 ```
 ⚠️  Contract tests require API credentials:
 Missing environment variables:
@@ -265,19 +291,24 @@ Tests will skip if credentials are not available.
 ```
 
 ### 2. Rate Limiting
+
 Automatic rate limiting per API domain:
+
 - Spotify: 1 req/s
 - Deezer: 1 req/s (self-imposed, API is unlimited)
 - Last.fm: 5 req/s (200ms delay)
 - Sequential execution to ensure compliance
 
 ### 3. Response Caching
+
 - 5-minute in-memory cache
 - Minimizes repeated API calls during test runs
 - Reduces API quota usage
 
 ### 4. Detailed Error Messages
+
 When schemas don't match:
+
 ```typescript
 if (!result.success) {
   console.error('Schema mismatch:', JSON.stringify(result.error.format(), null, 2))
@@ -285,7 +316,9 @@ if (!result.success) {
 ```
 
 ### 5. Well-Known Test Data
+
 Uses stable, permanent resources:
+
 - Spotify: "Bohemian Rhapsody" (6rqhFgbbKwnb9MLmUQDhG6)
 - Spotify: "Today's Top Hits" playlist (37i9dQZF1DXcBWIGoYBM5M)
 - Last.fm: Queen, The Beatles, Radiohead
@@ -296,17 +329,20 @@ Uses stable, permanent resources:
 ## Files Created
 
 ### Infrastructure (4 files):
+
 1. `/workers/api/vitest.contracts.config.ts` - Contract test configuration
 2. `/workers/api/src/__tests__/contracts/setup.ts` - Global setup
 3. `/workers/api/src/__tests__/contracts/helpers.ts` - Test utilities
 4. `/workers/api/src/__tests__/contracts/README.md` - Documentation
 
 ### Test Files (3 files):
+
 5. `/workers/api/src/__tests__/contracts/spotify.contract.test.ts` - 492 lines, 12 tests
 6. `/workers/api/src/__tests__/contracts/deezer.contract.test.ts` - 12 tests
 7. `/workers/api/src/__tests__/contracts/lastfm.contract.test.ts` - 407 lines, 8 tests
 
 ### Configuration (2 files):
+
 8. `/workers/api/.dev.vars.example` - Credential documentation
 9. Updated `/package.json` - Added contract test scripts
 10. Updated `/workers/api/package.json` - Added test:contracts script
@@ -318,6 +354,7 @@ Uses stable, permanent resources:
 ## Test Execution Results
 
 ### Without Credentials:
+
 ```
 Test Files  2 passed | 1 skipped (3)
 Tests       13 passed | 20 skipped (33)
@@ -331,6 +368,7 @@ Duration    12.60s
 - ✅ Rate limiting enforced (12.6s for 13 tests with delays)
 
 ### With Credentials (Expected):
+
 ```
 Test Files  3 passed (3)
 Tests       32 passed (32)
@@ -342,13 +380,16 @@ Duration    ~45-60s (with rate limiting)
 ## Next Steps
 
 ### Immediate (Optional):
+
 1. **Add API credentials** to `.dev.vars` to run full test suite locally
 2. **Set up nightly CI/CD** workflow to run contract tests automatically
 3. **Configure GitHub Secrets** for contract test credentials
 4. **Add schema change detection** workflow (run contracts when schemas modified)
 
 ### Phase 2: Integration Tests (Weeks 2-3)
+
 According to TESTING_IMPROVEMENT_PLAN.md:
+
 - Convert service tests to use real APIs instead of mocks
 - Test AudioEnrichmentService with real Deezer API
 - Test LastFmService with real Last.fm API
@@ -357,6 +398,7 @@ According to TESTING_IMPROVEMENT_PLAN.md:
 - **Goal:** 20-30 integration tests with real service interactions
 
 ### Phase 3: E2E Tests (Weeks 4-6)
+
 - Playwright setup for browser automation
 - Golden path: Analyze playlist workflow
 - Golden path: Create playlist from recommendations
@@ -370,13 +412,13 @@ According to TESTING_IMPROVEMENT_PLAN.md:
 
 ### Quantitative Progress:
 
-| Metric | Before Phase 1 | After Phase 1 | Target (All Phases) |
-|--------|----------------|---------------|---------------------|
-| **Contract Test Coverage** | 0% | 100% ✅ | 100% |
-| **Tests Testing Real Logic** | 30% | 35% | 80% |
-| **Tests Testing Mocks** | 54% | 49% | 10% |
-| **API Breaking Change Detection** | Manual | Automated ✅ | Automated |
-| **Production API Failures** | Unknown until deployed | Caught in CI ✅ | Prevented |
+| Metric                            | Before Phase 1         | After Phase 1   | Target (All Phases) |
+| --------------------------------- | ---------------------- | --------------- | ------------------- |
+| **Contract Test Coverage**        | 0%                     | 100% ✅         | 100%                |
+| **Tests Testing Real Logic**      | 30%                    | 35%             | 80%                 |
+| **Tests Testing Mocks**           | 54%                    | 49%             | 10%                 |
+| **API Breaking Change Detection** | Manual                 | Automated ✅    | Automated           |
+| **Production API Failures**       | Unknown until deployed | Caught in CI ✅ | Prevented           |
 
 ### Qualitative Improvements:
 
@@ -394,11 +436,13 @@ According to TESTING_IMPROVEMENT_PLAN.md:
 ## ROI Analysis
 
 ### Investment:
+
 - **Time:** ~4 hours (with 4 parallel agents)
 - **Lines of Code:** ~1,500 lines (infrastructure + tests)
 - **Files:** 10 files created/modified
 
 ### Return:
+
 - **Immediate:** Detect Spotify/Deezer/Last.fm API changes automatically
 - **Cost Savings:** Prevent 1-2 production incidents per quarter (est. 4-8 dev hours each)
 - **Confidence:** Can refactor API integration code with confidence
@@ -407,6 +451,7 @@ According to TESTING_IMPROVEMENT_PLAN.md:
 - **Future Proofing:** Foundation for Phase 2 & 3 testing
 
 ### Break-Even:
+
 - First API schema change caught = ROI positive
 - Expected: Within 1-3 months based on historical API change frequency
 
@@ -415,6 +460,7 @@ According to TESTING_IMPROVEMENT_PLAN.md:
 ## Technical Excellence
 
 ### Code Quality:
+
 - ✅ **TypeScript:** All files pass type checking
 - ✅ **ESLint:** All files pass linting
 - ✅ **Formatting:** All files formatted with Prettier
@@ -422,6 +468,7 @@ According to TESTING_IMPROVEMENT_PLAN.md:
 - ✅ **Best Practices:** Follows TESTING_GUIDANCE.md principles
 
 ### Test Quality:
+
 - ✅ **Real APIs:** Uses actual external APIs (not mocks)
 - ✅ **Stable Data:** Well-known permanent test resources
 - ✅ **Error Handling:** Tests both success and failure cases
@@ -435,6 +482,7 @@ According to TESTING_IMPROVEMENT_PLAN.md:
 ## Lessons Learned
 
 ### What Worked Well:
+
 1. **Parallel Agent Execution** - 4 agents working simultaneously completed Phase 1 in ~4 hours
 2. **Separation of Concerns** - Separate vitest config for contract tests
 3. **Graceful Credential Handling** - Tests skip instead of failing
@@ -442,12 +490,14 @@ According to TESTING_IMPROVEMENT_PLAN.md:
 5. **Response Caching** - Minimizes API calls during development
 
 ### Challenges Overcome:
+
 1. **Deezer ISRC Coverage** - Not all ISRCs in Deezer catalog (handled gracefully)
 2. **Last.fm Response Wrapping** - Complex nested envelopes (documented thoroughly)
 3. **Rate Limiting** - Multiple APIs with different limits (per-domain configuration)
 4. **Credential Management** - Required tokens for different APIs (skip when missing)
 
 ### Future Improvements:
+
 1. **CI/CD Integration** - Set up nightly runs with GitHub Actions
 2. **Slack Notifications** - Alert when contract tests fail in CI
 3. **Historical Tracking** - Log API response changes over time
@@ -462,6 +512,7 @@ From TESTING_GUIDANCE.md:
 ### Core Principle: "Test Real Behavior, Not Mocks" ✅
 
 **Contract tests embody this principle:**
+
 - ✅ Use real external APIs
 - ✅ No mocks whatsoever
 - ✅ Validate actual API responses
@@ -471,6 +522,7 @@ From TESTING_GUIDANCE.md:
 ### Value Hierarchy: ⭐⭐⭐⭐⭐ (CRITICAL)
 
 Contract tests are rated **CRITICAL** because they:
+
 1. **Prevent production outages** from API schema changes
 2. **Test boundaries** between systems (external APIs)
 3. **Validate assumptions** about third-party services
@@ -522,6 +574,7 @@ pnpm test:contracts:lastfm
 ```
 
 ### Expected Output (with credentials):
+
 ```
 Test Files  3 passed (3)
 Tests       32 passed (32)

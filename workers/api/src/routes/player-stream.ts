@@ -9,7 +9,7 @@
  * - Rich Spotify data (shuffle, repeat, context, volume, device type)
  */
 
-import type { Env } from '../index'
+import type {Env} from '../index'
 import type {
   ContextType,
   DeviceType,
@@ -28,14 +28,14 @@ import type {
   PlaybackVolumeEvent,
   PlayingType,
 } from '@dj/shared-types'
-import type { OpenAPIHono } from '@hono/zod-openapi'
+import type {OpenAPIHono} from '@hono/zod-openapi'
 
-import { z } from 'zod'
+import {z} from 'zod'
 
-import { isSuccessResponse, safeParse } from '../lib/guards'
-import { AudioEnrichmentService } from '../services/AudioEnrichmentService'
-import { MixSessionService } from '../services/MixSessionService'
-import { getLogger } from '../utils/LoggerContext'
+import {isSuccessResponse, safeParse} from '../lib/guards'
+import {AudioEnrichmentService} from '../services/AudioEnrichmentService'
+import {MixSessionService} from '../services/MixSessionService'
+import {getLogger} from '../utils/LoggerContext'
 
 // =============================================================================
 // ZOD SCHEMA FOR SPOTIFY PLAYBACK API
@@ -43,42 +43,54 @@ import { getLogger } from '../utils/LoggerContext'
 
 /** Schema for Spotify playback state response */
 const SpotifyPlaybackResponseSchema = z.object({
-  actions: z.object({
-    disallows: z.record(z.string(), z.boolean()).optional(),
-  }).optional(),
-  context: z.object({
-    external_urls: z.object({ spotify: z.string() }).optional(),
-    href: z.string(),
-    type: z.string(),
-    uri: z.string(),
-  }).nullable().optional(),
+  actions: z
+    .object({
+      disallows: z.record(z.string(), z.boolean()).optional(),
+    })
+    .optional(),
+  context: z
+    .object({
+      external_urls: z.object({spotify: z.string()}).optional(),
+      href: z.string(),
+      type: z.string(),
+      uri: z.string(),
+    })
+    .nullable()
+    .optional(),
   currently_playing_type: z.enum(['track', 'episode', 'ad', 'unknown']).optional(),
-  device: z.object({
-    id: z.string().nullable(),
-    is_active: z.boolean(),
-    is_private_session: z.boolean(),
-    is_restricted: z.boolean(),
-    name: z.string(),
-    supports_volume: z.boolean(),
-    type: z.string(),
-    volume_percent: z.number().nullable(),
-  }).optional(),
+  device: z
+    .object({
+      id: z.string().nullable(),
+      is_active: z.boolean(),
+      is_private_session: z.boolean(),
+      is_restricted: z.boolean(),
+      name: z.string(),
+      supports_volume: z.boolean(),
+      type: z.string(),
+      volume_percent: z.number().nullable(),
+    })
+    .optional(),
   is_playing: z.boolean().optional(),
-  item: z.object({
-    album: z.object({
-      images: z.array(z.object({ url: z.string() })).optional(),
+  item: z
+    .object({
+      album: z
+        .object({
+          images: z.array(z.object({url: z.string()})).optional(),
+          name: z.string().optional(),
+        })
+        .optional(),
+      artists: z.array(z.object({name: z.string()})).optional(),
+      duration_ms: z.number().optional(),
+      explicit: z.boolean().optional(),
+      id: z.string().optional(),
+      is_local: z.boolean().optional(),
       name: z.string().optional(),
-    }).optional(),
-    artists: z.array(z.object({ name: z.string() })).optional(),
-    duration_ms: z.number().optional(),
-    explicit: z.boolean().optional(),
-    id: z.string().optional(),
-    is_local: z.boolean().optional(),
-    name: z.string().optional(),
-    popularity: z.number().optional(),
-    preview_url: z.string().nullable().optional(),
-    uri: z.string().optional(),
-  }).nullable().optional(),
+      popularity: z.number().optional(),
+      preview_url: z.string().nullable().optional(),
+      uri: z.string().optional(),
+    })
+    .nullable()
+    .optional(),
   progress_ms: z.number().nullable().optional(),
   repeat_state: z.enum(['off', 'track', 'context']).optional(),
   shuffle_state: z.boolean().optional(),
@@ -95,7 +107,6 @@ interface InternalState {
   timestamp: number
   track: null | PlaybackTrack
 }
-
 
 // =============================================================================
 // INTERNAL STATE TRACKING
@@ -136,7 +147,7 @@ function createIdleState(): InternalState {
       volumePercent: null,
     },
     isPlaying: false,
-    modes: { repeat: 'off', shuffle: false },
+    modes: {repeat: 'off', shuffle: false},
     playingType: 'unknown',
     progress: 0,
     timestamp: Date.now(),
@@ -159,36 +170,43 @@ function modesChanged(prev: PlaybackModes, curr: PlaybackModes): boolean {
 function normalizeContextType(type: string): ContextType {
   const normalized = type.toLowerCase()
   const validTypes: ContextType[] = ['album', 'artist', 'playlist', 'show', 'collection']
-  return validTypes.includes(normalized as ContextType)
-    ? (normalized as ContextType)
-    : 'playlist' // Default fallback
+  return validTypes.includes(normalized as ContextType) ? (normalized as ContextType) : 'playlist' // Default fallback
 }
 
 function normalizeDeviceType(type: string): DeviceType {
   const normalized = type.toLowerCase()
   const validTypes: DeviceType[] = [
-    'computer', 'smartphone', 'speaker', 'tv', 'avr', 'stb',
-    'audio_dongle', 'game_console', 'cast_video', 'cast_audio', 'automobile'
+    'computer',
+    'smartphone',
+    'speaker',
+    'tv',
+    'avr',
+    'stb',
+    'audio_dongle',
+    'game_console',
+    'cast_video',
+    'cast_audio',
+    'automobile',
   ]
-  return validTypes.includes(normalized as DeviceType)
-    ? (normalized as DeviceType)
-    : 'unknown'
+  return validTypes.includes(normalized as DeviceType) ? (normalized as DeviceType) : 'unknown'
 }
 
 function parseSpotifyResponse(data: SpotifyPlaybackResponseZod): InternalState {
-  const track: null | PlaybackTrack = data.item ? {
-    albumArt: data.item.album?.images?.[0]?.url ?? null,
-    albumName: data.item.album?.name ?? '',
-    artist: data.item.artists?.map(a => a.name).join(', ') ?? '',
-    duration: data.item.duration_ms ?? 0,
-    explicit: data.item.explicit ?? false,
-    id: data.item.id ?? '',
-    isLocal: data.item.is_local ?? false,
-    name: data.item.name ?? 'Unknown',
-    popularity: data.item.popularity ?? 0,
-    previewUrl: data.item.preview_url ?? null,
-    uri: data.item.uri ?? '',
-  } : null
+  const track: null | PlaybackTrack = data.item
+    ? {
+        albumArt: data.item.album?.images?.[0]?.url ?? null,
+        albumName: data.item.album?.name ?? '',
+        artist: data.item.artists?.map(a => a.name).join(', ') ?? '',
+        duration: data.item.duration_ms ?? 0,
+        explicit: data.item.explicit ?? false,
+        id: data.item.id ?? '',
+        isLocal: data.item.is_local ?? false,
+        name: data.item.name ?? 'Unknown',
+        popularity: data.item.popularity ?? 0,
+        previewUrl: data.item.preview_url ?? null,
+        uri: data.item.uri ?? '',
+      }
+    : null
 
   const device: PlaybackDevice = {
     id: data.device?.id ?? null,
@@ -200,12 +218,14 @@ function parseSpotifyResponse(data: SpotifyPlaybackResponseZod): InternalState {
     volumePercent: data.device?.volume_percent ?? null,
   }
 
-  const context: null | PlaybackContext = data.context ? {
-    href: data.context.href,
-    name: null, // Spotify doesn't give context name in player endpoint
-    type: normalizeContextType(data.context.type),
-    uri: data.context.uri,
-  } : null
+  const context: null | PlaybackContext = data.context
+    ? {
+        href: data.context.href,
+        name: null, // Spotify doesn't give context name in player endpoint
+        type: normalizeContextType(data.context.type),
+        uri: data.context.uri,
+      }
+    : null
 
   const modes: PlaybackModes = {
     repeat: data.repeat_state ?? 'off',
@@ -242,17 +262,17 @@ const QUEUE_LOW_THRESHOLD = 3
 const QUEUE_CHECK_INTERVAL = 10 // Check queue every N polls
 const MAX_SIGNALS = 50
 
-export function registerPlayerStreamRoute(app: OpenAPIHono<{ Bindings: Env }>) {
+export function registerPlayerStreamRoute(app: OpenAPIHono<{Bindings: Env}>) {
   app.get('/api/player/stream', async c => {
     const token = c.req.header('Authorization')?.replace('Bearer ', '')
     if (!token) {
-      return c.json({ error: 'No authorization token' }, 401)
+      return c.json({error: 'No authorization token'}, 401)
     }
 
     const logger = getLogger()
 
     // Create TransformStream for SSE
-    const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>(undefined, {
+    const {readable, writable} = new TransformStream<Uint8Array, Uint8Array>(undefined, {
       highWaterMark: 10,
     })
     const writer = writable.getWriter()
@@ -277,7 +297,7 @@ export function registerPlayerStreamRoute(app: OpenAPIHono<{ Bindings: Env }>) {
     // Fetch from Spotify
     async function fetchPlayback(): Promise<InternalState> {
       const response = await fetch('https://api.spotify.com/v1/me/player', {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {Authorization: `Bearer ${token}`},
       })
 
       if (response.status === 204) {
@@ -325,19 +345,17 @@ export function registerPlayerStreamRoute(app: OpenAPIHono<{ Bindings: Env }>) {
       // Track change
       if (trackChanged(prev.track, curr.track)) {
         if (curr.track) {
-          const event: PlaybackTrackEvent = { ...curr.track, seq: seq++ }
+          const event: PlaybackTrackEvent = {...curr.track, seq: seq++}
           writeSSE(writer, 'track', event)
         } else {
           // Entered idle state
-          writeSSE(writer, 'idle', { seq: seq++ })
+          writeSSE(writer, 'idle', {seq: seq++})
         }
 
         // Server-side track transition processing (Phase 1a)
         // Run in background — never block the SSE poll loop
         if (prev.track) {
-          c.executionCtx.waitUntil(
-            handleTrackTransition(c.env, token!, prev.track, trackStartTimestamp)
-          )
+          c.executionCtx.waitUntil(handleTrackTransition(c.env, token!, prev.track, trackStartTimestamp))
         }
         // Reset track start time for the new track
         trackStartTimestamp = Date.now()
@@ -345,31 +363,31 @@ export function registerPlayerStreamRoute(app: OpenAPIHono<{ Bindings: Env }>) {
 
       // Play/pause change
       if (prev.isPlaying !== curr.isPlaying) {
-        const event: PlaybackStateEvent = { isPlaying: curr.isPlaying, seq: seq++ }
+        const event: PlaybackStateEvent = {isPlaying: curr.isPlaying, seq: seq++}
         writeSSE(writer, 'state', event)
       }
 
       // Device change
       if (deviceChanged(prev.device, curr.device)) {
-        const event: PlaybackDeviceEvent = { ...curr.device, seq: seq++ }
+        const event: PlaybackDeviceEvent = {...curr.device, seq: seq++}
         writeSSE(writer, 'device', event)
       }
 
       // Modes change (shuffle/repeat)
       if (modesChanged(prev.modes, curr.modes)) {
-        const event: PlaybackModesEvent = { ...curr.modes, seq: seq++ }
+        const event: PlaybackModesEvent = {...curr.modes, seq: seq++}
         writeSSE(writer, 'modes', event)
       }
 
       // Volume change (separate from device)
       if (volumeChanged(prev.device, curr.device) && !deviceChanged(prev.device, curr.device)) {
-        const event: PlaybackVolumeEvent = { percent: curr.device.volumePercent ?? 0, seq: seq++ }
+        const event: PlaybackVolumeEvent = {percent: curr.device.volumePercent ?? 0, seq: seq++}
         writeSSE(writer, 'volume', event)
       }
 
       // Context change
       if (contextChanged(prev.context, curr.context)) {
-        const event: PlaybackContextEvent = { context: curr.context, seq: seq++ }
+        const event: PlaybackContextEvent = {context: curr.context, seq: seq++}
         writeSSE(writer, 'context', event)
       }
     }
@@ -394,7 +412,7 @@ export function registerPlayerStreamRoute(app: OpenAPIHono<{ Bindings: Env }>) {
         const nowIdle = !curr.track
         if (nowIdle !== isIdle) {
           if (nowIdle) {
-            writeSSE(writer, 'idle', { seq: seq++ })
+            writeSSE(writer, 'idle', {seq: seq++})
           } else {
             // Came back from idle - send full init
             sendInit(curr)
@@ -415,7 +433,7 @@ export function registerPlayerStreamRoute(app: OpenAPIHono<{ Bindings: Env }>) {
 
         // Always send tick when playing (minimal ~20 bytes)
         if (curr.isPlaying) {
-          const tick: PlaybackTickEvent = { p: curr.progress, ts: curr.timestamp }
+          const tick: PlaybackTickEvent = {p: curr.progress, ts: curr.timestamp}
           writeSSE(writer, 'tick', tick)
         }
 
@@ -424,39 +442,43 @@ export function registerPlayerStreamRoute(app: OpenAPIHono<{ Bindings: Env }>) {
 
         // Periodic queue health check (Phase 1c) — every QUEUE_CHECK_INTERVAL polls (~10 seconds)
         if (pollCount % QUEUE_CHECK_INTERVAL === 0 && c.env.MIX_SESSIONS) {
-          c.executionCtx.waitUntil((async () => {
-            try {
-              const sessionService = new MixSessionService(c.env.MIX_SESSIONS!)
-              // Derive userId from token (lightweight — cached by Spotify)
-              const userResp = await fetch('https://api.spotify.com/v1/me', {
-                headers: { Authorization: `Bearer ${token}` },
-              })
-              if (!userResp.ok) return
-              const userJson2: unknown = await userResp.json()
-              const userParsed2 = z.object({ id: z.string() }).safeParse(userJson2)
-              if (!userParsed2.success) return
+          c.executionCtx.waitUntil(
+            (async () => {
+              try {
+                const sessionService = new MixSessionService(c.env.MIX_SESSIONS!)
+                // Derive userId from token (lightweight — cached by Spotify)
+                const userResp = await fetch('https://api.spotify.com/v1/me', {
+                  headers: {Authorization: `Bearer ${token}`},
+                })
+                if (!userResp.ok) return
+                const userJson2: unknown = await userResp.json()
+                const userParsed2 = z.object({id: z.string()}).safeParse(userJson2)
+                if (!userParsed2.success) return
 
-              const session = await sessionService.getSession(userParsed2.data.id)
-              if (!session) return
+                const session = await sessionService.getSession(userParsed2.data.id)
+                if (!session) return
 
-              if (session.queue.length < QUEUE_LOW_THRESHOLD && session.preferences.autoFill) {
-                writeSSE(writer, 'queue_low', { depth: session.queue.length, seq: seq++ })
-                logger?.info('[PlayerStream] Queue low detected', { depth: session.queue.length })
+                if (session.queue.length < QUEUE_LOW_THRESHOLD && session.preferences.autoFill) {
+                  writeSSE(writer, 'queue_low', {depth: session.queue.length, seq: seq++})
+                  logger?.info('[PlayerStream] Queue low detected', {depth: session.queue.length})
+                }
+              } catch {
+                // Non-fatal — queue check is best-effort
               }
-            } catch {
-              // Non-fatal — queue check is best-effort
-            }
-          })())
+            })(),
+          )
         }
       } catch (err) {
         // Handle auth expiration specifically - send auth_expired and close stream
         if (err instanceof AuthExpiredError) {
           logger?.info('[PlayerStream] Token expired, sending auth_expired event')
-          writeSSE(writer, 'auth_expired', { message: 'Spotify token expired, please refresh' })
+          writeSSE(writer, 'auth_expired', {message: 'Spotify token expired, please refresh'})
           isStreamClosed = true
           clearInterval(pollInterval)
           clearInterval(heartbeatInterval)
-          writer.close().catch(() => { /* noop */ })
+          writer.close().catch(() => {
+            /* noop */
+          })
           return
         }
 
@@ -464,9 +486,11 @@ export function registerPlayerStreamRoute(app: OpenAPIHono<{ Bindings: Env }>) {
         logger?.error('[PlayerStream] Fetch error:', err)
 
         if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
-          writeSSE(writer, 'error', { message: 'Too many errors, closing stream' })
+          writeSSE(writer, 'error', {message: 'Too many errors, closing stream'})
           isStreamClosed = true
-          writer.close().catch(() => { /* noop */ })
+          writer.close().catch(() => {
+            /* noop */
+          })
           return
         }
 
@@ -486,7 +510,9 @@ export function registerPlayerStreamRoute(app: OpenAPIHono<{ Bindings: Env }>) {
     }
 
     // Start intervals
-    const pollInterval = setInterval(() => { void poll() }, POLLING_INTERVAL_MS)
+    const pollInterval = setInterval(() => {
+      void poll()
+    }, POLLING_INTERVAL_MS)
     const heartbeatInterval = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL_MS)
 
     // Initial fetch
@@ -505,8 +531,10 @@ export function registerPlayerStreamRoute(app: OpenAPIHono<{ Bindings: Env }>) {
           isStreamClosed = true
           clearInterval(pollInterval)
           clearInterval(heartbeatInterval)
-          writeSSE(writer, 'reconnect', { message: 'Stream lifetime exceeded' })
-          writer.close().catch(() => { /* noop */ })
+          writeSSE(writer, 'reconnect', {message: 'Stream lifetime exceeded'})
+          writer.close().catch(() => {
+            /* noop */
+          })
           resolve()
         }, MAX_STREAM_LIFETIME_MS)
 
@@ -525,13 +553,13 @@ export function registerPlayerStreamRoute(app: OpenAPIHono<{ Bindings: Env }>) {
             clearTimeout(maxLifetime)
             resolve()
           })
-      })
+      }),
     )
 
     return new Response(readable, {
       headers: {
         'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
+        Connection: 'keep-alive',
         'Content-Type': 'text/event-stream',
         'X-Accel-Buffering': 'no',
       },
@@ -574,11 +602,11 @@ async function handleTrackTransition(
   try {
     // Get user ID from Spotify
     const userResponse = await fetch('https://api.spotify.com/v1/me', {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: {Authorization: `Bearer ${token}`},
     })
     if (!userResponse.ok) return
     const userJson: unknown = await userResponse.json()
-    const userParsed = z.object({ id: z.string() }).safeParse(userJson)
+    const userParsed = z.object({id: z.string()}).safeParse(userJson)
     if (!userParsed.success) return
     const userId = userParsed.data.id
 
@@ -587,9 +615,7 @@ async function handleTrackTransition(
     if (!session) return // No mix session, skip
 
     // Check if track is still in queue (hasn't been processed already by frontend)
-    const queuedTrack = session.queue.find(
-      t => t.trackId === prevTrack.id || t.trackUri === prevTrack.uri
-    )
+    const queuedTrack = session.queue.find(t => t.trackId === prevTrack.id || t.trackUri === prevTrack.uri)
 
     // Calculate listen duration and classify signal
     const listenDurationMs = Date.now() - trackStartTimestamp
@@ -618,7 +644,7 @@ async function handleTrackTransition(
         try {
           const audioService = new AudioEnrichmentService(env.AUDIO_FEATURES_CACHE)
           const enrichment = await audioService.enrichTrack({
-            artists: [{ name: prevTrack.artist }],
+            artists: [{name: prevTrack.artist}],
             duration_ms: prevTrack.duration,
             id: prevTrack.id,
             name: prevTrack.name,

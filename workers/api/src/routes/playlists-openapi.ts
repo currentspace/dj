@@ -23,7 +23,7 @@ import {getLogger} from '../utils/LoggerContext'
  */
 export function registerPlaylistRoutes(app: OpenAPIHono<{Bindings: Env}>) {
   // GET /api/spotify/playlists - Get user's playlists
-  app.openapi(getUserPlaylists, async (c) => {
+  app.openapi(getUserPlaylists, async c => {
     try {
       // Headers automatically validated by contract
       const token = c.req.header('authorization')?.replace('Bearer ', '')
@@ -65,7 +65,7 @@ export function registerPlaylistRoutes(app: OpenAPIHono<{Bindings: Env}>) {
   })
 
   // GET /api/spotify/playlists/:id/tracks - Get playlist tracks
-  app.openapi(getPlaylistTracks, async (c) => {
+  app.openapi(getPlaylistTracks, async c => {
     try {
       // Headers and params automatically validated by contract
       const token = c.req.header('authorization')?.replace('Bearer ', '')
@@ -114,7 +114,7 @@ export function registerPlaylistRoutes(app: OpenAPIHono<{Bindings: Env}>) {
   })
 
   // POST /api/spotify/playlists - Create a new playlist
-  app.openapi(createPlaylist, async (c) => {
+  app.openapi(createPlaylist, async c => {
     try {
       // Headers and body automatically validated by contract
       const token = c.req.header('authorization')?.replace('Bearer ', '')
@@ -182,7 +182,7 @@ export function registerPlaylistRoutes(app: OpenAPIHono<{Bindings: Env}>) {
   })
 
   // POST /api/spotify/playlists/modify - Add or remove tracks
-  app.openapi(modifyPlaylist, async (c) => {
+  app.openapi(modifyPlaylist, async c => {
     try {
       // Headers and body automatically validated by contract
       const token = c.req.header('authorization')?.replace('Bearer ', '')
@@ -219,11 +219,14 @@ export function registerPlaylistRoutes(app: OpenAPIHono<{Bindings: Env}>) {
         }
 
         // Response automatically validated against contract schema
-        return c.json({
-          action: 'added',
-          snapshot_id: addParseResult.data.snapshot_id,
-          success: true,
-        }, 200)
+        return c.json(
+          {
+            action: 'added',
+            snapshot_id: addParseResult.data.snapshot_id,
+            success: true,
+          },
+          200,
+        )
       } else if (action === 'remove') {
         // Remove tracks from playlist
         const response = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks`, {
@@ -251,11 +254,14 @@ export function registerPlaylistRoutes(app: OpenAPIHono<{Bindings: Env}>) {
         }
 
         // Response automatically validated against contract schema
-        return c.json({
-          action: 'removed',
-          snapshot_id: removeParseResult.data.snapshot_id,
-          success: true,
-        }, 200)
+        return c.json(
+          {
+            action: 'removed',
+            snapshot_id: removeParseResult.data.snapshot_id,
+            success: true,
+          },
+          200,
+        )
       }
 
       return c.json({error: 'Invalid action'}, 400)

@@ -14,16 +14,16 @@ Transform the current chat-based playlist assistant into a **live music mixing e
 
 ## Gap Analysis: Current vs. Intended
 
-| Aspect | Current State | Intended State |
-|--------|--------------|----------------|
-| **Primary UI** | Chat conversation | Now Playing + Mix Queue |
-| **Mental Model** | Playlist editing | Live session mixing |
-| **AI Role** | Reactive assistant | Proactive DJ partner |
-| **Queue** | Spotify's native queue | App-managed smart queue |
-| **State** | Stateless conversations | Persistent mix session |
-| **Vibe** | Analyzed per-request | Continuously tracked |
-| **Suggestions** | On-demand only | Always-visible recommendations |
-| **User Input** | Full conversation | Quick actions + vibe steering |
+| Aspect           | Current State           | Intended State                 |
+| ---------------- | ----------------------- | ------------------------------ |
+| **Primary UI**   | Chat conversation       | Now Playing + Mix Queue        |
+| **Mental Model** | Playlist editing        | Live session mixing            |
+| **AI Role**      | Reactive assistant      | Proactive DJ partner           |
+| **Queue**        | Spotify's native queue  | App-managed smart queue        |
+| **State**        | Stateless conversations | Persistent mix session         |
+| **Vibe**         | Analyzed per-request    | Continuously tracked           |
+| **Suggestions**  | On-demand only          | Always-visible recommendations |
+| **User Input**   | Full conversation       | Quick actions + vibe steering  |
 
 ---
 
@@ -116,11 +116,11 @@ interface MixSession {
 
   // Current vibe profile (updated as tracks play)
   vibe: {
-    mood: string[]           // ["upbeat", "energetic"]
-    genres: string[]         // ["indie rock", "alt pop"]
-    era: { start: number, end: number }  // { start: 2010, end: 2024 }
-    bpmRange: { min: number, max: number }
-    energyLevel: number      // 1-10
+    mood: string[] // ["upbeat", "energetic"]
+    genres: string[] // ["indie rock", "alt pop"]
+    era: {start: number; end: number} // { start: 2010, end: 2024 }
+    bpmRange: {min: number; max: number}
+    energyLevel: number // 1-10
     energyDirection: 'building' | 'steady' | 'winding_down'
   }
 
@@ -137,15 +137,15 @@ interface MixSession {
     trackId: string
     trackUri: string
     addedBy: 'user' | 'ai'
-    vibeScore: number        // How well it fits current vibe
-    reason?: string          // Why AI suggested it
+    vibeScore: number // How well it fits current vibe
+    reason?: string // Why AI suggested it
   }[]
 
   // User preferences for this session
   preferences: {
     avoidGenres: string[]
     favoriteArtists: string[]
-    bpmLock?: { min: number, max: number }
+    bpmLock?: {min: number; max: number}
   }
 }
 ```
@@ -179,24 +179,24 @@ async function maintainQueue(session: MixSession) {
     const suggestions = await generateVibeMatchingSuggestions(
       session.vibe,
       session.history,
-      needed * 2  // Get extra for variety
+      needed * 2, // Get extra for variety
     )
 
     // Filter for good transitions
     const lastTrack = session.history[session.history.length - 1]
-    const goodTransitions = suggestions.filter(track =>
-      isGoodTransition(lastTrack, track, session.vibe)
-    )
+    const goodTransitions = suggestions.filter(track => isGoodTransition(lastTrack, track, session.vibe))
 
     // Add top picks to queue
     const toAdd = goodTransitions.slice(0, needed)
-    session.queue.push(...toAdd.map(track => ({
-      trackId: track.id,
-      trackUri: track.uri,
-      addedBy: 'ai',
-      vibeScore: track.vibeScore,
-      reason: track.reason
-    })))
+    session.queue.push(
+      ...toAdd.map(track => ({
+        trackId: track.id,
+        trackUri: track.uri,
+        addedBy: 'ai',
+        vibeScore: track.vibeScore,
+        reason: track.reason,
+      })),
+    )
   }
 }
 ```
@@ -215,32 +215,32 @@ const mixModeTools = [
     description: 'Get track suggestions that fit the current mix vibe',
     parameters: {
       count: 'number (1-10)',
-      criteria: 'optional specific criteria like "more energy" or "90s feel"'
-    }
+      criteria: 'optional specific criteria like "more energy" or "90s feel"',
+    },
   },
   {
     name: 'add_to_mix',
     description: 'Add a track to the mix queue',
     parameters: {
       trackUri: 'Spotify URI',
-      position: 'optional position in queue'
-    }
+      position: 'optional position in queue',
+    },
   },
   {
     name: 'steer_vibe',
     description: 'Adjust the mix vibe in a direction',
     parameters: {
       direction: 'natural language like "more upbeat" or "add some jazz"',
-      intensity: 'number 1-10 for how strong the shift should be'
-    }
+      intensity: 'number 1-10 for how strong the shift should be',
+    },
   },
   {
     name: 'analyze_transition',
     description: 'Check how well a track would transition from current',
     parameters: {
-      trackUri: 'Spotify URI to check'
-    }
-  }
+      trackUri: 'Spotify URI to check',
+    },
+  },
 ]
 ```
 
@@ -271,8 +271,8 @@ async function onTrackChanged(session: MixSession, newTrack: Track) {
 
   // Blend with session vibe (weighted average)
   session.vibe = blendVibes(
-    session.vibe,      // 70% weight - maintain continuity
-    trackVibe,         // 30% weight - incorporate new track
+    session.vibe, // 70% weight - maintain continuity
+    trackVibe, // 30% weight - incorporate new track
   )
 
   // Detect energy direction
@@ -309,12 +309,12 @@ Rate how well tracks flow together:
 
 ```typescript
 interface TransitionScore {
-  overall: number        // 0-100
-  bpmMatch: number       // How close BPMs are (±5% = 100)
-  keyCompatibility: number  // Musical key relationship
-  energyFlow: number     // Does energy progression make sense
-  genreBlend: number     // Do genres complement
-  explanation: string    // Human-readable reason
+  overall: number // 0-100
+  bpmMatch: number // How close BPMs are (±5% = 100)
+  keyCompatibility: number // Musical key relationship
+  energyFlow: number // Does energy progression make sense
+  genreBlend: number // Do genres complement
+  explanation: string // Human-readable reason
 }
 
 // "Great transition! BPM drops smoothly from 128 to 120,
@@ -348,17 +348,18 @@ Party guests can request songs:
 ```typescript
 interface TrackRequest {
   trackUri: string
-  requestedBy: string    // Guest name/identifier
+  requestedBy: string // Guest name/identifier
   timestamp: string
   status: 'pending' | 'approved' | 'rejected' | 'played'
-  vibeScore: number      // How well it fits
-  aiNote?: string        // "Good fit!" or "Might break the vibe"
+  vibeScore: number // How well it fits
+  aiNote?: string // "Good fit!" or "Might break the vibe"
 }
 ```
 
 ### 3.3 Voting (Future)
 
 Allow guests to vote on upcoming tracks:
+
 - Upvote tracks in queue
 - Downvote to skip
 - Most voted plays next
@@ -433,10 +434,12 @@ Allow guests to vote on upcoming tracks:
 ### 1. Queue Management Strategy
 
 **Option A**: App-controlled queue only
+
 - Pros: Full control, predictable behavior
 - Cons: Need to sync with Spotify, handle edge cases
 
 **Option B**: Hybrid (app queue + Spotify queue)
+
 - Pros: Spotify handles playback transitions
 - Cons: Two sources of truth, sync complexity
 
@@ -445,10 +448,12 @@ Allow guests to vote on upcoming tracks:
 ### 2. Real-Time Updates
 
 **Option A**: Polling (current approach)
+
 - Pros: Simple, works now
 - Cons: Latency, wasted requests
 
 **Option B**: WebSockets for state sync
+
 - Pros: Real-time, efficient
 - Cons: More complex, connection management
 
@@ -457,10 +462,12 @@ Allow guests to vote on upcoming tracks:
 ### 3. Vibe Analysis Approach
 
 **Option A**: Pre-computed (analyze tracks upfront)
+
 - Pros: Fast at runtime
 - Cons: Storage, may be stale
 
 **Option B**: On-demand (analyze as needed)
+
 - Pros: Always fresh
 - Cons: Latency on each operation
 
@@ -473,6 +480,7 @@ Allow guests to vote on upcoming tracks:
 ### Preserve Existing Value
 
 The current chat-based features remain valuable:
+
 - **Analyze mode** → "Tell me about this mix's vibe"
 - **Create mode** → "Build me a playlist from this session"
 - **Edit mode** → Bulk operations on queue

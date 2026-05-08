@@ -11,7 +11,7 @@ describe('PromiseTracker', () => {
   it('tracks a single promise', async () => {
     const tracker = new PromiseTracker()
     let resolve!: () => void
-    const p = new Promise<void>((r) => {
+    const p = new Promise<void>(r => {
       resolve = r
     })
 
@@ -28,7 +28,7 @@ describe('PromiseTracker', () => {
     const resolvers: (() => void)[] = []
 
     for (let i = 0; i < 3; i++) {
-      const p = new Promise<void>((r) => {
+      const p = new Promise<void>(r => {
         resolvers.push(r)
       })
       tracker.track(p)

@@ -11,7 +11,7 @@ import {z} from 'zod'
  * Helper for optional URLs that might be empty strings
  * Deezer API sometimes returns empty strings for missing URLs
  */
-const optionalUrlOrEmpty = z.preprocess((val) => {
+const optionalUrlOrEmpty = z.preprocess(val => {
   if (typeof val === 'string' && val.trim() === '') {
     return undefined
   }
@@ -63,7 +63,7 @@ export const DeezerSearchResponseSchema = z.object({
  * Helper to coerce string numbers to actual numbers
  * Last.fm API sometimes returns numbers as strings
  */
-const numberCoercion = z.preprocess((val) => {
+const numberCoercion = z.preprocess(val => {
   if (typeof val === 'string' && val.trim() !== '') {
     const num = Number(val)
     return isNaN(num) ? val : num
@@ -75,7 +75,7 @@ const numberCoercion = z.preprocess((val) => {
  * Helper to handle URLs that might be empty strings
  * Last.fm API returns empty strings instead of null/undefined
  */
-const urlOrEmpty = z.preprocess((val) => {
+const urlOrEmpty = z.preprocess(val => {
   if (typeof val === 'string' && val.trim() === '') {
     return null
   }

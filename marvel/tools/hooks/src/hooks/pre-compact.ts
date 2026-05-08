@@ -7,63 +7,63 @@
  * Snapshots run state before context compaction.
  */
 
-import * as path from "path";
+import * as path from 'path'
 
-import type { PreCompactHookInput, SyncHookJSONOutput } from "../sdk-types.js";
-import type { RunState } from "../types.js";
+import type {PreCompactHookInput, SyncHookJSONOutput} from '../sdk-types.js'
+import type {RunState} from '../types.js'
 
-import { hasSessionAgents, serializeForSession } from "../lib/agent-registry.js";
-import { safeReadJson, safeWriteJson } from "../lib/file-ops.js";
-import { buildHookContext, logDebug } from "../lib/logger.js";
-import { findRunDir, getTempDir } from "../lib/paths.js";
+import {hasSessionAgents, serializeForSession} from '../lib/agent-registry.js'
+import {safeReadJson, safeWriteJson} from '../lib/file-ops.js'
+import {buildHookContext, logDebug} from '../lib/logger.js'
+import {findRunDir, getTempDir} from '../lib/paths.js'
 
 export async function handlePreCompact(input: PreCompactHookInput): Promise<SyncHookJSONOutput> {
-  const context = buildHookContext("pre-compact", input);
+  const context = buildHookContext('pre-compact', input)
 
-  const runDir = findRunDir();
+  const runDir = findRunDir()
   if (!runDir) {
-    logDebug("Run directory not found, skipping pre-compact", context);
-    return {};
+    logDebug('Run directory not found, skipping pre-compact', context)
+    return {}
   }
 
-  const runJsonPath = path.join(runDir, "run.json");
-  const runState = safeReadJson<RunState>(runJsonPath, context);
+  const runJsonPath = path.join(runDir, 'run.json')
+  const runState = safeReadJson<RunState>(runJsonPath, context)
   if (!runState) {
-    logDebug("Run state not found, skipping pre-compact", context);
-    return {};
+    logDebug('Run state not found, skipping pre-compact', context)
+    return {}
   }
 
   // Save snapshot before compaction
-  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const snapshotPath = path.join(runDir, `snapshot-${timestamp}.json`);
-  safeWriteJson(snapshotPath, runState, context);
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const snapshotPath = path.join(runDir, `snapshot-${timestamp}.json`)
+  safeWriteJson(snapshotPath, runState, context)
 
   // Append compaction event to recentActivity
-  runState.recentActivity = runState.recentActivity || [];
+  runState.recentActivity = runState.recentActivity || []
   runState.recentActivity.push({
-    data: { toolCallCount: runState.toolCallCount },
+    data: {toolCallCount: runState.toolCallCount},
     timestamp: new Date().toISOString(),
-    type: "compaction",
-  });
+    type: 'compaction',
+  })
 
   if (runState.recentActivity.length > 20) {
-    runState.recentActivity = runState.recentActivity.slice(-20);
+    runState.recentActivity = runState.recentActivity.slice(-20)
   }
 
-  safeWriteJson(runJsonPath, runState, context);
+  safeWriteJson(runJsonPath, runState, context)
 
   // Serialize agent state to temp file as fallback for daemon restarts
-  const sessionId = (input as Record<string, unknown>).session_id as string | undefined;
-  let agentNote = "";
+  const sessionId = (input as Record<string, unknown>).session_id as string | undefined
+  let agentNote = ''
   if (sessionId && hasSessionAgents(sessionId)) {
-    const agentState = serializeForSession(sessionId);
-    const agentFilePath = path.join(getTempDir(), `agents-${sessionId}.json`);
-    safeWriteJson(agentFilePath, agentState, context, false);
-    const runningCount = agentState.agents.filter((a) => a.status === "running").length;
-    const totalCount = agentState.agents.length;
-    logDebug(`Serialized ${totalCount} agents (${runningCount} running) to ${agentFilePath}`, context);
+    const agentState = serializeForSession(sessionId)
+    const agentFilePath = path.join(getTempDir(), `agents-${sessionId}.json`)
+    safeWriteJson(agentFilePath, agentState, context, false)
+    const runningCount = agentState.agents.filter(a => a.status === 'running').length
+    const totalCount = agentState.agents.length
+    logDebug(`Serialized ${totalCount} agents (${runningCount} running) to ${agentFilePath}`, context)
 
-    agentNote = `\n\n**CRITICAL — Agent State:** ${runningCount} of ${totalCount} agents were running at compaction time. Their state has been preserved and will be re-injected after compaction. Do NOT re-launch these agents or begin work that depends on their results.`;
+    agentNote = `\n\n**CRITICAL — Agent State:** ${runningCount} of ${totalCount} agents were running at compaction time. Their state has been preserved and will be re-injected after compaction. Do NOT re-launch these agents or begin work that depends on their results.`
   }
 
   // Return custom summary prompt to guide context compaction
@@ -79,12 +79,12 @@ Ask yourself: "Will this detail matter when work resumes after compaction?"
 - If yes → include it with specifics (file paths, function names, error messages)
 - If no → omit it
 
-Preserve MARVEL run context: Run ID ${runState.runId}, active packs: ${runState.activePacks?.join(", ") || "none"}, corrections: ${runState.correctionCount || 0}${agentNote}`;
+Preserve MARVEL run context: Run ID ${runState.runId}, active packs: ${runState.activePacks?.join(', ') || 'none'}, corrections: ${runState.correctionCount || 0}${agentNote}`
 
   // PreCompact isn't in the SDK's hookEventName union yet, but Claude Code accepts additionalContext.
   return {
     hookSpecificOutput: {
       additionalContext: summaryPrompt,
     },
-  } as SyncHookJSONOutput;
+  } as SyncHookJSONOutput
 }

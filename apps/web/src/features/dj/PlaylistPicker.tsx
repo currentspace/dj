@@ -28,34 +28,25 @@ export function PlaylistPicker({onSelect, selected}: PlaylistPickerProps) {
   )
 
   if (isLoading) {
-    return (
-      <div className={styles.pickerLoading}>Loading your playlists...</div>
-    )
+    return <div className={styles.pickerLoading}>Loading your playlists...</div>
   }
 
   if (error) {
-    return (
-      <div className={styles.pickerError}>{error.message}</div>
-    )
+    return <div className={styles.pickerError}>{error.message}</div>
   }
 
   return (
     <div className={styles.playlistPicker}>
       <h3 className={styles.pickerTitle}>Pick a seed playlist</h3>
       <div className={styles.pickerStrip}>
-        {playlists.map((playlist) => (
+        {playlists.map(playlist => (
           <button
             className={`${styles.pickerItem} ${selected?.id === playlist.id ? styles.pickerItemSelected : ''}`}
             key={playlist.id}
             onClick={() => handleSelect(playlist)}
-            type="button"
-          >
+            type="button">
             {playlist.images?.[0]?.url ? (
-              <img
-                alt={playlist.name}
-                className={styles.pickerArt}
-                src={playlist.images[0].url}
-              />
+              <img alt={playlist.name} className={styles.pickerArt} src={playlist.images[0].url} />
             ) : (
               <div className={styles.pickerArtPlaceholder}>🎵</div>
             )}

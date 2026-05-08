@@ -1,5 +1,5 @@
-import { defineConfig } from 'vitest/config'
-import { sharedConfig } from '../../vitest.shared'
+import {defineConfig} from 'vitest/config'
+import {sharedConfig} from '../../vitest.shared'
 
 /**
  * Vitest configuration for integration tests
@@ -29,12 +29,7 @@ export default defineConfig({
 
     // Only match integration test files
     include: ['src/**/*.integration.test.{ts,js}'],
-    exclude: [
-      '**/node_modules/**',
-      '**/dist/**',
-      '**/build/**',
-      '**/.{idea,git,cache,output,temp}/**',
-    ],
+    exclude: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/.{idea,git,cache,output,temp}/**'],
 
     // Integration tests can be slow (real API calls + rate limiting)
     testTimeout: 60000, // 60 seconds

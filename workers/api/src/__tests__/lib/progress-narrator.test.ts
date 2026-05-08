@@ -3,10 +3,10 @@
  * Tests for progress message generation and caching
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {beforeEach, describe, expect, it, vi} from 'vitest'
 
-import { ProgressNarrator } from '../../lib/progress-narrator'
-import { ServiceLogger } from '../../utils/ServiceLogger'
+import {ProgressNarrator} from '../../lib/progress-narrator'
+import {ServiceLogger} from '../../utils/ServiceLogger'
 
 // Mock the Anthropic API and rate limiter
 vi.mock('../../utils/RateLimitedAPIClients', () => ({
@@ -83,7 +83,7 @@ describe('ProgressNarrator', () => {
   })
 
   it('should cache messages for repeated contexts', async () => {
-    const context = { eventType: 'started' }
+    const context = {eventType: 'started'}
 
     const message1 = await narrator.generateMessage(context)
     const message2 = await narrator.generateMessage(context)
@@ -93,7 +93,7 @@ describe('ProgressNarrator', () => {
   })
 
   it('should bypass cache when skipCache is true', async () => {
-    const context = { eventType: 'searching_tracks' }
+    const context = {eventType: 'searching_tracks'}
 
     const message1 = await narrator.generateMessage(context, false)
     const message2 = await narrator.generateMessage(context, true)
@@ -106,7 +106,7 @@ describe('ProgressNarrator', () => {
   it('should handle missing logger gracefully', () => {
     const narratorNoLogger = new ProgressNarrator('fake-api-key')
     expect(narratorNoLogger).toBeDefined()
-    expect(() => narratorNoLogger.generateMessage({ eventType: 'started' })).not.toThrow()
+    expect(() => narratorNoLogger.generateMessage({eventType: 'started'})).not.toThrow()
   })
 })
 
@@ -119,7 +119,7 @@ describe('ProgressNarrator - Cache Behavior', () => {
   })
 
   it('should return cached message on second call', async () => {
-    const context = { eventType: 'analyzing_request' }
+    const context = {eventType: 'analyzing_request'}
 
     const msg1 = await narrator.generateMessage(context)
     const msg2 = await narrator.generateMessage(context)
@@ -130,7 +130,7 @@ describe('ProgressNarrator - Cache Behavior', () => {
   it('should generate different messages with skipCache=true', async () => {
     const context = {
       eventType: 'enriching_artists',
-      metadata: { enrichedCount: 5, totalArtists: 20 },
+      metadata: {enrichedCount: 5, totalArtists: 20},
     }
 
     // These might be different due to variation
@@ -144,7 +144,7 @@ describe('ProgressNarrator - Cache Behavior', () => {
   it('should limit cache size to prevent memory issues', async () => {
     // Generate more than 100 cache entries
     for (let i = 0; i < 105; i++) {
-      await narrator.generateMessage({ eventType: `event_${i}` })
+      await narrator.generateMessage({eventType: `event_${i}`})
     }
 
     // Cache should not grow unbounded
@@ -176,7 +176,7 @@ describe('ProgressNarrator - Event Types', () => {
     ]
 
     for (const eventType of eventTypes) {
-      const message = await narrator.generateMessage({ eventType })
+      const message = await narrator.generateMessage({eventType})
       expect(message).toBeTruthy()
       expect(typeof message).toBe('string')
     }
@@ -185,7 +185,7 @@ describe('ProgressNarrator - Event Types', () => {
   it('should generate message with tool parameters', async () => {
     const message = await narrator.generateMessage({
       eventType: 'tool_call_start',
-      parameters: { query: 'upbeat workout songs' },
+      parameters: {query: 'upbeat workout songs'},
       toolName: 'search_spotify_tracks',
     })
 

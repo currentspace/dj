@@ -31,14 +31,13 @@ export function SteerInput({disabled, isLoading, onSteer}: SteerInputProps) {
   return (
     <div className={styles.steerInput}>
       <div className={styles.steerPresets}>
-        {QUICK_PRESETS.map((preset) => (
+        {QUICK_PRESETS.map(preset => (
           <button
             className={styles.steerPresetBtn}
             disabled={isDisabled}
             key={preset.label}
             onClick={() => !isDisabled && onSteer(preset.direction)}
-            type="button"
-          >
+            type="button">
             {preset.label}
           </button>
         ))}

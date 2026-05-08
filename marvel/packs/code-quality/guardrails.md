@@ -24,7 +24,7 @@ const result = UserDataSchema.safeParse(await response.json())
 if (!result.success) {
   throw new ValidationError(result.error)
 }
-const data = result.data  // fully typed, no assertion
+const data = result.data // fully typed, no assertion
 ```
 
 ## Zero Floating Promises (Critical)
@@ -52,7 +52,9 @@ class PromiseTracker {
     await Promise.allSettled([...this.pending])
   }
 
-  get size(): number { return this.pending.size }
+  get size(): number {
+    return this.pending.size
+  }
 }
 ```
 

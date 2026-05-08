@@ -40,14 +40,14 @@ export function AutoFillToggle({autoFill, onToggle}: AutoFillToggleProps) {
         disabled={mutation.isPending}
         onClick={handleToggle}
         title={localAutoFill ? 'Auto (AI fills queue)' : 'Manual (you control queue)'}
-        type="button"
-      >
-        <span className={`relative w-8 h-[18px] rounded-[9px] transition-colors duration-200 ${localAutoFill ? 'bg-spotify-green' : 'bg-white/30'}`}>
-          <span className={`absolute top-0.5 left-0.5 size-3.5 rounded-full bg-white transition-transform duration-200 ${localAutoFill ? 'translate-x-3.5' : ''}`} />
+        type="button">
+        <span
+          className={`relative w-8 h-[18px] rounded-[9px] transition-colors duration-200 ${localAutoFill ? 'bg-spotify-green' : 'bg-white/30'}`}>
+          <span
+            className={`absolute top-0.5 left-0.5 size-3.5 rounded-full bg-white transition-transform duration-200 ${localAutoFill ? 'translate-x-3.5' : ''}`}
+          />
         </span>
-        <span className="text-xs font-medium min-w-12">
-          {localAutoFill ? 'Auto' : 'Manual'}
-        </span>
+        <span className="text-xs font-medium min-w-12">{localAutoFill ? 'Auto' : 'Manual'}</span>
       </button>
     </div>
   )

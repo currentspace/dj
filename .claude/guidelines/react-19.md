@@ -27,13 +27,13 @@ useEffect(() => {
 
 ### 2. Legitimate useEffect Use Cases (Only These)
 
-| Use Case | Example | Why Allowed |
-|----------|---------|-------------|
-| **OAuth callbacks** | Processing URL params once | Must run after mount, SSR-safe |
-| **API token validation** | Async validation on token change | Requires async operation |
-| **Cleanup on unmount** | Abort controllers, refs | Standard cleanup pattern |
-| **Dynamic imports** | Optional module loading | Runtime-dependent |
-| **External subscriptions** | Storage events, WebSocket | Browser APIs require effects |
+| Use Case                   | Example                          | Why Allowed                    |
+| -------------------------- | -------------------------------- | ------------------------------ |
+| **OAuth callbacks**        | Processing URL params once       | Must run after mount, SSR-safe |
+| **API token validation**   | Async validation on token change | Requires async operation       |
+| **Cleanup on unmount**     | Abort controllers, refs          | Standard cleanup pattern       |
+| **Dynamic imports**        | Optional module loading          | Runtime-dependent              |
+| **External subscriptions** | Storage events, WebSocket        | Browser APIs require effects   |
 
 **Reference**: `apps/web/src/hooks/useSpotifyAuth.ts` - All 6 useEffect instances are justified.
 
@@ -63,12 +63,13 @@ function useAuth() {
   return useSyncExternalStore(
     store.subscribe,
     store.getState,
-    store.getState // Server snapshot
+    store.getState, // Server snapshot
   )
 }
 ```
 
 **Benefits**:
+
 - Works with React Compiler
 - No tearing issues
 - Proper server-side support
@@ -91,6 +92,7 @@ const handleModeChange = (newMode: Mode) => {
 ```
 
 **When to use**:
+
 - Mode switching (analyze/create/edit)
 - Large list filtering
 - Tab/view changes
@@ -121,8 +123,7 @@ export const TrackList = memo(
 Use `Map` for per-entity state (conversations per playlist):
 
 ```typescript
-const [conversationsByPlaylist, setConversationsByPlaylist] =
-  useState<Map<string, ChatMessage[]>>(new Map())
+const [conversationsByPlaylist, setConversationsByPlaylist] = useState<Map<string, ChatMessage[]>>(new Map())
 
 // Update immutably
 setConversationsByPlaylist(prev => {
@@ -133,6 +134,7 @@ setConversationsByPlaylist(prev => {
 ```
 
 **Benefits**:
+
 - O(1) lookup per playlist
 - Preserves conversation history on playlist switch
 - Type-safe with generics
@@ -144,7 +146,7 @@ setConversationsByPlaylist(prev => {
 Use `flushSync` when DOM must update before continuing:
 
 ```typescript
-import { flushSync } from 'react-dom'
+import {flushSync} from 'react-dom'
 
 const injectMessage = (message: ChatMessage) => {
   flushSync(() => {
@@ -158,6 +160,7 @@ const injectMessage = (message: ChatMessage) => {
 ```
 
 **When to use**:
+
 - Scroll-to-bottom after message injection
 - Form focus after dynamic element creation
 - Accessibility announcements
@@ -174,29 +177,24 @@ For SSE streams, use callbacks to update state:
 const streamHandleRef = useRef<AbortableStream | null>(null)
 
 const handleSubmit = async () => {
-  streamHandleRef.current = await chatStreamClient.streamMessage(
-    message,
-    history,
-    mode,
-    {
-      onContent: (content) => {
-        setStreamingContent(prev => prev + content)
-      },
-      onToolStart: (tool, args) => {
-        setStreamingStatus(prev => ({
-          ...prev,
-          currentTool: tool,
-          toolsUsed: [...prev.toolsUsed, tool],
-        }))
-      },
-      onDone: () => {
-        setStreamingStatus({ isStreaming: false, toolsUsed: [] })
-      },
-      onError: (error) => {
-        setError(error)
-      },
-    }
-  )
+  streamHandleRef.current = await chatStreamClient.streamMessage(message, history, mode, {
+    onContent: content => {
+      setStreamingContent(prev => prev + content)
+    },
+    onToolStart: (tool, args) => {
+      setStreamingStatus(prev => ({
+        ...prev,
+        currentTool: tool,
+        toolsUsed: [...prev.toolsUsed, tool],
+      }))
+    },
+    onDone: () => {
+      setStreamingStatus({isStreaming: false, toolsUsed: []})
+    },
+    onError: error => {
+      setError(error)
+    },
+  })
 }
 ```
 
@@ -256,6 +254,7 @@ export class ErrorBoundary extends Component<Props, State> {
 ```
 
 **Wrap Error-Prone Components**:
+
 ```typescript
 <ErrorBoundary fallback={<PlaylistErrorFallback />}>
   <Suspense fallback={<PlaylistSkeleton />}>
@@ -290,7 +289,7 @@ const handleSubmit = useCallback(
     e.preventDefault()
     // ...
   },
-  [dependencies]
+  [dependencies],
 )
 
 const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -307,7 +306,7 @@ interface ChatInterfaceProps {
   selectedPlaylist: SpotifyPlaylist | null
 }
 
-export function ChatInterface({ selectedPlaylist }: ChatInterfaceProps) {
+export function ChatInterface({selectedPlaylist}: ChatInterfaceProps) {
   // ...
 }
 ```
@@ -345,18 +344,16 @@ const sanitizedHtml = DOMPurify.sanitize(marked.parse(content))
 
 ```typescript
 // PROBLEMATIC - Too many dependencies
-const handleSubmit = useCallback(
-  () => { /* ... */ },
-  [input, isStreaming, mode, playlist, messages, scrollFn, settings, user]
-)
+const handleSubmit = useCallback(() => {
+  /* ... */
+}, [input, isStreaming, mode, playlist, messages, scrollFn, settings, user])
 
 // BETTER - Extract stable values
 const playlistId = playlist?.id
 const messageCount = messages.length
-const handleSubmit = useCallback(
-  () => { /* ... */ },
-  [input, isStreaming, mode, playlistId, messageCount]
-)
+const handleSubmit = useCallback(() => {
+  /* ... */
+}, [input, isStreaming, mode, playlistId, messageCount])
 ```
 
 ### DO NOT: Inline Style Tags
@@ -410,9 +407,9 @@ This section documents Zustand 5.0.8 patterns for minimal re-renders with SSE st
 ### Store Setup with subscribeWithSelector
 
 ```typescript
-import { create } from 'zustand'
-import { subscribeWithSelector } from 'zustand/middleware'
-import { useShallow } from 'zustand/react/shallow'
+import {create} from 'zustand'
+import {subscribeWithSelector} from 'zustand/middleware'
+import {useShallow} from 'zustand/react/shallow'
 
 interface Store {
   // Normalized state (by ID for O(1) access)
@@ -426,31 +423,32 @@ interface Store {
 }
 
 const useStore = create<Store>()(
-  subscribeWithSelector((set) => ({
+  subscribeWithSelector(set => ({
     messages: {},
     messageIds: [],
     connectionStatus: 'disconnected',
 
-    addMessage: (msg) => set((s) => ({
-      messages: { ...s.messages, [msg.id]: msg },
-      messageIds: [...s.messageIds, msg.id],
-    })),
+    addMessage: msg =>
+      set(s => ({
+        messages: {...s.messages, [msg.id]: msg},
+        messageIds: [...s.messageIds, msg.id],
+      })),
 
-    setStatus: (status) => set({ connectionStatus: status }),
-  }))
+    setStatus: status => set({connectionStatus: status}),
+  })),
 )
 ```
 
 ### Selector Patterns
 
-| Selector Type | Pattern | When to Use |
-|---------------|---------|-------------|
-| **Primitive** | `useStore((s) => s.count)` | Single string/number/boolean |
-| **Single by ID** | `useStore((s) => s.items[id])` | Per-item subscriptions |
-| **Multiple primitives** | Two separate `useStore()` calls | Independent values |
-| **Object/array** | `useStore(useShallow((s) => ({})))` | Multi-value selections |
-| **Filtered array** | `useStore(useShallow((s) => arr.filter(...)))` | Derived arrays |
-| **Actions only** | `useStore((s) => s.actionName)` | Always stable |
+| Selector Type           | Pattern                                        | When to Use                  |
+| ----------------------- | ---------------------------------------------- | ---------------------------- |
+| **Primitive**           | `useStore((s) => s.count)`                     | Single string/number/boolean |
+| **Single by ID**        | `useStore((s) => s.items[id])`                 | Per-item subscriptions       |
+| **Multiple primitives** | Two separate `useStore()` calls                | Independent values           |
+| **Object/array**        | `useStore(useShallow((s) => ({})))`            | Multi-value selections       |
+| **Filtered array**      | `useStore(useShallow((s) => arr.filter(...)))` | Derived arrays               |
+| **Actions only**        | `useStore((s) => s.actionName)`                | Always stable                |
 
 ### ❌ DON'T: Subscribe to Entire Store
 
@@ -528,15 +526,15 @@ function GoodComponent() {
 ### SSE Handler Pattern with useEffectEvent (React 19.2)
 
 ```typescript
-import { useEffect, useEffectEvent } from 'react'
+import {useEffect, useEffectEvent} from 'react'
 
 function useSSEConnection(url: string) {
-  const setStatus = useStore((s) => s.setStatus)
-  const addMessage = useStore((s) => s.addMessage)
+  const setStatus = useStore(s => s.setStatus)
+  const addMessage = useStore(s => s.addMessage)
 
   // useEffectEvent: always reads latest state, never stale
   const onMessage = useEffectEvent((e: MessageEvent) => {
-    const { type, payload } = JSON.parse(e.data)
+    const {type, payload} = JSON.parse(e.data)
     if (type === 'message') addMessage(payload)
   })
 
@@ -570,21 +568,21 @@ useEffect(() => {
 ### External Subscriptions with subscribeWithSelector
 
 ```typescript
-import { shallow } from 'zustand/shallow'
+import {shallow} from 'zustand/shallow'
 
 // Subscribe to specific slice
 useStore.subscribe(
-  (s) => s.connectionStatus,
+  s => s.connectionStatus,
   (status, prevStatus) => {
     console.log(`Status: ${prevStatus} → ${status}`)
-  }
+  },
 )
 
 // With equality function for arrays
 useStore.subscribe(
-  (s) => s.messageIds,
-  (ids) => console.log('New message count:', ids.length),
-  { equalityFn: shallow }
+  s => s.messageIds,
+  ids => console.log('New message count:', ids.length),
+  {equalityFn: shallow},
 )
 ```
 
@@ -592,11 +590,12 @@ useStore.subscribe(
 
 ```typescript
 // Actions never change identity, safe to select together
-const useActions = () => useStore((s) => ({
-  addMessage: s.addMessage,
-  updateUser: s.updateUser,
-  setStatus: s.setStatus,
-}))
+const useActions = () =>
+  useStore(s => ({
+    addMessage: s.addMessage,
+    updateUser: s.updateUser,
+    setStatus: s.setStatus,
+  }))
 ```
 
 ### Quick Reference Table
@@ -640,7 +639,7 @@ const useActions = () => useStore((s) => ({
 const flushPromises = () => new Promise(resolve => setTimeout(resolve, 0))
 
 it('should update state after async operation', async () => {
-  const { result } = renderHook(() => useMyHook())
+  const {result} = renderHook(() => useMyHook())
 
   act(() => {
     result.current.doAsyncThing()
@@ -661,7 +660,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  const { result, unmount } = renderHook(() => useAuth())
+  const {result, unmount} = renderHook(() => useAuth())
   if (result.current.isAuthenticated) {
     result.current.logout()
   }
@@ -676,6 +675,7 @@ afterEach(() => {
 ### The Reality of Signals in React
 
 **React 19.2 does NOT have official signals.** The "signals" discussion involves:
+
 - Experimental proposals influenced by SolidJS/Preact
 - Community libraries like `@preact/signals-react`
 - Future roadmap considerations
@@ -696,6 +696,7 @@ The React team's position is clear: **adding signals to a Virtual DOM framework 
 ```
 
 **Quote from React Conf 2025** (Joe Savona, React team):
+
 > "Adding MobX, Zustand or Signals to React or even Signals to Preact isn't guaranteed
 > to improve performance. In fact, on average, it makes them slower."
 
@@ -717,25 +718,25 @@ const messages = usePlaylistStore(selectCurrentMessages)
 
 ### Signals vs Zustand Comparison
 
-| Feature | Signals (Preact) | Zustand + subscribeWithSelector |
-|---------|------------------|--------------------------------|
-| **Fine-grained updates** | ✅ | ✅ (via selectors) |
-| **React Compiler compatible** | ❌ | ✅ |
-| **DevTools support** | Limited | Full React DevTools |
-| **SSR support** | Varies | ✅ Built-in |
-| **Bundle size** | ~1KB | ~2KB |
-| **Learning curve** | New paradigm | Familiar hooks |
-| **VDOM performance** | Worse | Native |
+| Feature                       | Signals (Preact) | Zustand + subscribeWithSelector |
+| ----------------------------- | ---------------- | ------------------------------- |
+| **Fine-grained updates**      | ✅               | ✅ (via selectors)              |
+| **React Compiler compatible** | ❌               | ✅                              |
+| **DevTools support**          | Limited          | Full React DevTools             |
+| **SSR support**               | Varies           | ✅ Built-in                     |
+| **Bundle size**               | ~1KB             | ~2KB                            |
+| **Learning curve**            | New paradigm     | Familiar hooks                  |
+| **VDOM performance**          | Worse            | Native                          |
 
 ### When You Might Think You Need Signals
 
-| Symptom | Signal Solution | Better React Solution |
-|---------|-----------------|----------------------|
-| Too many re-renders | Signal primitive | Atomic Zustand selector |
-| Computed state | Signal derived | Selector function |
-| Cross-component state | Signal store | Zustand store |
-| Frequent updates (SSE) | Signal updates | Zustand + delta protocol |
-| Prop drilling | Signal context | Zustand store |
+| Symptom                | Signal Solution  | Better React Solution    |
+| ---------------------- | ---------------- | ------------------------ |
+| Too many re-renders    | Signal primitive | Atomic Zustand selector  |
+| Computed state         | Signal derived   | Selector function        |
+| Cross-component state  | Signal store     | Zustand store            |
+| Frequent updates (SSE) | Signal updates   | Zustand + delta protocol |
+| Prop drilling          | Signal context   | Zustand store            |
 
 ### The DJ App Pattern: Centralized Store with Derived Selectors
 
@@ -761,12 +762,13 @@ export const selectCurrentMessages = (state: PlaylistState): ChatMessage[] => {
 // Component usage - only re-renders when messages for current playlist change
 function ChatInterface() {
   const messages = usePlaylistStore(selectCurrentMessages)
-  const addMessage = usePlaylistStore((s) => s.addMessage)
+  const addMessage = usePlaylistStore(s => s.addMessage)
   // ...
 }
 ```
 
 **Benefits over signals:**
+
 1. Works with React Compiler (automatic memoization)
 2. No new paradigm to learn
 3. Full React DevTools support
@@ -780,7 +782,7 @@ function ChatInterface() {
 const MAX_CONVERSATIONS = 20
 
 function cleanupOldConversations(get: () => State, set: (partial: Partial<State>) => void) {
-  const { conversationsByPlaylist, selectedPlaylist } = get()
+  const {conversationsByPlaylist, selectedPlaylist} = get()
 
   if (conversationsByPlaylist.size <= MAX_CONVERSATIONS) return
 
@@ -788,16 +790,14 @@ function cleanupOldConversations(get: () => State, set: (partial: Partial<State>
   const playlistIds = [...conversationsByPlaylist.keys()]
   const currentId = selectedPlaylist?.id
 
-  const toRemove = playlistIds
-    .filter((id) => id !== currentId)
-    .slice(0, conversationsByPlaylist.size - MAX_CONVERSATIONS)
+  const toRemove = playlistIds.filter(id => id !== currentId).slice(0, conversationsByPlaylist.size - MAX_CONVERSATIONS)
 
   const newMap = new Map(conversationsByPlaylist)
   for (const id of toRemove) {
     newMap.delete(id)
   }
 
-  set({ conversationsByPlaylist: newMap })
+  set({conversationsByPlaylist: newMap})
 }
 ```
 

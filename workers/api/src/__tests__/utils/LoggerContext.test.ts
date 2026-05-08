@@ -3,10 +3,10 @@
  * Tests for AsyncLocalStorage-based logger context
  */
 
-import { describe, expect, it, vi } from 'vitest'
+import {describe, expect, it, vi} from 'vitest'
 
-import { getChildLogger, getLogger, runWithLogger } from '../../utils/LoggerContext'
-import { ServiceLogger } from '../../utils/ServiceLogger'
+import {getChildLogger, getLogger, runWithLogger} from '../../utils/LoggerContext'
+import {ServiceLogger} from '../../utils/ServiceLogger'
 
 describe('LoggerContext', () => {
   it('getLogger() returns undefined outside of context', () => {
@@ -61,7 +61,7 @@ describe('LoggerContext', () => {
 
   it('runWithLogger() returns function result', async () => {
     const testLogger = new ServiceLogger('ResultTest')
-    const expectedValue = { data: 'test' }
+    const expectedValue = {data: 'test'}
 
     const result = await runWithLogger(testLogger, async () => {
       return expectedValue

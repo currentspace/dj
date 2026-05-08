@@ -4,7 +4,7 @@
   "owner": "team",
   "description": "DJ set planning domain knowledge: energy arcs, transition theory, five-phase structure, contrast principles, and professional mixing patterns",
   "categories": ["dj", "music", "set-planning", "transitions", "energy-arc"],
-  "applies_to": { "extensions": [".ts", ".tsx"] },
+  "applies_to": {"extensions": [".ts", ".tsx"]},
   "sensitive_paths": [
     "**/set-planner**",
     "**/TransitionScorer**",

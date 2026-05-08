@@ -328,7 +328,7 @@ describe.skip('useSpotifyAuth Hook', () => {
 
       let abortSignal: AbortSignal | null = null
       vi.mocked(fetch).mockImplementation((_url, options) => {
-        abortSignal = (options?.signal) ?? null
+        abortSignal = options?.signal ?? null
         return new Promise((resolve, reject) => {
           setTimeout(() => {
             if (abortSignal?.aborted) {
@@ -433,9 +433,7 @@ describe.skip('useSpotifyAuth Hook', () => {
     it('should clear token on 401 response', async () => {
       setMockTokenInLocalStorage()
 
-      vi.mocked(fetch).mockResolvedValueOnce(
-        createMockFetchResponse({error: 'Unauthorized'}, {ok: false, status: 401}),
-      )
+      vi.mocked(fetch).mockResolvedValueOnce(createMockFetchResponse({error: 'Unauthorized'}, {ok: false, status: 401}))
 
       const {result} = renderHook(() => useSpotifyAuth())
 
@@ -454,9 +452,7 @@ describe.skip('useSpotifyAuth Hook', () => {
     it('should clear token on 403 response', async () => {
       setMockTokenInLocalStorage()
 
-      vi.mocked(fetch).mockResolvedValueOnce(
-        createMockFetchResponse({error: 'Forbidden'}, {ok: false, status: 403}),
-      )
+      vi.mocked(fetch).mockResolvedValueOnce(createMockFetchResponse({error: 'Forbidden'}, {ok: false, status: 403}))
 
       const {result} = renderHook(() => useSpotifyAuth())
 

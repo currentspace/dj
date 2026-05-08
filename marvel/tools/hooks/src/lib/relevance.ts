@@ -7,9 +7,9 @@
  * Calculates relevance of packs to file operations.
  */
 
-import * as path from "path";
+import * as path from 'path'
 
-import type { Guidance, LoadedPack } from "../types.js";
+import type {Guidance, LoadedPack} from '../types.js'
 
 /**
  * Simple glob pattern matching for sensitive_paths.
@@ -24,33 +24,33 @@ import type { Guidance, LoadedPack } from "../types.js";
  */
 function matchGlob(pattern: string, filePath: string): boolean {
   // Normalize paths to use forward slashes
-  const normalizedPath = filePath.replace(/\\/g, "/");
-  const normalizedPattern = pattern.replace(/\\/g, "/");
+  const normalizedPath = filePath.replace(/\\/g, '/')
+  const normalizedPattern = pattern.replace(/\\/g, '/')
 
   // If no glob characters, use simple includes check
-  if (!normalizedPattern.includes("*")) {
-    return normalizedPath.includes(normalizedPattern);
+  if (!normalizedPattern.includes('*')) {
+    return normalizedPath.includes(normalizedPattern)
   }
 
   // Convert glob pattern to regex
   // Escape regex special chars except * which we handle specially
   let regexStr = normalizedPattern
-    .replace(/[.+^${}()|[\]\\]/g, "\\$&") // Escape special regex chars
-    .replace(/\*\*/g, "<<<GLOBSTAR>>>") // Temp placeholder for **
-    .replace(/\*/g, "[^/]*") // * matches anything except /
-    .replace(/<<<GLOBSTAR>>>/g, ".*"); // ** matches anything including /
+    .replace(/[.+^${}()|[\]\\]/g, '\\$&') // Escape special regex chars
+    .replace(/\*\*/g, '<<<GLOBSTAR>>>') // Temp placeholder for **
+    .replace(/\*/g, '[^/]*') // * matches anything except /
+    .replace(/<<<GLOBSTAR>>>/g, '.*') // ** matches anything including /
 
   // Pattern should match anywhere in the path unless it starts with /
-  if (!regexStr.startsWith("/")) {
-    regexStr = ".*" + regexStr;
+  if (!regexStr.startsWith('/')) {
+    regexStr = '.*' + regexStr
   }
 
   try {
-    const regex = new RegExp(regexStr);
-    return regex.test(normalizedPath);
+    const regex = new RegExp(regexStr)
+    return regex.test(normalizedPath)
   } catch {
     // If regex is invalid, fall back to includes
-    return normalizedPath.includes(normalizedPattern);
+    return normalizedPath.includes(normalizedPattern)
   }
 }
 
@@ -62,9 +62,9 @@ const WEIGHTS = {
   FILE_PATTERN_MATCH: 15,
   RECENT_CORRECTION: 20,
   SENSITIVE_PATH: 20,
-};
+}
 
-const MAX_PACKS = 4;
+const MAX_PACKS = 4
 
 /**
  * Keyword-to-category mapping for file path boosting.
@@ -73,117 +73,110 @@ const MAX_PACKS = 4;
 // Path keyword to category mapping for file path boosting.
 // Projects should extend this map when adding domain-specific packs.
 const PATH_KEYWORD_CATEGORIES: Record<string, string[]> = {
-  auth: ["security", "auth"],
-  config: ["configuration"],
-  env: ["configuration"],
-  middleware: ["security", "auth"],
-  migration: ["database", "schema"],
-  schema: ["database", "schema"],
-  spec: ["testing", "test-quality"],
-  test: ["testing", "test-quality"],
-};
+  auth: ['security', 'auth'],
+  config: ['configuration'],
+  env: ['configuration'],
+  middleware: ['security', 'auth'],
+  migration: ['database', 'schema'],
+  schema: ['database', 'schema'],
+  spec: ['testing', 'test-quality'],
+  test: ['testing', 'test-quality'],
+}
 
 interface ScoredPack {
-  pack: LoadedPack;
-  score: number;
+  pack: LoadedPack
+  score: number
 }
 
 /**
  * Calculate relevance score for a pack given a file path.
  */
-export function calculateRelevance(
-  pack: LoadedPack,
-  filePath: string,
-  recentGuidance: Guidance[]
-): number {
+export function calculateRelevance(pack: LoadedPack, filePath: string, recentGuidance: Guidance[]): number {
   // Check excludes_paths first — if the file is in an excluded path, score 0
-  const excludesPaths = pack.metadata.excludes_paths || [];
+  const excludesPaths = pack.metadata.excludes_paths || []
   if (excludesPaths.length > 0) {
-    const normalizedFile = filePath.replace(/\\/g, "/");
+    const normalizedFile = filePath.replace(/\\/g, '/')
     for (const excludePath of excludesPaths) {
       if (normalizedFile.includes(excludePath)) {
-        return 0;
+        return 0
       }
     }
   }
 
-  let score = 0;
-  const signals: string[] = [];
+  let score = 0
+  const signals: string[] = []
 
-  const ext = path.extname(filePath).toLowerCase();
-  const packExtensions = pack.metadata.applies_to?.extensions || [];
+  const ext = path.extname(filePath).toLowerCase()
+  const packExtensions = pack.metadata.applies_to?.extensions || []
 
   // Extension match
   if (packExtensions.includes(ext)) {
-    score += WEIGHTS.EXTENSION_MATCH;
-    signals.push("extension_match");
+    score += WEIGHTS.EXTENSION_MATCH
+    signals.push('extension_match')
   }
 
   // Check code paths
-  const codePaths = pack.metadata.references?.code_paths || [];
+  const codePaths = pack.metadata.references?.code_paths || []
   for (const codePath of codePaths) {
     if (filePath.includes(codePath)) {
-      score += WEIGHTS.FILE_PATTERN_MATCH;
-      signals.push("code_path_match");
-      break;
+      score += WEIGHTS.FILE_PATTERN_MATCH
+      signals.push('code_path_match')
+      break
     }
   }
 
   // Check sensitive paths (supports glob patterns like "src/app/**/page.tsx")
-  const sensitivePaths = pack.metadata.sensitive_paths || [];
+  const sensitivePaths = pack.metadata.sensitive_paths || []
   for (const sensitivePath of sensitivePaths) {
     if (matchGlob(sensitivePath, filePath)) {
-      score += WEIGHTS.SENSITIVE_PATH;
-      signals.push("sensitive_path");
-      break;
+      score += WEIGHTS.SENSITIVE_PATH
+      signals.push('sensitive_path')
+      break
     }
   }
 
   // Recent corrections boost
-  const packCategories = pack.metadata.categories || [];
+  const packCategories = pack.metadata.categories || []
   const relevantCorrections = recentGuidance.filter(
-    (g) =>
-      g.type === "correction" &&
-      g.category &&
-      packCategories.includes(g.category)
-  );
+    g => g.type === 'correction' && g.category && packCategories.includes(g.category),
+  )
 
   if (relevantCorrections.length > 0) {
     // Cap at 3x multiplier
-    const multiplier = Math.min(relevantCorrections.length, 3);
-    score += WEIGHTS.RECENT_CORRECTION * multiplier;
-    signals.push(`recent_corrections:${multiplier}`);
+    const multiplier = Math.min(relevantCorrections.length, 3)
+    score += WEIGHTS.RECENT_CORRECTION * multiplier
+    signals.push(`recent_corrections:${multiplier}`)
   }
 
   // Category keyword match from recent guidance
   for (const guidance of recentGuidance) {
     if (guidance.category && packCategories.includes(guidance.category)) {
-      score += WEIGHTS.CATEGORY_MATCH;
-      signals.push("category_match");
-      break;
+      score += WEIGHTS.CATEGORY_MATCH
+      signals.push('category_match')
+      break
     }
   }
 
   // Path keyword → category boost
-  const normalizedPath = filePath.toLowerCase();
+  const normalizedPath = filePath.toLowerCase()
   for (const [keyword, categories] of Object.entries(PATH_KEYWORD_CATEGORIES)) {
     if (normalizedPath.includes(keyword)) {
-      const overlap = categories.some((cat) => packCategories.includes(cat));
+      const overlap = categories.some(cat => packCategories.includes(cat))
       if (overlap) {
-        score += WEIGHTS.CATEGORY_MATCH;
-        signals.push(`path_keyword:${keyword}`);
-        break;
+        score += WEIGHTS.CATEGORY_MATCH
+        signals.push(`path_keyword:${keyword}`)
+        break
       }
     }
   }
 
-  return score;
+  return score
 }
 
 // Packs that scored only via extension match (no path, sensitive, or correction signal)
 // need a higher threshold to avoid injecting noise for generic .ts files.
-const MIN_STRONG_RELEVANCE_SCORE = 10;
-const MIN_WEAK_RELEVANCE_SCORE = 20;
+const MIN_STRONG_RELEVANCE_SCORE = 10
+const MIN_WEAK_RELEVANCE_SCORE = 20
 
 /**
  * Select top packs by relevance score.
@@ -191,16 +184,14 @@ const MIN_WEAK_RELEVANCE_SCORE = 20;
  */
 export function selectTopPacks(scored: ScoredPack[], filePath?: string, recentGuidance?: Guidance[]): LoadedPack[] {
   return scored
-    .filter((s) => {
-      const strong = filePath && recentGuidance
-        ? hasStrongSignal(s.pack, filePath, recentGuidance)
-        : true;
-      const threshold = strong ? MIN_STRONG_RELEVANCE_SCORE : MIN_WEAK_RELEVANCE_SCORE;
-      return s.score >= threshold;
+    .filter(s => {
+      const strong = filePath && recentGuidance ? hasStrongSignal(s.pack, filePath, recentGuidance) : true
+      const threshold = strong ? MIN_STRONG_RELEVANCE_SCORE : MIN_WEAK_RELEVANCE_SCORE
+      return s.score >= threshold
     })
     .sort((a, b) => b.score - a.score)
     .slice(0, MAX_PACKS)
-    .map((s) => s.pack);
+    .map(s => s.pack)
 }
 
 /**
@@ -209,21 +200,21 @@ export function selectTopPacks(scored: ScoredPack[], filePath?: string, recentGu
  * or the pack was boosted by recent corrections.
  */
 function hasStrongSignal(pack: LoadedPack, filePath: string, recentGuidance: Guidance[]): boolean {
-  const codePaths = pack.metadata.references?.code_paths || [];
+  const codePaths = pack.metadata.references?.code_paths || []
   for (const codePath of codePaths) {
-    if (filePath.includes(codePath)) return true;
+    if (filePath.includes(codePath)) return true
   }
 
-  const sensitivePaths = pack.metadata.sensitive_paths || [];
+  const sensitivePaths = pack.metadata.sensitive_paths || []
   for (const sensitivePath of sensitivePaths) {
-    if (matchGlob(sensitivePath, filePath)) return true;
+    if (matchGlob(sensitivePath, filePath)) return true
   }
 
-  const packCategories = pack.metadata.categories || [];
+  const packCategories = pack.metadata.categories || []
   const hasCorrection = recentGuidance.some(
-    (g) => g.type === "correction" && g.category && packCategories.includes(g.category)
-  );
-  if (hasCorrection) return true;
+    g => g.type === 'correction' && g.category && packCategories.includes(g.category),
+  )
+  if (hasCorrection) return true
 
-  return false;
+  return false
 }

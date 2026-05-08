@@ -4,7 +4,7 @@
  */
 
 export class MockKVNamespace {
-  private store = new Map<string, { expiration: null | number; value: string; }>()
+  private store = new Map<string, {expiration: null | number; value: string}>()
 
   // Clear all data (for test cleanup)
   clear(): void {
@@ -17,10 +17,7 @@ export class MockKVNamespace {
   async get(key: string, type: 'json'): Promise<unknown>
   async get(key: string, type: 'arrayBuffer'): Promise<ArrayBuffer | null>
   async get(key: string, type: 'stream'): Promise<null | ReadableStream>
-  async get(
-    key: string,
-    type: 'arrayBuffer' | 'json' | 'stream' | 'text' = 'text',
-  ): Promise<unknown> {
+  async get(key: string, type: 'arrayBuffer' | 'json' | 'stream' | 'text' = 'text'): Promise<unknown> {
     const entry = this.store.get(key)
     if (!entry) return null
 
@@ -55,7 +52,7 @@ export class MockKVNamespace {
   }
 
   // Get raw store (for test assertions)
-  getStore(): Map<string, { expiration: null | number; value: string; }> {
+  getStore(): Map<string, {expiration: null | number; value: string}> {
     return this.store
   }
 
@@ -67,19 +64,19 @@ export class MockKVNamespace {
     value: unknown
   }> {
     const value = await this.get(key, type as 'text')
-    return { metadata: null, value }
+    return {metadata: null, value}
   }
 
-  async list(options?: { limit?: number; prefix?: string; }): Promise<{
+  async list(options?: {limit?: number; prefix?: string}): Promise<{
     cacheStatus: null | string
     cursor?: string
-    keys: { expiration?: number; metadata?: unknown; name: string; }[]
+    keys: {expiration?: number; metadata?: unknown; name: string}[]
     list_complete: boolean
   }> {
     const keys = Array.from(this.store.keys())
       .filter(k => !options?.prefix || k.startsWith(options.prefix))
       .slice(0, options?.limit ?? 1000)
-      .map(name => ({ name }))
+      .map(name => ({name}))
 
     return {
       cacheStatus: null,
@@ -91,7 +88,7 @@ export class MockKVNamespace {
   async put(
     key: string,
     value: ArrayBuffer | ReadableStream | string,
-    options?: { expiration?: number; expirationTtl?: number; },
+    options?: {expiration?: number; expirationTtl?: number},
   ): Promise<void> {
     let stringValue: string
     if (value instanceof ArrayBuffer) {
@@ -100,7 +97,7 @@ export class MockKVNamespace {
       const reader = value.getReader()
       const chunks: Uint8Array[] = []
       while (true) {
-        const { done, value: chunk } = await reader.read()
+        const {done, value: chunk} = await reader.read()
         if (done) break
         chunks.push(chunk)
       }
@@ -122,7 +119,7 @@ export class MockKVNamespace {
       expiration = options.expiration * 1000
     }
 
-    this.store.set(key, { expiration, value: stringValue })
+    this.store.set(key, {expiration, value: stringValue})
   }
 }
 
@@ -138,11 +135,7 @@ export function buildMockKV(): KVNamespace {
  * Create a mock Hono Context (c)
  * This is a minimal mock - extend as needed for specific tests
  */
-export function createMockContext(options: {
-  env?: unknown
-  executionCtx?: ExecutionContext
-  request?: Request
-}): {
+export function createMockContext(options: {env?: unknown; executionCtx?: ExecutionContext; request?: Request}): {
   env: unknown
   executionCtx: ExecutionContext
   header: (name: string, value: string) => void
@@ -166,7 +159,9 @@ export function createMockContext(options: {
   return {
     env,
     executionCtx,
-    header: () => { /* noop */ },
+    header: () => {
+      /* noop */
+    },
     html: (html: string, status = 200) =>
       new Response(html, {
         headers: {'Content-Type': 'text/html'},
@@ -185,7 +180,9 @@ export function createMockContext(options: {
       raw: req,
       url: req.url,
     },
-    status: () => { /* noop */ },
+    status: () => {
+      /* noop */
+    },
     text: (text: string, status = 200) =>
       new Response(text, {
         headers: {'Content-Type': 'text/plain'},
@@ -234,7 +231,9 @@ export function createMockExecutionContext(): ExecutionContext {
   const promises: Promise<unknown>[] = []
 
   return {
-    passThroughOnException: () => { /* noop */ },
+    passThroughOnException: () => {
+      /* noop */
+    },
     // For tests: await all promises
     async waitForAll(): Promise<void> {
       await Promise.all(promises)
@@ -242,7 +241,7 @@ export function createMockExecutionContext(): ExecutionContext {
     waitUntil: (promise: Promise<unknown>) => {
       promises.push(promise)
     },
-  } as ExecutionContext & { waitForAll: () => Promise<void> }
+  } as ExecutionContext & {waitForAll: () => Promise<void>}
 }
 
 /**

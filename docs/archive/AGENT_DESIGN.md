@@ -5,16 +5,21 @@ This document explains the design philosophy and implementation of our AI DJ age
 ## Core Principles
 
 ### 1. Simplicity
+
 The agent is fundamentally "an LLM using tools based on environmental feedback in a loop." We avoid unnecessary complexity and framework overhead.
 
 ### 2. Transparency
+
 The agent explicitly shows its reasoning process:
+
 - Which data sources it's using (Spotify metadata, Deezer BPM, Last.fm tags)
 - Why it's choosing specific tools
 - How it's interpreting vibe and planning discovery
 
 ### 3. Just-in-Time Context
+
 Following Anthropic's principle of "the smallest set of high-signal tokens," we:
+
 - Start with analyze_playlist (summary + track IDs)
 - Load track names only when needed (get_playlist_tracks)
 - Fetch full details only for specific tracks (get_track_details)
@@ -26,6 +31,7 @@ This prevents context bloat while maintaining complete information access.
 **Location**: `workers/api/src/routes/chat-stream.ts:2296-2357`
 
 **Format**: XML-tagged sections (Anthropic recommendation)
+
 ```xml
 <role>Brief identity</role>
 <capabilities>What the agent can do</capabilities>
@@ -39,6 +45,7 @@ This prevents context bloat while maintaining complete information access.
 **Size**: ~1850 characters (reduced from 6254 - 70% smaller)
 
 **Key Design Choices**:
+
 - **Principle-based** not example-heavy (examples are for tool schemas, not system prompt)
 - **Right altitude**: Specific enough to guide, flexible enough for heuristics
 - **Minimal repetition**: Tool schemas define parameters/returns, prompt focuses on when/why
@@ -47,12 +54,15 @@ This prevents context bloat while maintaining complete information access.
 ## Workflow Patterns
 
 ### Pattern 1: Simple Q&A (Routing)
+
 User asks about playlist → classify question → route to appropriate tool
+
 - Tempo/genres/vibe → analyze_playlist data
 - Track listing → get_playlist_tracks
 - Specific track → get_track_details
 
 ### Pattern 2: Vibe-Driven Discovery (Orchestrator-Workers)
+
 User wants recommendations → orchestrator breaks down into 4 phases:
 
 1. **ANALYZE** (workers): analyze_playlist + get_sample_tracks + extract_playlist_vibe
@@ -78,32 +88,37 @@ This prevents "generic algorithm trap" by understanding vibe BEFORE searching.
 ## Model Configuration
 
 ### Main Chat (Claude Sonnet 4.5)
+
 ```typescript
 model: 'claude-sonnet-4-5-20250929'
-temperature: 0.7  // Balanced for tool selection
+temperature: 0.7 // Balanced for tool selection
 maxTokens: 4000
 ```
 
 **Extended Thinking**: Currently disabled
+
 - Langchain doesn't preserve thinking blocks in agentic loops
 - Anthropic requires: "assistant message must start with thinking block before tool_use"
 - TODO: Re-enable when we implement proper thinking block preservation
 - Current approach: Rely on smaller system prompt (70% reduction) for better performance
 
 **Prompt Caching**: System prompt cached with `cache_control: ephemeral`
+
 - ~90% cost reduction on messages after first in conversation
 - Cache invalidates when playlist context changes (desired behavior)
 
 ### Vibe/Strategy/Curation (Claude Sonnet 4.5)
+
 ```typescript
 model: 'claude-sonnet-4-5-20250929'
 temperature: 0.7
-maxTokens: 2000-3000
+maxTokens: 2000 - 3000
 ```
 
 **Note**: Extended thinking also disabled here for consistency. These single-call tasks could use extended thinking (no agentic loop), but keeping configuration consistent simplifies maintenance.
 
 ### Progress Narrator (Claude Haiku 4.5)
+
 ```typescript
 model: 'claude-haiku-4-5-20251001'
 temperature: 0.7
@@ -111,6 +126,7 @@ maxTokens: 100
 ```
 
 **Prompt Caching**: System prompt (~350 tokens) cached
+
 - Called 10-50+ times during playlist operations
 - 2x faster than Haiku 3.5
 
@@ -124,6 +140,7 @@ From Anthropic's "Writing Effective Tools" guidance:
 4. **Natural formats**: Close to what models see in training data
 
 **Example**: analyze_playlist
+
 - Returns aggregated insights (not raw track dumps)
 - Tool schema defines structure (system prompt just explains when to use)
 - Optional `playlist_id` auto-injected from context
@@ -133,12 +150,14 @@ From Anthropic's "Writing Effective Tools" guidance:
 ### Updating System Prompt
 
 **DO**:
+
 - Keep XML structure clear
 - Focus on principles, not procedures
 - Let tool schemas define technical details
 - Test prompt changes with extended thinking enabled
 
 **DON'T**:
+
 - Add exhaustive examples (use diverse, canonical examples in tool schemas instead)
 - Duplicate tool documentation
 - Write step-by-step procedures (provide decision frameworks instead)
@@ -154,6 +173,7 @@ From Anthropic's "Writing Effective Tools" guidance:
 ### Modifying Workflows
 
 Current workflows are proven patterns. Before changing:
+
 1. Identify the specific problem (e.g., "discovery too generic")
 2. Determine if it's a prompt issue or tool issue
 3. Make minimal changes
@@ -162,18 +182,21 @@ Current workflows are proven patterns. Before changing:
 ## Performance Optimization
 
 ### Context Window Management
+
 - System prompt: ~1850 chars (cached)
 - Conversation history: Grows with turns
 - Tool results: Kept compact (see SPOTIFY_TRACK_ANALYSIS.md)
 - Extended thinking: Uses budget before response tokens
 
 ### Cost Optimization
+
 - Prompt caching reduces main chat cost by ~90%
 - Haiku 4.5 for progress (2x faster, same cost as 3.5)
 - Sonnet 4.5 only for reasoning-heavy tasks (vibe/strategy/curation)
 - Higher thinking budgets improve quality enough to reduce retries
 
 ### Quality Optimization
+
 - Extended thinking: Disabled due to Langchain compatibility (see Model Configuration)
 - 70% smaller system prompt compensates for lack of extended thinking
 - Temperature 0.7 for balanced, focused responses
@@ -182,18 +205,21 @@ Current workflows are proven patterns. Before changing:
 ## Testing & Validation
 
 **Manual Testing**:
+
 1. Simple questions: "What's the tempo?" → Uses analyze_playlist
 2. Listing: "Show me tracks" → Uses get_playlist_tracks
 3. Discovery: "Find similar tracks" → Uses 4-phase workflow
 4. Edge cases: Empty BPM data → Infers intelligently instead of "not available"
 
 **Log Analysis**:
+
 - Check tool selection patterns
 - Verify reasoning is transparent
 - Ensure minimal tool calls (not fetching unnecessary data)
 - Monitor context window usage
 
 **A/B Testing** (if applicable):
+
 - Deploy prompt changes to % of traffic
 - Compare: tool selection accuracy, user satisfaction, context efficiency
 
@@ -208,6 +234,7 @@ Current workflows are proven patterns. Before changing:
 ## Change Log
 
 **2025-11-03**: Initial agent restructuring
+
 - Reduced system prompt from 6254 → 1850 chars (70%)
 - Applied Anthropic 2025 best practices (XML structure, principle-based)
 - Removed example bloat, shifted to decision frameworks

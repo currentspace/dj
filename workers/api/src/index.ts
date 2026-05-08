@@ -39,7 +39,7 @@ app.use(
     xContentTypeOptions: 'nosniff',
     xFrameOptions: 'DENY',
     xXssProtection: '1; mode=block',
-  })
+  }),
 )
 
 // CORS middleware with environment-based origin
@@ -50,7 +50,7 @@ app.use(
     allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     credentials: true,
     origin: (_, c) => c.env.FRONTEND_URL ?? 'https://dj.current.space',
-  })
+  }),
 )
 
 // Health check

@@ -69,22 +69,25 @@ After running all targets:
 ## Verification Report
 
 ### Summary
-| Target    | Status | Issues |
-|-----------|--------|--------|
-| Lint      | pass/fail | N errors, M warnings |
-| Typecheck | pass/fail | N errors |
-| Build     | pass/fail | N errors |
+
+| Target    | Status    | Issues                        |
+| --------- | --------- | ----------------------------- |
+| Lint      | pass/fail | N errors, M warnings          |
+| Typecheck | pass/fail | N errors                      |
+| Build     | pass/fail | N errors                      |
 | Test      | pass/fail | N failed, M passed, K skipped |
 
 ### Failures (by root cause)
 
 #### 1. <Root cause description>
+
 - **Target**: typecheck / lint / build / test
 - **Files**: <affected files>
 - **Error**: <error message>
 - **Fix**: <specific action to resolve>
 
 ### Post-Reflection
+
 - What went well: ...
 - What broke: ...
 - Patterns to watch for next time: ...

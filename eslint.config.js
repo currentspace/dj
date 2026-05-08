@@ -210,13 +210,7 @@ export default [
       'perfectionist/sort-imports': [
         'error',
         {
-          groups: [
-            'type',
-            ['builtin', 'external'],
-            'internal',
-            ['parent', 'sibling', 'index'],
-            'unknown',
-          ],
+          groups: ['type', ['builtin', 'external'], 'internal', ['parent', 'sibling', 'index'], 'unknown'],
           order: 'asc',
           type: 'natural',
         },

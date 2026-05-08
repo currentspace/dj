@@ -321,10 +321,13 @@ export function registerPlayerRoutes(app: OpenAPIHono<{Bindings: Env}>) {
         return c.json({error: 'volume_percent must be a number between 0 and 100'}, 400)
       }
 
-      const response = await fetch(`https://api.spotify.com/v1/me/player/volume?volume_percent=${Math.round(volumePercent)}`, {
-        headers: {Authorization: `Bearer ${token}`},
-        method: 'PUT',
-      })
+      const response = await fetch(
+        `https://api.spotify.com/v1/me/player/volume?volume_percent=${Math.round(volumePercent)}`,
+        {
+          headers: {Authorization: `Bearer ${token}`},
+          method: 'PUT',
+        },
+      )
 
       if (response.status === 204) {
         return c.json({success: true, volume_percent: volumePercent}, 200)
